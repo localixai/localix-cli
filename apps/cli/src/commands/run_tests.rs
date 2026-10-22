@@ -1,9 +1,12 @@
+use agent::agent::Status;
 use clap::Parser;
 use contracts::chat::{Completion, ToolCall};
+use decision_loop::meter::Spend;
 use serde_json::json;
 use session::Sessions;
 
 use super::*;
+use crate::brake::Halt;
 use crate::cli::Cli;
 use crate::compose::{Models, assemble};
 use crate::interrupt::Interrupt;

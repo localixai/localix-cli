@@ -13,6 +13,8 @@ use crate::commands::signin;
 use crate::compose::Rig;
 use crate::picker::{Item, Numbered, Terminal};
 use crate::providers::{self, Method, Provider};
+use crate::tui::asking::UiTerminal;
+use crate::tui::event::Event;
 
 /// What the steps ask of the world beyond the terminal: where each provider's sign-in comes
 /// from, and signing in (what was saved, in words).
@@ -150,7 +152,16 @@ fn reasoning(selection: Selection, terminal: &mut dyn Terminal) -> Option<Select
 
 /// `/login` at the prompt line: the steps, then the choice put in and saved.
 pub fn run(rig: &mut Rig, input: &mut dyn BufRead, shown: &dyn Fn(&str)) {
-    let mut terminal = Numbered { input, shown };
+    match rig.ui.clone() {
+        Some(ui) => {
+            let say = |text: &str| ui.send(Event::Note(text.to_string()));
+            steps(rig, &mut UiTerminal { ui: ui.clone() }, &say);
+        }
+        None => steps(rig, &mut Numbered { input, shown }, shown),
+    }
+}
+
+fn steps(rig: &mut Rig, terminal: &mut dyn Terminal, shown: &dyn Fn(&str)) {
     let sign_in = |provider, method, terminal: &mut dyn Terminal| {
         signin::sign_in(provider, method, terminal, shown)
     };
@@ -159,7 +170,7 @@ pub fn run(rig: &mut Rig, input: &mut dyn BufRead, shown: &dyn Fn(&str)) {
         sign_in: &sign_in,
         say: shown,
     };
-    match choose(&rig.choice, &mut terminal, &world) {
+    match choose(&rig.choice, terminal, &world) {
         Ok(Some(choice)) => rig.output.note(&adopt(rig, choice)),
         Ok(None) => rig.output.note("Nothing changed.\n"),
         Err(why) => rig.output.note(&format!("Not signed in: {why}\n")),

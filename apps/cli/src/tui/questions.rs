@@ -62,16 +62,29 @@ pub fn question(question: &Question, at: usize, of: usize) -> Select {
     if own == 0 { select.typing(0) } else { select }
 }
 
-pub fn choice(title: &str, options: &[String]) -> Select {
+pub fn choice(title: &str, options: &[(String, String)], marked: Option<usize>) -> Select {
     let title = vec![Line::from(vec![
         Span::styled("• ", style::waiting()),
         Span::styled(printable(title), style::bold()),
     ])];
-    Select::new(
-        title,
-        options.iter().map(|option| Choice::new(option)).collect(),
-        "esc to cancel",
-    )
+    let choices = options
+        .iter()
+        .map(|(label, detail)| Choice::new(label).detail(detail))
+        .collect();
+    Select::new(title, choices, "esc to cancel").at(marked.unwrap_or(0))
+}
+
+/// A line to type, its characters hidden for a secret.
+pub fn line(prompt: &str, hidden: bool) -> Select {
+    let title = vec![Line::from(vec![
+        Span::styled("• ", style::waiting()),
+        Span::styled(
+            printable(prompt.trim().trim_end_matches(['>', ':']).trim()),
+            style::bold(),
+        ),
+    ])];
+    let select = Select::new(title, vec![Choice::new("Type it").types()], "esc to cancel");
+    select.hidden(hidden).typing(0)
 }
 
 /// Sends what `picked` means to whoever asked. A refused approval returns what the person said
@@ -106,6 +119,12 @@ pub fn answer(open: Open, picked: Picked) -> Option<String> {
                 Picked::Cancelled => None,
             };
             let _ = reply.send(answer);
+        }
+        Open::Line(reply) => {
+            let _ = reply.send(match picked {
+                Picked::Typed(_, text) => Some(text),
+                _ => None,
+            });
         }
         Open::Choice(reply) => {
             let _ = reply.send(match picked {

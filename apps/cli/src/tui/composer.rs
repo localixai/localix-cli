@@ -34,9 +34,18 @@ pub struct Composer {
     earlier: Vec<String>,
     /// While walking `earlier`: which one is shown, and what was typed before the walk began.
     walking: Option<(usize, String)>,
+    /// A secret: each character is drawn as a dot.
+    masked: bool,
 }
 
 impl Composer {
+    pub fn masked(masked: bool) -> Self {
+        Self {
+            masked,
+            ..Self::default()
+        }
+    }
+
     pub fn text(&self) -> String {
         self.text.iter().collect()
     }
@@ -128,7 +137,9 @@ impl Composer {
             if index == self.at {
                 cursor = (rows.len() - 1, indent + used);
             }
-            rows.last_mut().unwrap().push(*c);
+            rows.last_mut()
+                .unwrap()
+                .push(if self.masked { '•' } else { *c });
             used += w;
         }
         if self.at == self.text.len() {

@@ -186,6 +186,11 @@ fn items(message: &Message) -> Vec<Value> {
                     "arguments": arguments})
             }))
             .collect(),
+        // A picture goes in as the person's message, after the call that took it.
+        Message::Image { caption, image } => vec![json!({"type": "message", "role": "user",
+            "content": [{"type": "input_text", "text": caption},
+                {"type": "input_image",
+                 "image_url": format!("data:{};base64,{}", image.media_type, image.data)}]})],
         // The wire has no failure flag for a tool result: the text says it.
         Message::ToolResult {
             id,

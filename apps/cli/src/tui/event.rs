@@ -63,8 +63,17 @@ pub enum Event {
     /// A choice of llx's own (carry out the plan?): a title and its options, and the one picked.
     Choose {
         title: String,
-        options: Vec<String>,
+        /// Each option's label and a short note.
+        options: Vec<(String, String)>,
+        /// The option in effect now, where the marker starts.
+        marked: Option<usize>,
         reply: Sender<Option<usize>>,
+    },
+    /// A line to type (a key, a pasted address), hidden when it is a secret.
+    Line {
+        prompt: String,
+        hidden: bool,
+        reply: Sender<Option<String>>,
     },
     /// The question open no longer waits (the task was stopped): it closes unanswered.
     Dismiss,

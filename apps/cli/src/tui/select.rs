@@ -72,6 +72,10 @@ pub struct Select {
     typing: Option<Composer>,
     /// What Esc does, as the hint says it: `esc to cancel`, `esc to say no`.
     escape: String,
+    /// What is typed is a secret: shown as dots.
+    hidden: bool,
+    /// Only a line to type, with no options shown.
+    direct: bool,
 }
 
 impl Select {
@@ -82,13 +86,28 @@ impl Select {
             at: 0,
             typing: None,
             escape: escape.into(),
+            hidden: false,
+            direct: false,
         }
+    }
+
+    /// The marker starts on `at`.
+    pub fn at(mut self, at: usize) -> Self {
+        self.at = at.min(self.choices.len().saturating_sub(1));
+        self
+    }
+
+    pub fn hidden(mut self, hidden: bool) -> Self {
+        self.hidden = hidden;
+        self
     }
 
     /// Opens the line of the option at `at` at once: a question with nothing to pick from.
     pub fn typing(mut self, at: usize) -> Self {
         self.at = at;
-        self.typing = Some(Composer::default());
+        self.typing = Some(Composer::masked(self.hidden));
+        // With nothing else to pick, the line is the whole question: no list, and Esc cancels.
+        self.direct = self.choices.len() == 1;
         self
     }
 
@@ -96,6 +115,7 @@ impl Select {
     pub fn key(&mut self, key: KeyEvent) -> Option<Picked> {
         if let Some(composer) = &mut self.typing {
             return match key.code {
+                KeyCode::Esc if self.direct => Some(Picked::Cancelled),
                 KeyCode::Esc => {
                     self.typing = None;
                     None
@@ -140,7 +160,7 @@ impl Select {
     fn pick(&mut self, at: usize) -> Option<Picked> {
         self.at = at;
         if self.choices[at].types {
-            self.typing = Some(Composer::default());
+            self.typing = Some(Composer::masked(self.hidden));
             return None;
         }
         Some(Picked::Option(at))
@@ -156,7 +176,12 @@ impl Select {
         if !out.is_empty() {
             out.push(Line::default());
         }
-        for (at, choice) in self.choices.iter().enumerate() {
+        let listed = if self.direct {
+            &self.choices[..0]
+        } else {
+            &self.choices[..]
+        };
+        for (at, choice) in listed.iter().enumerate() {
             let marked = at == self.at;
             let mark = if marked {
                 Span::styled("❯ ", style::bold())
@@ -188,7 +213,9 @@ impl Select {
         }
         let mut cursor = None;
         if let Some(composer) = &self.typing {
-            out.push(Line::default());
+            if !self.direct {
+                out.push(Line::default());
+            }
             let (rows, (row, column)) =
                 composer.render(Span::styled("  ❯ ", style::bold()), "Type here", width);
             cursor = Some((out.len() + row, column));
@@ -196,6 +223,7 @@ impl Select {
         }
         out.push(Line::default());
         let hint = match self.typing {
+            Some(_) if self.direct => format!("  enter to send · {}", self.escape),
             Some(_) => "  enter to send · esc to go back".to_string(),
             None => format!("  ↑↓ to choose · enter to confirm · {}", self.escape),
         };

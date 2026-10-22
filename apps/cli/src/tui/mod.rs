@@ -207,10 +207,36 @@ impl Ui {
 
     /// One of `options`, or `None`.
     pub fn choose(&self, title: &str, options: &[&str]) -> Option<usize> {
+        let options: Vec<(String, String)> = options
+            .iter()
+            .map(|o| (o.to_string(), String::new()))
+            .collect();
+        self.pick(title, options, None)
+    }
+
+    /// One of `options` (a label and a note each), starting on `marked`; `None` when cancelled.
+    pub fn pick(
+        &self,
+        title: &str,
+        options: Vec<(String, String)>,
+        marked: Option<usize>,
+    ) -> Option<usize> {
         let (reply, answer) = channel();
         self.send(Event::Choose {
             title: title.into(),
-            options: options.iter().map(|option| option.to_string()).collect(),
+            options,
+            marked,
+            reply,
+        });
+        answer.recv().ok().flatten()
+    }
+
+    /// A line the person types after `prompt`, shown as dots when `hidden`; `None` when cancelled.
+    pub fn line(&self, prompt: &str, hidden: bool) -> Option<String> {
+        let (reply, answer) = channel();
+        self.send(Event::Line {
+            prompt: prompt.into(),
+            hidden,
             reply,
         });
         answer.recv().ok().flatten()

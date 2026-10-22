@@ -14,6 +14,7 @@ use super::Ui;
 use super::event::Approval;
 use crate::gate::declined;
 use crate::mode::{AUTONOMOUS, Mode};
+use crate::picker::{Item, Lines, Picker};
 
 pub struct UiGate<'a> {
     pub ui: Ui,
@@ -78,5 +79,27 @@ impl Person for UiPerson<'_> {
             true => Reply::Stopped,
             false => Reply::Answers(answers),
         }
+    }
+}
+
+/// `/login`'s steps in the interface: each list a choice, each line typed in place (a key as dots).
+pub struct UiTerminal {
+    pub ui: Ui,
+}
+
+impl Picker for UiTerminal {
+    fn pick(&mut self, title: &str, items: &[Item]) -> Option<usize> {
+        let options = items
+            .iter()
+            .map(|item| (item.label.clone(), item.detail.clone()))
+            .collect();
+        self.ui
+            .pick(title, options, items.iter().position(|item| item.marked))
+    }
+}
+
+impl Lines for UiTerminal {
+    fn line(&mut self, prompt: &str, hidden: bool) -> Option<String> {
+        self.ui.line(prompt, hidden)
     }
 }

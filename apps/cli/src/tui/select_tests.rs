@@ -100,3 +100,25 @@ fn a_long_option_wraps_under_its_label() {
       ↑↓ to choose · enter to confirm · esc to skip
     ");
 }
+
+#[test]
+fn a_line_alone_shows_no_list_and_esc_cancels() {
+    let mut select = Select::new(
+        vec![Line::from("Paste the key")],
+        vec![Choice::new("Type it").types()],
+        "esc to cancel",
+    )
+    .hidden(true)
+    .typing(0);
+    for c in "sk-1".chars() {
+        select.key(key(KeyCode::Char(c)));
+    }
+    insta::assert_snapshot!(shown(&select, 40), @r"
+    Paste the key
+
+      ❯ ••••
+
+      enter to send · esc to cancel
+    ");
+    assert_eq!(select.key(key(KeyCode::Esc)), Some(Picked::Cancelled));
+}

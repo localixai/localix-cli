@@ -35,6 +35,7 @@ pub enum Open {
     Approval(Sender<Approval>),
     Question(Sender<Option<Answer>>),
     Choice(Sender<Option<usize>>),
+    Line(Sender<Option<String>>),
 }
 
 pub struct App {
@@ -204,9 +205,18 @@ impl App {
             Event::Choose {
                 title,
                 options,
+                marked,
                 reply,
             } => {
-                self.select = Some((questions::choice(&title, &options), Open::Choice(reply)));
+                let select = questions::choice(&title, &options, marked);
+                self.select = Some((select, Open::Choice(reply)));
+            }
+            Event::Line {
+                prompt,
+                hidden,
+                reply,
+            } => {
+                self.select = Some((questions::line(&prompt, hidden), Open::Line(reply)));
             }
             Event::Dismiss => {
                 if let Some((_, open)) = self.select.take() {

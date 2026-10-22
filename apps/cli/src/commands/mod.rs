@@ -3,6 +3,8 @@
 //! exits the process with the run's code, which nothing else decides).
 
 pub mod doctor;
+pub mod ended;
+pub mod entry;
 pub mod login;
 pub mod repl;
 pub mod run;

@@ -285,3 +285,24 @@ fn a_usage_limit_says_so() {
     let refused = model.complete(request).unwrap_err().to_string();
     assert!(refused.contains("usage limit") && refused.contains("try later"));
 }
+
+#[test]
+fn a_picture_goes_in_as_a_user_message_with_an_input_image() {
+    let image = contracts::tool::Image {
+        media_type: "image/jpeg".into(),
+        data: "/9j/AA==".into(),
+        width: 2,
+        height: 1,
+    };
+    let item = &items(&Message::Image {
+        caption: "The screenshot".into(),
+        image,
+    })[0];
+    assert_eq!(item["role"], "user");
+    assert_eq!(item["content"][0]["text"], "The screenshot");
+    assert_eq!(item["content"][1]["type"], "input_image");
+    assert_eq!(
+        item["content"][1]["image_url"],
+        "data:image/jpeg;base64,/9j/AA=="
+    );
+}

@@ -29,7 +29,7 @@ fn a_prompt_runs_with_its_options() {
         "fix the tests",
     ])
     .unwrap();
-    assert_eq!(cli.prompt.as_deref(), Some("fix the tests"));
+    assert_eq!(joined(&cli.prompt).as_deref(), Some("fix the tests"));
     assert!(cli.command.is_none());
     let run = cli.run;
     assert!(run.yes && run.json && run.show_browser);
@@ -44,8 +44,8 @@ fn a_prompt_runs_with_its_options() {
 #[test]
 fn no_prompt_is_the_prompt_line() {
     let cli = parse(&[]).unwrap();
-    assert!(cli.prompt.is_none() && cli.command.is_none());
-    assert_eq!(parse(&["-"]).unwrap().prompt.as_deref(), Some("-"));
+    assert!(cli.prompt.is_empty() && cli.command.is_none());
+    assert_eq!(joined(&parse(&["-"]).unwrap().prompt).as_deref(), Some("-"));
 }
 
 #[test]
@@ -130,7 +130,7 @@ fn exec_runs_one_task_as_codex_exec_does() {
         else {
             panic!("{name} is not exec")
         };
-        assert_eq!(exec.prompt.as_deref(), Some("fix it"));
+        assert_eq!(joined(&exec.prompt).as_deref(), Some("fix it"));
         assert!(exec.run.json && exec.run.yes && exec.command.is_none());
     }
     let Some(Command::Exec(exec)) = parse(&["exec", "resume", "--last", "go on"])
@@ -149,9 +149,9 @@ fn exec_runs_one_task_as_codex_exec_does() {
 fn print_and_continue_are_claudes_spellings() {
     let print = parse(&["-p", "review this"]).unwrap();
     assert!(print.print && !print.resume_last);
-    assert_eq!(print.prompt.as_deref(), Some("review this"));
+    assert_eq!(joined(&print.prompt).as_deref(), Some("review this"));
     let resumed = parse(&["-c"]).unwrap();
-    assert!(resumed.resume_last && resumed.prompt.is_none());
+    assert!(resumed.resume_last && resumed.prompt.is_empty());
     assert!(parse(&["-c", "-p", "go on"]).unwrap().print);
     for alias in ["--yolo", "--dangerously-skip-permissions"] {
         assert!(parse(&[alias, "x"]).unwrap().run.yes, "{alias}");
@@ -182,8 +182,11 @@ fn the_mode_is_a_flag_with_claudes_spelling_too_and_conflicts_with_yes() {
 }
 
 #[test]
-fn a_prompt_conflicts_with_a_subcommand() {
-    assert!(parse(&["fix it", "sessions"]).is_err());
+fn a_command_counts_only_as_the_first_word() {
+    // After the first word of a prompt, a command's name is just another word of it.
+    let cli = parse(&["fix it", "sessions"]).unwrap();
+    assert_eq!(joined(&cli.prompt).as_deref(), Some("fix it sessions"));
+    assert!(cli.command.is_none());
     assert!(parse(&["login", "--with-token", "status"]).is_err());
 }
 
@@ -205,4 +208,30 @@ fn help_and_version_are_not_errors() {
         assert!(help.contains(heading), "no {heading} in --help");
     }
     assert!(help.contains("Examples:"));
+}
+
+#[test]
+fn a_prompt_needs_no_quotes_and_commands_still_parse() {
+    let cli = parse(&["сделать", "лендинг", "для", "кафе", "-y"]).unwrap();
+    assert_eq!(
+        joined(&cli.prompt).as_deref(),
+        Some("сделать лендинг для кафе")
+    );
+    assert!(cli.run.yes, "an option after the words is still an option");
+    assert!(cli.command.is_none());
+    let Some(Command::Exec(exec)) = parse(&["exec", "fix", "the", "tests"]).unwrap().command else {
+        panic!("exec")
+    };
+    assert_eq!(joined(&exec.prompt).as_deref(), Some("fix the tests"));
+    assert!(matches!(
+        parse(&["sessions"]).unwrap().command,
+        Some(Command::Sessions)
+    ));
+    let Some(Command::Exec(exec)) = parse(&["exec", "resume", "--last", "go on"])
+        .unwrap()
+        .command
+    else {
+        panic!("exec resume")
+    };
+    assert!(matches!(exec.command, Some(ExecCommand::Resume(_))));
 }

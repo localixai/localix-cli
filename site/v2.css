@@ -268,17 +268,21 @@ h1 {
 .rig {
   position: relative;
 }
+/* A terminal window, as plain as a real one: a slightly lighter ground, a soft shadow, no frame
+   and no title bar. The prompt line follows the output. */
 .term {
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  background: var(--card);
+  border-radius: 14px;
+  background: #0f0f0f;
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.03) inset,
+    0 40px 90px -40px rgb(0 0 0 / 0.95);
   cursor: text;
 }
 .screen {
-  --pad: 1.1rem;
+  --pad: 1.4rem;
   --step: 10ch;
-  height: 22rem;
-  padding: 0.9rem var(--pad) 0;
+  height: 26rem;
+  padding: 1.3rem var(--pad);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -356,8 +360,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.6rem 1.1rem 0.9rem;
-  font-size: 0.75rem;
+  min-height: 1.7em;
 }
 .ps {
   color: var(--muted);
@@ -386,9 +389,8 @@ h1 {
   bottom: -2.5rem;
   z-index: 2;
   width: min(19rem, 72%);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  background: var(--raised);
+  border-radius: 14px;
+  background: #161616;
   box-shadow: 0 30px 70px -20px rgb(0 0 0 / 0.9);
   overflow: hidden;
   opacity: 0;
@@ -402,6 +404,11 @@ h1 {
 .browser.is-on {
   opacity: 1;
   transform: none;
+}
+.b-url {
+  padding: 0.65rem 1rem;
+  color: var(--muted);
+  font: 400 0.6875rem/1 var(--mono);
 }
 .b-page {
   position: relative;

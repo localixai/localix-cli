@@ -68,9 +68,10 @@ LLX_DECISION_MODEL, LLX_SESSIONS (where sessions are kept, default ~/.lx/session
     args_conflicts_with_subcommands = true
 )]
 pub struct Cli {
-    /// The first message of the session; with -p, the task (`-` reads it from stdin).
-    #[arg(value_name = "PROMPT")]
-    pub prompt: Option<String>,
+    /// The first message of the session; with -p, the task (`-` reads it from stdin). Quotes
+    /// are optional: the words are joined with spaces.
+    #[arg(value_name = "PROMPT", num_args = 1..)]
+    pub prompt: Vec<String>,
     /// Run the prompt as one task and exit, as `llx exec` does.
     #[arg(short = 'p', long)]
     pub print: bool,
@@ -109,9 +110,10 @@ pub enum Command {
 
 #[derive(Args, Debug)]
 pub struct ExecArgs {
-    /// The task, in plain words; `-` reads it from stdin. Without one, piped stdin is the task.
-    #[arg(value_name = "PROMPT")]
-    pub prompt: Option<String>,
+    /// The task, in plain words, quoted or not; `-` reads it from stdin. Without one, piped
+    /// stdin is the task.
+    #[arg(value_name = "PROMPT", num_args = 1..)]
+    pub prompt: Vec<String>,
     #[command(flatten)]
     pub run: RunOptions,
     #[command(subcommand)]
@@ -250,6 +252,11 @@ pub struct RunOptions {
     /// uses the browser).
     #[arg(long, help_heading = "Browser")]
     pub show_browser: bool,
+}
+
+/// A prompt given as words, unquoted or quoted, as one text; `None` when none was given.
+pub fn joined(words: &[String]) -> Option<String> {
+    (!words.is_empty()).then(|| words.join(" "))
 }
 
 #[cfg(test)]

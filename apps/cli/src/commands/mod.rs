@@ -8,7 +8,7 @@ pub mod repl;
 pub mod run;
 pub mod sessions;
 
-use crate::cli::{Cli, Command, ExecCommand};
+use crate::cli::{Cli, Command, ExecCommand, joined};
 use crate::error::Failure;
 use run::Kind;
 
@@ -18,10 +18,12 @@ pub fn dispatch(cli: Cli) -> Result<i32, Failure> {
         false => Kind::Session,
     };
     match cli.command {
-        None if cli.resume_last => sessions::resume(None, cli.prompt.as_deref(), cli.run, kind),
-        None => run::run(cli.prompt.as_deref(), cli.run, None, kind),
+        None if cli.resume_last => {
+            sessions::resume(None, joined(&cli.prompt).as_deref(), cli.run, kind)
+        }
+        None => run::run(joined(&cli.prompt).as_deref(), cli.run, None, kind),
         Some(Command::Exec(exec)) => match exec.command {
-            None => run::run(exec.prompt.as_deref(), exec.run, None, Kind::Exec),
+            None => run::run(joined(&exec.prompt).as_deref(), exec.run, None, Kind::Exec),
             Some(ExecCommand::Resume(args)) => resumed(args, Kind::Exec),
         },
         Some(Command::Resume(args)) => resumed(args, Kind::Session),

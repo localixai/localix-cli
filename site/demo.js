@@ -76,6 +76,8 @@ function setUpDemo(root) {
 
   // One line: plain text, or parts as [text, class]; `hang` is where a wrapped line continues.
   function line(text, kind = '', hang = 0) {
+    // A blank line separates; at the top of an empty screen there is nothing to separate.
+    if (text === '' && !screen.querySelector('.l')) return null;
     const node = document.createElement('div');
     node.className = `l ${kind}`;
     if (hang) node.style.setProperty('--hang', typeof hang === 'number' ? `${hang}ch` : hang);
@@ -94,7 +96,10 @@ function setUpDemo(root) {
       span.textContent = content;
       node.append(span);
     }
-    screen.append(node);
+    // The prompt line follows the output, as in a real terminal, when it sits in the screen.
+    const entry = input.closest('.entry');
+    if (entry && entry.parentElement === screen) screen.insertBefore(node, entry);
+    else screen.append(node);
     screen.scrollTop = screen.scrollHeight;
     return node;
   }
@@ -102,12 +107,14 @@ function setUpDemo(root) {
   const lines = (text, kind) => text.split('\n').forEach((t) => line(t, kind));
   const time = (ms) => `${(ms / 1000).toFixed(1)}s`.padStart(7, ' ');
 
+  // A new session: an empty screen and the prompt line, nothing else.
   function banner() {
     session += 1;
     tasks = 0;
-    screen.textContent = '';
-    line(`llx 0.1.0 · ${MODEL} · ~/ember · bypass`, 'dim');
-    line('Type a task; each one goes on from the last. /help, or Ctrl-D to quit.', 'dim');
+    clearScreen();
+  }
+  function clearScreen() {
+    screen.querySelectorAll('.l').forEach((node) => node.remove());
   }
 
   const sleep = (ms, mine) =>

@@ -13,7 +13,7 @@ pub enum Failure {
     Usage(String),
     /// What the command needs is not there: the network, a model, a file it must write.
     Environment(String),
-    /// No OpenRouter key, from the environment or a sign-in.
+    /// No sign-in to the chosen provider (a key, or ChatGPT tokens).
     SignedOut,
     /// The reader of stdout went away (`llx … | head -1`): nothing is left to tell anyone, so
     /// the command ends quietly, like any Unix filter.
@@ -51,8 +51,8 @@ impl fmt::Display for Failure {
         match self {
             Self::Usage(message) | Self::Environment(message) => f.write_str(message),
             Self::SignedOut => f.write_str(
-                "not signed in: set OPENROUTER_API_KEY, or run `llx login` \
-                 (`llx login --with-token` reads a key from stdin)",
+                "not signed in: open a session (`llx`) and type /login, or set \
+                 OPENROUTER_API_KEY",
             ),
             Self::Closed => f.write_str("the output was closed"),
         }

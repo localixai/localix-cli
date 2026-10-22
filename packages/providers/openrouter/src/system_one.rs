@@ -9,12 +9,12 @@ use crate::client::{ApiError, OpenRouter};
 
 pub const DEFAULT_MODEL: &str = "~typesafe/jev-latest";
 
-pub struct SystemOne<'a> {
-    pub client: &'a OpenRouter,
+pub struct SystemOne {
+    pub client: OpenRouter,
     pub model: String,
 }
 
-impl Decider for SystemOne<'_> {
+impl Decider for SystemOne {
     fn decide(
         &self,
         state: &Value,

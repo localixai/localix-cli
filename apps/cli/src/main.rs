@@ -5,6 +5,7 @@
 //! returns. Nothing else exits.
 
 mod brake;
+mod choice;
 mod cli;
 mod commands;
 mod compose;
@@ -14,10 +15,13 @@ mod exit;
 mod gate;
 mod input;
 mod interrupt;
+mod live;
 mod mode;
 mod output;
 mod person;
+mod picker;
 mod printable;
+mod providers;
 #[cfg(test)]
 mod testing;
 mod tui;

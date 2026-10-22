@@ -51,7 +51,8 @@ fn sources(dir: &Path, found: &mut Vec<PathBuf>) {
 fn measure() -> (BTreeMap<String, usize>, Vec<(usize, PathBuf)>) {
     let mut packages = BTreeMap::new();
     let mut files = vec![];
-    for group in ["packages", "apps"] {
+    // The model providers live a level down, a package each.
+    for group in ["packages", "packages/providers", "apps"] {
         for entry in std::fs::read_dir(root().join(group)).unwrap().flatten() {
             let mut found = vec![];
             sources(&entry.path().join("src"), &mut found);

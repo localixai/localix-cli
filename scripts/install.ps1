@@ -59,5 +59,5 @@ if (-not (($userPath -split ';') -contains $dir)) {
 
 Write-Host ''
 Write-Host 'Next steps:'
-Write-Host '  llx login     # sign in with OpenRouter (or set OPENROUTER_API_KEY)'
-Write-Host '  llx doctor    # check the key, the models and the WebView2 runtime'
+Write-Host '  llx           # a session: type /login to sign in (ChatGPT or OpenRouter)'
+Write-Host '  llx doctor    # check the sign-ins, the models and the WebView2 runtime'

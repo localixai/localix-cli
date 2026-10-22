@@ -7,7 +7,7 @@
 ## Install
 
 - `curl -fsSL https://llx.sh | sh` installs `llx` and `lx` into `~/.local/bin`.
-- Sign in with `llx login`, or set `OPENROUTER_API_KEY`.
+- Sign in with `/login` in a session (`llx`): OpenAI with a ChatGPT sign-in, or OpenRouter with a key. Or set `OPENROUTER_API_KEY`.
 
 ## Use
 

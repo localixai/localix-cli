@@ -12,11 +12,11 @@ use agent::agent::Status;
 use contracts::history::{History, Session, Turn};
 use contracts::view::View;
 use decision_loop::meter::Spend;
-use openrouter::auth;
 use serde_json::Value;
 use tools::workspace::Workspace;
 
 use crate::brake::Halt;
+use crate::choice;
 use crate::cli::RunOptions;
 use crate::commands::{repl, sessions};
 use crate::compose::{APP, Rig, Setup, compose};
@@ -29,8 +29,8 @@ use crate::interrupt;
 use crate::mode::{self, Mode};
 use crate::output::{Start, Summary};
 
-/// The workspace `options` name (`-C`, else the current directory), with llx's own key and
-/// sessions off limits to the tools: a prompt injection must not read them into the conversation.
+/// The workspace `options` name (`-C`, else the current directory), with llx's config (keys,
+/// tokens) and sessions off limits to the tools: a prompt injection must not read them.
 pub fn root(options: &RunOptions) -> Result<Workspace, Failure> {
     let root = options.cd.as_deref().unwrap_or(Path::new("."));
     let workspace = Workspace::new(root)
@@ -39,7 +39,7 @@ pub fn root(options: &RunOptions) -> Result<Workspace, Failure> {
         let why = format!("-C {}: not a directory", root.display());
         return Err(Failure::Usage(why));
     }
-    let private = auth::credentials_path(APP).into_iter();
+    let private = provider_kit::store::dir(APP).into_iter();
     Ok(workspace.denying(private.chain([sessions::store().dir])))
 }
 
@@ -106,7 +106,11 @@ pub fn run(
     if kind == Kind::Session {
         session_allowed(prompt, &options, std::io::stdin().is_terminal())?;
     }
-    let (key, _) = auth::key(APP).ok_or(Failure::SignedOut)?;
+    let choice = choice::resolve(&options.models, choice::saved())?;
+    // A session starts signed out too, so that /login can sign in; one task cannot.
+    if kind == Kind::Exec && choice.provider.signed_in().is_none() {
+        return Err(Failure::SignedOut);
+    }
     let work = work(prompt, kind)?;
     let mode = Mode::choose(options.mode, options.yes);
     let (terminal, asks) = (Tty::available(), kind == Kind::Session);
@@ -127,7 +131,7 @@ pub fn run(
     let headless = !options.show_browser;
     let setup = Setup {
         options,
-        key,
+        choice,
         workspace,
         context,
         fresh,
@@ -160,7 +164,7 @@ impl Rig<'_> {
         self.output.started(&Start {
             goal,
             session: &self.session.id,
-            model: &self.options.models.model,
+            model: self.choice.model(),
             decision_model: &self.options.models.decision_model,
             workspace: &workspace,
         });

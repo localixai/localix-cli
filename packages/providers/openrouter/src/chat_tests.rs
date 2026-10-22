@@ -47,3 +47,9 @@ fn a_tool_call_with_unreadable_arguments_arrives_as_their_text() {
     );
     assert_eq!(call.map(|c| c.arguments), Some(json!("{\"path\": \"a")));
 }
+
+#[test]
+fn off_turns_thinking_off_and_a_level_is_asked_by_name() {
+    assert_eq!(reasoning(Effort::Off), json!({"enabled": false}));
+    assert_eq!(reasoning(Effort::XHigh), json!({"effort": "xhigh"}));
+}

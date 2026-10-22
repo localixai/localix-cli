@@ -7,6 +7,7 @@ pub mod login;
 pub mod repl;
 pub mod run;
 pub mod sessions;
+pub mod signin;
 
 use crate::cli::{Cli, Command, ExecCommand, joined};
 use crate::error::Failure;
@@ -28,8 +29,7 @@ pub fn dispatch(cli: Cli) -> Result<i32, Failure> {
         },
         Some(Command::Resume(args)) => resumed(args, Kind::Session),
         Some(Command::Sessions) => sessions::list(),
-        Some(Command::Login(args)) => login::login(args),
-        Some(Command::Logout) => login::logout(),
+        Some(Command::Logout) => signin::logout(),
         Some(Command::Doctor(models)) => doctor::doctor(&models),
     }
 }

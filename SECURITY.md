@@ -31,10 +31,13 @@ selector, coordinates or code for the browser's hands.
 
 ## Keys
 
-The OpenRouter key comes from `OPENROUTER_API_KEY` or from `llx login`, which saves it in a file
-readable only by you (mode 0600 on Unix). `llx logout` deletes it. Goals, page text and command
-output are sent to OpenRouter and the models you choose; do not point llx at secrets you would
-not send there.
+The OpenRouter key comes from `OPENROUTER_API_KEY` or from `/login` in a session, which saves it
+in `~/.config/llx/credentials`. A ChatGPT sign-in (`/login`, OpenAI) saves its access, refresh
+and ID tokens in `~/.config/llx/openai.json`. Both files are readable only by you (mode 0600 on
+Unix), keys and tokens are never printed or logged, and the tools cannot read anything under
+`~/.config/llx/`. `llx logout` deletes both. Goals, page text and command output are sent to the
+provider and the models you choose (OpenRouter, or OpenAI's ChatGPT backend); do not point llx
+at secrets you would not send there.
 
 ## Releases
 

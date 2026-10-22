@@ -45,11 +45,17 @@ llx uses the system's own WebView for the browser:
 ## Quick start
 
 ```bash
-llx login        # sign in with OpenRouter in your browser; or export OPENROUTER_API_KEY=sk-or-...
-llx doctor       # checks the key, both models, the WebView and the shell
 cd your-project
-llx              # a session: type a task, each one goes on from the last
+llx              # a session: type /login first, then a task; each one goes on from the last
+llx doctor       # checks the sign-ins, both models, the WebView and the shell
 ```
+
+`/login` asks for a provider, signs you in to it, then asks for one of its models and a reasoning level that model takes:
+
+- **OpenAI**, with a ChatGPT sign-in: your browser opens OpenAI's sign-in page and comes back to llx on `127.0.0.1:1455` (or 1457); requests are billed to your ChatGPT plan. On a machine without a browser, open the address shown elsewhere and paste the address the browser ends on.
+- **OpenRouter**, with a key: paste it (it is not shown), or sign in in the browser for a new one. `OPENROUTER_API_KEY` works too, and wins over a saved key.
+
+The choice is put in at once, in the same conversation, and saved as the default for later sessions and for `exec`. The browser tool's decision model runs on OpenRouter, so browser actions need an OpenRouter key whichever provider the agent thinks with.
 
 ## Usage
 
@@ -72,7 +78,7 @@ llx exec --schema '{"type":"object","properties":{"version":{"type":"string"}},"
 llx exec resume --last "now update the README"             # one more task in the newest session
 ```
 
-In a session, each line you type is the next task, in the same conversation. A line ending in `\` goes on on the next. Slash commands: `/mode [name]` (also `/permissions`) lists the [modes](#modes-and-approvals) or switches to one, `/plan [task]` enters plan mode (and runs the task in it), Shift+Tab then Enter toggles plan mode, `/new` (also `/clear`) starts a new conversation and session, `/status` shows the models, the workspace, the mode, the session and any terminal session still running, `/help`, and `/exit` (also `/quit`, or Ctrl-D). The prompt shows the mode when it is not `default` (`plan › `). A session needs a terminal on stdin; without one, use `llx exec`.
+In a session, each line you type is the next task, in the same conversation. A line ending in `\` goes on on the next. Slash commands: `/login` signs in and chooses the provider, the model and its reasoning level (see [Quick start](#quick-start)), `/mode [name]` (also `/permissions`) lists the [modes](#modes-and-approvals) or switches to one, `/plan [task]` enters plan mode (and runs the task in it), Shift+Tab then Enter toggles plan mode, `/new` (also `/clear`) starts a new conversation and session, `/status` shows the models, the workspace, the mode, the session and any terminal session still running, `/help`, and `/exit` (also `/quit`, or Ctrl-D). The prompt shows the mode when it is not `default` (`plan › `). A session needs a terminal on stdin; without one, use `llx exec`.
 
 | Option | Meaning |
 | --- | --- |
@@ -85,7 +91,9 @@ In a session, each line you type is the next task, in the same conversation. A l
 | `--schema SCHEMA` | With `exec` or `-p`: end with data matching this JSON Schema (inline, or `@file`), printed alone on stdout. |
 | `-o, --output-last-message FILE` | With `exec` or `-p`: also write the final answer, or the data with `--schema`, to FILE. With `--schema` and no data that matched, the file is left empty. |
 | `-v, --verbose` | Show each tool result and model turn in the trace. With `--json`, the trace also goes to stderr. |
-| `-m, --model MODEL` | The agent's chat model, any OpenRouter model id. Env `LLX_MODEL`, default `anthropic/claude-haiku-5.5`. |
+| `--provider PROVIDER` | Where the agent's chat model comes from: `openai` (a ChatGPT sign-in) or `openrouter` (a key). Env `LLX_PROVIDER`. Default: the one `/login` saved, else the one signed in to. |
+| `-m, --model MODEL` | The agent's chat model, a model id of the provider's (any OpenRouter id works). Env `LLX_MODEL`. Default: the one `/login` saved, else `gpt-6-luna` on OpenAI and `anthropic/claude-haiku-5.5` on OpenRouter. |
+| `--reasoning LEVEL` | How much the chat model reasons: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` or `ultra`, as far as the model takes it (a level it does not take is a usage error; `/login` lists its levels). Env `LLX_REASONING`. Default: the one `/login` saved for that model, else the model's own. |
 | `--decision-model MODEL` | The browser's decision model. Env `LLX_DECISION_MODEL`, default `~typesafe/jev-latest`. |
 | `--max-turns N` | Model turns for one task (50; 1 to 10000). |
 | `--max-steps N` | Actions for one browser task of the decision model (40; 1 to 10000). |
@@ -94,8 +102,7 @@ In a session, each line you type is the next task, in the same conversation. A l
 
 Commands:
 
-- `login`: sign in with OpenRouter. `login --with-token` reads the key from stdin instead (at a terminal, with the echo off), and `login status` shows where the key comes from, masked.
-- `logout`: forget the saved key.
+- `logout`: forget every saved sign-in: the ChatGPT tokens and the OpenRouter key. (Signing in is `/login` in a session.)
 - `sessions`: list the saved sessions, newest first, with the directory each ran in.
 - `exec [PROMPT | -]` (alias `e`): run one task without a session and exit, with the answer alone on stdout. `exec resume [ID | --last] [PROMPT]` runs one more task in a saved session.
 - `resume [ID | --last] [PROMPT]`: go on with a session at the terminal. `--last` is the newest session that ran in this workspace (else the newest of all, with a note).
@@ -175,24 +182,27 @@ The workspace is split into packages and one app. Every dependency points inward
 | `packages/agent` | The agent: the chat model's loop over tools, the conversation, `--schema`, the system prompt | `contracts` |
 | `packages/decision-loop` | The browser's hands: a short task carried out on a view, one decision-model request per step | `contracts` |
 | `packages/tools` | `read`, `edit`, `bash`, `ask`, the workspace, and the browser (window, driver, page probe) | `contracts` |
-| `packages/openrouter` | The models' provider (chat and decision models) and signing in | `contracts` |
+| `packages/providers/kit` | What the providers share: an HTTP client on the OS's TLS, PKCE, the sign-in callback server and its pages, private credential files, server-sent events | nothing |
+| `packages/providers/openrouter` | OpenRouter: its chat models (with a catalog of models and their reasoning levels), the decision model, its key and sign-in | `contracts`, the kit |
+| `packages/providers/openai` | OpenAI with a ChatGPT sign-in: the OAuth flow and token refresh, the Responses API of the ChatGPT backend, the models a plan reaches | `contracts`, the kit |
 | `packages/session` | Sessions as JSON files | `contracts` |
 | `apps/cli` | The `llx` binary: the command line, the modes and approvals, who answers `ask`, the context, the output; it composes the packages | all of the above |
 
-The agent knows its tools only by their specs, the hands know a view only through its protocol, and neither names a tool or a provider. A tool asks the gate before an effect, and the person a question, but only the app answers them.
+The agent knows its tools only by their specs, the hands know a view only through its protocol, and neither names a tool or a provider. A provider implements the chat port (and the decision port where it has decision models) and lists its models with the reasoning levels each takes; only `apps/cli/src/providers.rs` knows the provider packages, so a new provider is a package under `packages/providers/` and one arm per `match` there. A tool asks the gate before an effect, and the person a question, but only the app answers them.
 
 ## Trust boundaries
 
 - **Tool output is data, not instructions.** File contents, command output and pages are untrusted. The system prompt says so, and every page reaches the agent marked as untrusted content. This lowers the risk of prompt injection without removing it: approve commands with that in mind, and use `-y` in places where a wrong command costs little.
 - **The workspace limits `edit`, not `bash`.** `edit` changes only files inside the workspace, after following symlinks. `bash` is a real shell with your permissions, and there is no sandbox: the gate is what stands between the model and your machine. A `workdir` outside the workspace is named as such in the question.
-- **llx's own files are off limits** to `read` and `edit`, symlinks included: the saved key and the sessions directory.
+- **llx's own files are off limits** to `read` and `edit`, symlinks included: its config directory (the saved key, the ChatGPT tokens, the `/login` choice) and the sessions directory.
 - **The browser's decision model only chooses** among the operations and controls a page offers, and types only the strings the agent gave it. Its output never becomes a selector, coordinates or code. Only http(s) pages load; downloads and other schemes are refused. A password field is typed into, but its value is never read back.
-- **Keys:** the key `llx login` saves lives in `~/.config/llx/credentials` (under `XDG_CONFIG_HOME` when set, `%APPDATA%` on Windows), mode 0600 on Unix, also when an older file was wider. `llx logout` removes it. `OPENROUTER_API_KEY` wins over it when set. Commands start without the variable in their environment, but a command can still read the key from llx's environment or from the saved file: what keeps it from a command is approving each one (not `--yes`, `bypass` or `autonomous`).
+- **Keys and tokens:** `/login` saves an OpenRouter key in `~/.config/llx/credentials` and a ChatGPT sign-in's tokens (access, refresh, ID, and the account id) in `~/.config/llx/openai.json` (under `XDG_CONFIG_HOME` when set, `%APPDATA%` on Windows), mode 0600 on Unix, also when an older file was wider; the choice of provider, model and level goes in `settings.json` beside them. Keys and tokens are never printed or logged; a pasted key is read with the echo off and shown only as its masked ends. The ChatGPT access token is refreshed five minutes before it lapses (and once when a request is refused), and the refreshed tokens are saved. `llx logout` removes both files. `OPENROUTER_API_KEY` wins over a saved key when set. Commands start without the variable in their environment, but a command can still read the key from llx's environment or from the saved file: what keeps it from a command is approving each one (not `--yes`, `bypass` or `autonomous`).
 
 Known gaps:
 
 - Terminal sessions (`bash` with `tty`) have no screen: a full-screen program (an editor, `top`, a pager) shows only fragments of its text, so the agent is steered to batch modes. The window is fixed at 120×40. There are none on Windows: `tty` is not offered there. A session never outlives its task, so a long-lived server still runs as `cmd > log 2>&1 &`. `wait_for` can match the echo of the text typed; the report says so when the text was in the input.
-- On Windows, Ctrl-C ends llx and the commands it started at once (they share the console), with no `run.completed` event, and `login --with-token` shows the key as it is pasted.
+- On Windows, Ctrl-C ends llx and the commands it started at once (they share the console), with no `run.completed` event, and a key pasted at `/login` shows as it is typed.
+- `/login` asks with a numbered list read from the prompt line (type a number and Enter; Enter alone keeps the marked option; `q` cancels).
 
 ## Metrics
 

@@ -17,11 +17,8 @@ use contracts::tool::Tool;
 use decision_loop::decision_loop::DecisionLoop;
 use decision_loop::meter::{Meter, MeteredDecider};
 use decision_loop::step::GoalStep;
-use openrouter::App;
 use openrouter::auth::KEY_VARIABLE;
-use openrouter::chat::ChatModel;
-use openrouter::client::OpenRouter;
-use openrouter::system_one::SystemOne;
+use provider_kit::App;
 use serde_json::Value;
 use session::Sessions;
 use tools::ask::AskTool;
@@ -31,14 +28,16 @@ use tools::shell::BashTool;
 use tools::workspace::Workspace;
 
 use crate::brake::{Brake, BrakedDecider};
+use crate::choice::Choice;
 use crate::cli::RunOptions;
 use crate::gate::{Stoppable, Tty};
 use crate::interrupt::{self, Interrupt};
+use crate::live::Live;
 use crate::mode::{self, Mode, ModeGate};
 use crate::output::Output;
 use crate::person::TerminalPerson;
 
-/// Who calls OpenRouter: its attribution, the sign-in page, the folder the key is saved in.
+/// Who calls the providers: attribution, the sign-in pages, the folder sign-ins are saved in.
 pub const APP: App = App {
     name: "llx",
     slug: "llx",
@@ -52,7 +51,8 @@ const HIDDEN: &[&str] = &[KEY_VARIABLE];
 /// thread (so a bad argument still fails fast, with no window machinery started).
 pub struct Setup {
     pub options: RunOptions,
-    pub key: String,
+    /// The provider, model and reasoning level the agent thinks with.
+    pub choice: Choice,
     pub workspace: Workspace,
     /// The agent's context block: the environment, the instructions, an earlier session.
     pub context: String,
@@ -76,6 +76,8 @@ pub struct Models<'a> {
     pub chat: &'a dyn Chat,
     /// Behind the browser's hands.
     pub decider: &'a dyn Decider,
+    /// Where `/login` puts the models it chose; `None` when they cannot change.
+    pub live: Option<&'a Live>,
 }
 
 /// The built agent and what a task needs around it; one per process, for every task it runs.
@@ -109,6 +111,9 @@ pub struct Rig<'a> {
     pub told: Mode,
     /// The mode plan mode was entered from, which carrying out the plan goes back to.
     pub before_plan: Mode,
+    /// What the agent thinks with now.
+    pub choice: Choice,
+    pub live: Option<&'a Live>,
 }
 
 impl Rig<'_> {
@@ -146,21 +151,14 @@ impl Rig<'_> {
     }
 }
 
-/// Build the agent from `setup` on OpenRouter's models, with the browser when `browser` is given,
-/// and run `work` with it; its exit code is returned.
+/// Build the agent from `setup` on the chosen provider's chat model and OpenRouter's decision
+/// model, with the browser when `browser` is given, and run `work` with it; its exit code.
 pub fn compose(setup: Setup, browser: Option<Browser>, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
-    let client = OpenRouter::new(setup.key.clone(), APP);
-    let chat = ChatModel {
-        client: &client,
-        model: setup.options.models.model.clone(),
-    };
-    let system_one = SystemOne {
-        client: &client,
-        model: setup.options.models.decision_model.clone(),
-    };
+    let live = Live::of(&setup.choice, &setup.options.models.decision_model);
     let models = Models {
-        chat: &chat,
-        decider: &system_one,
+        chat: &live.chat,
+        decider: &live.decider,
+        live: Some(&live),
     };
     let output = Output::new(setup.options.json, setup.options.verbose);
     assemble(setup, models, &output, &interrupt::PROCESS, browser, work)
@@ -187,7 +185,7 @@ pub fn assemble(
         asks,
         history,
         session,
-        ..
+        choice,
     } = setup;
     let closed = || output.closed();
     let stopped = || interrupt.stopped();
@@ -284,6 +282,8 @@ pub fn assemble(
             Mode::Plan => Mode::Default,
             other => other,
         },
+        choice,
+        live: models.live,
     };
     work(&mut rig)
 }

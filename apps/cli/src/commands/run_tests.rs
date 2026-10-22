@@ -128,7 +128,7 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
     let session = history.start();
     let setup = Setup {
         options,
-        key: "test".into(),
+        choice: crate::choice::Choice::new(crate::providers::Provider::OpenRouter, "test/model"),
         workspace: Workspace::new(&work).unwrap(),
         context: String::new(),
         fresh: String::new(),
@@ -158,6 +158,7 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
     let models = Models {
         chat: &chat,
         decider: &NoDecider,
+        live: None,
     };
     let out = Captured::default();
     let output = Output::with(

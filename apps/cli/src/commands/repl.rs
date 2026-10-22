@@ -1,18 +1,20 @@
 //! The prompt line: `llx` at a terminal, after its first message when one was given. Each line is
 //! the next task, in the same conversation, workspace, browser window and session; a line ending
-//! in `\` goes on on the next. `/new` starts over, `/status` says where things stand, `/mode`
-//! shows or switches the mode, `/plan` enters plan mode, and Ctrl-D or `/exit` quits. A plan
-//! that ends well is offered to be carried out. The time limit is per task, so waiting for the
-//! person to type never times out.
+//! in `\` goes on on the next. `/login` chooses the provider, model and reasoning level, `/new`
+//! starts over, `/status` says where things stand, `/mode` shows or switches the mode, `/plan`
+//! enters plan mode, and Ctrl-D or `/exit` quits. A plan that ends well is offered to be carried
+//! out. The time limit is per task, so waiting for the person to type never times out.
 
 use std::io::{BufRead, Write};
 
+use crate::commands::login;
 use crate::compose::Rig;
 use crate::exit;
 use crate::mode::{self, Mode};
 
 const HELP: &str = "Type a task and press Enter; each one goes on from the last. End a line \
 with \\ to go on on the next.
+  /login            sign in, and choose the provider, the model and its reasoning level
   /mode [name]      the modes, or switch to one (also /permissions)
   /plan [task]      plan mode: investigate and answer with a plan; with a task, run it
   Shift+Tab, Enter  plan mode on or off
@@ -32,6 +34,7 @@ const IMPLEMENT: &str = "Implement the plan.";
 #[derive(Debug, PartialEq, Eq)]
 pub enum Entry {
     Task(String),
+    Login,
     New,
     Status,
     Help,
@@ -75,10 +78,11 @@ pub fn run(rig: &mut Rig, first: Option<&str>) -> i32 {
         mode => format!(" · {}", mode.name()),
     };
     rig.output.note(&format!(
-        "llx {} · {} · {}{mode}\n{}",
+        "llx {} · {} · {}{mode}\n{}{}",
         env!("CARGO_PKG_VERSION"),
-        rig.options.models.model,
+        rig.choice.label(),
         rig.workspace.root().display(),
+        login::signed_out(&rig.choice),
         "Type a task; each one goes on from the last. /help, or Ctrl-D to quit.\n"
     ));
     let stdin = std::io::stdin();
@@ -106,6 +110,7 @@ pub fn run(rig: &mut Rig, first: Option<&str>) -> i32 {
         match entry(&text) {
             None => {}
             Some(Entry::Exit) => return exit::OK,
+            Some(Entry::Login) => login::run(rig, &mut input, &shown),
             Some(entry) => {
                 if let Some(task) = command(rig, entry) {
                     next = attempt(rig, &task, &mut input, &shown);
@@ -154,7 +159,8 @@ fn command(rig: &mut Rig, entry: Entry) -> Option<String> {
         Entry::Unknown(command) => {
             note(&format!("unknown command /{command}: /help lists them\n"));
         }
-        Entry::Exit => {}
+        // Both are carried out where the prompt line is read.
+        Entry::Exit | Entry::Login => {}
     }
     None
 }
@@ -214,9 +220,10 @@ pub fn prompt(mode: Mode) -> String {
 /// closes its own as it ends, so this shows one only when something was left behind).
 pub fn status(rig: &Rig) -> String {
     format!(
-        "model      {}\ndecision   {}\nworkspace  {}\nmode       {}\nsession    {} ({} tasks)\n\
+        "model      {} ({})\ndecision   {}\nworkspace  {}\nmode       {}\nsession    {} ({} tasks)\n\
          terminals  {}\n",
-        rig.options.models.model,
+        rig.choice.label(),
+        login::signed(&rig.choice),
         rig.options.models.decision_model,
         rig.workspace.root().display(),
         rig.mode.get().name(),
@@ -286,6 +293,7 @@ pub fn entry(text: &str) -> Option<Entry> {
         ("plan", "") => Entry::Plan(None),
         ("plan", task) => Entry::Plan(Some(task.to_string())),
         ("exit" | "quit", "") => Entry::Exit,
+        ("login", "") => Entry::Login,
         ("new" | "clear", "") => Entry::New,
         ("status", "") => Entry::Status,
         ("help" | "?", "") => Entry::Help,

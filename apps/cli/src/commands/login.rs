@@ -1,144 +1,209 @@
-//! `llx login`, `login --with-token`, `login status` and `logout`: the OpenRouter key, from
-//! `OPENROUTER_API_KEY` (which wins) or the file a sign-in saved.
+//! `/login` in a session, as a few steps, each a pick: the provider (with how it is signed in
+//! to), signing in when it is not (OAuth in the browser, or a pasted key: see `signin`), one of
+//! its models, and a reasoning level that model takes. A model switch starts at that model's
+//! default level, and only its own levels are offered. The choice is put in at once and saved as
+//! the default for later sessions.
 
-use std::io::{BufRead, IsTerminal, Read};
+use std::io::BufRead;
 
-use openrouter::auth::{self, KeySource};
+use contracts::catalog::Selection;
 
-use crate::cli::{LoginAction, LoginArgs};
-use crate::compose::APP;
-use crate::error::{self, Failure};
-use crate::exit;
+use crate::choice::{self, Choice};
+use crate::commands::signin;
+use crate::compose::Rig;
+use crate::picker::{Item, Numbered, Terminal};
+use crate::providers::{self, Method, Provider};
 
-pub fn login(args: LoginArgs) -> Result<i32, Failure> {
-    match (args.action, args.with_token) {
-        (Some(LoginAction::Status), _) => status(),
-        (None, true) => with_token(),
-        (None, false) => {
-            let path = auth::login(APP).map_err(Failure::Environment)?;
-            error::print(&format!(
-                "Signed in. The key is saved in {}\n",
-                path.display()
-            ))?;
-            Ok(exit::OK)
-        }
-    }
+/// What the steps ask of the world beyond the terminal: where each provider's sign-in comes
+/// from, and signing in (what was saved, in words).
+pub struct World<'a> {
+    pub signed_in: &'a dyn Fn(Provider) -> Option<String>,
+    pub sign_in: &'a SignIn<'a>,
+    pub say: &'a dyn Fn(&str),
 }
 
-/// Save the key read from stdin: a pipe whole, a terminal one line, not shown as it is typed.
-fn with_token() -> Result<i32, Failure> {
-    let stdin = std::io::stdin();
-    let mut text = String::new();
-    let read = if stdin.is_terminal() {
-        eprint_flush("Paste the OpenRouter key and press Enter (it is not shown): ");
-        unseen(|| stdin.lock().read_line(&mut text).map(|_| ()))
-    } else {
-        stdin.lock().read_to_string(&mut text).map(|_| ())
+/// Sign in to a provider in a way, asking at the terminal; what was saved, in words.
+pub type SignIn<'a> = dyn Fn(Provider, Method, &mut dyn Terminal) -> Result<String, String> + 'a;
+
+/// The steps from `current`: the choice made, `Ok(None)` when the person cancelled.
+pub fn choose(
+    current: &Choice,
+    terminal: &mut dyn Terminal,
+    world: &World,
+) -> Result<Option<Choice>, String> {
+    let items: Vec<Item> = Provider::ALL
+        .iter()
+        .map(|&provider| {
+            let detail = (world.signed_in)(provider)
+                .map_or("not signed in".into(), |from| format!("signed in: {from}"));
+            Item::new(provider.name(), detail, provider == current.provider)
+        })
+        .collect();
+    let Some(at) = terminal.pick("Provider", &items) else {
+        return Ok(None);
     };
-    read.map_err(|error| Failure::Environment(format!("could not read stdin: {error}")))?;
-    let key = text.trim();
-    if key.is_empty() || key.contains(|c: char| c.is_whitespace() || c.is_control()) {
-        return Err(Failure::Usage(
-            "no key on stdin: printenv OPENROUTER_API_KEY | llx login --with-token".into(),
-        ));
+    let provider = Provider::ALL[at];
+    if !signed_in(provider, terminal, world)? {
+        return Ok(None);
     }
-    let path = auth::save(APP, key)
-        .map_err(|error| Failure::Environment(format!("could not save the key: {error}")))?;
-    error::print(&format!(
-        "Saved the key {} in {}\n",
-        mask(key),
-        path.display()
-    ))?;
-    if from_env() {
-        eprint_flush("Note: OPENROUTER_API_KEY is set, and it wins over the saved key.\n");
-    }
-    Ok(exit::OK)
+    let Some(model) = model(provider, current, terminal) else {
+        return Ok(None);
+    };
+    Ok(reasoning(model, terminal).map(|selection| Choice {
+        provider,
+        selection,
+    }))
 }
 
-/// Where the key comes from; exit 0 when there is one, 3 when not.
-fn status() -> Result<i32, Failure> {
-    match auth::key(APP) {
-        Some((key, KeySource::Env)) => {
-            error::print(&format!(
-                "Signed in with OPENROUTER_API_KEY: {}\n",
-                mask(&key)
-            ))?;
-            Ok(exit::OK)
+/// Keep the sign-in there is, or sign in; `false` when the person cancelled.
+fn signed_in(
+    provider: Provider,
+    terminal: &mut dyn Terminal,
+    world: &World,
+) -> Result<bool, String> {
+    if let Some(from) = (world.signed_in)(provider) {
+        let items = [
+            Item::new("Keep it", "", true),
+            Item::new("Sign in again", "", false),
+        ];
+        let title = format!("Signed in to {} with {from}", provider.name());
+        match terminal.pick(&title, &items) {
+            None => return Ok(false),
+            Some(0) => return Ok(true),
+            Some(_) => {}
         }
-        Some((key, KeySource::Saved(path))) => {
-            error::print(&format!(
-                "Signed in with the key saved in {}: {}\n",
-                path.display(),
-                mask(&key)
-            ))?;
-            Ok(exit::OK)
+    }
+    let methods = provider.methods();
+    let method = match methods {
+        [only] => *only,
+        _ => {
+            let items: Vec<Item> = methods
+                .iter()
+                .enumerate()
+                .map(|(at, method)| Item::new(describe(*method), "", at == 0))
+                .collect();
+            let Some(at) = terminal.pick("Sign in with", &items) else {
+                return Ok(false);
+            };
+            methods[at]
         }
-        None => Err(Failure::SignedOut),
+    };
+    let said = (world.sign_in)(provider, method, terminal)?;
+    (world.say)(&format!("{said}\n"));
+    Ok(true)
+}
+
+fn describe(method: Method) -> &'static str {
+    match method {
+        Method::Key => "Paste an API key",
+        Method::Browser => "Sign in in the browser",
     }
 }
 
-pub fn logout() -> Result<i32, Failure> {
-    let path = auth::credentials_path(APP);
-    let removed = auth::logout(APP)
-        .map_err(|error| Failure::Environment(format!("could not remove the key: {error}")))?;
-    match (removed, path) {
-        (true, Some(path)) => error::print(&format!("Signed out: removed {}\n", path.display()))?,
-        _ => error::print("No saved key.\n")?,
+/// One of the provider's models: the current one marked, else the provider's default.
+fn model(provider: Provider, current: &Choice, terminal: &mut dyn Terminal) -> Option<Selection> {
+    let mut models = provider.models();
+    let same = current.provider == provider;
+    if same && !models.iter().any(|model| model.id == current.model()) {
+        models.insert(0, current.selection.model().clone());
     }
-    if from_env() {
-        eprint_flush("Note: OPENROUTER_API_KEY is still set; unset it to sign out fully.\n");
+    let marked = if same {
+        current.model()
+    } else {
+        provider.default_model()
+    };
+    let items: Vec<Item> = models
+        .iter()
+        .map(|model| {
+            let levels = choice::levels(&Selection::new(model.clone()));
+            let detail = format!("{}  reasoning: {levels}", model.id);
+            Item::new(&model.name, detail, model.id == marked)
+        })
+        .collect();
+    let at = terminal.pick(&format!("Model ({})", provider.name()), &items)?;
+    let model = models.swap_remove(at);
+    // The same model keeps its level; another one starts at its own default.
+    Some(match same && model.id == current.model() {
+        true => current.selection.clone(),
+        false => Selection::new(model),
+    })
+}
+
+/// A level the model takes; asked only when it takes more than one.
+fn reasoning(selection: Selection, terminal: &mut dyn Terminal) -> Option<Selection> {
+    let offered = selection.model().offered().to_vec();
+    if offered.len() == 1 {
+        return Some(selection);
     }
-    Ok(exit::OK)
+    let default = selection.model().default;
+    let items: Vec<Item> = offered
+        .iter()
+        .map(|&effort| {
+            let note = if effort == default { " (default)" } else { "" };
+            let detail = format!("{}{note}", effort.describe());
+            Item::new(effort.name(), detail, effort == selection.effort())
+        })
+        .collect();
+    let at = terminal.pick(&format!("Reasoning ({})", selection.model().name), &items)?;
+    selection.with_effort(offered[at])
 }
 
-/// Run `read` with the terminal's echo off, so a pasted key never stays on the screen or in its
-/// scrollback. Ctrl-C is read as a character meanwhile (and refused as a key), so the process is
-/// never killed with the echo still off; the terminal is put back as it was either way.
-#[cfg(unix)]
-fn unseen<T>(read: impl FnOnce() -> std::io::Result<T>) -> std::io::Result<T> {
-    use std::mem::MaybeUninit;
-    let fd = libc::STDIN_FILENO;
-    let mut saved = MaybeUninit::<libc::termios>::uninit();
-    // SAFETY: tcgetattr fills `saved` for a terminal; it is read only when that succeeded.
-    if unsafe { libc::tcgetattr(fd, saved.as_mut_ptr()) } != 0 {
-        return read();
+/// `/login` at the prompt line: the steps, then the choice put in and saved.
+pub fn run(rig: &mut Rig, input: &mut dyn BufRead, shown: &dyn Fn(&str)) {
+    let mut terminal = Numbered { input, shown };
+    let sign_in = |provider, method, terminal: &mut dyn Terminal| {
+        signin::sign_in(provider, method, terminal, shown)
+    };
+    let world = World {
+        signed_in: &Provider::signed_in,
+        sign_in: &sign_in,
+        say: shown,
+    };
+    match choose(&rig.choice, &mut terminal, &world) {
+        Ok(Some(choice)) => rig.output.note(&adopt(rig, choice)),
+        Ok(None) => rig.output.note("Nothing changed.\n"),
+        Err(why) => rig.output.note(&format!("Not signed in: {why}\n")),
     }
-    let saved = unsafe { saved.assume_init() };
-    let mut quiet = saved;
-    quiet.c_lflag &= !(libc::ECHO | libc::ISIG);
-    quiet.c_lflag |= libc::ECHONL;
-    // SAFETY: both settings are whole termios values for this descriptor.
-    unsafe { libc::tcsetattr(fd, libc::TCSAFLUSH, &quiet) };
-    let result = read();
-    unsafe { libc::tcsetattr(fd, libc::TCSAFLUSH, &saved) };
-    result
 }
 
-/// Windows: the console keeps its echo (no std call turns it off).
-#[cfg(not(unix))]
-fn unseen<T>(read: impl FnOnce() -> std::io::Result<T>) -> std::io::Result<T> {
-    read()
-}
-
-fn from_env() -> bool {
-    std::env::var(auth::KEY_VARIABLE).is_ok_and(|key| !key.trim().is_empty())
-}
-
-/// A key as it may be shown: `sk-or-...abcd`, never more of it.
-pub fn mask(key: &str) -> String {
-    let chars: Vec<char> = key.chars().collect();
-    if chars.len() < 16 {
-        return "...".into();
+/// Think with `choice` from the next task on, and save it as the default.
+fn adopt(rig: &mut Rig, choice: Choice) -> String {
+    let Some(chat) = choice.provider.chat(&choice.selection) else {
+        return format!(
+            "Not signed in to {}: nothing changed.\n",
+            choice.provider.name()
+        );
+    };
+    if let Some(live) = rig.live {
+        live.chat.set(chat);
+        live.decider
+            .set(providers::decider(&rig.options.models.decision_model));
     }
-    let start: String = chars[..6].iter().collect();
-    let end: String = chars[chars.len() - 4..].iter().collect();
-    format!("{start}...{end}")
+    let saved = match choice::save(&choice) {
+        Ok(path) => format!("saved as the default in {}", path.display()),
+        Err(error) => format!("not saved: {error}"),
+    };
+    rig.choice = choice;
+    format!("Now {} ({saved}).\n", rig.choice.label())
 }
 
-fn eprint_flush(text: &str) {
-    use std::io::Write;
-    let mut err = std::io::stderr();
-    let _ = err.write_all(text.as_bytes()).and_then(|()| err.flush());
+/// How the session stands with its provider, for `/status`.
+pub fn signed(choice: &Choice) -> String {
+    match choice.provider.signed_in() {
+        Some(from) => format!("signed in: {from}"),
+        None => format!("not signed in to {}: type /login", choice.provider.name()),
+    }
+}
+
+/// A line for the banner when the session is signed out, else nothing.
+pub fn signed_out(choice: &Choice) -> String {
+    match choice.provider.signed_in() {
+        Some(_) => String::new(),
+        None => format!(
+            "Not signed in to {}: type /login.\n",
+            choice.provider.name()
+        ),
+    }
 }
 
 #[cfg(test)]

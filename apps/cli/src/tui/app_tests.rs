@@ -82,6 +82,7 @@ fn a_task_leaves_its_blocks_in_order() {
     let outcome = Ok(ToolOutput {
         report: "exit 0 in 0.0s\n### stdout\nREADME.md".into(),
         state: None,
+        image: None,
     });
     app.event(
         Event::Result {

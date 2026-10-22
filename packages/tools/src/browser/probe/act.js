@@ -164,3 +164,23 @@
     return { text: text.slice(offset, offset + (args?.limit || 6000)), total: text.length, offset }
   }
 
+
+  // Where the element a screenshot is cropped to sits, in viewport pixels: scrolled into view
+  // first when it is not wholly there, with a little of what surrounds it, clipped to the viewport.
+  const CROP_MARGIN = 8
+  function locate(args) {
+    let e
+    try { e = document.querySelector(args.selector) } catch { throw new Error(`not a CSS selector: ${args.selector}`) }
+    if (!e) throw new Error(`nothing on the page matches ${args.selector}`)
+    const was = e.getBoundingClientRect()
+    if (was.top < 0 || was.left < 0 || was.bottom > innerHeight || was.right > innerWidth) {
+      e.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' })
+    }
+    const r = e.getBoundingClientRect()
+    const left = Math.max(0, r.left - CROP_MARGIN), top = Math.max(0, r.top - CROP_MARGIN)
+    const right = Math.min(innerWidth, r.right + CROP_MARGIN), bottom = Math.min(innerHeight, r.bottom + CROP_MARGIN)
+    if (r.width < 1 || r.height < 1 || right - left < 1 || bottom - top < 1) {
+      throw new Error(`${args.selector} has no visible size`)
+    }
+    return { x: left, y: top, width: right - left, height: bottom - top }
+  }

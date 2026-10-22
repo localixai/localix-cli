@@ -151,11 +151,12 @@ fn sources() -> Vec<PathBuf> {
     out
 }
 
-/// The repository is English only: no Cyrillic in any tracked text file, tests included.
+/// The repository is English only: no Cyrillic in any tracked text file, tests included. Files
+/// a run left in the tree are not the repository's until they are added.
 #[test]
 fn no_cyrillic_anywhere() {
     let listed = std::process::Command::new("git")
-        .args(["ls-files", "-co", "--exclude-standard"])
+        .args(["ls-files"])
         .current_dir(root())
         .output()
         .unwrap();

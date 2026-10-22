@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use crate::tool::ToolSpec;
+use crate::tool::{Image, ToolSpec};
 
 /// One message of a conversation.
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +21,12 @@ pub enum Message {
         id: String,
         content: String,
         failed: bool,
+    },
+    /// A picture a tool call left (a screenshot), shown to the model right after that call's
+    /// result: tool results carry text only on some providers. `caption` says what it shows.
+    Image {
+        caption: String,
+        image: Image,
     },
 }
 

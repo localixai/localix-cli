@@ -106,6 +106,7 @@ impl Tool for EditTool<'_> {
         Ok(ToolOutput {
             report,
             state: None,
+            image: None,
         })
     }
 }

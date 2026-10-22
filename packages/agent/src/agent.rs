@@ -249,6 +249,7 @@ fn take_result(
             let output = ToolOutput {
                 report: RETURNED.into(),
                 state: None,
+                image: None,
             };
             (Ok(output), true)
         }

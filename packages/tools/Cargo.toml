@@ -13,6 +13,8 @@ harness = false
 
 # The tool protocol only (rule L3): a tool knows nothing of the loop or the model.
 [dependencies]
+# Already in the tree through openrouter: a screenshot goes to the model as base64.
+base64.workspace = true
 contracts.workspace = true
 getrandom.workspace = true
 serde.workspace = true
@@ -25,6 +27,8 @@ wry.workspace = true
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
-# Already in the tree through wry: messages to the WKWebView behind the window.
+# Already in the tree through wry: messages to the WKWebView behind the window, and the block its
+# screenshot answers through.
 [target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
 objc2.workspace = true

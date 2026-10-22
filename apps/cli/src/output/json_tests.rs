@@ -19,6 +19,7 @@ fn a_call_and_its_result_share_an_id() {
     let done = Ok(ToolOutput {
         report: "exit 0".into(),
         state: Some("### Page".into()),
+        image: None,
     });
     let result_event = result(&bash_call(), &done, 9);
     assert_eq!(result_event["type"], "tool.result");

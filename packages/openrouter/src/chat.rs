@@ -1,7 +1,7 @@
 //! The chat port over OpenRouter's chat completions, with tool calling: any of its chat models.
 
 use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
-use contracts::tool::ToolSpec;
+use contracts::tool::{Image, ToolSpec};
 use serde_json::{Value, json};
 
 use crate::client::{ApiError, OpenRouter};
@@ -101,7 +101,18 @@ fn wire(message: &Message) -> Value {
             };
             json!({"role": "tool", "tool_call_id": id, "content": content})
         }
+        Message::Image { caption, image } => picture(caption, image),
     }
+}
+
+/// A picture as a user message with a text part and an image part: a tool message carries text
+/// only, so it follows the call's result instead.
+fn picture(caption: &str, image: &Image) -> Value {
+    let url = format!("data:{};base64,{}", image.media_type, image.data);
+    json!({"role": "user", "content": [
+        {"type": "text", "text": caption},
+        {"type": "image_url", "image_url": {"url": url}},
+    ]})
 }
 
 fn function(spec: &ToolSpec) -> Value {
@@ -117,6 +128,9 @@ fn cached(mut messages: Vec<Value>) -> Vec<Value> {
         if let Some(text) = message["content"].as_str().map(str::to_string) {
             message["content"] =
                 json!([{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]);
+        } else if let Some(last) = message["content"].as_array_mut().and_then(|p| p.last_mut()) {
+            // Already in parts (a picture): the mark goes on the last one.
+            last["cache_control"] = json!({"type": "ephemeral"});
         }
     };
     if let Some(system) = messages.first_mut().filter(|m| m["role"] == "system") {

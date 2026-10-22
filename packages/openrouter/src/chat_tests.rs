@@ -47,3 +47,37 @@ fn a_tool_call_with_unreadable_arguments_arrives_as_their_text() {
     );
     assert_eq!(call.map(|c| c.arguments), Some(json!("{\"path\": \"a")));
 }
+
+#[test]
+fn a_picture_goes_out_as_a_user_message_with_an_image_part_and_the_mark() {
+    let image = Image {
+        media_type: "image/jpeg".into(),
+        data: "/9j/AA==".into(),
+        width: 2,
+        height: 1,
+    };
+    let messages = cached(
+        [
+            Message::System("rules".into()),
+            Message::Image {
+                caption: "The screenshot".into(),
+                image,
+            },
+        ]
+        .iter()
+        .map(wire)
+        .collect(),
+    );
+    let picture = &messages[1];
+    assert_eq!(picture["role"], "user");
+    assert_eq!(picture["content"][0]["text"], "The screenshot");
+    assert_eq!(picture["content"][1]["type"], "image_url");
+    assert_eq!(
+        picture["content"][1]["image_url"]["url"],
+        "data:image/jpeg;base64,/9j/AA=="
+    );
+    assert_eq!(
+        picture["content"][1]["cache_control"]["type"], "ephemeral",
+        "the newest message keeps its cache mark"
+    );
+}

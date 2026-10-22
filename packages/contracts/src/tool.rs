@@ -21,6 +21,21 @@ pub struct ToolOutput {
     /// The state the call left (a view, a screen): only the newest one matters, so an agent may
     /// drop older ones to keep the conversation short.
     pub state: Option<String>,
+    /// A picture of what the call left (a screenshot), for a model that reads images: like a
+    /// state, only the newest few matter.
+    pub image: Option<Image>,
+}
+
+/// An encoded picture, as a model reads it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Image {
+    /// `image/jpeg`, `image/png`.
+    pub media_type: String,
+    /// The encoded bytes, in base64.
+    pub data: String,
+    /// In pixels.
+    pub width: u32,
+    pub height: u32,
 }
 
 /// Why a call did nothing useful.

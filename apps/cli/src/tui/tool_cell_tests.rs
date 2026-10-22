@@ -8,6 +8,7 @@ fn done(report: &str) -> Result<ToolOutput, ToolError> {
     Ok(ToolOutput {
         report: report.into(),
         state: None,
+        image: None,
     })
 }
 

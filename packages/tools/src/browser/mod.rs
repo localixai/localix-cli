@@ -3,6 +3,8 @@
 //! the window as a view (`contracts::view::View`) for the hands; [`Driver`] is the browser's own,
 //! fuller surface (navigate, read, keys, scripts).
 
+mod args;
+mod capture;
 mod guard;
 mod host;
 mod page;
@@ -17,6 +19,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+pub use capture::{Clip, Shot};
 pub use contracts::view::{
     Action, Element, SelectOption, ViewError as BrowserError, ViewResult as BrowserResult,
 };
@@ -102,6 +105,9 @@ pub trait Driver {
     fn evaluate(&self, source: &str) -> BrowserResult<String>;
     /// The document's readable text from `offset`, at most `limit` characters.
     fn read(&self, offset: usize, limit: usize) -> BrowserResult<PageText>;
+    /// A picture of the viewport as drawn, or of the first element matching the CSS `selector`
+    /// (scrolled into view first, with a little of its surroundings).
+    fn screenshot(&self, selector: Option<&str>) -> BrowserResult<Shot>;
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

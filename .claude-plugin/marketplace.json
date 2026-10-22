@@ -1,17 +1,19 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "localix-surf",
-  "description": "Goal-driven browser for AI agents and tests",
+  "name": "decision-loop",
+  "description": "A decision loop for AI agents and tests: give it a goal, a decision model drives a tool there",
   "owner": {
-    "name": "Localix"
+    "name": "Decision Loop"
   },
   "plugins": [
     {
-      "name": "lxsurf",
-      "description": "Reaches goals on the web in a native browser window and answers; checks web apps end to end in plain words",
+      "name": "decision-loop",
+      "description": "Reaches goals in a native browser window with a decision model; checks web apps end to end in plain words",
       "source": "./",
       "strict": false,
-      "skills": ["./skills/lxsurf"],
+      "skills": [
+        "./skills/decision-loop"
+      ],
       "category": "development"
     }
   ]

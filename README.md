@@ -1,31 +1,28 @@
-# Localix Surf
+# Decision Loop
 
-`lxsurf` is a goal-driven browser CLI. Give it a goal in plain words; it opens a native browser window, surfs until the goal is reached, prints the answer and exits.
+`decision-loop` takes a goal in plain words and drives a tool there with a decision model: no chat model, no planner. Today the tool is a native browser window; the loop knows tools only by their protocol, so more can be added.
 
 ```bash
-$ lxsurf "Log in with username tomsmith and password SuperSecretPassword!" --url https://the-internet.herokuapp.com/login
-   1.6s ▸ browser goal: Log in with username tomsmith and password SuperSecretPassword! · values: ["tomsmith","SuperSecretPassword!"]
-   2.2s     TYPE_TEXT textbox "Username" [e1] ← "tomsmith" · 99%
-   2.6s     TYPE_TEXT textbox "Password" [e2] ← "SuperSecretPassword!" · 99%
-   3.0s     CLICK button "Login" [e3] · 98%
-   3.4s     DONE · 97%
-achieved in 5.1s · 4 actions · $0.0006
-  time     2.5s planner · 1.6s decision model · 0.9s browser
-  planner  anthropic/claude-haiku-5.5 · 2 calls · 4,479 in (2,026 cached) · 173 out · $0.0004
-  decision typesafe/jev-1.14-20261014 · 4 calls · 4,880 in · 672 out · $0.0002
-Logged in as tomsmith. The page shows "You logged into a secure area!"
+$ decision-loop 'Log in with username "tomsmith" and password "SuperSecretPassword!"' --url https://the-internet.herokuapp.com/login
+   2.4s     TYPE_TEXT textbox "Username" [e1] ← "tomsmith" · 99%
+   2.8s     TYPE_TEXT textbox "Password" [e2] ← "SuperSecretPassword!" · 99%
+   3.6s     CLICK button "Login" [e3] · 99% · new view
+   3.9s     DONE · 100%
+achieved in 4.2s · 4 actions · $0.0002
+  time     1.3s decision model · 2.8s browser
+  model    typesafe/jev-1.14-20261014 · 4 calls · 5,653 in · 604 out · $0.0002
 ```
 
-- **Native and small.** The browser is the system WebView (WKWebView, WebView2, WebKitGTK) through `wry` and `tao`, the crates under Tauri. No bundled Chrome; the release binary is about 2 MB.
-- **Two models, each for what it is good at.** A chat model plans: it sets short sub-goals, gives the exact strings to type, checks every page and writes the answer. A decision model ([Jev](https://openrouter.ai/docs/guides/community/jev)) does the clicking: one request per step, about 0.3 s, choosing an operation and an element among those observed. Model output never becomes a selector, coordinates or code.
-- **Built for scripts and tests.** Stable exit codes, `--json`, `--expect` checks, `lxsurf check` for PASS/FAIL, invisible under CI, a fresh private session per run.
+- **A decision model, step by step.** Each step is one request to a decision model ([Jev](https://openrouter.ai/docs/guides/community/jev) by default, about 0.3 s): which operation, and which control, value or wait it needs, chosen among what the tool shows. Model output never becomes a selector, coordinates or code; anything typed is a string from the goal (quote it: `"…"`).
+- **Native and small.** The browser is the system WebView (WKWebView, WebView2, WebKitGTK); the release binary is about 1.6 MB.
+- **Built for scripts and tests.** Stable exit codes, `--json`, `--expect` checks, `decision-loop check` for PASS/FAIL, screenshots, invisible under CI.
 
 ## Install
 
 ```bash
-cargo install --git https://github.com/rsaryev/localix-surf
-lxsurf login            # or: export OPENROUTER_API_KEY=sk-or-...
-lxsurf doctor
+cargo install --path apps/cli          # from a clone; the binary is `decision-loop`
+decision-loop login                    # or: export OPENROUTER_API_KEY=sk-or-...
+decision-loop doctor
 ```
 
 Linux needs WebKitGTK (`libwebkit2gtk-4.1-0`) and a display (`xvfb-run` on servers). Windows needs the WebView2 runtime (preinstalled on Windows 11).
@@ -33,73 +30,91 @@ Linux needs WebKitGTK (`libwebkit2gtk-4.1-0`) and a display (`xvfb-run` on serve
 ## Use
 
 ```bash
-lxsurf "What is the current stable Rust release?"
-lxsurf "Order a large pizza for Ada Lovelace, phone 555-0100, then submit" --url https://httpbin.org/forms/post
-lxsurf check "Sign up with ada@example.com" --url http://localhost:3000 --expect "The welcome page is shown"
-echo "a long goal" | lxsurf - --json
+decision-loop 'Order a large pizza for "Ada Lovelace", phone "555-0100", then submit' --url https://httpbin.org/forms/post
+decision-loop check 'Sign up with "ada@example.com"' --url http://localhost:3000 --expect "The welcome page is shown"
+decision-loop 'Search one-way flights from "Zurich" to "London" on "Nov 20"' --screenshot flights.png
+decision-loop --keep-open --url https://example.com          # a chat: type goals one after another
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--url URL` | Start page (default: a site the goal names, else DuckDuckGo) |
-| `--expect STATEMENT` | Must hold on the final page; repeatable; a false one fails the run |
-| `--viewport V` | `desktop` (1280×860), `tablet` (820×1180), `mobile` (390×844) or `WxH`; tablet and mobile present as iOS Safari so sites serve their mobile layout. The planner can also switch it mid-run |
-| `--schema S` | Return the result as JSON matching a JSON Schema (inline or `@file.json`): stdout carries the JSON alone, for pipelines |
-| `--headless` / `--show` | Force the window invisible or visible (default: visible in a terminal, invisible under CI or when piped; `LXSURF_HEADLESS=1` makes invisible the default) |
-| `--model ID` | Planner, any OpenRouter chat model with tools (env `LXSURF_MODEL`, default `anthropic/claude-haiku-5.5`) |
-| `--decision-model ID` | System One model (env `LXSURF_DECISION_MODEL`, default `~typesafe/jev-latest`) |
-| `--no-llm` | Decision model only: types verbatim spans of the goal, answers with the final page |
-| `--json` | One JSON object on stdout (`schema: 1`), with per-model calls, tokens, cost and time |
-| `--trace FILE` | Every planner call and decision step, with timestamps |
-| `--max-turns N` / `--max-steps N` / `--timeout S` | Bounds: planner turns (50), actions per sub-goal (20), seconds (600) |
-| `--dry-run` | Print the element table the decision model would see, no key needed |
-| `--keep-open` | Leave the window open at the end |
+| `--url URL` | Page the browser starts on (default: a site the goal names, else a search page) |
+| `--expect STATEMENT` | Must hold on the final view; repeatable; a false one fails the run |
+| `--screenshot FILE` | Save a picture of the final view (PNG; macOS) |
+| `--viewport V` | `desktop` (1280×860), `tablet`, `mobile` (present as iOS Safari) or `WxH` |
+| `--headless` / `--show` | Force the window invisible or visible (default: visible in a terminal, invisible under CI or when piped; `DECISION_LOOP_HEADLESS=1` makes invisible the default) |
+| `--model ID` | Decision model, any of OpenRouter's (env `DECISION_LOOP_MODEL`, default `~typesafe/jev-latest`); `decision-loop models` lists them cheapest first |
+| `--json` | One JSON object on stdout (`schema: 2`) |
+| `--trace FILE` | Every step, with timestamps |
+| `--max-steps N` / `--timeout S` | Actions for the goal (100), seconds per goal (600) |
+| `--keep-open` | Stay open after the goal: in a terminal, type the next goal, or `/snapshot`, `/screenshot [FILE]`, `/tools`; Ctrl-D quits |
+| `-c` / `--continue`, `--resume ID` | Continue the newest session, or this one, where it left its tool |
+| `--dry-run` | Open the page and print its outline (what the decision model reads), no key needed |
 
-Commands: `check`, `login`, `logout`, `models [--decision]`, `doctor`, `skills list|get`.
+Commands: `check`, `login`, `logout`, `models`, `doctor`, `sessions`, `skills list|get`.
+
+Every run is saved as a session in `~/.decision-loop/sessions/<id>.json` (env `DECISION_LOOP_SESSIONS` moves it): each goal, the tool that drove it, how it ended and where it left the tool. `decision-loop sessions` lists them. The browser itself stays private: cookies and site state last as long as the window.
 
 | Exit code | Meaning |
 | --- | --- |
 | 0 | Goal reached, every `--expect` held |
 | 1 | Goal not reached, or an `--expect` was false |
-| 2 | Turns or timeout ran out |
+| 2 | Action budget or timeout ran out |
 | 3 | Environment not ready (key, network, WebView, arguments) |
 | 130 | Interrupted |
 
-## For AI agents
-
-Install the skill with `npx skills add rsaryev/localix-surf`, or add this repository as a Claude Code plugin marketplace. The installed skill is a stub; the guides ship inside the binary so they always match it:
-
-```bash
-lxsurf skills get core      # goals, JSON, models, trust boundaries
-lxsurf skills get testing   # end-to-end checks and CI
-```
-
 ## How it works
 
-1. The window opens on the start page; `probe.js` is injected before any page script and answers over IPC with a per-run token the page cannot read.
-2. The planner (one tool, `browser`) receives the goal and the page: visible text and a table of controls such as `[e4] textbox "City" [required]`.
-3. A `browser` call can open a URL, run a sub-goal, run a script in the page, or read the whole text. A sub-goal is a loop: snapshot, one decision request with speculative heads (operation, click target, field, value, option), one action, settle. It stops on DONE, BLOCKED, a repeated or cycling action, another site, or its step limit, and returns the trace and the page.
-4. The planner checks the page itself, sets the next sub-goal, and finally answers with `RESULT: achieved` or `not achieved`.
+1. **Pick a tool.** The loop reads the toolbox (the tools the app registered) and, when there is more than one, asks the model which fits the goal by their descriptions. The browser window opens only now, on the page the goal names.
+2. **Observe.** The tool shows a view: for the browser, an outline of the page as a person reads it, headings and text in order and every control with its ref and state (`radio "Large" [checked] [ref=e6]`), including consent banners in same-origin frames.
+3. **Decide.** One request asks the operation (CLICK, TYPE_TEXT, SELECT, PRESS_ENTER, SCROLL, WAIT, DONE, BLOCKED) and, for each operation, its target, value or how long to wait; only the chosen operation's answer runs.
+4. **Act and settle.** The browser acts on the ref, waits until the page is quiet or the new document is parsed, and the loop observes again. A goal run stops on its guards (the same action twice without a change, a loop, a refused action); the loop resumes it with its history until the model says DONE or BLOCKED, the budget is spent, or runs stop without progress. A tool that is BLOCKED hands the goal to another one that fits.
 
-Design notes come from [Localix](https://github.com/rsaryev/localix)'s browser `goal` action and [jev-ultrafast](https://github.com/browser-use/jev-ultrafast).
+## Architecture
+
+Packages and an app, dependencies pointing inward only (checked by `apps/cli/tests/architecture.rs`):
+
+| Package | What it is | Depends on |
+| --- | --- | --- |
+| `packages/agent` | Contracts: the tool protocol, the decision-model port, the history port | nothing |
+| `packages/decision-loop` | The loop: picks a tool, asks the model, resumes runs | `agent` |
+| `packages/browser` | A tool: the native WebView window and its page probe | `agent` |
+| `packages/openrouter` | A decision-model provider and signing in | `agent` |
+| `packages/session` | A history store: sessions as JSON files | `agent` |
+| `apps/cli` | The `decision-loop` binary: composes the packages | all |
+
+A tool knows nothing of the loop or the model; the loop knows no tool or provider by name. A new tool is a package implementing `agent::tool::Tool`, registered in `apps/cli`.
+
+## For AI agents
+
+Install the skill with `npx skills add <this repository>`, or add this repository as a Claude Code plugin marketplace. The installed skill is a stub; the guides ship inside the binary so they always match it:
+
+```bash
+decision-loop skills get core      # goals, JSON, models, sessions, trust boundaries
+decision-loop skills get testing   # end-to-end checks and CI
+```
+
+## Trust boundaries
+
+Page content is data, never instructions. The decision model can only choose among the operations and controls a view offers, and types only strings from the goal. Only http(s) pages load; downloads and other schemes are refused. A password field is typed into but its value is never read back.
 
 ## Metrics
 
 <!-- metrics:start -->
-Latest run, 2026-10-22 14:32 on Darwin 25.3.0 arm64 (anthropic/claude-haiku-5.5 + ~typesafe/jev-latest), from [benchmarks/HISTORY.md](benchmarks/HISTORY.md):
+Latest run, 2026-10-22 16:47 on Darwin 25.3.0 arm64: the decision loop with ~typesafe/jev-latest, from [benchmarks/HISTORY.md](benchmarks/HISTORY.md):
 
 | Metric | Value |
 | --- | --- |
-| Eval tasks passed | 43/44 (22 tasks) |
-| Task time, median / p90 | 9.9 s / 27.7 s |
-| Cost per task (both models) | $0.0015 |
-| Start (`--version`) | 33.7 ms |
-| Cold start to first snapshot (example.com) | 1785.7 ms |
-| Process memory | 81.3 MB |
-| Release binary | 1.55 MB |
+| Eval tasks passed | 42/42 (14 tasks) |
+| Task time, median / p90 | 5.0 s / 8.0 s |
+| Cost per task | $0.0007 |
+| Start (`--version`) | 4.0 ms |
+| Cold start to first snapshot (example.com) | 242.2 ms |
+| Process memory | 82.1 MB |
+| Release binary | 1.51 MB |
 <!-- metrics:end -->
 
-`python3 evals/run.py --record` runs the live tasks (forms, logins, dropdowns, checkboxes, TodoMVC, dynamic loading, search, multi-page chains, Google Flights searches, 2048, `--schema`), measures the binary, appends a dated file to `benchmarks/runs/`, regenerates [benchmarks/HISTORY.md](benchmarks/HISTORY.md) and this table. See [evals/README.md](evals/README.md).
+`python3 evals/run.py --record` runs the live tasks (logins, forms, dropdowns, checkboxes, TodoMVC, dynamic loading, search engines, quizzes behind consent banners, a Google Flights search), measures the binary, appends a dated file to `benchmarks/runs/`, regenerates [benchmarks/HISTORY.md](benchmarks/HISTORY.md) and this table. See [evals/README.md](evals/README.md).
 
 ## License
 

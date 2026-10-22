@@ -1,25 +1,33 @@
-[package]
-name = "localix-surf"
+# Decision Loop: a goal in, a decision model drives a tool there.
+#
+# Packages and apps, dependencies pointing inward only (AGENTS.md, rules L1-L5):
+#   packages/agent          contracts: the tool protocol, the decision-model port, the history port
+#   packages/decision-loop  the loop: picks a tool for a goal and drives it with a decision model
+#   packages/browser        a tool: a native WebView window
+#   packages/openrouter     a decision-model provider: OpenRouter's decision models, sign-in
+#   packages/session        a history store: sessions as JSON files
+#   apps/cli                the `decision-loop` binary: composes the packages
+[workspace]
+resolver = "3"
+members = ["packages/*", "apps/*"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
-description = "Localix Surf: give it a goal, it drives a native browser window there and exits"
 license = "MIT"
-keywords = ["browser", "agent", "automation", "e2e", "webview"]
-categories = ["command-line-utilities", "development-tools::testing"]
 
-[[bin]]
-name = "lxsurf"
-path = "src/main.rs"
-
-[[test]]
-name = "driver"
-harness = false
-
-[dependencies]
+[workspace.dependencies]
+agent = { path = "packages/agent" }
+decision-loop = { path = "packages/decision-loop" }
+browser = { path = "packages/browser" }
+openrouter = { path = "packages/openrouter" }
+session = { path = "packages/session" }
 base64 = "0.23.1"
+block2 = "0.6"
 clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 getrandom = "0.3"
+objc2 = "0.6"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
@@ -27,12 +35,8 @@ tao = "0.37"
 ureq = { version = "3", default-features = false, features = ["json", "gzip", "native-tls"] }
 wry = "0.57"
 
-# Already in the tree through wry: messages to the WKWebView behind the window.
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
-
 # A small, self-contained binary: the browser engine is the system's own WebView, TLS is the OS's,
-# and the code is optimized for size ("z"): the time goes to the network and the models, not here.
+# and the code is optimized for size ("z"): the time goes to the network and the model, not here.
 [profile.release]
 codegen-units = 1
 lto = "fat"

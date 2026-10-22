@@ -1,0 +1,9 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>Search</title></head>
+  <body>
+    <!-- Results arrive from the page's own server after the DOM has gone quiet, as on Google Flights. -->
+    <button onclick="fetch('/slow/second.html').then(() => { results.textContent = '3 results' })">Search</button>
+    <p id="results"></p>
+  </body>
+</html>

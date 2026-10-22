@@ -9,6 +9,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "agent"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "anstyle"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -116,6 +124,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "browser"
+version = "0.1.0"
+dependencies = [
+ "agent",
+ "block2",
+ "getrandom 0.3.4",
+ "objc2",
+ "serde",
+ "serde_json",
+ "tao",
+ "wry",
+]
+
+[[package]]
 name = "bytes"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -215,6 +237,21 @@ name = "clap_lex"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
+
+[[package]]
+name = "cli"
+version = "0.1.0"
+dependencies = [
+ "agent",
+ "browser",
+ "clap",
+ "decision-loop",
+ "getrandom 0.3.4",
+ "openrouter",
+ "serde",
+ "serde_json",
+ "session",
+]
 
 [[package]]
 name = "combine"
@@ -394,6 +431,14 @@ dependencies = [
  "libc",
  "libdbus-sys",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "decision-loop"
+version = "0.1.0"
+dependencies = [
+ "agent",
+ "serde_json",
 ]
 
 [[package]]
@@ -1297,22 +1342,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4744e383959f0db86ede514b809b1c53251889093803c05267acc7d4e7030d70"
 
 [[package]]
-name = "localix-surf"
-version = "0.1.0"
-dependencies = [
- "base64 0.23.1",
- "clap",
- "getrandom 0.3.4",
- "objc2",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "tao",
- "ureq",
- "wry",
-]
-
-[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1643,6 +1672,18 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "openrouter"
+version = "0.1.0"
+dependencies = [
+ "agent",
+ "base64 0.23.1",
+ "getrandom 0.3.4",
+ "serde_json",
+ "sha2 0.11.1",
+ "ureq",
+]
 
 [[package]]
 name = "openssl"
@@ -2124,6 +2165,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "170fb83ab34de17dc69aa7c67482b22218ddb85da56546f9bd6b929e32a05930"
 dependencies = [
  "stable_deref_trait",
+]
+
+[[package]]
+name = "session"
+version = "0.1.0"
+dependencies = [
+ "agent",
+ "getrandom 0.3.4",
+ "serde_json",
 ]
 
 [[package]]

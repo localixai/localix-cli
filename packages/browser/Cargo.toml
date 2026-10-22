@@ -1,0 +1,26 @@
+[package]
+name = "browser"
+description = "A tool: a native browser window (the system WebView), observed and acted on by refs"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[test]]
+name = "driver"
+harness = false
+
+# The tool protocol only (rule L3): a tool knows nothing of the loop or the model.
+[dependencies]
+agent.workspace = true
+getrandom.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tao.workspace = true
+wry.workspace = true
+
+# Already in the tree through wry: messages and blocks to the WKWebView behind the window.
+[target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
+objc2.workspace = true

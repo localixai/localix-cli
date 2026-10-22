@@ -1,0 +1,26 @@
+[package]
+name = "cli"
+description = "Decision Loop: give it a goal, a decision model drives a tool there"
+keywords = ["agent", "decision-model", "browser", "automation", "e2e"]
+categories = ["command-line-utilities", "development-tools::testing"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "decision-loop"
+path = "src/main.rs"
+
+# The composition root (rule L4): the only package that depends on tools, providers and stores.
+[dependencies]
+agent.workspace = true
+decision-loop.workspace = true
+browser.workspace = true
+openrouter.workspace = true
+session.workspace = true
+clap.workspace = true
+getrandom.workspace = true
+serde.workspace = true
+serde_json.workspace = true

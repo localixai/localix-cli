@@ -1,23 +1,21 @@
-//! `llx doctor`: is everything a run needs in place? The key, both models (each asked one tiny
-//! question), the WebView the browser tool opens, and the shell `bash` runs in. A missing display
-//! only leaves the browser out, so it warns without failing.
+//! `llx doctor`: is everything a run needs in place? The sign-in to each provider, both models
+//! (each asked one tiny question), the WebView the browser tool opens, and the shell `bash` runs
+//! in. A missing display only leaves the browser out, and a missing decision model only its
+//! actions, so both warn without failing.
 
 use std::collections::BTreeMap;
 use std::process::{Command, Stdio};
 
 use contracts::chat::{Chat, Message, Request};
 use contracts::model::{Decider, Question};
-use openrouter::auth::{self, KeySource};
-use openrouter::chat::ChatModel;
-use openrouter::client::OpenRouter;
-use openrouter::system_one::SystemOne;
 use serde_json::json;
 
+use crate::choice;
 use crate::cli::ModelOptions;
-use crate::commands::login::mask;
-use crate::compose::APP;
 use crate::error::{self, Failure};
 use crate::exit;
+use crate::live::NO_DECIDER;
+use crate::providers::{self, Provider};
 
 /// One check: passed, failed, or a warning that does not fail the run.
 enum Mark {
@@ -48,26 +46,34 @@ pub fn doctor(models: &ModelOptions) -> Result<i32, Failure> {
             "browser: no display, so the browser tool is left out (run under xvfb-run for it)",
         )?;
     }
-    let Some((key, source)) = auth::key(APP) else {
-        line(
-            Mark::Fail,
-            "no OpenRouter key: set OPENROUTER_API_KEY or run `llx login`",
-        )?;
-        return Ok(exit::ENVIRONMENT);
-    };
-    match source {
-        KeySource::Env => line(
-            Mark::Pass,
-            &format!("key {} from OPENROUTER_API_KEY", mask(&key)),
-        )?,
-        KeySource::Saved(path) => line(
-            Mark::Pass,
-            &format!("key {} saved in {}", mask(&key), path.display()),
-        )?,
+    let choice = choice::resolve(models, choice::saved())?;
+    for provider in Provider::ALL {
+        match provider.signed_in() {
+            Some(from) => line(
+                Mark::Pass,
+                &format!("{}: signed in with {from}", provider.name()),
+            )?,
+            None => line(
+                if provider == choice.provider {
+                    Mark::Fail
+                } else {
+                    Mark::Warn
+                },
+                &format!(
+                    "{}: not signed in (type /login in a session)",
+                    provider.name()
+                ),
+            )?,
+        }
     }
-    let client = OpenRouter::new(key, APP);
-    ok &= agent_model(&client, &models.model)?;
-    ok &= decision_model(&client, &models.decision_model)?;
+    match choice.provider.chat(&choice.selection) {
+        Some(chat) => ok &= agent_model(chat.as_ref(), &choice.label())?,
+        None => ok = false,
+    }
+    match providers::decider(&models.decision_model) {
+        Some(decider) => ok &= decision_model(decider.as_ref(), &models.decision_model)?,
+        None => line(Mark::Warn, &format!("decision model: {NO_DECIDER}"))?,
+    }
     Ok(if ok { exit::OK } else { exit::ENVIRONMENT })
 }
 
@@ -98,11 +104,7 @@ fn shell() -> Result<bool, Failure> {
     }
 }
 
-fn agent_model(client: &OpenRouter, model: &str) -> Result<bool, Failure> {
-    let chat = ChatModel {
-        client,
-        model: model.to_string(),
-    };
+fn agent_model(chat: &dyn Chat, model: &str) -> Result<bool, Failure> {
     let hello = [Message::User("Reply with the word ready.".into())];
     let request = Request {
         conversation: &hello,
@@ -125,11 +127,7 @@ fn agent_model(client: &OpenRouter, model: &str) -> Result<bool, Failure> {
     }
 }
 
-fn decision_model(client: &OpenRouter, model: &str) -> Result<bool, Failure> {
-    let decider = SystemOne {
-        client,
-        model: model.to_string(),
-    };
+fn decision_model(decider: &dyn Decider, model: &str) -> Result<bool, Failure> {
     let question = Question::Noul {
         instructions: json!("Is the sky in the state blue?"),
     };

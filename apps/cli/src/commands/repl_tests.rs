@@ -47,6 +47,11 @@ fn slash_commands_are_not_tasks() {
     assert_eq!(entry("/new"), Some(Entry::New));
     assert_eq!(entry("/clear"), Some(Entry::New));
     assert_eq!(entry("/status"), Some(Entry::Status));
+    assert_eq!(entry(" /login "), Some(Entry::Login));
+    assert_eq!(
+        entry("/login openai"),
+        Some(Entry::Unknown("login openai".into()))
+    );
     assert_eq!(entry("/undo"), Some(Entry::Unknown("undo".into())));
     assert_eq!(
         entry("add a test for /api/users"),

@@ -81,3 +81,9 @@ fn a_picture_goes_out_as_a_user_message_with_an_image_part_and_the_mark() {
         "the newest message keeps its cache mark"
     );
 }
+
+#[test]
+fn off_turns_thinking_off_and_a_level_is_asked_by_name() {
+    assert_eq!(reasoning(Effort::Off), json!({"enabled": false}));
+    assert_eq!(reasoning(Effort::XHigh), json!({"effort": "xhigh"}));
+}

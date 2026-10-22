@@ -1,6 +1,8 @@
 //! The contracts every part of llx speaks, and nothing else: no logic, no technology.
 //! - [`chat`]: the chat-model port: a conversation in, the next message out. A provider package
 //!   implements [`chat::Chat`].
+//! - [`catalog`]: what a provider offers: models and the reasoning levels each takes, and a
+//!   [`catalog::Selection`] of one, which holds only a level its model offers.
 //! - [`tool`]: the agent's tools: a spec the model reads and a call that returns text. A tool
 //!   package implements [`tool::Tool`].
 //! - [`view`]: the view protocol: what a view shows (an observation of refs, roles and text) and
@@ -12,6 +14,7 @@
 //! - [`person`]: a tool asks the person a question; the app answers, or says nobody can.
 //! - [`history`]: the session-history port. A store package implements [`history::History`].
 
+pub mod catalog;
 pub mod chat;
 pub mod gate;
 pub mod hands;

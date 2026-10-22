@@ -10,6 +10,7 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
 
 - `packages/contracts`: ports only, no logic.
   - `chat.rs`: the chat-model port, with our own `Message`, `ToolCall`, `Request`, `Completion` and `Usage`.
+  - `catalog.rs`: what a provider offers: `ModelEntry` (an id, a name, the `Effort` levels it takes, its default) and `Selection`, a model with a level it takes (its fields are private: no other level can be put in).
   - `tool.rs`: the agent's tools: `ToolSpec`, `ToolOutput { report, state }`, `ToolError { Failed, Fatal }`.
   - `gate.rs`: a tool asks before an effect: `Effect { tool, summary }`, `Verdict { Allow, Deny(why) }`, `Gate`, and `Open`.
   - `person.rs`: a tool asks the person: `Question` with its `Choice`s, `Answer`, `Reply { Answers, Nobody(why), Stopped }`, `Person`.
@@ -33,7 +34,7 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
   - `step.rs`, `choice.rs`.
   - `meter.rs`: the decision model's spend.
 - `packages/tools`: the tools, a module each.
-  - `workspace.rs`: where paths resolve. A file can be read anywhere but the paths the app denies (its key, its sessions), and changed only inside the root.
+  - `workspace.rs`: where paths resolve. A file can be read anywhere but the paths the app denies (its config directory with the keys and tokens, its sessions), and changed only inside the root.
   - `fs/`: `read.rs` (numbered lines, or a directory's entries) and `edit.rs` (exact replacement, or a new file), with `text.rs` (numbering, line endings, +/- counts) and `atomic.rs` (temporary file, then rename).
   - `shell/`: `bash.rs` (the tool), `process.rs` (its own session with no terminal, a deadline, a stop, both pipes read on threads, the group killed, then the rest of the session), `sweep.rs` (every process of a session killed by its session id, with system calls on the stack only, so the signal handler may use it) and `output.rs` (head and tail kept, the middle cut).
     - Terminal sessions (`tty`, `session`; unix only): `interactive.rs` (the arguments checked, the gate asked, the call carried out), `report.rs` (what the person and the model read), `pty.rs` (`openpty`, the shell its session leader with the PTY as its terminal, the reader thread, guarded writes), `stream.rs` (the output since the last call, the `wait_for` match), `filter.rs` (control sequences dropped, `\r` redraws, DSR replies, DECCKM), `keys.rs` (named keys), `session.rs` (`Sessions`, the registry the app owns: at most 4) and `running.rs` (one session's event-driven wait and its end, and `kill_all_now` for the signal handler).
@@ -49,17 +50,19 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
     - `probe/*.js`: the page side: snapshot, frames, outline, actions and settle, keys, evaluate.
   - `ask.rs`: `AskTool`, the agent's `ask`: one to three questions, read leniently, answered through `Person`.
   - `testing.rs`: test-only: temporary directories, and a gate that records what it is asked.
-- `packages/openrouter`: the models' provider.
-  - `chat.rs`: chat completions, with tool calling and prompt-cache marks.
-  - `system_one.rs`: the decision models.
-  - `client.rs`: the HTTP client.
-  - `auth.rs` and `auth_page.rs`: signing in.
-  - It is told who calls it (`App`).
+- `packages/providers/`: the models' providers, a package each, told who calls them (`App`).
+  - `kit/`: what they share, with no port: `http.rs` (`Http`, a POST answered with a status and a body; `Web` on the OS's TLS; forms and queries), `oauth.rs` (PKCE, random state, a pasted redirect, a token's claims, opening the system browser), `loopback.rs` (the sign-in callback on 127.0.0.1: route and `state` checked, `/cancel` to give way), `page.rs` (the browser's success and failure pages), `store.rs` (credential files, 0600), `sse.rs` (server-sent events).
+  - `openrouter/`: `chat.rs` (chat completions, tool calling, prompt-cache marks, the `reasoning` level), `system_one.rs` (the decision models), `client.rs`, `catalog.rs` (chat models and their levels), `auth.rs` (the key: environment, pasted, or a PKCE sign-in).
+  - `openai/`: a ChatGPT sign-in: `auth.rs` (the OAuth flow: authorize, exchange, refresh), `tokens.rs` (the tokens, the account id from their claims, `openai.json`), `responses.rs` (the chat port over the ChatGPT backend's Responses API, streamed; refresh before expiry and once on 401), `catalog.rs`.
+  - A new provider is a package here implementing `Chat` (and `Decider` where it has decision models) with a catalog, and one arm per `match` in `apps/cli/src/providers.rs`.
 - `packages/session`: a history store: sessions as JSON files.
 - `apps/cli`: the `llx` binary and the composition root.
   - `main.rs`: where the process exits (or the browser host, once its event loop owns the main thread, with the code the run returns).
   - `cli.rs`: the command line.
-  - `commands/`: `run.rs` (a session or one `exec` task: checks, then the browser host, then the work), `repl.rs` (a session's prompt line, its slash commands, and the plan handoff), `login.rs`, `sessions.rs` (`sessions`, `resume`), `doctor.rs`.
+  - `commands/`: `run.rs` (a session or one `exec` task: checks, then the browser host, then the work), `repl.rs` (a session's prompt line, its slash commands, and the plan handoff), `login.rs` (`/login`: provider, sign-in, model, level, each a pick), `signin.rs` (signing in to each provider, and `logout`), `sessions.rs` (`sessions`, `resume`), `doctor.rs`.
+  - `providers.rs`: the one place that knows the provider packages: names, catalogs, sign-ins, building a chat model; the decision model (OpenRouter's).
+  - `choice.rs`: the provider, model and level a run uses (the options, else what `/login` saved in `settings.json`). `live.rs`: the models a session thinks with, switched by `/login` between tasks.
+  - `picker.rs`: `Picker` (a title and items in, an index or a cancel out) and `Lines`; `Numbered` is the plain fallback.
   - `compose.rs`: builds the models, then (`assemble`, testable with fake models) the hands, the mode's gate, the person and the tools, then the `Agent`; `Rig` switches the mode and tells the agent of a change.
   - `context.rs`: the environment block, the AGENTS.md files from the git root down, an earlier session.
   - `mode.rs`: the four modes (`default`, `plan`, `bypass`, `autonomous`), the context's `Mode:` text, the `<mode_change>` note, and `ModeGate`: what each mode allows, refuses or asks.
@@ -81,9 +84,9 @@ Layers (checked by `apps/cli/tests/architecture.rs`):
 
 - L1: `contracts` depends on no workspace package.
 - L2: `agent` and `decision-loop` depend only on `contracts`.
-- L3: tools, providers and stores (every other package under `packages/`) depend only on `contracts`. A tool knows nothing of the agent, the hands, the models or the other tools. A provider knows nothing of tools.
+- L3: tools and stores (every other package under `packages/`) depend only on `contracts`; providers (under `packages/providers/`) only on `contracts` and the provider kit, which depends on no workspace package. A tool knows nothing of the agent, the hands, the models or the other tools. A provider knows nothing of tools or of the other providers.
 - L4: only apps compose packages. Nothing depends on an app.
-- L5: `contracts`, `agent` and `decision-loop` name no tool or provider: no browser, page, URL, OpenRouter, model name. The agent learns what a tool's world is like through `ToolSpec::description`, and the hands through `View::conventions`. Where the run happens (the directory, the system, the mode) reaches the agent through the app's context. A browser's own controls (its toolbar) are part of its view.
+- L5: `contracts`, `agent` and `decision-loop` name no tool or provider: no browser, page, URL, OpenRouter, OpenAI, model name. The agent learns what a tool's world is like through `ToolSpec::description`, and the hands through `View::conventions`. Where the run happens (the directory, the system, the mode) reaches the agent through the app's context. A browser's own controls (its toolbar) are part of its view.
 
 Behaviour:
 

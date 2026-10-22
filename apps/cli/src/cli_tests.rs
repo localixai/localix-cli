@@ -34,7 +34,7 @@ fn a_prompt_runs_with_its_options() {
     let run = cli.run;
     assert!(run.yes && run.json && run.show_browser);
     assert_eq!(run.cd, Some(PathBuf::from("/tmp")));
-    assert_eq!(run.models.model, "openai/gpt-5-mini");
+    assert_eq!(run.models.model.as_deref(), Some("openai/gpt-5-mini"));
     assert_eq!(run.output_last_message, Some(PathBuf::from("last.txt")));
     assert_eq!(run.max_turns, 7);
     assert_eq!(run.max_steps, 40);
@@ -50,27 +50,9 @@ fn no_prompt_is_the_prompt_line() {
 
 #[test]
 fn subcommands_parse() {
-    assert!(matches!(
-        parse(&["login"]).unwrap().command,
-        Some(Command::Login(LoginArgs {
-            with_token: false,
-            action: None
-        }))
-    ));
-    assert!(matches!(
-        parse(&["login", "--with-token"]).unwrap().command,
-        Some(Command::Login(LoginArgs {
-            with_token: true,
-            ..
-        }))
-    ));
-    assert!(matches!(
-        parse(&["login", "status"]).unwrap().command,
-        Some(Command::Login(LoginArgs {
-            action: Some(LoginAction::Status),
-            ..
-        }))
-    ));
+    // Signing in is `/login` in a session now: `login` is no command, only a word.
+    let login = parse(&["login"]).unwrap();
+    assert!(login.command.is_none() && login.prompt == ["login"]);
     assert!(matches!(
         parse(&["logout"]).unwrap().command,
         Some(Command::Logout)
@@ -82,7 +64,20 @@ fn subcommands_parse() {
     let Some(Command::Doctor(models)) = parse(&["doctor", "-m", "x/y"]).unwrap().command else {
         panic!("doctor")
     };
-    assert_eq!(models.model, "x/y");
+    assert_eq!(models.model.as_deref(), Some("x/y"));
+}
+
+#[test]
+fn the_provider_and_the_reasoning_level_are_flags() {
+    let models = parse(&["--provider", "openai", "--reasoning", "high", "x"])
+        .unwrap()
+        .run
+        .models;
+    assert_eq!(models.provider, Some(Provider::OpenAi));
+    assert_eq!(models.reasoning.as_deref(), Some("high"));
+    assert!(parse(&["--provider", "elsewhere", "x"]).is_err());
+    let plain = parse(&["x"]).unwrap().run.models;
+    assert!(plain.provider.is_none() && plain.model.is_none() && plain.reasoning.is_none());
 }
 
 #[test]
@@ -187,7 +182,7 @@ fn a_command_counts_only_as_the_first_word() {
     let cli = parse(&["fix it", "sessions"]).unwrap();
     assert_eq!(joined(&cli.prompt).as_deref(), Some("fix it sessions"));
     assert!(cli.command.is_none());
-    assert!(parse(&["login", "--with-token", "status"]).is_err());
+    assert!(parse(&["logout", "status"]).is_err());
 }
 
 #[test]

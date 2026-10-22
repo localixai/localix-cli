@@ -7,10 +7,13 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// The directories packages live in: the model providers have one of their own.
+const GROUPS: [&str; 3] = ["packages", "packages/providers", "apps"];
+
 /// Every workspace package: (directory group, package name) → the workspace packages it depends on.
 fn packages() -> BTreeMap<(String, String), Vec<String>> {
     let mut manifests = BTreeMap::new();
-    for group in ["packages", "apps"] {
+    for group in GROUPS {
         for entry in std::fs::read_dir(root().join(group)).unwrap().flatten() {
             let Ok(text) = std::fs::read_to_string(entry.path().join("Cargo.toml")) else {
                 continue;
@@ -64,11 +67,29 @@ fn l2_the_agent_and_the_hands_know_only_the_contracts() {
     }
 }
 
+/// What the model providers share: plumbing with no port, which knows no workspace package.
+const KIT: &str = "provider-kit";
+
 #[test]
 fn l3_tools_providers_and_stores_know_only_the_contracts() {
-    for ((group, name), uses) in packages() {
+    let packages = packages();
+    for ((group, name), uses) in &packages {
         if group == "packages" && name != "contracts" && !CORES.contains(&name.as_str()) {
-            assert_eq!(uses, ["contracts"], "{name} depends on {uses:?}");
+            assert_eq!(uses, &["contracts"], "{name} depends on {uses:?}");
+        }
+    }
+    let providers: Vec<_> = packages
+        .iter()
+        .filter(|((group, _), _)| group == "packages/providers")
+        .collect();
+    assert!(
+        providers.len() >= 3,
+        "the kit and two providers: {providers:?}"
+    );
+    for ((_, name), uses) in providers {
+        match name.as_str() {
+            KIT => assert!(uses.is_empty(), "the kit depends on {uses:?}"),
+            _ => assert_eq!(uses, &["contracts", KIT], "{name} depends on {uses:?}"),
         }
     }
 }
@@ -100,6 +121,8 @@ const TOOL_WORDS: &[&str] = &[
     "web page",
     "page",
     "openrouter",
+    "openai",
+    "chatgpt",
     "jev",
     "url",
     "html",
@@ -143,7 +166,7 @@ fn sources() -> Vec<PathBuf> {
         }
     }
     let mut out = vec![];
-    for group in ["packages", "apps"] {
+    for group in GROUPS {
         for entry in std::fs::read_dir(root().join(group)).unwrap().flatten() {
             walk(&entry.path().join("src"), &mut out);
         }

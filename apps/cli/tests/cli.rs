@@ -2,7 +2,6 @@
 //! with a scripted model runs in `commands/run_tests.rs`). Each test gets its own home, config
 //! and sessions directories, so nothing of the person's is read.
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -39,6 +38,8 @@ impl Home {
             .env("LLX_SESSIONS", self.0.join("sessions"))
             .env_remove("OPENROUTER_API_KEY")
             .env_remove("LLX_MODEL")
+            .env_remove("LLX_PROVIDER")
+            .env_remove("LLX_REASONING")
             .env_remove("LLX_DECISION_MODEL")
             .stdin(Stdio::null());
         command
@@ -88,54 +89,69 @@ fn an_unknown_flag_is_a_usage_error() {
 }
 
 #[test]
-fn login_status_without_a_key_exits_three() {
+fn signing_in_is_no_command_of_its_own() {
     let home = Home::new();
+    // `llx login` is a session whose first message is "login": it needs a terminal.
     let out = home.run(&["login", "status"]);
     assert_eq!(out.status.code(), Some(3));
-    assert!(text(&out.stderr).contains("not signed in"));
-    assert!(out.stdout.is_empty());
+    assert!(
+        text(&out.stderr).contains("needs a terminal"),
+        "{}",
+        text(&out.stderr)
+    );
+    let help = text(&home.run(&["--help"]).stdout);
+    assert!(
+        help.contains("/login") && !help.contains("llx login"),
+        "{help}"
+    );
 }
 
 #[test]
-fn login_status_shows_the_key_masked() {
+fn logout_forgets_every_saved_sign_in_without_showing_it() {
+    let home = Home::new();
+    let config = home.path().join("config/llx");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::write(config.join("credentials"), FAKE_KEY).unwrap();
+    std::fs::write(config.join("openai.json"), "{\"access_token\": \"secret\"}").unwrap();
+    let out = home.run(&["logout"]);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    let shown = text(&out.stdout);
+    assert!(shown.contains("OpenRouter: signed out"), "{shown}");
+    assert!(
+        shown.contains("OpenAI (sign in with ChatGPT): signed out"),
+        "{shown}"
+    );
+    assert!(!shown.contains(FAKE_KEY) && !shown.contains("secret"));
+    assert!(!config.join("credentials").exists() && !config.join("openai.json").exists());
+    let again = text(&home.run(&["logout"]).stdout);
+    assert!(again.contains("OpenRouter: no saved sign-in"), "{again}");
+}
+
+#[test]
+fn a_provider_not_signed_in_and_a_level_the_model_lacks_stop_before_any_model() {
     let home = Home::new();
     let out = home
-        .llx(&["login", "status"])
+        .llx(&["exec", "--provider", "openai", "x"])
         .env("OPENROUTER_API_KEY", FAKE_KEY)
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(0));
-    let shown = text(&out.stdout);
-    assert_eq!(shown, "Signed in with OPENROUTER_API_KEY: sk-or-...wxyz\n");
-}
-
-#[test]
-fn a_key_from_stdin_is_saved_reported_and_forgotten() {
-    let home = Home::new();
-    let mut login = home
-        .llx(&["login", "--with-token"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    login
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(format!("{FAKE_KEY}\n").as_bytes())
-        .unwrap();
-    let saved = login.wait_with_output().unwrap();
-    assert_eq!(saved.status.code(), Some(0), "{}", text(&saved.stderr));
+    assert_eq!(out.status.code(), Some(3));
     assert!(
-        !text(&saved.stdout).contains(FAKE_KEY),
-        "the key is never shown"
+        text(&out.stderr).contains("not signed in"),
+        "{}",
+        text(&out.stderr)
     );
-    let status = home.run(&["login", "status"]);
-    assert_eq!(status.status.code(), Some(0));
-    assert!(text(&status.stdout).contains("saved in"));
-    let logout = home.run(&["logout"]);
-    assert!(text(&logout.stdout).starts_with("Signed out"));
-    assert_eq!(home.run(&["login", "status"]).status.code(), Some(3));
+    let out = home
+        .llx(&["exec", "--reasoning", "ultra", "x"])
+        .env("OPENROUTER_API_KEY", FAKE_KEY)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(3));
+    let said = text(&out.stderr);
+    assert!(
+        said.contains("--reasoning ultra: anthropic/claude-haiku-5.5 takes off, low"),
+        "{said}"
+    );
 }
 
 #[test]
@@ -213,10 +229,7 @@ fn a_closed_stdout_ends_quietly_with_zero() {
     let home = Home::new();
     let help = into_a_closed_pipe(&mut home.llx(&["--help"]));
     assert_eq!(help.status.code(), Some(0));
-    let status = into_a_closed_pipe(
-        home.llx(&["login", "status"])
-            .env("OPENROUTER_API_KEY", FAKE_KEY),
-    );
+    let status = into_a_closed_pipe(home.llx(&["logout"]).env("OPENROUTER_API_KEY", FAKE_KEY));
     assert_eq!(status.status.code(), Some(0));
     assert!(status.stderr.is_empty(), "{}", text(&status.stderr));
     let sessions = into_a_closed_pipe(&mut home.llx(&["sessions"]));
@@ -232,7 +245,8 @@ fn doctor_without_a_key_checks_the_rest_then_exits_three() {
     let shown = text(&out.stdout);
     assert!(shown.contains("shell: "), "{shown}");
     assert!(shown.contains("browser: "), "{shown}");
-    assert!(shown.contains("no OpenRouter key"), "{shown}");
+    assert!(shown.contains("OpenRouter: not signed in"), "{shown}");
+    assert!(shown.contains("decision model: "), "{shown}");
 }
 
 /// A saved session, as the store writes it.
@@ -276,30 +290,4 @@ fn resuming_a_session_from_elsewhere_says_where_it_ran() {
         said.contains("session 1700000000-cd34 ran in /elsewhere/repo"),
         "{said}"
     );
-}
-
-#[cfg(unix)]
-#[test]
-fn a_saved_key_is_private_even_over_an_older_file() {
-    use std::os::unix::fs::PermissionsExt;
-    let home = Home::new();
-    let path = home.path().join("config/llx/credentials");
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(&path, "old").unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
-    let mut login = home
-        .llx(&["login", "--with-token"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .spawn()
-        .unwrap();
-    login
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(FAKE_KEY.as_bytes())
-        .unwrap();
-    assert_eq!(login.wait().unwrap().code(), Some(0));
-    let mode = std::fs::metadata(&path).unwrap().permissions().mode();
-    assert_eq!(mode & 0o777, 0o600);
 }

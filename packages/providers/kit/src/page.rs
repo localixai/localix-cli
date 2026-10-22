@@ -46,12 +46,12 @@ fn page(heading: &str, message: &str, details: Option<&str>) -> String {
     )
 }
 
-/// `app` is signed in.
-pub fn success(app: &str) -> String {
+/// `app` came back from signing in to `provider`.
+pub fn success(app: &str, provider: &str) -> String {
     page(
         "Authentication successful",
         &format!(
-            "{app} is signed in to OpenRouter. You can close this tab and return to the terminal."
+            "{app} is signing in to {provider}. You can close this tab and return to the terminal."
         ),
         None,
     )
@@ -62,5 +62,5 @@ pub fn failure(message: &str, details: Option<&str>) -> String {
 }
 
 #[cfg(test)]
-#[path = "auth_page_tests.rs"]
+#[path = "page_tests.rs"]
 mod tests;

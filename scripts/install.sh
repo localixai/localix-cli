@@ -130,8 +130,8 @@ main() {
 
   say ""
   say "Next steps:"
-  say "  llx login     # sign in with OpenRouter (or export OPENROUTER_API_KEY)"
-  say "  llx doctor    # check the key, the models and the WebView"
+  say "  llx           # a session: type /login to sign in (ChatGPT or OpenRouter)"
+  say "  llx doctor    # check the sign-ins, the models and the WebView"
 }
 
 main "$@"

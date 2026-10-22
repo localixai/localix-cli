@@ -174,7 +174,7 @@ pub fn composed(
     let session = history.start();
     let setup = Setup {
         options: Cli::try_parse_from(["llx"]).unwrap().run,
-        key: "test".into(),
+        choice: crate::choice::Choice::new(crate::providers::Provider::OpenRouter, "test/model"),
         workspace: Workspace::new(scratch.path()).unwrap(),
         context: String::new(),
         fresh: String::new(),
@@ -190,6 +190,7 @@ pub fn composed(
     let models = Models {
         chat: &chat,
         decider: &NoDecider,
+        live: None,
     };
     let output = Output::with(
         false,

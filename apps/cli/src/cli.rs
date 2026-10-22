@@ -5,9 +5,10 @@ use std::path::PathBuf;
 
 use clap::builder::RangedU64ValueParser;
 use clap::{ArgGroup, Args, Parser, Subcommand};
-use openrouter::{chat, system_one};
+use openrouter::system_one;
 
 use crate::mode::Mode;
+use crate::providers::Provider;
 
 const USAGE: &str = "llx [OPTIONS] [PROMPT]\n       \
     llx exec [OPTIONS] [PROMPT | -]\n       \
@@ -26,6 +27,12 @@ session only).
 With no command, llx opens a session at the terminal: PROMPT, when given, is its first message, \
 and each line you type goes on from the last. `llx exec` (or -p) runs one task without a session \
 and exits, with the answer alone on stdout: for scripts, CI and pipes.
+
+To sign in, type /login in a session: choose a provider (OpenAI, signed in with ChatGPT in \
+your browser, or OpenRouter, with a key), then one of its models and a reasoning level that \
+model takes. The choice is saved as the default for later sessions and for exec. The browser \
+tool's decision model runs on OpenRouter, so it needs an OpenRouter key whichever provider the \
+agent thinks with.
 
 The mode (--mode) decides what runs without asking. In default, commands, file changes and \
 browser actions are asked for at the terminal (y, n, or a: always for this tool), and refused \
@@ -55,8 +62,9 @@ const EXAMPLES: &str = "Examples:
 Exit codes: 0 achieved, 1 not achieved, 2 out of turns or time, 3 environment or usage,
 130 interrupted.
 
-Environment: OPENROUTER_API_KEY (else the key `llx login` saved), LLX_MODEL,
-LLX_DECISION_MODEL, LLX_SESSIONS (where sessions are kept, default ~/.lx/sessions).";
+Environment: OPENROUTER_API_KEY (else the key /login saved), LLX_PROVIDER, LLX_MODEL,
+LLX_REASONING, LLX_DECISION_MODEL, LLX_SESSIONS (where sessions are kept, default
+~/.lx/sessions). Sign-ins and the /login choice are kept in ~/.config/llx/ (0600).";
 
 #[derive(Parser, Debug)]
 #[command(
@@ -92,7 +100,7 @@ pub enum Command {
     /// Given a prompt, stdin that is not a terminal is read to its end and added in a <stdin>
     /// block (`</dev/null` skips it); `-` reads the prompt itself from stdin.
     #[command(visible_alias = "e", args_conflicts_with_subcommands = true)]
-    Exec(ExecArgs),
+    Exec(Box<ExecArgs>),
     /// Go on with a saved session, at the terminal.
     ///
     /// Its conversation is not kept, only each task and how it ended: the agent starts a new
@@ -101,11 +109,9 @@ pub enum Command {
     Resume(ResumeArgs),
     /// List saved sessions, newest first.
     Sessions,
-    /// Sign in with OpenRouter in your browser and save the key it issues.
-    Login(LoginArgs),
-    /// Forget the key `login` saved.
+    /// Forget every saved sign-in: the ChatGPT tokens and the OpenRouter key.
     Logout,
-    /// Check the key, both models, the browser's WebView and the shell.
+    /// Check the sign-ins, both models, the browser's WebView and the shell.
     Doctor(ModelOptions),
 }
 
@@ -126,22 +132,6 @@ pub enum ExecCommand {
     /// Go on with a saved session with one task, then exit.
     #[command(group(ArgGroup::new("which").args(["id", "last"]).required(true).multiple(true)))]
     Resume(ResumeArgs),
-}
-
-#[derive(Args, Debug)]
-#[command(args_conflicts_with_subcommands = true)]
-pub struct LoginArgs {
-    /// Read the key from stdin instead of signing in: `printenv KEY | llx login --with-token`.
-    #[arg(long)]
-    pub with_token: bool,
-    #[command(subcommand)]
-    pub action: Option<LoginAction>,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum LoginAction {
-    /// Where the key comes from, masked; exit 0 when signed in, 3 when not.
-    Status,
 }
 
 #[derive(Args, Debug)]
@@ -174,13 +164,23 @@ impl ResumeArgs {
     }
 }
 
-/// The two models a run uses.
+/// The two models a run uses. The chat model's provider, model and reasoning level default to
+/// what `/login` saved.
 #[derive(Args, Debug, Clone)]
 #[command(next_help_heading = "Model")]
 pub struct ModelOptions {
-    /// The agent's chat model, an OpenRouter model id.
-    #[arg(short = 'm', long, value_name = "MODEL", env = "LLX_MODEL", default_value = chat::DEFAULT_MODEL)]
-    pub model: String,
+    /// Where the agent's chat model comes from: openai (a ChatGPT sign-in) or openrouter (a key).
+    /// Default: the one /login saved, else the one signed in to.
+    #[arg(long, value_enum, value_name = "PROVIDER", env = "LLX_PROVIDER")]
+    pub provider: Option<Provider>,
+    /// The agent's chat model, a model id of the provider's (any OpenRouter id works). Default:
+    /// the one /login saved, else the provider's default.
+    #[arg(short = 'm', long, value_name = "MODEL", env = "LLX_MODEL")]
+    pub model: Option<String>,
+    /// How much the chat model reasons: off, minimal, low, medium, high, xhigh, max or ultra,
+    /// as far as the model takes it (/login lists its levels). Default: the model's own.
+    #[arg(long, value_name = "LEVEL", env = "LLX_REASONING")]
+    pub reasoning: Option<String>,
     /// The decision model that clicks and types in the browser.
     #[arg(long, value_name = "MODEL", env = "LLX_DECISION_MODEL", default_value = system_one::DEFAULT_MODEL)]
     pub decision_model: String,

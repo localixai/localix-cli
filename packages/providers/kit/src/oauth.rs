@@ -1,0 +1,82 @@
+//! The pieces of an OAuth sign-in: a PKCE pair, random state, what a person pasted, the claims
+//! of a token, and opening the sign-in address in the system browser.
+
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+
+use crate::http::query_value;
+
+/// A PKCE verifier and its S256 challenge.
+pub fn pkce() -> (String, String) {
+    let verifier = random(32);
+    let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
+    (verifier, challenge)
+}
+
+/// `bytes` random bytes, URL-safe base64 without padding.
+pub fn random(bytes: usize) -> String {
+    let mut buffer = vec![0u8; bytes];
+    getrandom::fill(&mut buffer).expect("the OS has randomness");
+    URL_SAFE_NO_PAD.encode(buffer)
+}
+
+/// What a person pasted when the browser could not reach the callback: the address the browser
+/// ended on (its `code` and `state`), or the code alone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pasted {
+    pub code: Option<String>,
+    pub state: Option<String>,
+    /// The provider's refusal, when the address carries one.
+    pub error: Option<String>,
+}
+
+pub fn pasted(input: &str) -> Pasted {
+    let input = input.trim();
+    if input.is_empty() {
+        return Pasted {
+            code: None,
+            state: None,
+            error: None,
+        };
+    }
+    if !input.contains('?') {
+        return Pasted {
+            code: Some(input.to_string()),
+            state: None,
+            error: None,
+        };
+    }
+    Pasted {
+        code: query_value(input, "code").filter(|code| !code.is_empty()),
+        state: query_value(input, "state"),
+        error: query_value(input, "error"),
+    }
+}
+
+/// The claims of a JWT, unverified: the server that issued it checks it, this only reads what
+/// it says about the account and its expiry.
+pub fn claims(token: &str) -> Option<Value> {
+    let payload = token.split('.').nth(1)?;
+    let bytes = URL_SAFE_NO_PAD.decode(payload.trim_end_matches('=')).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+/// Open `address` in the system browser; nothing happens where none can be started (the person
+/// opens the address shown instead).
+pub fn open(address: &str) {
+    #[cfg(target_os = "macos")]
+    let command = std::process::Command::new("open").arg(address).spawn();
+    #[cfg(target_os = "windows")]
+    let command = std::process::Command::new("cmd")
+        .args(["/C", "start", "", address])
+        .spawn();
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let command = std::process::Command::new("xdg-open").arg(address).spawn();
+    let _ = command;
+}
+
+#[cfg(test)]
+#[path = "oauth_tests.rs"]
+mod tests;

@@ -11,7 +11,7 @@ const ATTEMPTS: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ApiError {
-    /// The key was refused: sign in again or fix `OPENROUTER_API_KEY`.
+    /// The key was refused: `/login` again or fix `OPENROUTER_API_KEY`.
     Auth(String),
     /// OpenRouter or the model answered with an error.
     Http(u16, String),
@@ -34,6 +34,8 @@ impl std::fmt::Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
+/// Cheap to clone: the clones share one agent and its connections.
+#[derive(Clone)]
 pub struct OpenRouter {
     agent: ureq::Agent,
     key: String,
@@ -50,22 +52,8 @@ pub struct Timing {
 impl OpenRouter {
     pub fn new(key: String, app: crate::App) -> Self {
         let base = std::env::var("OPENROUTER_BASE_URL").unwrap_or_else(|_| BASE_URL.into());
-        let config = ureq::Agent::config_builder()
-            .http_status_as_error(false)
-            .timeout_connect(Some(Duration::from_secs(10)))
-            .timeout_global(Some(Duration::from_secs(90)))
-            .user_agent(format!("{}/{}", app.slug, app.version))
-            // The OS's own TLS and trust store (Security.framework, SChannel, OpenSSL): no
-            // bundled TLS stack or root certificates in the binary, and corporate roots work.
-            .tls_config(
-                ureq::tls::TlsConfig::builder()
-                    .provider(ureq::tls::TlsProvider::NativeTls)
-                    .root_certs(ureq::tls::RootCerts::PlatformVerifier)
-                    .build(),
-            )
-            .build();
         Self {
-            agent: ureq::Agent::new_with_config(config),
+            agent: provider_kit::http::agent(app, Duration::from_secs(90)),
             key,
             base,
             app,

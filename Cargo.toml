@@ -6,12 +6,23 @@
 #   packages/agent          the agent: a chat model's loop over tools
 #   packages/decision-loop  the browser's hands: a task carried out on a view with a decision model
 #   packages/tools          the tools: read, edit, bash, the workspace, a native browser window
-#   packages/openrouter     the models' provider: OpenRouter's chat and decision models, sign-in
+#   packages/providers/     the models' providers, a package each, and the kit they share:
+#     kit                   no port: HTTP, PKCE, the sign-in callback, credential files, SSE
+#     openrouter            OpenRouter's chat and decision models, its key
+#     openai                OpenAI's models through a ChatGPT sign-in (the Responses API)
 #   packages/session        a history store: sessions as JSON files
 #   apps/cli                the `llx` binary: composes the packages
 [workspace]
 resolver = "3"
-members = ["packages/*", "apps/*"]
+members = [
+    "packages/agent",
+    "packages/contracts",
+    "packages/decision-loop",
+    "packages/session",
+    "packages/tools",
+    "packages/providers/*",
+    "apps/*",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -23,7 +34,9 @@ license = "MIT"
 agent = { path = "packages/agent" }
 contracts = { path = "packages/contracts" }
 decision-loop = { path = "packages/decision-loop" }
-openrouter = { path = "packages/openrouter" }
+openai = { path = "packages/providers/openai" }
+openrouter = { path = "packages/providers/openrouter" }
+provider-kit = { path = "packages/providers/kit" }
 session = { path = "packages/session" }
 tools = { path = "packages/tools" }
 base64 = "0.23.1"

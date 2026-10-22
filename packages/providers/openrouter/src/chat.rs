@@ -1,27 +1,26 @@
 //! The chat port over OpenRouter's chat completions, with tool calling: any of its chat models.
 
+use contracts::catalog::{Effort, Selection};
 use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
 use contracts::tool::{Image, ToolSpec};
 use serde_json::{Value, json};
 
 use crate::client::{ApiError, OpenRouter};
 
-pub const DEFAULT_MODEL: &str = "anthropic/claude-haiku-5.5";
-
-pub struct ChatModel<'a> {
-    pub client: &'a OpenRouter,
-    pub model: String,
+pub struct ChatModel {
+    pub client: OpenRouter,
+    pub selection: Selection,
 }
 
-impl Chat for ChatModel<'_> {
+impl Chat for ChatModel {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
+        let model = &self.selection.model().id;
         let mut body = json!({
-            "model": self.model,
+            "model": model,
             "messages": cached(request.conversation.iter().map(wire).collect()),
             // No output limit: a whole file in one call is a long reply, and a cut one breaks the
             // call's arguments. The model's own maximum applies, as in Codex.
-            // Thinking costs seconds per turn; the agent reasons in its tool calls instead.
-            "reasoning": {"enabled": false},
+            "reasoning": reasoning(self.selection.effort()),
             "usage": {"include": true},
         });
         if !request.tools.is_empty() {
@@ -56,7 +55,7 @@ impl Chat for ChatModel<'_> {
             text,
             calls,
             usage: Usage {
-                model: value["model"].as_str().unwrap_or(&self.model).to_string(),
+                model: value["model"].as_str().unwrap_or(model).to_string(),
                 cost: value
                     .pointer("/usage/cost")
                     .and_then(Value::as_f64)
@@ -67,6 +66,15 @@ impl Chat for ChatModel<'_> {
                 output_tokens: tokens("/usage/completion_tokens"),
             },
         })
+    }
+}
+
+/// The level as OpenRouter's `reasoning` takes it. Off is no thinking at all: it costs seconds
+/// per turn, and the agent reasons in its tool calls instead.
+pub fn reasoning(effort: Effort) -> Value {
+    match effort {
+        Effort::Off => json!({"enabled": false}),
+        effort => json!({"effort": effort.name()}),
     }
 }
 

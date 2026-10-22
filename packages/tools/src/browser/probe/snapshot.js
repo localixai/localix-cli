@@ -199,6 +199,20 @@
 
   const DIALOG = 'dialog[open],[role="dialog"],[role="alertdialog"],[aria-modal="true"]'
 
+  // Every element under `root`, and under the open shadow roots inside it, each shadow tree right
+  // after its host: a consent dialog or a web component keeps its controls in one.
+  function* deep(root) {
+    for (const e of root.querySelectorAll('*')) {
+      yield e
+      if (e.shadowRoot) yield* deep(e.shadowRoot)
+    }
+  }
+  // `closest`, across shadow boundaries: up through each shadow tree's host.
+  const closestDeep = (e, selector) => {
+    for (let n = e; n; n = n.parentElement || n.getRootNode?.().host) if (n.matches?.(selector)) return n
+    return null
+  }
+
   function snapshot() {
     if (!document.body) return null
     for (const [id, e] of nodes) if (!e.isConnected || !e.ownerDocument.defaultView) nodes.delete(id)
@@ -207,7 +221,7 @@
     const frames = subframes()
     // An overlay frame first: it is what the page is about now, and the element cap must not cut it.
     const docs = [...frames.filter((f) => f.overlay), { doc: document, frame: null }, ...frames.filter((f) => !f.overlay)]
-    for (const { doc, frame, ...at } of docs) for (const e of doc.body.querySelectorAll('*')) {
+    for (const { doc, frame, ...at } of docs) for (const e of deep(doc.body)) {
       if (!isControl(e)) continue
       if (secret(e) || !visible(e)) continue
       const role = roleOf(e)
@@ -225,7 +239,7 @@
       if (!inViewport(box)) states.push('below')
       if (states.length) element.states = states
       if (editableOf(e, role)) element.editable = true
-      if (e.closest(DIALOG) || at.overlay) element.dialog = true
+      if (closestDeep(e, DIALOG) || at.overlay) element.dialog = true
       if (e.tagName === 'SELECT') {
         element.options = [...e.options].filter((o) => !o.disabled).slice(0, 50)
           .map((o) => ({ value: o.value, label: o.label }))

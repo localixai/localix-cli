@@ -65,3 +65,30 @@ fn a_call_that_only_closes_opens_nothing() {
         "a screenshot and a close ask nothing"
     );
 }
+
+#[test]
+fn a_tab_is_new_or_a_number() {
+    let new = args(json!({"tab": "new", "url": "example.com"}));
+    assert_eq!((new.new_tab(), new.switch_to()), (Ok(true), None));
+    let second = args(json!({"tab": 2}));
+    assert_eq!((second.new_tab(), second.switch_to()), (Ok(false), Some(2)));
+    let written = args(json!({"tab": "2"}));
+    assert_eq!(written.switch_to(), Some(2), "a number written as text");
+    assert!(args(json!({"tab": "next"})).new_tab().is_err());
+    assert_eq!(
+        args(json!({"tab": "\"new\""})).new_tab(),
+        Ok(true),
+        "quoted twice"
+    );
+    assert_eq!(
+        effects(Some("https://example.com"), &new).unwrap(),
+        "open https://example.com in a new tab"
+    );
+    let closing = args(json!({"close_tab": 2, "tab": 1}));
+    assert_eq!(
+        effects(None, &closing),
+        None,
+        "switching and closing tabs ask nothing"
+    );
+    assert!(!closing.only_closes());
+}

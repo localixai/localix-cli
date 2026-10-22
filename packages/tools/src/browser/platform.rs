@@ -25,8 +25,8 @@ pub(super) fn conceal(builder: WindowBuilder) -> WindowBuilder {
 /// missing, but it is fully transparent and passes clicks through: it covers nothing.
 #[cfg(target_os = "macos")]
 pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
+    use objc2::msg_send;
     use objc2::runtime::Bool;
-    use objc2::{msg_send, sel};
     use wry::WebViewExtMacOS;
 
     // NSWindowCollectionBehavior: open in the Space the person is in, even over a full-screen app,
@@ -37,14 +37,7 @@ pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
     const TRANSIENT: usize = 1 << 3;
     const IGNORES_CYCLE: usize = 1 << 6;
     const FULL_SCREEN_AUXILIARY: usize = 1 << 8;
-    let view = webview.webview();
-    unsafe {
-        let switch = sel!(_setWindowOcclusionDetectionEnabled:);
-        let available: bool = msg_send![&*view, respondsToSelector: switch];
-        if available {
-            let _: () = msg_send![&*view, _setWindowOcclusionDetectionEnabled: Bool::NO];
-        }
-    }
+    keep_tab_rendering(webview);
     let window = webview.ns_window();
     unsafe {
         // It never takes focus.
@@ -76,6 +69,25 @@ pub(super) fn level(headless: bool) -> isize {
         NORMAL_WINDOW_LEVEL
     }
 }
+
+/// A tab's WebView keeps drawing while covered: WebKit's occlusion detection is off for it.
+#[cfg(target_os = "macos")]
+pub(super) fn keep_tab_rendering(webview: &wry::WebView) {
+    use objc2::runtime::Bool;
+    use objc2::{msg_send, sel};
+    use wry::WebViewExtMacOS;
+    let view = webview.webview();
+    unsafe {
+        let switch = sel!(_setWindowOcclusionDetectionEnabled:);
+        let available: bool = msg_send![&*view, respondsToSelector: switch];
+        if available {
+            let _: () = msg_send![&*view, _setWindowOcclusionDetectionEnabled: Bool::NO];
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(super) fn keep_tab_rendering(_webview: &wry::WebView) {}
 
 #[cfg(not(target_os = "macos"))]
 pub(super) fn keep_rendering(_webview: &wry::WebView, _headless: bool) {}

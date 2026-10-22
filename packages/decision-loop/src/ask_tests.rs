@@ -247,3 +247,46 @@ fn the_model_chooses_how_long_to_wait() {
     };
     assert_eq!(step.trace_line(), "WAIT 10s · 100%");
 }
+
+#[test]
+fn a_target_refused_as_covered_is_not_offered_again_until_the_view_changes() {
+    let view = view(vec![
+        element("e1", "button", "New Game"),
+        element("e2", "button", "Save"),
+    ]);
+    let refused = GoalStep {
+        operation: Operation::Click,
+        reference: Some("e1".into()),
+        element: None,
+        value: None,
+        probability: 0.9,
+        changed: Some(false),
+        failed: Some("covered: a dialog \"Consent\" is on top; answer or close it first".into()),
+        new_view: false,
+    };
+    let offered = |history: &[GoalStep]| {
+        let ask = ask(&AskInput {
+            goal: "g",
+            conventions: "",
+            view: &view,
+            values: &[],
+            history,
+        });
+        ask.offered["click_target"]
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(offered(std::slice::from_ref(&refused)), ["e2"]);
+    let moved = GoalStep {
+        reference: Some("e2".into()),
+        changed: Some(true),
+        failed: None,
+        ..refused.clone()
+    };
+    assert_eq!(
+        offered(&[refused, moved]),
+        ["e1", "e2"],
+        "the view changed since"
+    );
+}

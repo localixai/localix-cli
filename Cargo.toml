@@ -56,6 +56,8 @@ vt100 = "0.16.2"
 objc2 = "0.6"
 # Already in the tree through tao and wry: the completion block of a WebKit screenshot.
 block2 = "0.6"
+# Already in the tree through wry: the configuration the browser's tabs share.
+objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "WKWebView", "WKWebViewConfiguration"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"

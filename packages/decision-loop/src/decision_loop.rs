@@ -55,7 +55,13 @@ impl DecisionLoop<'_> {
                 Stop::Done { .. } | Stop::Blocked | Stop::Unreachable(_) => false,
                 // Its share of actions spent: a checkpoint, not a failure.
                 Stop::Limit => left > SEGMENT,
-                Stop::Repeated | Stop::Cycling | Stop::ActionFailed(_) | Stop::NoDecision(_) => {
+                // Going round in circles changes the view at every step without getting anywhere:
+                // a stall however much moved.
+                Stop::Cycling => {
+                    stalls += 1;
+                    stalls < MAX_STALLS && left > 0
+                }
+                Stop::Repeated | Stop::ActionFailed(_) | Stop::NoDecision(_) => {
                     stalls = if moved { 0 } else { stalls + 1 };
                     stalls < MAX_STALLS && left > 0
                 }

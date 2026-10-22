@@ -213,6 +213,16 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
         driver.evaluate("document.title").unwrap(),
         "keys:ArrowUp/ArrowUp/38;ArrowLeft/ArrowLeft/37;a/KeyA/65;"
     );
+    // A script presses keys the same way, with `press` (a game bot's loop); a script may still
+    // declare a `press` of its own.
+    driver.navigate(&format!("{origin}/keys.html")).unwrap();
+    assert_eq!(
+        driver
+            .evaluate("press('ArrowDown'); await sleep(10); press('b'); document.title")
+            .unwrap(),
+        "keys:ArrowDown/ArrowDown/40;b/KeyB/66;"
+    );
+    assert_eq!(driver.evaluate("const press = 2; press * 3").unwrap(), "6");
 
     // Calendar days carry their date or month: "5" alone is ambiguous across two months.
     driver.navigate(&format!("{origin}/calendar.html")).unwrap();
@@ -239,6 +249,12 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     // Scripts: an expression, statements (last value), a body with its own return, a throw.
     assert_eq!(driver.evaluate("document.title").unwrap(), "Dropdown");
     assert_eq!(driver.evaluate("const n = 2; n * 21").unwrap(), "42");
+    assert_eq!(
+        driver
+            .evaluate("let n = 0; while (n < 3) { n++ } n * 2")
+            .unwrap(),
+        "6"
+    );
     assert_eq!(
         driver
             .evaluate("const xs = [1, 2]; return xs.length")
@@ -373,7 +389,43 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     let stale = driver.act(&old, &Action::Click { reference: back });
     assert!(matches!(stale, Err(BrowserError::Stale(_))), "{stale:?}");
 
+    tabs(driver, origin);
     screenshots(driver, origin);
+
+    // A dialog in an open shadow root (a consent web component): its controls are offered, as a
+    // dialog; what it covers names it; its button closes it.
+    driver.navigate(&format!("{origin}/shadow.html")).unwrap();
+    let page = driver.observe().unwrap();
+    let save = find(&page, "button", "Save + Exit").to_string();
+    assert!(
+        page.elements
+            .iter()
+            .any(|e| e.reference == save && e.dialog),
+        "{:#?}",
+        page.elements
+    );
+    let covered = driver.act(
+        &page.epoch,
+        &Action::Click {
+            reference: find(&page, "button", "New Game").into(),
+        },
+    );
+    assert!(
+        matches!(&covered, Err(BrowserError::Refused(m))
+            if m.starts_with("covered: a dialog \"Consent to Cookies\"")),
+        "{covered:?}"
+    );
+    act(driver, &page, Action::Click { reference: save });
+    let page = driver.observe().unwrap();
+    assert!(page.elements.iter().all(|e| !e.dialog), "the dialog closed");
+    act(
+        driver,
+        &page,
+        Action::Click {
+            reference: find(&page, "button", "New Game").into(),
+        },
+    );
+    assert_eq!(driver.observe().unwrap().title, "new game");
 
     // Controls a page made from plain elements (a pointer cursor, an onclick) are offered and
     // clicked like buttons; a pointer group once, and a wrapper around a link not at all.
@@ -418,6 +470,93 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
         driver.observe(),
         Err(BrowserError::Unavailable(_))
     ));
+}
+
+/// Tabs: one opened, switched to and back, one per link with target=_blank and per window.open,
+/// a tab out of sight still drawing, and closing them.
+fn tabs(driver: &WebviewDriver, origin: &str) {
+    let titles = |driver: &WebviewDriver| {
+        std::thread::sleep(Duration::from_millis(300));
+        let (tabs, active) = driver.tabs();
+        let titles: Vec<String> = tabs.iter().map(|tab| tab.title.clone()).collect();
+        (titles, active)
+    };
+    driver.navigate(&format!("{origin}/tabs.html")).unwrap();
+    assert_eq!(driver.tabs().0.len(), 1);
+    let second = driver.new_tab(&format!("{origin}/form.html")).unwrap();
+    assert_eq!(
+        (second, driver.observe().unwrap().title.as_str()),
+        (2, "Book")
+    );
+    assert_eq!(titles(driver), (vec!["Tabs".into(), "Book".into()], 2));
+
+    // Tab 1 kept drawing while out of sight.
+    driver.switch_tab(1).unwrap();
+    let drawn = |driver: &WebviewDriver| {
+        driver
+            .evaluate("window.frames_drawn")
+            .unwrap()
+            .parse::<u64>()
+            .unwrap()
+    };
+    let before = drawn(driver);
+    driver.switch_tab(2).unwrap();
+    std::thread::sleep(Duration::from_millis(600));
+    driver.switch_tab(1).unwrap();
+    assert!(
+        drawn(driver) > before + 10,
+        "{before} then {}",
+        drawn(driver)
+    );
+
+    // A link with target=_blank and window.open each open a tab, which is then acted on.
+    let page = driver.observe().unwrap();
+    act(
+        driver,
+        &page,
+        Action::Click {
+            reference: find(&page, "link", "Open second").into(),
+        },
+    );
+    assert_eq!(driver.observe().unwrap().title, "Second");
+    driver.switch_tab(1).unwrap();
+    let page = driver.observe().unwrap();
+    act(
+        driver,
+        &page,
+        Action::Click {
+            reference: find(&page, "button", "Open dropdown").into(),
+        },
+    );
+    assert_eq!(driver.observe().unwrap().title, "Dropdown");
+    assert_eq!(
+        titles(driver),
+        (
+            vec![
+                "Tabs".into(),
+                "Book".into(),
+                "Second".into(),
+                "Dropdown".into()
+            ],
+            4
+        )
+    );
+
+    // Closing the tab acted on goes to the one before it; a closed id is refused.
+    assert!(driver.close_tab(4).unwrap());
+    assert_eq!(driver.observe().unwrap().title, "Second");
+    assert!(matches!(
+        driver.switch_tab(4),
+        Err(BrowserError::Refused(_))
+    ));
+    for id in [3, 2] {
+        assert!(driver.close_tab(id).unwrap());
+    }
+    assert_eq!(titles(driver), (vec!["Tabs".into()], 1));
+    assert_eq!(driver.observe().unwrap().title, "Tabs");
+    // A new tab reuses a closed one's place.
+    assert_eq!(driver.new_tab(&format!("{origin}/second.html")).unwrap(), 2);
+    assert!(driver.close_tab(2).unwrap());
 }
 
 /// A screenshot is the WebView's own picture, as JPEG; a selector crops it to one element.

@@ -138,3 +138,46 @@ fn the_hands_report_each_step_and_how_the_task_ended() {
     assert_eq!(report.steps.len(), 3, "{:?}", report.steps);
     assert!(report.steps[0].starts_with("CLICK"), "{:?}", report.steps);
 }
+
+/// A section that opens and closes on each click: the view changes every time, and comes back.
+struct Toggle(Mutex<bool>);
+
+impl View for Toggle {
+    fn observe(&self) -> ViewResult<Observation> {
+        let open = *self.0.lock().unwrap();
+        let mut view = Quiz {
+            question: Mutex::new(1),
+            stuck: true,
+        }
+        .observe()?;
+        view.text = if open {
+            "Essential: details"
+        } else {
+            "Essential"
+        }
+        .into();
+        Ok(view)
+    }
+    fn act(&self, _: &str, _: &Action) -> ViewResult<()> {
+        let mut open = self.0.lock().unwrap();
+        *open = !*open;
+        Ok(())
+    }
+}
+
+#[test]
+fn going_round_in_circles_ends_the_task_however_much_the_view_changes() {
+    let toggle = Toggle(Mutex::new(false));
+    let hands = DecisionLoop {
+        decider: &Taker,
+        on_step: &|_| {},
+        max_actions: 40,
+    };
+    let outcome = hands.run(&toggle, "Close the dialog", &[]);
+    assert_eq!(outcome.stop, Stop::Cycling);
+    assert!(
+        outcome.steps.len() <= 10,
+        "{} steps for two loops",
+        outcome.steps.len()
+    );
+}

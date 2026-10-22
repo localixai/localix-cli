@@ -10,6 +10,8 @@ mod host;
 mod page;
 mod platform;
 mod script;
+mod tab_view;
+mod tabs;
 mod tool;
 mod toolbar;
 mod viewport;
@@ -23,7 +25,7 @@ pub use capture::{Clip, Shot};
 pub use contracts::view::{
     Action, Element, SelectOption, ViewError as BrowserError, ViewResult as BrowserResult,
 };
-pub use host::{Browser, Window, host, run};
+pub use host::{Browser, Tab, Window, host, run};
 pub use page::Page;
 pub use tool::BrowserTool;
 pub use viewport::Viewport;

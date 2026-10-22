@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 use tao::event_loop::EventLoopProxy;
 
-use super::host::{Cmd, Loads, Shared, WINDOW_CLOSED};
+use super::host::{Cmd, Loads, Shared, Tab, WINDOW_CLOSED, active_loads};
 use super::script::script_forms;
 use super::{Action, BrowserError, BrowserResult, Clip, Driver, Observation, PageText, Shot};
 
@@ -105,19 +105,76 @@ impl WebviewDriver {
         }
     }
 
+    /// The loads of the tab acted on.
     fn loads(&self) -> Loads {
-        *self.shared.loads.lock().unwrap()
+        let active = self.shared.active.load(Ordering::SeqCst);
+        active_loads(&self.shared.loads.lock().unwrap(), active)
     }
 
-    /// Wait for a load newer than `before` to start, up to `grace`.
+    /// Wait for a load newer than `before` to start, up to `grace`: in the tab acted on, which
+    /// may be a tab the page just opened.
     fn load_started_since(&self, before: Loads, grace: Duration) -> bool {
         let guard = self.shared.loads.lock().unwrap();
+        let active = || self.shared.active.load(Ordering::SeqCst);
         let (loads, _) = self
             .shared
             .loaded
-            .wait_timeout_while(guard, grace, |loads| loads.started == before.started)
+            .wait_timeout_while(guard, grace, |loads| {
+                active_loads(loads, active()).started == before.started
+            })
             .unwrap();
-        loads.started != before.started
+        active_loads(&loads, active()).started != before.started
+    }
+
+    /// The tabs open now, and the id of the one acted on.
+    pub fn tabs(&self) -> (Vec<Tab>, u32) {
+        let tabs = self.shared.tabs.lock().unwrap().clone();
+        (tabs, self.shared.active.load(Ordering::SeqCst))
+    }
+
+    /// Open `url` in a new tab, show it and act on it from now on; then wait for its document.
+    pub fn new_tab(&self, url: &str) -> BrowserResult<u32> {
+        self.open_or_closed()?;
+        let before = self.loads();
+        let (reply, opened) = mpsc::channel();
+        self.send(Cmd::NewTab {
+            url: url.to_string(),
+            reply: Some(reply),
+        })?;
+        let id = self.reply(opened)?;
+        self.load_started_since(before, PROBE_READY);
+        let _ = self.wait_loaded(LOAD_TIMEOUT);
+        Ok(id)
+    }
+
+    /// Show tab `id` and act on it from now on.
+    pub fn switch_tab(&self, id: u32) -> BrowserResult<()> {
+        self.open_or_closed()?;
+        let (reply, switched) = mpsc::channel();
+        self.send(Cmd::SwitchTab { id, reply })?;
+        self.reply(switched)
+    }
+
+    /// Close tab `id`; returns whether tabs are left (with none, the window is closed).
+    pub fn close_tab(&self, id: u32) -> BrowserResult<bool> {
+        self.open_or_closed()?;
+        let (reply, closed) = mpsc::channel();
+        self.send(Cmd::CloseTab { id, reply })?;
+        self.reply(closed)
+    }
+
+    fn send(&self, command: Cmd) -> BrowserResult<()> {
+        self.proxy
+            .send_event(command)
+            .map_err(|_| BrowserError::Unavailable("the browser window is gone".into()))
+    }
+
+    fn reply<T>(&self, answer: mpsc::Receiver<Result<T, String>>) -> BrowserResult<T> {
+        match answer.recv_timeout(CALL_TIMEOUT) {
+            Ok(Ok(value)) => Ok(value),
+            Ok(Err(why)) => Err(BrowserError::Refused(why)),
+            Err(_) => Err(closed()),
+        }
     }
 }
 

@@ -1,30 +1,30 @@
 # Changelog
 
-## Unreleased: Decision Loop
+## Unreleased
 
-The project is now Decision Loop: a goal driven to its end by a decision model alone, through tools. The browser CLI became its first tool. Breaking: the binary, flags, environment variables, the `--json` schema and the data folders are new.
+lxsurf is rebuilt as a small agent and its hands, in layered packages. Breaking: the `--json` schema is 3, and `--url` and `--viewport` are gone: a goal names where it starts, the agent opens addresses and changes the page size.
 
-- **No chat model.** The planner, its tools, `--schema`, `--no-llm`, `--max-turns`, `LXSURF_MODEL` and the chat-model checks in `doctor` and `models` are gone. Every step is one decision-model request; the run ends on DONE or BLOCKED.
-- **The decision loop.** A goal run stops on its guards (the same action twice without a change, a loop, a refused action, its share of actions); the loop resumes it with its whole history until DONE or BLOCKED, the action budget (`--max-steps`, default 100) is spent, or two runs in a row stop without progress. A 25-question quiz is one goal.
-- **Tools, gathered at run time.** The loop knows tools only by their protocol (`Tool`: name, description, conventions, start, observe, act, content, capture). The app registers them in a toolbox; the model picks the one whose description fits the goal. The other tools are controls in every view: clicking one moves the goal there, from the place the current tool shows (a path, an address); a BLOCKED tool hands the goal to another. The browser window opens only when a goal needs it.
-- **Only the goal.** `--url` and `--viewport` are gone: a goal names where it starts, and the browser's own toolbar (Back, Reload, page size) lets the model change the page size. A continued session resumes where its last goal left its tool.
-- **Packages.** `agent` (contracts), `decision-loop` (the loop), `tools` (the browser), `openrouter` (a decision-model provider), `session` (a history store), `apps/cli` (the binary). Dependencies point inward; `apps/cli/tests/architecture.rs` checks it.
-- **Renamed.** The binary is `decision-loop`; environment variables are `DECISION_LOOP_MODEL` (was `--decision-model` / `LXSURF_DECISION_MODEL`, now `--model`), `DECISION_LOOP_HEADLESS`, `DECISION_LOOP_SESSIONS`, `DECISION_LOOP_DEBUG` and `BROWSER_DEBUG`; the key lives in `~/.config/decision-loop/credentials`, sessions in `~/.decision-loop/sessions`.
-- **`--json` schema 2.** `usage` has `decision` only; `tool`, `final_location` (was `final_url`) and `screenshot` are new; `data`, `data_error` and the `unstated` status are gone; an expectation has no `by`.
-- **The page as an outline.** The browser shows the model its page as an outline: headings and text in reading order, every control with its ref, value and state, by structure (which question a radio answers, which result a price belongs to). `--dry-run` and `/snapshot` print it.
-- **Wait, as long as needed.** WAIT carries a length the model picks (1 to 30 s), ending early when the view changes.
-- **Screenshots.** `--screenshot FILE` saves a PNG of the final view, and `/screenshot` in the chat; the browser takes WebKit's own snapshot, in an invisible window too (macOS).
-- **Chat and sessions.** `--keep-open` leaves a chat: each line is the next goal in the same window, or `/snapshot`, `/screenshot [FILE]`, `/tools`. Every run is a session (`decision-loop sessions`, `-c`, `--resume ID`). `--timeout` bounds each goal.
-- **Decision models.** `decision-loop models` lists OpenRouter's decision models cheapest first, with price and context.
-- **Steadier on real sites** (evals 48/48, median 5 s, $0.0008 a task):
-  - a quoted string is typed exactly as written, and when the goal quotes values only those are offered;
+- **An agent and its hands.** The chat model (`--model`, default `anthropic/claude-haiku-5.5`) is an agent with one tool, `browser`: open an address, hand a short task with the exact `values` to type to the hands, press keys, run a script, read the whole text. The hands are the decision loop: the decision model (`--decision-model`, default `~typesafe/jev-latest`) carries a task out step by step. The agent checks every page itself and answers with a `RESULT:` line.
+- **Packages.** `contracts` (ports only: chat model, the agent's tools, the view, the decision model, the hands, history), `agent`, `decision-loop` (the hands), `tools` (the browser), `openrouter` (both models' provider), `session`, `apps/cli` (the `lxsurf` binary). Dependencies point inward; `apps/cli/tests/architecture.rs` checks it, and that unit tests live in their own `x_tests.rs` files.
+- **No site hints.** The agent's prompt and the tool's description are general: how to phrase a task (one page's worth, actions only, how to tell it is done), what the hands can and cannot do. Tool results come in sections (`### Helper`, `### Page (untrusted content)`), the page as an outline without refs.
+- **Kept short.** A tool result's report stays for the whole conversation; its state (the page) only until the conversation passes its budget; a result too long keeps its head and tail. Calls left unanswered are closed before a follow-up.
+- **Stops cleanly.** A failed call goes back to the model to try another way; after three in a row, or on the last turn, it is asked to answer with what it has. A fatal one (the decision model unreachable) ends the run.
+- **`--schema`** still returns the answer as JSON matching a JSON Schema through the `result` tool, checked before it is printed. **`--no-llm`** now runs the hands alone on the whole goal, from the page it names, typing quoted strings or words of the goal. `--max-steps` bounds one task of the hands (40).
+- **`--json` schema 3.** `usage` has `agent` (with `cached_tokens`) and `decision`; `data` / `data_error` with `--schema`; status `unstated` when the agent does not say; `tool` is gone; `final_url` and `screenshot`.
+- **Keys again.** `browser` presses keys (`keys`, `key_delay_ms`) with the `key`, `code` and `keyCode` games read.
+- **The page as an outline.** The hands read the page as an outline: headings and text in reading order, every control with its ref, value and state, by structure. `--dry-run` and `/snapshot` print it. The browser's toolbar (Back, Reload, page size) is part of the view.
+- **Wait, as long as needed.** WAIT carries a length the decision model picks (1 to 30 s), ending early when the page changes.
+- **Screenshots.** `--screenshot FILE` saves a PNG of the final page, and `/screenshot` in the chat; WebKit's own snapshot, in an invisible window too (macOS).
+- **Chat and sessions.** `--keep-open` leaves a chat: each line is the next goal in the same window and conversation, or `/snapshot`, `/screenshot [FILE]`. Every run is a session (`lxsurf sessions`, `-c`, `--resume ID`). `--timeout` bounds each goal.
+- **Steadier on real sites:**
   - a filled field and a placed value are not offered again;
   - consent banners in same-origin frames are seen and accepted; a click under one that loads late is decided again;
   - a script or a click that leaves the page no longer waits for a reply that cannot come, and a parsed document is used after at most 1 s more instead of waiting up to 20 s for every ad and video;
   - with the Navigation API reporting the page's own navigations, actions on ad-heavy pages no longer wait 300 ms for frames' navigations;
-  - the page's own requests in flight mark it busy; an unsure DONE, or one while fetching, is decided again only if the view changes;
-  - the step history is numbered, marks steps that opened a new view, and counts ("three questions") hold.
-- A `<button>` is named by its text, not its `value`; a refused action shows why in the trace.
+  - the page's own requests in flight mark it busy; an unsure DONE, or one while fetching, is decided again only if the page changes;
+  - the step history is numbered, marks steps that opened a new view, and counts ("three questions") hold;
+  - a link inside a heading (a search result's title, as on DuckDuckGo) keeps its ref in the outline instead of showing only as the heading's words.
+- A `<button>` is named by its text, not its `value`; a refused action shows why in the trace. The planner no longer sends `temperature`, which current Claude models refuse.
 
 ## 0.1.0
 

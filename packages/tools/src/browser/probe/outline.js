@@ -66,6 +66,12 @@
       const explicit = e.getAttribute('role') || ''
       const landmark = LANDMARK_ROLES.test(explicit) ? explicit : LANDMARK_TAGS[e.tagName]
       if (/^H[1-6]$/.test(e.tagName) || explicit === 'heading') {
+        // A result's title is often a link inside its heading: the link must keep its ref.
+        if (e.querySelector(SELECTOR)) {
+          if (near(e)) emit(depth, contentRole(e))
+          for (const child of e.children) walk(child, depth + 1)
+          return
+        }
         const text = (e.innerText || '').replace(/\s+/g, ' ').trim()
         if (text && near(e)) emit(depth, `${contentRole(e)} ${quoted(text)}`)
         return

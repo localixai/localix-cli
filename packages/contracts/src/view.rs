@@ -1,37 +1,29 @@
-//! The tool protocol: what a tool shows and what can be done to it. A tool shows controls by refs
-//! and is acted on by a ref and an operation, never a selector or coordinates. A tool knows nothing
-//! of who drives it.
+//! The view protocol: what a view shows and what can be done to it, for the decision model that
+//! drives it. A view shows controls by refs and is acted on by a ref and an operation, never a
+//! selector or coordinates. A view knows nothing of who drives it.
 
 use serde::{Deserialize, Serialize};
 
-/// Something that can be driven toward a goal.
-pub trait Tool {
-    /// A short, unique name.
-    fn name(&self) -> &str;
-    /// What the tool is for, in a sentence: how a tool is chosen for a goal.
-    fn description(&self) -> &str;
-    /// How the tool's world behaves, where it is not obvious (how its forms or menus work).
+/// Something a decision model can see and act on: a page, a screen.
+pub trait View {
+    /// How the view's world behaves, where it is not obvious (how its forms or menus work).
     fn conventions(&self) -> &str {
         ""
     }
-    /// Get ready for `goal`: open, or go where the goal names. `at` is where another tool left off
-    /// (its `Observation::location`) when the goal moves here from it; a tool goes there if it
-    /// can. Called before every goal, and on every move.
-    fn start(&self, goal: &str, at: Option<&str>) -> ToolResult<()>;
-    fn observe(&self) -> ToolResult<Observation>;
-    /// Perform `action` against the observation with `epoch`, then let the tool settle.
-    fn act(&self, epoch: &str, action: &Action) -> ToolResult<()>;
+    fn observe(&self) -> ViewResult<Observation>;
+    /// Perform `action` against the observation with `epoch`, then let the view settle.
+    fn act(&self, epoch: &str, action: &Action) -> ViewResult<()>;
     /// Everything readable, beyond what is in view: what expectations are judged on.
-    fn content(&self) -> ToolResult<String> {
+    fn content(&self) -> ViewResult<String> {
         self.observe().map(|observation| observation.text)
     }
-    /// A picture of what the tool shows, for the person; `None` from a tool that cannot take one.
-    fn capture(&self) -> ToolResult<Option<Capture>> {
+    /// A picture of what the view shows, for the person; `None` from a view that cannot take one.
+    fn capture(&self) -> ViewResult<Option<Capture>> {
         Ok(None)
     }
 }
 
-/// A picture of a tool's view.
+/// A picture of a view.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Capture {
     /// `image/png`.
@@ -39,25 +31,25 @@ pub struct Capture {
     pub bytes: Vec<u8>,
 }
 
-/// One atomic read of what the tool shows: the controls one can see and use, and the text around.
+/// One atomic read of what the view shows: the controls one can see and use, and the text around.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Observation {
-    /// Changes when the tool shows a new document or screen; an action carries it so it never
+    /// Changes when the view shows a new document or screen; an action carries it so it never
     /// lands on a newer one.
     pub epoch: String,
-    /// Where the tool is, in its own terms (an address, a path, a screen).
+    /// Where the view is, in its own terms (an address, a path, a screen).
     pub location: String,
     pub title: String,
     pub text: String,
     /// The view as an outline: headings and text in reading order, every control with its ref,
-    /// indented by structure. Empty from a tool that has none.
+    /// indented by structure. Empty from a view that has none.
     #[serde(default)]
     pub outline: String,
     pub elements: Vec<Element>,
     /// Visible controls left out past the element cap.
     #[serde(default)]
     pub omitted: usize,
-    /// The tool says it is still working (loading, fetching, a progress bar, "Loading…").
+    /// The view says it is still working (loading, fetching, a progress bar, "Loading…").
     #[serde(default)]
     pub busy: bool,
     /// How far the view is scrolled: a scroll that moved nothing is told apart from one that did.
@@ -111,7 +103,7 @@ impl Element {
     }
 }
 
-/// One operation on the tool. Targets are refs from the latest observation.
+/// One operation on the view. Targets are refs from the latest observation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     Click { reference: String },
@@ -122,18 +114,18 @@ pub enum Action {
     ScrollUp,
 }
 
-/// Why the tool could not do what was asked.
+/// Why the view could not do what was asked.
 #[derive(Debug, Clone, PartialEq)]
-pub enum ToolError {
+pub enum ViewError {
     /// What the action named changed since the observation; observe again.
     Stale(String),
-    /// The tool refused the action (covered, disabled, not editable).
+    /// The view refused the action (covered, disabled, not editable).
     Refused(String),
-    /// The tool did not answer in time, or is gone.
+    /// The view did not answer in time, or is gone.
     Unavailable(String),
 }
 
-impl std::fmt::Display for ToolError {
+impl std::fmt::Display for ViewError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Stale(message) | Self::Refused(message) | Self::Unavailable(message) => {
@@ -143,6 +135,6 @@ impl std::fmt::Display for ToolError {
     }
 }
 
-impl std::error::Error for ToolError {}
+impl std::error::Error for ViewError {}
 
-pub type ToolResult<T> = Result<T, ToolError>;
+pub type ViewResult<T> = Result<T, ViewError>;

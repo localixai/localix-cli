@@ -22,21 +22,5 @@ pub fn url_in(goal: &str) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::url_in;
-
-    #[test]
-    fn finds_the_site_a_goal_names() {
-        assert_eq!(
-            url_in("open https://example.com/a?b=1 now"),
-            Some("https://example.com/a?b=1".into())
-        );
-        assert_eq!(
-            url_in("найди статью на wikipedia.org про Гёделя"),
-            Some("https://wikipedia.org".into())
-        );
-        assert_eq!(url_in("write to me@mail.com"), None);
-        assert_eq!(url_in("version 1.2 is out."), None);
-        assert_eq!(url_in("Search flights"), None);
-    }
-}
+#[path = "start_tests.rs"]
+mod tests;

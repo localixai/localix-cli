@@ -8,46 +8,53 @@ use std::time::Duration;
 
 use tools::browser::{self, Action, BrowserError, Driver, Observation, WebviewDriver, Window};
 
-/// Serves `tests/fixtures` on an ephemeral port; returns its origin.
+/// Serves `tests/fixtures` on an ephemeral port; returns its origin. Each connection has its own
+/// thread: a browser opens connections ahead of need, and one that never sends a request must not
+/// hold up the next page.
 fn serve() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
-            let mut reader = BufReader::new(&stream);
-            let mut line = String::new();
-            if reader.read_line(&mut line).is_err() {
-                continue;
-            }
-            let path = line
-                .split_whitespace()
-                .nth(1)
-                .unwrap_or("/")
-                .trim_start_matches('/');
-            // A server that takes its time: a navigation must be followed, not raced.
-            let (path, delay) = match (path.strip_prefix("slow/"), path.strip_prefix("slower/")) {
-                (Some(rest), _) => (rest, 800),
-                (_, Some(rest)) => (rest, 3000),
-                _ => (path, 0),
-            };
-            std::thread::sleep(Duration::from_millis(delay));
-            let file = format!("{}/tests/fixtures/{path}", env!("CARGO_MANIFEST_DIR"));
-            let (status, body) = match std::fs::read(&file) {
-                Ok(body) => ("200 OK", body),
-                Err(_) => ("404 Not Found", b"missing".to_vec()),
-            };
-            let mut stream = &stream;
-            let head = format!(
-                "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\n\
-                 Content-Length: {}\r\nConnection: close\r\n\r\n",
-                body.len()
-            );
-            let _ = stream
-                .write_all(head.as_bytes())
-                .and_then(|_| stream.write_all(&body));
+            std::thread::spawn(move || answer(&stream));
         }
     });
     origin
+}
+
+/// One request: the fixture it names, after the delay its path asks for.
+fn answer(stream: &std::net::TcpStream) {
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    if reader.read_line(&mut line).is_err() {
+        return;
+    }
+    let path = line
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or("/")
+        .trim_start_matches('/');
+    // A server that takes its time: a navigation must be followed, not raced.
+    let (path, delay) = match (path.strip_prefix("slow/"), path.strip_prefix("slower/")) {
+        (Some(rest), _) => (rest, 800),
+        (_, Some(rest)) => (rest, 3000),
+        _ => (path, 0),
+    };
+    std::thread::sleep(Duration::from_millis(delay));
+    let file = format!("{}/tests/fixtures/{path}", env!("CARGO_MANIFEST_DIR"));
+    let (status, body) = match std::fs::read(&file) {
+        Ok(body) => ("200 OK", body),
+        Err(_) => ("404 Not Found", b"missing".to_vec()),
+    };
+    let head = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\n\
+         Content-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    let mut stream = stream;
+    let _ = stream
+        .write_all(head.as_bytes())
+        .and_then(|_| stream.write_all(&body));
 }
 
 fn find<'a>(page: &'a Observation, role: &str, name: &str) -> &'a str {
@@ -184,6 +191,28 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
             after.elements[0]
         );
     }
+
+    // A link inside a heading is a control in the outline, not only the heading's words.
+    driver.navigate(&format!("{origin}/results.html")).unwrap();
+    let page = driver.observe().unwrap();
+    let title = find(&page, "link", "Cheap flights to Georgia");
+    assert!(
+        page.outline
+            .contains(&format!("link \"Cheap flights to Georgia\" [ref={title}]"))
+            && page.outline.contains("heading 2 \"Plain heading\""),
+        "{}",
+        page.outline
+    );
+
+    // Keys reach the focused element (here the body) with the key, code and keyCode games read.
+    driver.navigate(&format!("{origin}/keys.html")).unwrap();
+    driver
+        .press(&["Up".into(), "ArrowLeft".into(), "a".into()], 0)
+        .unwrap();
+    assert_eq!(
+        driver.evaluate("document.title").unwrap(),
+        "keys:ArrowUp/ArrowUp/38;ArrowLeft/ArrowLeft/37;a/KeyA/65;"
+    );
 
     // Calendar days carry their date or month: "5" alone is ambiguous across two months.
     driver.navigate(&format!("{origin}/calendar.html")).unwrap();

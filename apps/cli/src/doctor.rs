@@ -1,9 +1,11 @@
-//! `decision-loop doctor` and `decision-loop models`: is everything a run needs in place?
+//! `lxsurf doctor` and `lxsurf models`: is everything a run needs in place?
 
 use std::collections::BTreeMap;
 
-use agent::model::{Decider, Question};
+use contracts::chat::{Chat, Message, Request};
+use contracts::model::{Decider, Question};
 use openrouter::auth::{self, KeySource};
+use openrouter::chat::ChatModel;
 use openrouter::client::OpenRouter;
 use openrouter::system_one::{self, SystemOne};
 use serde_json::json;
@@ -14,18 +16,18 @@ fn client() -> Result<OpenRouter, i32> {
     match auth::key(APP) {
         Some((key, _)) => Ok(OpenRouter::new(key, APP)),
         None => {
-            eprintln!("✗ no OpenRouter key: set OPENROUTER_API_KEY or run `decision-loop login`");
+            eprintln!("✗ no OpenRouter key: set OPENROUTER_API_KEY or run `lxsurf login`");
             Err(exit::ENVIRONMENT)
         }
     }
 }
 
-pub fn doctor(model: &str) -> i32 {
+pub fn doctor(chat_model: &str, model: &str) -> i32 {
     let mut ok = true;
     match auth::key(APP) {
         Some((_, KeySource::Env)) => println!("✓ key from OPENROUTER_API_KEY"),
         Some((_, KeySource::Saved(path))) => {
-            println!("✓ key saved by `decision-loop login` ({})", path.display())
+            println!("✓ key saved by `lxsurf login` ({})", path.display())
         }
         None => {}
     }
@@ -33,6 +35,26 @@ pub fn doctor(model: &str) -> i32 {
         Ok(client) => client,
         Err(code) => return code,
     };
+    let chat = ChatModel {
+        client: &client,
+        model: chat_model.to_string(),
+    };
+    let hello = [Message::User("Reply with the word ready.".into())];
+    let request = Request {
+        conversation: &hello,
+        tools: &[],
+        may_call: false,
+    };
+    match chat.complete(request) {
+        Ok(completion) => println!(
+            "✓ agent model {} answers in {} ms",
+            completion.usage.model, completion.usage.millis
+        ),
+        Err(error) => {
+            ok = false;
+            println!("✗ agent model {chat_model}: {error}");
+        }
+    }
     let decider = SystemOne {
         client: &client,
         model: model.to_string(),
@@ -84,7 +106,7 @@ pub fn models() -> i32 {
             exit::OK
         }
         Err(error) => {
-            eprintln!("decision-loop: {error}");
+            eprintln!("lxsurf: {error}");
             exit::ENVIRONMENT
         }
     }

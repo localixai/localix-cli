@@ -1,4 +1,4 @@
-//! `goal`: the decision model drives the current view toward a short sub-goal — observe, one
+//! `goal`: the decision model drives the current view toward a short task — observe, one
 //! decision request, one action, repeat, bounded.
 //!
 //! It never decides success. It stops on DONE or BLOCKED, an unreadable answer, a failed action,
@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use crate::ask::{AskInput, GoalStep, Operation, Pick, ask};
 pub use crate::step::Stop;
-use agent::model::{DecideError, Decider};
-use agent::tool::{Action, Observation, Tool, ToolError};
+use contracts::model::{DecideError, Decider};
+use contracts::view::{Action, Observation, View, ViewError};
 
 pub const MAX_DECISIONS: usize = 40;
 /// Below this probability a DONE is reported as unsure.
@@ -47,14 +47,12 @@ impl GoalOutcome {
 }
 
 pub struct GoalRun<'a> {
-    pub tool: &'a dyn Tool,
+    pub view: &'a dyn View,
     pub decider: &'a dyn Decider,
     /// Each executed step as it happens (the live trace).
     pub on_step: &'a dyn Fn(&GoalStep),
     /// Actions this run may take (not counting the steps it resumes from).
     pub max_actions: usize,
-    /// The other tools the goal may move to: (name, description).
-    pub others: &'a [(String, String)],
 }
 
 fn action_of(pick: &Pick) -> Option<Action> {
@@ -74,7 +72,7 @@ fn action_of(pick: &Pick) -> Option<Action> {
         Operation::PressEnter => Action::PressEnter { reference: None },
         Operation::ScrollDown => Action::ScrollDown,
         Operation::ScrollUp => Action::ScrollUp,
-        Operation::Wait | Operation::Switch | Operation::Done | Operation::Blocked => return None,
+        Operation::Wait | Operation::Done | Operation::Blocked => return None,
     })
 }
 
@@ -114,7 +112,7 @@ impl GoalRun<'_> {
         let deadline = std::time::Instant::now() + most;
         loop {
             std::thread::sleep(WAIT_POLL);
-            let now = self.tool.observe().ok();
+            let now = self.view.observe().ok();
             let done = now.as_ref().is_some_and(|now| changed(view, now));
             if done || std::time::Instant::now() >= deadline {
                 return now;
@@ -127,10 +125,10 @@ impl GoalRun<'_> {
     /// `SETTLE_MAX`, so the caller does not judge a view half-loaded.
     fn settled(&self, last: Option<Observation>) -> Option<Observation> {
         let deadline = std::time::Instant::now() + SETTLE_MAX;
-        let mut previous = last.map(Ok).unwrap_or_else(|| self.tool.observe()).ok()?;
+        let mut previous = last.map(Ok).unwrap_or_else(|| self.view.observe()).ok()?;
         loop {
             std::thread::sleep(WAIT_POLL);
-            let Ok(now) = self.tool.observe() else {
+            let Ok(now) = self.view.observe() else {
                 return Some(previous);
             };
             let quiet = fingerprint(&now) == fingerprint(&previous) && !now.busy;
@@ -166,7 +164,7 @@ impl GoalRun<'_> {
             if actions_of(&outcome.steps) - before >= self.max_actions {
                 break;
             }
-            let view = match latest.take().map(Ok).unwrap_or_else(|| self.tool.observe()) {
+            let view = match latest.take().map(Ok).unwrap_or_else(|| self.view.observe()) {
                 Ok(view) => view,
                 Err(error) => {
                     outcome.stop =
@@ -176,11 +174,10 @@ impl GoalRun<'_> {
             };
             let request = ask(&AskInput {
                 goal,
-                conventions: self.tool.conventions(),
+                conventions: self.view.conventions(),
                 view: &view,
                 values,
                 history: &outcome.steps,
-                others: self.others,
             });
             if std::env::var_os("DECISION_LOOP_DEBUG").is_some() {
                 eprintln!("decision state: {}", request.state);
@@ -248,14 +245,6 @@ impl GoalRun<'_> {
                 }
             }
             match pick.operation {
-                Operation::Switch => {
-                    (self.on_step)(&step);
-                    let tool = step.value.clone().unwrap_or_default();
-                    outcome.steps.push(step);
-                    outcome.stop = Stop::Switch(tool);
-                    outcome.view = Some(view);
-                    break;
-                }
                 Operation::Done | Operation::Blocked => {
                     (self.on_step)(&step);
                     outcome.steps.push(step);
@@ -296,16 +285,16 @@ impl GoalRun<'_> {
                     && last.value == step.value
                     && last.changed == Some(false)
             });
-            match self.tool.act(&view.epoch, &action) {
+            match self.view.act(&view.epoch, &action) {
                 // A target gone since the snapshot (a popup still opening) is a stale read, not a
                 // failed action: look again and decide again, once per step.
-                Err(ToolError::Stale(_)) if !retried_stale => {
+                Err(ViewError::Stale(_)) if !retried_stale => {
                     retried_stale = true;
                     continue;
                 }
                 // Something came over the view since the snapshot (a dialog that appears late):
                 // the next look offers it. Kept in the history, so the model knows why.
-                Err(ToolError::Refused(error))
+                Err(ViewError::Refused(error))
                     if error.starts_with("covered") && !retried_stale =>
                 {
                     retried_stale = true;
@@ -325,7 +314,7 @@ impl GoalRun<'_> {
                 }
                 Ok(()) => retried_stale = false,
             }
-            let after = self.tool.observe();
+            let after = self.view.observe();
             step.changed = Some(after.as_ref().map_or(true, |after| changed(&view, after)));
             step.new_view = after.as_ref().is_ok_and(|after| after.epoch != view.epoch);
             (self.on_step)(&step);

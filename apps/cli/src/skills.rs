@@ -1,5 +1,5 @@
-//! `decision-loop skills`: the guides for agents, built into the binary so they always match it.
-//! The `skills/decision-loop/SKILL.md` stub that agents install only points here.
+//! `lxsurf skills`: the guides for agents, built into the binary so they always match it.
+//! The `skills/lxsurf/SKILL.md` stub that agents install only points here.
 
 const SKILLS: &[(&str, &str)] = &[
     ("core", include_str!("../skill-data/core/SKILL.md")),
@@ -35,19 +35,5 @@ pub fn get(name: &str) -> Option<&'static str> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_guide_has_a_description_and_a_body() {
-        for (name, text) in SKILLS {
-            assert!(!description(text).is_empty(), "{name} has no description");
-            assert!(
-                get(name).unwrap().starts_with("# "),
-                "{name} body starts with its title"
-            );
-        }
-        assert!(list().contains("testing"));
-        assert_eq!(get("nope"), None);
-    }
-}
+#[path = "skills_tests.rs"]
+mod tests;

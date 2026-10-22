@@ -1,23 +1,23 @@
 ---
 name: testing
-description: Writing end-to-end checks in plain words with decision-loop check and --expect, for local dev servers, smoke tests and CI.
+description: Writing end-to-end checks in plain words with lxsurf check and --expect, for local dev servers, smoke tests and CI.
 ---
 
-# decision-loop for tests
+# lxsurf for tests
 
-A check is a goal plus statements that must hold afterwards. The goal names the page it starts on; decision-loop drives it, then judges each statement against the final page.
+A check is a goal plus statements that must hold afterwards. The goal names the page it starts on; the agent drives it there, then each statement is judged against the final page.
 
 ```bash
-decision-loop check 'On http://localhost:3000/signup sign up with email "ada@example.com" and password "Str0ng!pass"' \
+lxsurf check 'On http://localhost:3000/signup sign up with email "ada@example.com" and password "Str0ng!pass"' \
   --expect "The page welcomes ada@example.com" \
   --expect "No error message is shown"
 # PASS            (exit 0)
 # FAIL: <reason>  (exit 1)
 ```
 
-Quote every value to type: the decision model types only quoted strings from the goal.
+Give every value the journey needs in the goal (test accounts, emails); the agent types them in the form the page expects. For a fixed, scripted flow, `--no-llm` is cheaper: the decision model alone, typing only quoted strings, so quote them.
 
-Exit 1 means the app failed the check; 2 means the run ran out of actions or time; 3 means the environment is not ready. Treat 2 and 3 as infrastructure problems, not test failures.
+Exit 1 means the app failed the check; 2 means the run ran out of turns, actions or time; 3 means the environment is not ready. Treat 2 and 3 as infrastructure problems, not test failures.
 
 ## In a test runner
 
@@ -28,7 +28,7 @@ Spawn the binary and assert on the exit code; keep `--json` output as the failur
 import { spawnSync } from 'node:child_process'
 
 test('checkout works', () => {
-  const run = spawnSync('decision-loop', ['check', 'On http://localhost:3000 buy the cheapest T-shirt in size "M"',
+  const run = spawnSync('lxsurf', ['check', 'On http://localhost:3000 buy the cheapest T-shirt in size "M"',
     '--expect', 'The order confirmation page is shown', '--json'], { encoding: 'utf8', timeout: 300_000 })
   expect(run.status, run.stdout).toBe(0)
 })
@@ -39,7 +39,7 @@ test('checkout works', () => {
 import json, subprocess
 
 def test_login():
-    run = subprocess.run(["decision-loop", "check", 'On http://localhost:8000 log in with username "demo" and password "demo"',
+    run = subprocess.run(["lxsurf", "check", 'On http://localhost:8000 log in with username "demo" and password "demo"',
                           "--expect", "The dashboard is shown", "--json"], capture_output=True, text=True)
     assert run.returncode == 0, json.loads(run.stdout)["answer"]
 ```
@@ -48,13 +48,13 @@ def test_login():
 
 ```yaml
 # GitHub Actions
-- run: decision-loop check "On $PREVIEW_URL open the pricing page" --expect "The Pro plan price is shown"
+- run: lxsurf check "On $PREVIEW_URL open the pricing page" --expect "The Pro plan price is shown"
   env:
     OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
 - The window is invisible under CI automatically.
-- Linux needs WebKitGTK and a display: `sudo apt-get install -y libwebkit2gtk-4.1-0 xvfb` and run `xvfb-run decision-loop …`. macOS and Windows runners need nothing.
+- Linux needs WebKitGTK and a display: `sudo apt-get install -y libwebkit2gtk-4.1-0 xvfb` and run `xvfb-run lxsurf …`. macOS and Windows runners need nothing.
 - Runs are isolated: each gets a fresh private session, so checks can run in parallel.
 - `--trace trace.json` and `--screenshot final.png` (macOS) are good artifacts to upload on failure.
 
@@ -62,4 +62,5 @@ def test_login():
 
 - Expectations are observable facts on the final page ("The cart shows 2 items"), not process ("the button was clicked").
 - One user journey per check; several `--expect` for its outcome.
-- Give the data the journey needs (emails, passwords of test accounts) in the goal; decision-loop never invents personal data or credentials.
+- Give the data the journey needs (emails, passwords of test accounts) in the goal; lxsurf never invents personal data or credentials.
+- For data instead of a verdict (a price, a list), use `--schema` and assert on the JSON.

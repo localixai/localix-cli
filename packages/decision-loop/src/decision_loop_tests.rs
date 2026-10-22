@@ -4,9 +4,9 @@ use std::sync::Mutex;
 use serde_json::Value;
 
 use super::*;
-use crate::toolbox::Toolbox;
-use agent::model::{Answer, DecideError, Decision, Question};
-use agent::tool::{Action, Element, Observation, Tool, ToolResult};
+use contracts::hands::{Hands, Outcome, Task};
+use contracts::model::{Answer, DecideError, Decision, Question};
+use contracts::view::{Action, Element, Observation, View, ViewResult};
 
 /// A quiz of `questions` views behind a Next button; with `stuck`, Next does nothing.
 struct Quiz {
@@ -14,17 +14,8 @@ struct Quiz {
     stuck: bool,
 }
 
-impl Tool for Quiz {
-    fn name(&self) -> &str {
-        "quiz"
-    }
-    fn description(&self) -> &str {
-        "a quiz"
-    }
-    fn start(&self, _: &str, _: Option<&str>) -> ToolResult<()> {
-        Ok(())
-    }
-    fn observe(&self) -> ToolResult<Observation> {
+impl View for Quiz {
+    fn observe(&self) -> ViewResult<Observation> {
         let question = *self.question.lock().unwrap();
         Ok(Observation {
             outline: String::new(),
@@ -47,7 +38,7 @@ impl Tool for Quiz {
             busy: false,
         })
     }
-    fn act(&self, _: &str, _: &Action) -> ToolResult<()> {
+    fn act(&self, _: &str, _: &Action) -> ViewResult<()> {
         if !self.stuck {
             *self.question.lock().unwrap() += 1;
         }
@@ -94,16 +85,12 @@ fn run(stuck: bool) -> GoalOutcome {
         question: Mutex::new(1),
         stuck,
     };
-    let toolbox = Toolbox::default();
-    toolbox.add(std::sync::Arc::new(quiz));
     DecisionLoop {
-        toolbox: &toolbox,
         decider: &Taker,
         on_step: &|_| {},
         max_actions: 100,
     }
-    .run("Answer all 25 questions", &[], None)
-    .run
+    .run(&quiz, "Answer all 25 questions", &[])
 }
 
 #[test]
@@ -129,79 +116,25 @@ fn runs_that_change_nothing_end_the_loop() {
     );
 }
 
-/// A tool that shows one still view at `location`.
-struct Still(&'static str);
-
-impl Tool for Still {
-    fn name(&self) -> &str {
-        self.0
-    }
-    fn description(&self) -> &str {
-        "a still view"
-    }
-    fn start(&self, _: &str, _: Option<&str>) -> ToolResult<()> {
-        Ok(())
-    }
-    fn observe(&self) -> ToolResult<Observation> {
-        Ok(Observation {
-            outline: String::new(),
-            epoch: "1".into(),
-            location: self.0.into(),
-            ..Observation::default()
-        })
-    }
-    fn act(&self, _: &str, _: &Action) -> ToolResult<()> {
-        Ok(())
-    }
-}
-
-/// Picks `maps` for the goal; is BLOCKED in `maps` and DONE anywhere else.
-struct Router;
-
-impl Decider for Router {
-    fn decide(
-        &self,
-        state: &Value,
-        questions: &BTreeMap<String, Question>,
-    ) -> Result<Decision, DecideError> {
-        let answers = if questions.contains_key("tool") {
-            [("tool".to_string(), sure("maps"))].into()
-        } else if state["view"]["location"] == "maps" {
-            [("operation".to_string(), sure("BLOCKED"))].into()
-        } else {
-            [("operation".to_string(), sure("DONE"))].into()
-        };
-        Ok(Decision {
-            answers,
-            ..Decision::default()
-        })
-    }
-}
-
 #[test]
-fn the_model_picks_a_tool_and_a_blocked_one_hands_the_goal_on() {
-    let toolbox = Toolbox::default();
-    toolbox.add(std::sync::Arc::new(Still("web")));
-    toolbox.add(std::sync::Arc::new(Still("maps")));
-    let outcome = DecisionLoop {
-        toolbox: &toolbox,
-        decider: &Router,
+fn the_hands_report_each_step_and_how_the_task_ended() {
+    let quiz = Quiz {
+        question: Mutex::new(24),
+        stuck: false,
+    };
+    let hands = DecisionLoop {
+        decider: &Taker,
         on_step: &|_| {},
         max_actions: 10,
-    }
-    .run("Find the route", &[], None);
-    assert_eq!(outcome.tool.as_deref(), Some("web"));
-    assert_eq!(outcome.run.stop, Stop::Done { probability: 1.0 });
-}
-
-#[test]
-fn an_empty_toolbox_blocks() {
-    let outcome = DecisionLoop {
-        toolbox: &Toolbox::default(),
-        decider: &Router,
-        on_step: &|_| {},
-        max_actions: 10,
-    }
-    .run("Anything", &[], None);
-    assert_eq!((outcome.tool, outcome.run.stop), (None, Stop::Blocked));
+    };
+    let report = hands.carry_out(
+        &quiz,
+        Task {
+            goal: "Finish the quiz",
+            values: &[],
+        },
+    );
+    assert_eq!(report.outcome, Outcome::Done { probability: 1.0 });
+    assert_eq!(report.steps.len(), 3, "{:?}", report.steps);
+    assert!(report.steps[0].starts_with("CLICK"), "{:?}", report.steps);
 }

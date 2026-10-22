@@ -21,13 +21,14 @@ use super::viewport::Viewport;
 use super::webview::WebviewDriver;
 use super::{BrowserError, BrowserResult};
 
-/// One script from five files: snapshot, same-origin frames, the outline, actions, then evaluate
-/// and the IPC entry point.
+/// One script from six files: snapshot, same-origin frames, the outline, actions, keys, then
+/// evaluate and the IPC entry point.
 const PROBE: &str = concat!(
     include_str!("probe/snapshot.js"),
     include_str!("probe/frames.js"),
     include_str!("probe/outline.js"),
     include_str!("probe/act.js"),
+    include_str!("probe/keys.js"),
     include_str!("probe/evaluate.js"),
 );
 /// Off-screen placement of a headless window where the OS allows it (see platform.rs).

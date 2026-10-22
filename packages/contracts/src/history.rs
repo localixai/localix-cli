@@ -22,9 +22,6 @@ pub struct Session {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Turn {
     pub goal: String,
-    /// The tool that drove it.
-    #[serde(default)]
-    pub tool: Option<String>,
     pub answer: String,
     pub status: String,
     /// Unix seconds.

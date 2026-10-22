@@ -1,6 +1,6 @@
 [package]
 name = "decision-loop"
-description = "The decision loop: picks a tool for a goal and drives it there with a decision model"
+description = "The hands: a short task carried out on a view with a decision model"
 publish = false
 version.workspace = true
 edition.workspace = true
@@ -9,5 +9,5 @@ license.workspace = true
 
 # Contracts only (rule L2): no tool, no provider, no technology.
 [dependencies]
-agent.workspace = true
+contracts.workspace = true
 serde_json.workspace = true

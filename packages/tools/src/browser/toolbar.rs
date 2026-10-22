@@ -2,7 +2,7 @@
 //! and the page size (a phone or a tablet, for how a site lays out at that width). They are acted
 //! on like any control, by ref; the page never sees them.
 
-use agent::tool::{Element, SelectOption};
+use contracts::view::{Element, SelectOption};
 
 pub(crate) const BACK: &str = "back";
 pub(crate) const RELOAD: &str = "reload";

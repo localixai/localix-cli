@@ -13,7 +13,7 @@ harness = false
 
 # The tool protocol only (rule L3): a tool knows nothing of the loop or the model.
 [dependencies]
-agent.workspace = true
+contracts.workspace = true
 getrandom.workspace = true
 serde.workspace = true
 serde_json.workspace = true

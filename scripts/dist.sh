@@ -5,7 +5,7 @@
 #   scripts/dist.sh                 # every target this host builds (macOS: arm64, x86_64, universal)
 #   scripts/dist.sh x86_64-unknown-linux-gnu
 #
-# Archive names: decision-loop-<target>.tar.gz (zip on Windows), holding the decision-loop binary, README.md and
+# Archive names: lxsurf-<target>.tar.gz (zip on Windows), holding the lxsurf binary, README.md and
 # LICENSE. CI (.github/workflows/release.yml) runs this once per platform.
 set -eu
 
@@ -26,14 +26,14 @@ package() {
   target=$1
   binary=$2
   stage=$(mktemp -d)
-  cp "$binary" "$stage/decision-loop$( [ "${target#*windows}" != "$target" ] && echo .exe || true)"
+  cp "$binary" "$stage/lxsurf$( [ "${target#*windows}" != "$target" ] && echo .exe || true)"
   cp README.md LICENSE "$stage/"
   case "$target" in
-    *windows*) (cd "$stage" && zip -q -r - .) > "$dist/decision-loop-$target.zip" ;;
-    *) tar -C "$stage" -czf "$dist/decision-loop-$target.tar.gz" . ;;
+    *windows*) (cd "$stage" && zip -q -r - .) > "$dist/lxsurf-$target.zip" ;;
+    *) tar -C "$stage" -czf "$dist/lxsurf-$target.tar.gz" . ;;
   esac
   rm -rf "$stage"
-  echo "packaged decision-loop-$target"
+  echo "packaged lxsurf-$target"
 }
 
 targets=${*:-$(host_targets)}
@@ -41,17 +41,17 @@ for target in $targets; do
   cargo build --release --locked --target "$target"
   ext=""
   case "$target" in *windows*) ext=".exe" ;; esac
-  package "$target" "target/$target/release/decision-loop$ext"
+  package "$target" "target/$target/release/lxsurf$ext"
 done
 
 # One macOS download for both architectures.
-if [ -f "target/aarch64-apple-darwin/release/decision-loop" ] && [ -f "target/x86_64-apple-darwin/release/decision-loop" ]; then
-  universal=$(mktemp -d)/decision-loop
+if [ -f "target/aarch64-apple-darwin/release/lxsurf" ] && [ -f "target/x86_64-apple-darwin/release/lxsurf" ]; then
+  universal=$(mktemp -d)/lxsurf
   lipo -create -output "$universal" \
-    target/aarch64-apple-darwin/release/decision-loop target/x86_64-apple-darwin/release/decision-loop
+    target/aarch64-apple-darwin/release/lxsurf target/x86_64-apple-darwin/release/lxsurf
   package universal-apple-darwin "$universal"
 fi
 
-(cd "$dist" && shasum -a 256 decision-loop-* > SHA256SUMS 2>/dev/null || sha256sum decision-loop-* > SHA256SUMS)
-echo "decision-loop $version → $dist/"
+(cd "$dist" && shasum -a 256 lxsurf-* > SHA256SUMS 2>/dev/null || sha256sum lxsurf-* > SHA256SUMS)
+echo "lxsurf $version → $dist/"
 ls -la "$dist"

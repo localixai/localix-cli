@@ -18,9 +18,9 @@ mod covered {
     use serde_json::Value;
 
     use super::*;
-    use agent::model::DecideError;
-    use agent::model::{Answer, Decision, Question};
-    use agent::tool::{Element, Tool, ToolResult};
+    use contracts::model::DecideError;
+    use contracts::model::{Answer, Decision, Question};
+    use contracts::view::{Element, View, ViewResult};
 
     /// A view whose first click is refused because a banner came over it after the snapshot.
     struct Banner {
@@ -50,26 +50,17 @@ mod covered {
         }
     }
 
-    impl Tool for Banner {
-        fn name(&self) -> &str {
-            "quiz"
-        }
-        fn description(&self) -> &str {
-            "a quiz"
-        }
-        fn start(&self, _: &str, _: Option<&str>) -> ToolResult<()> {
-            Ok(())
-        }
-        fn observe(&self) -> ToolResult<Observation> {
+    impl View for Banner {
+        fn observe(&self) -> ViewResult<Observation> {
             // The click that went through moved on to the next question.
             let acts = self.acts.lock().unwrap().get();
             Ok(view(if acts >= 2 { 2 } else { 1 }))
         }
-        fn act(&self, _: &str, _: &Action) -> ToolResult<()> {
+        fn act(&self, _: &str, _: &Action) -> ViewResult<()> {
             let acts = self.acts.lock().unwrap();
             acts.set(acts.get() + 1);
             if acts.get() == 1 {
-                return Err(ToolError::Refused(
+                return Err(ViewError::Refused(
                     "covered: iframe \"Consent\" is on top".into(),
                 ));
             }
@@ -126,11 +117,10 @@ mod covered {
             clicked: Mutex::new(0),
         };
         let outcome = GoalRun {
-            tool: &driver,
+            view: &driver,
             decider: &model,
             on_step: &|_| {},
             max_actions: 5,
-            others: &[],
         }
         .run("Click Next", &[]);
         assert_eq!(outcome.stop, Stop::Done { probability: 1.0 });
@@ -181,11 +171,10 @@ mod covered {
             asked: Mutex::new(0),
         };
         let outcome = GoalRun {
-            tool: &driver,
+            view: &driver,
             decider: &model,
             on_step: &|_| {},
             max_actions: 5,
-            others: &[],
         }
         .run("Answer three questions", &[]);
         assert_eq!(outcome.stop, Stop::Done { probability: 0.55 });

@@ -12,7 +12,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 name = "agent"
 version = "0.1.0"
 dependencies = [
- "serde",
+ "contracts",
  "serde_json",
 ]
 
@@ -230,6 +230,7 @@ version = "0.1.0"
 dependencies = [
  "agent",
  "clap",
+ "contracts",
  "decision-loop",
  "getrandom 0.3.4",
  "openrouter",
@@ -254,6 +255,14 @@ name = "const-oid"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
+
+[[package]]
+name = "contracts"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "cookie"
@@ -423,7 +432,7 @@ dependencies = [
 name = "decision-loop"
 version = "0.1.0"
 dependencies = [
- "agent",
+ "contracts",
  "serde_json",
 ]
 
@@ -1663,8 +1672,8 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 name = "openrouter"
 version = "0.1.0"
 dependencies = [
- "agent",
  "base64 0.23.1",
+ "contracts",
  "getrandom 0.3.4",
  "serde_json",
  "sha2 0.11.1",
@@ -2157,7 +2166,7 @@ dependencies = [
 name = "session"
 version = "0.1.0"
 dependencies = [
- "agent",
+ "contracts",
  "getrandom 0.3.4",
  "serde_json",
 ]
@@ -2564,8 +2573,8 @@ dependencies = [
 name = "tools"
 version = "0.1.0"
 dependencies = [
- "agent",
  "block2",
+ "contracts",
  "getrandom 0.3.4",
  "objc2",
  "serde",

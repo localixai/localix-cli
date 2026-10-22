@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use serde_json::json;
 
-use agent::model::{Answer, Decider, Question};
+use contracts::model::{Answer, Decider, Question};
 
 /// At or above: true. Below, a statement the view does not clearly show is false.
 pub const PASS: f64 = 0.8;

@@ -1,13 +1,13 @@
 [package]
 name = "agent"
-description = "Decision Loop's contracts: the tool protocol, the decision-model port, the history port"
+description = "The agent: a chat model reaches a goal through tools and answers"
 publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-# Contracts only (rule L1): no loop, no technology.
+# Contracts only (rule L2): no tool, no provider, no technology.
 [dependencies]
-serde.workspace = true
+contracts.workspace = true
 serde_json.workspace = true

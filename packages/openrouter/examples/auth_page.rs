@@ -3,7 +3,7 @@ fn main() {
     let dir = std::env::args().nth(1).unwrap_or_else(|| ".".into());
     std::fs::write(
         format!("{dir}/success.html"),
-        openrouter::auth_page::success("Decision Loop"),
+        openrouter::auth_page::success("lxsurf"),
     )
     .unwrap();
     let failure = openrouter::auth_page::failure(

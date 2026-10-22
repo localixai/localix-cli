@@ -284,6 +284,15 @@ impl Driver for WebviewDriver {
         Ok(())
     }
 
+    fn press(&self, keys: &[String], delay_ms: u64) -> BrowserResult<()> {
+        let before = self.loads();
+        let budget = Duration::from_millis(delay_ms * keys.len() as u64) + CALL_TIMEOUT;
+        self.call("keys", json!({"keys": keys, "delay": delay_ms}), budget)?;
+        let settled = self.call("settle", json!({}), SETTLE_TIMEOUT);
+        self.follow_navigation(before, &settled);
+        Ok(())
+    }
+
     fn evaluate(&self, source: &str) -> BrowserResult<String> {
         let before = self.loads();
         let mut value = Err(BrowserError::Refused("the script does not parse".into()));

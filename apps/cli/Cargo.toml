@@ -1,7 +1,7 @@
 [package]
 name = "cli"
-description = "Decision Loop: give it a goal, a decision model drives a tool there"
-keywords = ["agent", "decision-model", "browser", "automation", "e2e"]
+description = "lxsurf: a goal in, an agent surfs a native browser window there and answers"
+keywords = ["agent", "browser", "decision-model", "automation", "e2e"]
 categories = ["command-line-utilities", "development-tools::testing"]
 version.workspace = true
 edition.workspace = true
@@ -10,12 +10,13 @@ license.workspace = true
 publish = false
 
 [[bin]]
-name = "decision-loop"
+name = "lxsurf"
 path = "src/main.rs"
 
 # The composition root (rule L4): the only package that depends on tools, providers and stores.
 [dependencies]
 agent.workspace = true
+contracts.workspace = true
 decision-loop.workspace = true
 openrouter.workspace = true
 session.workspace = true

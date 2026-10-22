@@ -3,15 +3,13 @@
 //! types is always a verbatim span of the goal.
 
 const MAX_CANDIDATES: usize = 40;
-const STOP: &[&str] = &[
-    "a", "an", "the", "and", "or", "to", "in", "on", "at", "for", "of", "from", "with", "by",
-    "find", "search", "open", "go", "show", "get", "me", "my", "is", "are", "then", "it", "that",
-    "this", "and", "please", "view", "site", "click", "type", "enter", "select", "choose", "look",
-    "up",
-];
+/// A sentence longer than this is a list of steps, not something to type.
+const MAX_SENTENCE: usize = 12;
 
 /// The quoted strings, when the goal has any: whoever quoted them said what to type. Otherwise
-/// word runs of one to four words that do not start or end on a function word, longest first.
+/// each sentence of the goal as written (a search query is the whole request, not four words of
+/// it), then every run of one to four words, longest first. No word lists: the model, not code,
+/// tells a name from a function word, in any language.
 pub fn candidates(goal: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let push = |out: &mut Vec<String>, value: &str| {
@@ -47,36 +45,47 @@ pub fn candidates(goal: &str) -> Vec<String> {
     if !out.is_empty() {
         return out;
     }
-    let words: Vec<&str> = goal
+    let trim = |w: &str| {
+        w.trim_matches(|c: char| ",.;:!?()\"'«»“”".contains(c))
+            .to_string()
+    };
+    for sentence in sentences(goal) {
+        let words: Vec<String> = sentence.split_whitespace().map(trim).collect();
+        if words.len() > 4 && words.len() <= MAX_SENTENCE {
+            push(&mut out, trim(sentence.trim()).as_str());
+        }
+    }
+    let words: Vec<String> = goal
         .split_whitespace()
-        .map(|w| w.trim_matches(|c: char| ",.;:!?()\"'«»“”".contains(c)))
+        .map(trim)
+        .filter(|w| !w.is_empty())
         .collect();
-    let content = |word: &str| !word.is_empty() && !STOP.contains(&word.to_lowercase().as_str());
     for length in (1..=4).rev() {
         for window in words.windows(length) {
-            if content(window[0]) && content(window[length - 1]) {
-                push(&mut out, &window.join(" "));
-            }
+            push(&mut out, &window.join(" "));
         }
     }
     out
 }
 
-#[cfg(test)]
-mod tests {
-    use super::candidates;
-
-    #[test]
-    fn spans_of_the_goal_are_the_only_candidates() {
-        let found = candidates("Find flights from Zurich to London on 20 Sep 2026");
-        assert!(found.contains(&"20 Sep 2026".to_string()));
-        let password = candidates("Log in as \"tomsmith\" with password \"SuperSecretPassword!\"");
-        assert_eq!(password, ["tomsmith", "SuperSecretPassword!"]);
-        assert_eq!(candidates("Add 'buy milk' to the list"), ["buy milk"]);
-        assert!(candidates("Don't stop, it's Paris").contains(&"Paris".to_string()));
-        assert!(found.contains(&"Zurich".to_string()));
-        assert!(found.contains(&"London".to_string()));
-        assert!(!found.iter().any(|value| value == "to" || value == "from"));
-        assert!(found.len() <= 40);
+/// The goal cut where a sentence or a clause ends: a stop, a colon or a semicolon followed by a
+/// space, or a line break. An address ("x.org/a.b") and a time ("19:30") stay whole.
+fn sentences(goal: &str) -> Vec<&str> {
+    let mut out = vec![];
+    let mut start = 0;
+    let mut chars = goal.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        let next = chars.peek().map(|&(_, n)| n);
+        let ends = c == '\n' || (".;:!?".contains(c) && next.is_none_or(char::is_whitespace));
+        if ends {
+            out.push(&goal[start..i]);
+            start = i + c.len_utf8();
+        }
     }
+    out.push(&goal[start..]);
+    out.into_iter().filter(|s| !s.trim().is_empty()).collect()
 }
+
+#[cfg(test)]
+#[path = "values_tests.rs"]
+mod tests;

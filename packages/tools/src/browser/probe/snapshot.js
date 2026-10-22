@@ -120,7 +120,7 @@
   // A calendar day reads "15" in every month a picker shows. Name it with its date when the page
   // says it (data-iso, data-date, datetime), else with its month's heading: "15 (2026-11-15)".
   const ISO = /\d{4}-\d{2}-\d{2}/
-  const MONTH = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|янв|фев|мар|апр|мая|май|июн|июл|авг|сен|окт|ноя|дек)/i
+  const MONTH = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i
   const dayOf = (e, name) => {
     if (!/^\s*\d{1,2}(\D|$)/.test(name) || name.length > 40) return name
     for (let n = e; n && n !== document.body; n = n.parentElement) {

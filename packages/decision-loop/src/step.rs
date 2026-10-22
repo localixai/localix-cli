@@ -10,13 +10,11 @@ pub enum Operation {
     ScrollDown,
     ScrollUp,
     Wait,
-    /// Go on with another tool, where this one left off.
-    Switch,
     Done,
     Blocked,
 }
 
-pub const OPERATIONS: [Operation; 10] = [
+pub const OPERATIONS: [Operation; 9] = [
     Operation::Click,
     Operation::TypeText,
     Operation::Select,
@@ -24,7 +22,6 @@ pub const OPERATIONS: [Operation; 10] = [
     Operation::ScrollDown,
     Operation::ScrollUp,
     Operation::Wait,
-    Operation::Switch,
     Operation::Done,
     Operation::Blocked,
 ];
@@ -39,7 +36,6 @@ impl Operation {
             Self::ScrollDown => "SCROLL_DOWN",
             Self::ScrollUp => "SCROLL_UP",
             Self::Wait => "WAIT",
-            Self::Switch => "SWITCH",
             Self::Done => "DONE",
             Self::Blocked => "BLOCKED",
         }
@@ -58,9 +54,6 @@ impl Operation {
             Self::ScrollDown => "Scroll the view down to reveal controls below.",
             Self::ScrollUp => "Scroll the view up to reveal controls above.",
             Self::Wait => "Wait: what the goal needs next is still loading or on its way.",
-            Self::Switch => {
-                "Go on with another tool, from where this view is: what the goal needs next is done there."
-            }
             Self::Done => "Every part of the goal is visibly satisfied in the view.",
             Self::Blocked => "No offered operation can make progress.",
         }
@@ -108,7 +101,6 @@ impl GoalStep {
         };
         let value = match (&self.value, self.operation) {
             (Some(seconds), Operation::Wait) => format!(" {seconds}s"),
-            (Some(tool), Operation::Switch) => format!(" → {tool}"),
             (Some(value), _) => format!(" ← \"{value}\""),
             (None, _) => String::new(),
         };
@@ -148,8 +140,6 @@ pub enum Stop {
     NoDecision(String),
     /// The decision model could not be reached.
     Unreachable(String),
-    /// The model chose to go on with the tool of this name.
-    Switch(String),
     Limit,
 }
 
@@ -164,10 +154,9 @@ impl std::fmt::Display for Stop {
             Self::Done { .. } => f.write_str("the model judged the goal done"),
             Self::Blocked => f.write_str("the model is blocked: nothing offered can progress"),
             Self::Repeated => f.write_str("the same action twice without a visible change"),
-            Self::Cycling => f.write_str("the tool keeps returning to the same state"),
+            Self::Cycling => f.write_str("the view keeps returning to the same state"),
             Self::ActionFailed(error) => write!(f, "the action failed: {error}"),
             Self::Unreachable(error) => write!(f, "the decision model is unreachable: {error}"),
-            Self::Switch(tool) => write!(f, "the goal moved to {tool}"),
             Self::NoDecision(error) => {
                 write!(f, "the decision model gave no usable answer: {error}")
             }

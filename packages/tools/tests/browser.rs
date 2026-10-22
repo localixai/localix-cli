@@ -389,6 +389,7 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     let stale = driver.act(&old, &Action::Click { reference: back });
     assert!(matches!(stale, Err(BrowserError::Stale(_))), "{stale:?}");
 
+    tabs(driver, origin);
     screenshots(driver, origin);
 
     // A dialog in an open shadow root (a consent web component): its controls are offered, as a
@@ -469,6 +470,93 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
         driver.observe(),
         Err(BrowserError::Unavailable(_))
     ));
+}
+
+/// Tabs: one opened, switched to and back, one per link with target=_blank and per window.open,
+/// a tab out of sight still drawing, and closing them.
+fn tabs(driver: &WebviewDriver, origin: &str) {
+    let titles = |driver: &WebviewDriver| {
+        std::thread::sleep(Duration::from_millis(300));
+        let (tabs, active) = driver.tabs();
+        let titles: Vec<String> = tabs.iter().map(|tab| tab.title.clone()).collect();
+        (titles, active)
+    };
+    driver.navigate(&format!("{origin}/tabs.html")).unwrap();
+    assert_eq!(driver.tabs().0.len(), 1);
+    let second = driver.new_tab(&format!("{origin}/form.html")).unwrap();
+    assert_eq!(
+        (second, driver.observe().unwrap().title.as_str()),
+        (2, "Book")
+    );
+    assert_eq!(titles(driver), (vec!["Tabs".into(), "Book".into()], 2));
+
+    // Tab 1 kept drawing while out of sight.
+    driver.switch_tab(1).unwrap();
+    let drawn = |driver: &WebviewDriver| {
+        driver
+            .evaluate("window.frames_drawn")
+            .unwrap()
+            .parse::<u64>()
+            .unwrap()
+    };
+    let before = drawn(driver);
+    driver.switch_tab(2).unwrap();
+    std::thread::sleep(Duration::from_millis(600));
+    driver.switch_tab(1).unwrap();
+    assert!(
+        drawn(driver) > before + 10,
+        "{before} then {}",
+        drawn(driver)
+    );
+
+    // A link with target=_blank and window.open each open a tab, which is then acted on.
+    let page = driver.observe().unwrap();
+    act(
+        driver,
+        &page,
+        Action::Click {
+            reference: find(&page, "link", "Open second").into(),
+        },
+    );
+    assert_eq!(driver.observe().unwrap().title, "Second");
+    driver.switch_tab(1).unwrap();
+    let page = driver.observe().unwrap();
+    act(
+        driver,
+        &page,
+        Action::Click {
+            reference: find(&page, "button", "Open dropdown").into(),
+        },
+    );
+    assert_eq!(driver.observe().unwrap().title, "Dropdown");
+    assert_eq!(
+        titles(driver),
+        (
+            vec![
+                "Tabs".into(),
+                "Book".into(),
+                "Second".into(),
+                "Dropdown".into()
+            ],
+            4
+        )
+    );
+
+    // Closing the tab acted on goes to the one before it; a closed id is refused.
+    assert!(driver.close_tab(4).unwrap());
+    assert_eq!(driver.observe().unwrap().title, "Second");
+    assert!(matches!(
+        driver.switch_tab(4),
+        Err(BrowserError::Refused(_))
+    ));
+    for id in [3, 2] {
+        assert!(driver.close_tab(id).unwrap());
+    }
+    assert_eq!(titles(driver), (vec!["Tabs".into()], 1));
+    assert_eq!(driver.observe().unwrap().title, "Tabs");
+    // A new tab reuses a closed one's place.
+    assert_eq!(driver.new_tab(&format!("{origin}/second.html")).unwrap(), 2);
+    assert!(driver.close_tab(2).unwrap());
 }
 
 /// A screenshot is the WebView's own picture, as JPEG; a selector crops it to one element.

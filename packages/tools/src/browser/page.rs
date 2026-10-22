@@ -1,13 +1,14 @@
 //! The browser window and the page it shows, as a `View`: the window opens on the first address
 //! it is sent to, and later addresses load in it. The browser's own toolbar (Back, Reload, page
-//! size) is part of the view, so the hands can use it like any control.
+//! size) is part of the view, so the hands can use it like any control; with several tabs open,
+//! it also says which tab the view is, but the hands do not switch tabs: the agent does.
 
 use std::sync::Mutex;
 use std::time::Duration;
 
 use contracts::view::{Action, Observation, View, ViewError, ViewResult};
 
-use super::{Browser, Driver, PageText, Viewport, WebviewDriver, Window, toolbar};
+use super::{Browser, Driver, PageText, Tab, Viewport, WebviewDriver, Window, toolbar};
 
 /// How web pages behave where it is not obvious: forms, suggestions, date pickers, results.
 const CONVENTIONS: &str = "A form sends only once its required fields are filled and its Search, \
@@ -28,6 +29,8 @@ pub struct Page {
     /// The page size the toolbar shows (`desktop`, `tablet`, `mobile`).
     size: Mutex<String>,
     driver: Mutex<Option<WebviewDriver>>,
+    /// The tabs as the agent was last told of them: they are told again only once they change.
+    told: Mutex<String>,
 }
 
 impl Page {
@@ -38,6 +41,7 @@ impl Page {
             hidden: Mutex::new(headless),
             size: Mutex::new("desktop".into()),
             driver: Mutex::new(None),
+            told: Mutex::new(String::new()),
         }
     }
 
@@ -98,6 +102,47 @@ impl Page {
             .ok_or_else(|| ViewError::Unavailable("the browser window is not open".into()))
     }
 
+    /// Open `url` in a new tab and act on it from now on.
+    pub fn new_tab(&self, url: &str) -> ViewResult<u32> {
+        self.driver()?.new_tab(url)
+    }
+
+    /// Act on tab `id` from now on.
+    pub fn switch_tab(&self, id: u32) -> ViewResult<()> {
+        self.driver()?.switch_tab(id)
+    }
+
+    /// Close tab `id`; whether tabs are left (with none, the window closed).
+    pub fn close_tab(&self, id: u32) -> ViewResult<bool> {
+        self.driver()?.close_tab(id)
+    }
+
+    /// The tabs, when they changed since the agent was last told: one line each, the shown one
+    /// marked. Nothing while a single tab was and is open.
+    pub fn tabs_news(&self) -> Option<String> {
+        let (tabs, active) = self.driver().map(|d| d.tabs()).unwrap_or_default();
+        // Told again when tabs open, close, move or the shown one changes, not when a title
+        // ticks.
+        let key = match tabs.len() {
+            0 | 1 => String::new(),
+            _ => tabs
+                .iter()
+                .map(|tab| format!("{} {}", tab.id, tab.url))
+                .chain([active.to_string()])
+                .collect::<Vec<_>>()
+                .join("\n"),
+        };
+        let mut told = self.told.lock().unwrap();
+        if *told == key {
+            return None;
+        }
+        *told = key.clone();
+        Some(match key.is_empty() {
+            true => "### Tabs\nOne tab is open.".to_string(),
+            false => format!("### Tabs\n{}", listing(&tabs, active)),
+        })
+    }
+
     /// The document's readable text from `offset`, at most `limit` characters.
     pub fn read(&self, offset: usize, limit: usize) -> ViewResult<PageText> {
         self.driver()?.read(offset, limit)
@@ -139,6 +184,17 @@ fn closed(open: &WebviewDriver) {
     }
 }
 
+/// The tabs, one line each: `2. Title — address (shown)`.
+fn listing(tabs: &[Tab], active: u32) -> String {
+    tabs.iter()
+        .map(|tab| {
+            let shown = if tab.id == active { " (shown)" } else { "" };
+            format!("{}. {} — {}{shown}", tab.id, tab.title, tab.url)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 impl View for Page {
     fn conventions(&self) -> &str {
         CONVENTIONS
@@ -147,7 +203,19 @@ impl View for Page {
     fn observe(&self) -> ViewResult<Observation> {
         let mut view = Observation::from(self.driver()?.observe()?);
         let controls = toolbar::controls(&self.size.lock().unwrap());
-        view.outline = format!("{}\n{}", toolbar::outline(&controls), view.outline);
+        let mut bar = toolbar::outline(&controls);
+        let (tabs, active) = self.driver()?.tabs();
+        if tabs.len() > 1 {
+            let names: Vec<String> = tabs
+                .iter()
+                .map(|tab| format!("{} \"{}\"", tab.id, tab.title))
+                .collect();
+            bar.push_str(&format!(
+                "\n  - tabs: {} (this is {active})",
+                names.join(", ")
+            ));
+        }
+        view.outline = format!("{bar}\n{}", view.outline);
         view.elements.splice(0..0, controls);
         Ok(view)
     }

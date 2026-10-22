@@ -21,7 +21,7 @@ const LONG_ABOUT: &str = "llx: an ultrafast, lightweight coding agent for the te
 It works in a directory (the current one, or -C DIR) with five tools: read, edit, bash (on \
 unix it can keep a program that asks, such as a REPL, open in a terminal session until the task \
 ends), a browser whose clicks and typing are done by a fast decision model (the agent also reads \
-the page, runs scripts in it and sees it in screenshots), and ask, a question to you (in a \
+the page, runs scripts in it, sees it in screenshots and keeps several tabs), and ask, a question to you (in a \
 session only).
 
 With no command, llx opens a session at the terminal: PROMPT, when given, is its first message, \

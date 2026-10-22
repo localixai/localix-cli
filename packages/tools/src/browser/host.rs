@@ -1,30 +1,29 @@
-//! The native window: a `tao` event loop on the main thread that opens one `wry` WebView when asked
-//! (the window exists only once it is needed). The caller's work runs on a worker thread and
+//! The native window: a `tao` event loop on the main thread that opens one window when asked (it
+//! exists only once it is needed), with a `wry` WebView per tab (tabs.rs). The caller's work runs on a worker thread and
 //! reaches the page through [`Cmd`]s on the event loop's proxy; answers come back over the page's
 //! IPC channel, matched by call id and a per-run token the page cannot read.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Condvar, Mutex};
 
 use serde_json::Value;
 use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
-use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
-use tao::window::WindowBuilder;
-use wry::{NewWindowResponse, PageLoadEvent, WebViewBuilder};
+use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
+use wry::PageLoadEvent;
 
 use super::capture::{Clip, Shot, capture};
-use super::guard::{allowed, token};
-use super::platform::{conceal, keep_rendering, user_agent};
+use super::guard::token;
+use super::tabs::Tabs;
 use super::viewport::Viewport;
 use super::webview::WebviewDriver;
 use super::{BrowserError, BrowserResult};
 
 /// One script from six files: snapshot, same-origin frames, the outline, actions, keys, then
 /// evaluate and the IPC entry point.
-const PROBE: &str = concat!(
+pub(super) const PROBE: &str = concat!(
     include_str!("probe/snapshot.js"),
     include_str!("probe/frames.js"),
     include_str!("probe/outline.js"),
@@ -67,6 +66,21 @@ pub(super) enum Cmd {
         script: String,
     },
     Navigate(String),
+    /// Open a tab on `url` and show it. A page's own new window (`target=_blank`, `window.open`)
+    /// comes here with no reply.
+    NewTab {
+        url: String,
+        reply: Option<Sender<Result<u32, String>>>,
+    },
+    SwitchTab {
+        id: u32,
+        reply: Sender<Result<(), String>>,
+    },
+    /// Close a tab; the reply says whether tabs are left (with none, the window closed).
+    CloseTab {
+        id: u32,
+        reply: Sender<Result<bool, String>>,
+    },
     /// Close the window, as the person would but without stopping the task: it opens again,
     /// shown or hidden, on its next use.
     Close,
@@ -89,8 +103,28 @@ pub(super) struct Shared {
     pub open: AtomicBool,
     pub next_id: AtomicU64,
     pub pending: Mutex<HashMap<u64, Sender<Reply>>>,
-    pub loads: Mutex<Loads>,
+    /// Each tab's loads, by tab id.
+    pub loads: Mutex<HashMap<u32, Loads>>,
     pub loaded: Condvar,
+    /// The tab acted on.
+    pub active: AtomicU32,
+    /// Numbers every load event across the tabs, so a load in another tab never reads as this
+    /// tab's (a page that opened a tab has started a load: the new tab's).
+    seq: AtomicU64,
+    pub tabs: Mutex<Vec<Tab>>,
+}
+
+/// The loads of tab `active`.
+pub(super) fn active_loads(loads: &HashMap<u32, Loads>, active: u32) -> Loads {
+    loads.get(&active).copied().unwrap_or_default()
+}
+
+/// One tab as the agent reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Tab {
+    pub id: u32,
+    pub url: String,
+    pub title: String,
 }
 
 /// Page loads started and finished; equal counts mean nothing is loading. `requested` counts the
@@ -117,26 +151,59 @@ impl Shared {
         for (_, sender) in self.pending.lock().unwrap().drain() {
             let _ = sender.send(Err(WINDOW_CLOSED.into()));
         }
-        *self.loads.lock().unwrap() = Loads::default();
+        self.loads.lock().unwrap().clear();
+        self.tabs.lock().unwrap().clear();
         self.loaded.notify_all();
     }
 
-    fn navigation_requested(&self) {
-        self.loads.lock().unwrap().requested += 1;
+    pub(super) fn navigation_requested(&self, tab: u32) {
+        let next = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
+        self.loads.lock().unwrap().entry(tab).or_default().requested = next;
         self.loaded.notify_all();
     }
 
-    fn page_load(&self, event: PageLoadEvent) {
-        let mut loads = self.loads.lock().unwrap();
-        match event {
-            PageLoadEvent::Started => loads.started += 1,
-            PageLoadEvent::Finished => loads.finished = loads.started,
+    pub(super) fn page_load(&self, tab: u32, event: PageLoadEvent, url: &str) {
+        let next = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
+        {
+            let mut loads = self.loads.lock().unwrap();
+            let loads = loads.entry(tab).or_default();
+            match event {
+                PageLoadEvent::Started => loads.started = next,
+                PageLoadEvent::Finished => loads.finished = loads.started,
+            }
+        }
+        if let Some(entry) = self.tabs.lock().unwrap().iter_mut().find(|t| t.id == tab) {
+            entry.url = url.to_string();
         }
         self.loaded.notify_all();
     }
 
+    pub(super) fn titled(&self, tab: u32, title: String) {
+        if let Some(entry) = self.tabs.lock().unwrap().iter_mut().find(|t| t.id == tab) {
+            entry.title = title;
+        }
+    }
+
+    /// The tabs open now, `active` acted on; what is known of each is kept.
+    pub(super) fn set_tabs(&self, active: u32, ids: &[u32]) {
+        let mut tabs = self.tabs.lock().unwrap();
+        tabs.retain(|tab| ids.contains(&tab.id));
+        for id in ids {
+            if !tabs.iter().any(|tab| tab.id == *id) {
+                tabs.push(Tab {
+                    id: *id,
+                    url: String::new(),
+                    title: String::new(),
+                });
+            }
+        }
+        tabs.sort_by_key(|tab| tab.id);
+        self.active.store(active, Ordering::SeqCst);
+        self.loaded.notify_all();
+    }
+
     /// A message from the page: `{t, id, ok}` or `{t, id, err}`. Anything else is ignored.
-    fn ipc(&self, body: &str) {
+    pub(super) fn ipc(&self, body: &str) {
         let Ok(message) = serde_json::from_str::<Value>(body) else {
             return;
         };
@@ -209,8 +276,11 @@ where
         open: AtomicBool::new(false),
         next_id: AtomicU64::new(1),
         pending: Mutex::new(HashMap::new()),
-        loads: Mutex::new(Loads::default()),
+        loads: Mutex::new(HashMap::new()),
         loaded: Condvar::new(),
+        active: AtomicU32::new(1),
+        seq: AtomicU64::new(0),
+        tabs: Mutex::new(vec![]),
     });
     let browser = Browser {
         proxy: proxy.clone(),
@@ -222,24 +292,34 @@ where
         let _ = exit.send_event(Cmd::Exit(code));
     });
 
-    let mut view: Option<(tao::window::Window, wry::WebView)> = None;
+    let mut view: Option<Tabs> = None;
     event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
         let Event::UserEvent(command) = event else {
-            if let Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } = event
-            {
-                view = None;
-                shared.closed();
-                on_close();
+            match event {
+                Event::WindowEvent {
+                    event: WindowEvent::CloseRequested,
+                    ..
+                } => {
+                    view = None;
+                    shared.closed();
+                    on_close();
+                }
+                Event::WindowEvent {
+                    event: WindowEvent::Resized(_),
+                    ..
+                } => {
+                    if let Some(tabs) = &view {
+                        tabs.layout();
+                    }
+                }
+                _ => {}
             }
             return;
         };
         let command = match (command, &view) {
             (Cmd::Open { window, reply }, None) => {
-                let opened = open(&window, target, &shared, proxy.clone());
+                let opened = Tabs::open(&window, target, &shared, &proxy);
                 shared.open.store(opened.is_ok(), Ordering::SeqCst);
                 let _ = reply.send(opened.as_ref().map(|_| ()).map_err(String::clone));
                 view = opened.ok();
@@ -263,7 +343,7 @@ where
             }
             (_, None) => return,
         };
-        let Some((native, webview)) = &view else {
+        let Some(tabs) = &mut view else {
             return;
         };
         match command {
@@ -272,30 +352,61 @@ where
                     "window.__dloop_call ? window.__dloop_call({id}, {name:?}, {args}) : false"
                 );
                 let answer = shared.clone();
-                let sent = webview.evaluate_script_with_callback(&script, move |accepted| {
-                    if accepted.trim() != "true" {
-                        answer.answer(id, Err("probe_not_ready".into()));
-                    }
-                });
+                let sent = tabs
+                    .active()
+                    .evaluate_script_with_callback(&script, move |accepted| {
+                        if accepted.trim() != "true" {
+                            answer.answer(id, Err("probe_not_ready".into()));
+                        }
+                    });
                 if let Err(error) = sent {
                     shared.answer(id, Err(format!("probe_not_ready: {error}")));
                 }
             }
             Cmd::Eval { id, script } => {
                 let answer = shared.clone();
-                let sent = webview.evaluate_script_with_callback(&script, move |started| {
-                    if started.trim() != "true" {
-                        answer.answer(id, Err("script_not_started".into()));
-                    }
-                });
+                let sent = tabs
+                    .active()
+                    .evaluate_script_with_callback(&script, move |started| {
+                        if started.trim() != "true" {
+                            answer.answer(id, Err("script_not_started".into()));
+                        }
+                    });
                 if let Err(error) = sent {
                     shared.answer(id, Err(format!("script_not_started: {error}")));
                 }
             }
-            Cmd::Resize(width, height) => native.set_inner_size(LogicalSize::new(width, height)),
-            Cmd::Capture { clip, reply } => capture(webview, clip, reply),
+            Cmd::Resize(width, height) => {
+                tabs.native.set_inner_size(LogicalSize::new(width, height));
+                tabs.layout();
+            }
+            Cmd::Capture { clip, reply } => capture(tabs.active(), clip, reply),
             Cmd::Navigate(url) => {
-                let _ = webview.load_url(&url);
+                let _ = tabs.active().load_url(&url);
+            }
+            Cmd::NewTab { url, reply } => {
+                let added = tabs.add(&url, &shared, &proxy);
+                match reply {
+                    Some(reply) => {
+                        let _ = reply.send(added);
+                    }
+                    // A page's window past the tab limit opens where the page is, as before tabs.
+                    None if added.is_err() => {
+                        let _ = tabs.active().load_url(&url);
+                    }
+                    None => {}
+                }
+            }
+            Cmd::SwitchTab { id, reply } => {
+                let _ = reply.send(tabs.switch(id, &shared));
+            }
+            Cmd::CloseTab { id, reply } => {
+                let closed = tabs.close(id, &shared);
+                if closed == Ok(false) {
+                    view = None;
+                    shared.closed();
+                }
+                let _ = reply.send(closed);
             }
             Cmd::Open { .. } | Cmd::Exit(_) | Cmd::Close => {}
         }
@@ -325,101 +436,3 @@ const CLOSED_EXIT: i32 = 130;
 /// The answer to every call while the window is closed.
 pub(super) const WINDOW_CLOSED: &str = "window_closed";
 const ENVIRONMENT_EXIT: i32 = 3;
-
-/// The window and its WebView, shown without taking focus.
-fn open(
-    window: &Window,
-    target: &EventLoopWindowTarget<Cmd>,
-    shared: &Arc<Shared>,
-    proxy: EventLoopProxy<Cmd>,
-) -> Result<(tao::window::Window, wry::WebView), String> {
-    let mut builder = WindowBuilder::new()
-        .with_title(&window.title)
-        .with_inner_size(LogicalSize::new(
-            window.viewport.width,
-            window.viewport.height,
-        ))
-        .with_focused(false);
-    if window.headless {
-        // Shown only once concealed, so it never flashes on screen.
-        builder = conceal(builder.with_decorations(false).with_visible(false));
-    }
-    let native = builder.build(target).map_err(|error| error.to_string())?;
-    let webview = webview(window, shared, proxy)
-        .and_then(|builder| build(builder, &native))
-        .map_err(|error| error.to_string())?;
-    // Shows the window too, without making it the key window (tao's set_visible would).
-    keep_rendering(&webview, window.headless);
-    #[cfg(not(target_os = "macos"))]
-    if window.headless {
-        native.set_visible(true);
-    }
-    Ok((native, webview))
-}
-
-fn webview<'a>(
-    window: &'a Window,
-    shared: &Arc<Shared>,
-    proxy: EventLoopProxy<Cmd>,
-) -> wry::Result<WebViewBuilder<'a>> {
-    let ipc = shared.clone();
-    let loads = shared.clone();
-    let requests = shared.clone();
-    let mut builder = WebViewBuilder::new()
-        .with_url(&window.url)
-        .with_incognito(true)
-        .with_initialization_script_for_main_only(
-            PROBE.replace("__TOKEN__", &shared.token).replace(
-                "__HEADLESS__",
-                if window.headless { "true" } else { "false" },
-            ),
-            true,
-        )
-        .with_ipc_handler(move |request| ipc.ipc(request.body()))
-        .with_on_page_load_handler(move |event, url| {
-            if std::env::var_os("BROWSER_DEBUG").is_some() {
-                let kind = if matches!(event, PageLoadEvent::Started) {
-                    "started"
-                } else {
-                    "finished"
-                };
-                eprintln!("load {kind}: {url}");
-            }
-            loads.page_load(event)
-        })
-        .with_navigation_handler(move |url| {
-            let allow = allowed(&url);
-            if std::env::var_os("BROWSER_DEBUG").is_some() {
-                eprintln!("navigation requested: {url} (allowed: {allow})");
-            }
-            if allow {
-                requests.navigation_requested();
-            }
-            allow
-        })
-        .with_download_started_handler(|_url, _path| false)
-        // A new tab or popup opens in this window instead: one page at a time.
-        .with_new_window_req_handler(move |url, _features| {
-            if allowed(&url) {
-                let _ = proxy.send_event(Cmd::Navigate(url));
-            }
-            NewWindowResponse::Deny
-        })
-        .with_background_throttling(wry::BackgroundThrottlingPolicy::Disabled);
-    if let Some(agent) = user_agent() {
-        builder = builder.with_user_agent(agent);
-    }
-    Ok(builder)
-}
-
-#[cfg(not(target_os = "linux"))]
-fn build(builder: WebViewBuilder, window: &tao::window::Window) -> wry::Result<wry::WebView> {
-    builder.build(window)
-}
-
-#[cfg(target_os = "linux")]
-fn build(builder: WebViewBuilder, window: &tao::window::Window) -> wry::Result<wry::WebView> {
-    use tao::platform::unix::WindowExtUnix;
-    use wry::WebViewBuilderExtUnix;
-    builder.build_gtk(window.default_vbox().expect("tao window has a vbox"))
-}

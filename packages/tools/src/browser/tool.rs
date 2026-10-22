@@ -53,7 +53,17 @@ impl Tool for BrowserTool<'_> {
             });
         }
         let mut report = vec![];
-        self.go(url, &args, &mut report);
+        let new_tab = args.new_tab().map_err(ToolError::Failed)?;
+        if let Some(id) = args.switch_to() {
+            self.page
+                .switch_tab(id)
+                .map_err(|error| ToolError::Failed(error.to_string()))?;
+            report.push(format!("Showing tab {id}."));
+        }
+        match new_tab && self.page.is_open() {
+            true => self.open_tab(url, &mut report),
+            false => self.go(url, &args, &mut report),
+        }
         if let Some(size) = given(&args.size) {
             match self.page.resize(size) {
                 Ok(()) => report.push(format!("Page size {size}.")),
@@ -95,16 +105,20 @@ impl Tool for BrowserTool<'_> {
             true => self.screenshot(&driver, given(&args.selector), &mut report),
             false => None,
         };
-        let mut state = self.state();
-        if args.read {
+        if let Some(id) = args.close_tab {
+            report.push(self.close_tab(id));
+        }
+        let mut state = self.page.is_open().then(|| self.state());
+        if let (Some(state), true) = (&mut state, args.read) {
             state.push_str(&self.read(args.offset));
         }
         if args.close {
             report.push(self.close());
         }
+        report.extend(self.page.tabs_news());
         Ok(ToolOutput {
             report: report.join("\n\n"),
-            state: Some(state),
+            state,
             image,
         })
     }
@@ -127,6 +141,26 @@ impl BrowserTool<'_> {
         match self.page.open(&url, &title, args.show) {
             Ok(()) => report.push(format!("Opened {url}.")),
             Err(error) => report.push(format!("Opening {url} did not finish cleanly ({error}).")),
+        }
+    }
+
+    /// Open `url`, or the search page, in a new tab.
+    fn open_tab(&self, url: Option<String>, report: &mut Vec<String>) {
+        let url = url.unwrap_or_else(|| SEARCH_PAGE.to_string());
+        match self.page.new_tab(&url) {
+            Ok(id) => report.push(format!("Opened {url} in tab {id}.")),
+            Err(error) => report.push(format!("No new tab: {error}")),
+        }
+    }
+
+    fn close_tab(&self, id: u32) -> String {
+        match self.page.close_tab(id) {
+            Ok(true) => format!("Closed tab {id}."),
+            Ok(false) => format!(
+                "Closed tab {id}, the last one: the window is closed, and the next call opens a \
+                 fresh one."
+            ),
+            Err(error) => format!("Tab {id} was not closed: {error}"),
         }
     }
 

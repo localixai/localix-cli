@@ -147,7 +147,7 @@ fn draw(mut app: App, inbox: &Receiver<Event>) {
         if history.is_empty() && shown.as_ref() == Some(&drawn) {
             continue;
         }
-        let _ = screen.frame(&history, &drawn.0, drawn.1, app.height);
+        let _ = screen.frame(&history, &drawn.0, drawn.1, app.height, app.width);
         shown = Some(drawn);
     }
     let _ = screen.clear();
@@ -157,7 +157,7 @@ fn draw(mut app: App, inbox: &Receiver<Event>) {
 fn stop(screen: &mut Screen<io::Stdout>, app: &mut App) {
     if interrupt::PROCESS.stop() {
         let history = app.take_history();
-        let _ = screen.frame(&history, &[], None, app.height);
+        let _ = screen.frame(&history, &[], None, app.height, app.width);
         let _ = screen.clear();
         restore();
         interrupt::quit_now();

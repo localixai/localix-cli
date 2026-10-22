@@ -148,7 +148,11 @@ impl Select {
 
     /// The rows at `width`, and the cursor's place among them while typing.
     pub fn render(&self, width: usize) -> (Vec<Line<'static>>, Option<(usize, usize)>) {
-        let mut out = self.title.clone();
+        let mut out: Vec<Line<'static>> = self
+            .title
+            .iter()
+            .flat_map(|line| title_rows(line, width))
+            .collect();
         if !out.is_empty() {
             out.push(Line::default());
         }
@@ -198,6 +202,25 @@ impl Select {
         out.push(Line::from(Span::styled(hint, style::dim())));
         (out, cursor)
     }
+}
+
+/// A title row wrapped at words, its rows under its own indent: a long command stays readable.
+fn title_rows(line: &Line<'static>, width: usize) -> Vec<Line<'static>> {
+    let mut body = line.clone();
+    let mut indent = String::new();
+    while let Some(first) = body.spans.first_mut() {
+        let text = first.content.to_string();
+        let kept = text.trim_start();
+        indent.push_str(&text[..text.len() - kept.len()]);
+        if kept.is_empty() {
+            body.spans.remove(0);
+        } else {
+            first.content = kept.to_string().into();
+            break;
+        }
+    }
+    let prefix = Line::from(indent);
+    wrap(&body, width, &prefix, &prefix)
 }
 
 #[cfg(test)]

@@ -46,6 +46,7 @@ fn history_goes_above_and_the_live_area_is_redrawn_in_place() {
             &lines(&["• Running cargo test", "", "❯ "]),
             Some(Cursor { row: 2, column: 2 }),
             ROWS as usize,
+            COLUMNS as usize,
         )
         .unwrap();
     screen
@@ -54,6 +55,7 @@ fn history_goes_above_and_the_live_area_is_redrawn_in_place() {
             &lines(&["• Running cargo test", "", "❯ "]),
             Some(Cursor { row: 2, column: 2 }),
             ROWS as usize,
+            COLUMNS as usize,
         )
         .unwrap();
     screen
@@ -62,6 +64,7 @@ fn history_goes_above_and_the_live_area_is_redrawn_in_place() {
             &lines(&["", "❯ next"]),
             Some(Cursor { row: 1, column: 6 }),
             ROWS as usize,
+            COLUMNS as usize,
         )
         .unwrap();
     let mut parser = terminal();
@@ -90,6 +93,7 @@ fn history_longer_than_the_screen_scrolls_into_the_scrollback() {
             &lines(&["❯ "]),
             Some(Cursor { row: 0, column: 2 }),
             ROWS as usize,
+            COLUMNS as usize,
         )
         .unwrap();
     screen
@@ -98,6 +102,7 @@ fn history_longer_than_the_screen_scrolls_into_the_scrollback() {
             &lines(&["• Working", "❯ "]),
             None,
             ROWS as usize,
+            COLUMNS as usize,
         )
         .unwrap();
     let mut parser = terminal();
@@ -124,6 +129,7 @@ fn a_live_area_taller_than_the_screen_keeps_its_last_rows() {
             &lines(&tall),
             Some(Cursor { row: 19, column: 0 }),
             ROWS as usize,
+            COLUMNS as usize,
         )
         .unwrap();
     screen
@@ -132,6 +138,7 @@ fn a_live_area_taller_than_the_screen_keeps_its_last_rows() {
             &lines(&["❯ "]),
             Some(Cursor { row: 0, column: 2 }),
             ROWS as usize,
+            COLUMNS as usize,
         )
         .unwrap();
     let mut parser = terminal();
@@ -148,6 +155,7 @@ fn clearing_leaves_the_history_and_a_shown_cursor() {
             &lines(&["", "❯ "]),
             None,
             ROWS as usize,
+            COLUMNS as usize,
         )
         .unwrap();
     screen.clear().unwrap();
@@ -162,11 +170,27 @@ fn clearing_leaves_the_history_and_a_shown_cursor() {
 fn every_frame_is_one_synchronized_update() {
     let mut screen = Screen::new(Vec::new(), true);
     screen
-        .frame(&[], &lines(&["❯ "]), None, ROWS as usize)
+        .frame(&[], &lines(&["❯ "]), None, ROWS as usize, COLUMNS as usize)
         .unwrap();
     let text = String::from_utf8(screen.output().clone()).unwrap();
     assert!(
         text.starts_with("\x1b[?2026h") && text.ends_with("\x1b[?2026l"),
         "{text:?}"
     );
+}
+
+#[test]
+fn a_row_wider_than_the_terminal_is_redrawn_without_leaving_copies() {
+    let mut screen = Screen::new(Vec::new(), false);
+    let wide = "x".repeat(70);
+    let live = lines(&["• Run this command?", &wide, "❯ 1. Yes", "  2. No"]);
+    for _ in 0..3 {
+        screen
+            .frame(&[], &live, None, ROWS as usize, COLUMNS as usize)
+            .unwrap();
+    }
+    let mut parser = terminal();
+    feed(&mut parser, &mut screen);
+    let all = everything(&mut parser);
+    assert_eq!(all.matches("Run this command?").count(), 1, "{all}");
 }

@@ -106,3 +106,32 @@ fn slash_lists_the_commands_under_the_prompt() {
       /model      pick the model
     ");
 }
+
+#[test]
+fn a_long_command_in_an_approval_wraps_under_its_indent() {
+    let now = Instant::now();
+    let mut app = App::new(50, 20, vec![]);
+    let (reply, _answer) = channel();
+    let summary = "cd /Users/me/site && wc -l index.html v2.html style.css && grep -n -i 'viewport' index.html";
+    app.event(
+        Event::Approve {
+            tool: "bash".into(),
+            summary: summary.into(),
+            reply,
+        },
+        now,
+    );
+    let (lines, _) = render(&app, now);
+    assert!(
+        lines
+            .iter()
+            .all(|line| crate::tui::wrap::line_width(line) <= 50)
+    );
+    insta::assert_snapshot!(shown(&app, now).lines().take(5).collect::<Vec<_>>().join("\n"), @r"
+    • Run this command?
+      cd /Users/me/site && wc -l index.html v2.html
+      style.css && grep -n -i 'viewport' index.html
+
+    ❯ 1. Yes
+    ");
+}

@@ -10,6 +10,7 @@ use std::io::{self, Write};
 use ratatui::text::Line;
 
 use super::style::ansi;
+use super::wrap::fit;
 
 pub struct Screen<W: Write> {
     out: W,
@@ -38,14 +39,27 @@ impl<W: Write> Screen<W> {
     /// (its last ones), with the cursor at `cursor` or hidden.
     pub fn frame(
         &mut self,
-        history: &[Line],
-        live: &[Line],
+        history: &[Line<'static>],
+        live: &[Line<'static>],
         cursor: Option<Cursor>,
         height: usize,
+        width: usize,
     ) -> io::Result<()> {
+        let history: Vec<Line> = history.iter().flat_map(|line| fit(line, width)).collect();
+        // A row split in two moves the rows under it, the cursor's among them.
+        let mut cursor = cursor;
+        let mut split = vec![];
+        for (at, line) in live.iter().enumerate() {
+            let rows = fit(line, width);
+            if let Some(c) = cursor.as_mut().filter(|c| c.row > at) {
+                c.row += rows.len() - 1;
+            }
+            split.extend(rows);
+        }
+        let live = &split[..];
         let mut out = String::from("\x1b[?2026h");
         self.erase_into(&mut out);
-        for line in history {
+        for line in &history {
             out.push_str(&ansi(line, self.colour));
             out.push_str("\r\n");
         }

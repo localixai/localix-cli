@@ -118,6 +118,39 @@ pub fn hard(text: &str, columns: usize) -> Vec<String> {
     rows
 }
 
+/// `line` in rows of at most `columns`, broken anywhere with its styles kept: what the terminal
+/// would do to a row too wide, done first so the rows drawn are the rows counted.
+pub fn fit(line: &Line<'static>, columns: usize) -> Vec<Line<'static>> {
+    let columns = columns.max(1);
+    if line_width(line) <= columns {
+        return vec![line.clone()];
+    }
+    let mut rows = vec![Line::default()];
+    let mut used = 0;
+    for span in &line.spans {
+        let style = line.style.patch(span.style);
+        let mut text = String::new();
+        for c in span.content.chars() {
+            let w = c.width().unwrap_or(0);
+            if used + w > columns {
+                rows.last_mut()
+                    .unwrap()
+                    .spans
+                    .push(Span::styled(std::mem::take(&mut text), style));
+                rows.push(Line::default());
+                used = 0;
+            }
+            text.push(c);
+            used += w;
+        }
+        rows.last_mut()
+            .unwrap()
+            .spans
+            .push(Span::styled(text, style));
+    }
+    rows
+}
+
 /// `text` cut to `columns`, ending in `…` when cut.
 pub fn cut(text: &str, columns: usize) -> String {
     if width(text) <= columns {

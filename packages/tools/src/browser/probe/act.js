@@ -9,7 +9,19 @@
     return top
   }
 
-  const coveredBy = (top) => new Error(`covered: ${top.tagName.toLowerCase()} "${nameOf(top)}" is on top`)
+  // What covers a target, named so the next step can deal with it: the dialog it belongs to (by
+  // its label or first heading), or the one beside it (a backdrop is the dialog's sibling, often
+  // in the same shadow tree), else the element itself.
+  const coveredBy = (top) => {
+    const root = top.getRootNode()
+    const dialog = closestDeep(top, DIALOG) || top.parentElement?.querySelector(DIALOG) ||
+      (root instanceof ShadowRoot ? root.querySelector(DIALOG) : null)
+    if (dialog) {
+      const title = nameOf(dialog.querySelector('h1,h2,h3,[role="heading"]')) || dialog.getAttribute('aria-label') || ''
+      return new Error(`covered: a dialog "${title.slice(0, 80)}" is on top; answer or close it first`)
+    }
+    return new Error(`covered: ${top.tagName.toLowerCase()} "${nameOf(top)}" is on top`)
+  }
 
   // Resolve a ref for input: the same document, still attached, visible, enabled and on top. In a
   // frame, on top of its document and the frame on top of the page.

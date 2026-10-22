@@ -213,6 +213,16 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
         driver.evaluate("document.title").unwrap(),
         "keys:ArrowUp/ArrowUp/38;ArrowLeft/ArrowLeft/37;a/KeyA/65;"
     );
+    // A script presses keys the same way, with `press` (a game bot's loop); a script may still
+    // declare a `press` of its own.
+    driver.navigate(&format!("{origin}/keys.html")).unwrap();
+    assert_eq!(
+        driver
+            .evaluate("press('ArrowDown'); await sleep(10); press('b'); document.title")
+            .unwrap(),
+        "keys:ArrowDown/ArrowDown/40;b/KeyB/66;"
+    );
+    assert_eq!(driver.evaluate("const press = 2; press * 3").unwrap(), "6");
 
     // Calendar days carry their date or month: "5" alone is ambiguous across two months.
     driver.navigate(&format!("{origin}/calendar.html")).unwrap();
@@ -239,6 +249,12 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     // Scripts: an expression, statements (last value), a body with its own return, a throw.
     assert_eq!(driver.evaluate("document.title").unwrap(), "Dropdown");
     assert_eq!(driver.evaluate("const n = 2; n * 21").unwrap(), "42");
+    assert_eq!(
+        driver
+            .evaluate("let n = 0; while (n < 3) { n++ } n * 2")
+            .unwrap(),
+        "6"
+    );
     assert_eq!(
         driver
             .evaluate("const xs = [1, 2]; return xs.length")
@@ -374,6 +390,41 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     assert!(matches!(stale, Err(BrowserError::Stale(_))), "{stale:?}");
 
     screenshots(driver, origin);
+
+    // A dialog in an open shadow root (a consent web component): its controls are offered, as a
+    // dialog; what it covers names it; its button closes it.
+    driver.navigate(&format!("{origin}/shadow.html")).unwrap();
+    let page = driver.observe().unwrap();
+    let save = find(&page, "button", "Save + Exit").to_string();
+    assert!(
+        page.elements
+            .iter()
+            .any(|e| e.reference == save && e.dialog),
+        "{:#?}",
+        page.elements
+    );
+    let covered = driver.act(
+        &page.epoch,
+        &Action::Click {
+            reference: find(&page, "button", "New Game").into(),
+        },
+    );
+    assert!(
+        matches!(&covered, Err(BrowserError::Refused(m))
+            if m.starts_with("covered: a dialog \"Consent to Cookies\"")),
+        "{covered:?}"
+    );
+    act(driver, &page, Action::Click { reference: save });
+    let page = driver.observe().unwrap();
+    assert!(page.elements.iter().all(|e| !e.dialog), "the dialog closed");
+    act(
+        driver,
+        &page,
+        Action::Click {
+            reference: find(&page, "button", "New Game").into(),
+        },
+    );
+    assert_eq!(driver.observe().unwrap().title, "new game");
 
     // Controls a page made from plain elements (a pointer cursor, an onclick) are offered and
     // clicked like buttons; a pointer group once, and a wrapper around a link not at all.

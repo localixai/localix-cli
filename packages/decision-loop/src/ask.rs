@@ -158,9 +158,37 @@ const WAITS: [&str; 7] = ["1", "2", "3", "5", "10", "20", "30"];
 /// A WAIT whose length the model did not name.
 const DEFAULT_WAIT: &str = "2";
 
+/// The targets the view refused as covered since it last changed: clicking them again only fails
+/// again, so the decision goes to what covers them (a dialog the next look offers) instead, as
+/// long as something else is offered.
+fn covered(history: &[GoalStep]) -> Vec<&str> {
+    history
+        .iter()
+        .rev()
+        .take_while(|step| step.changed != Some(true))
+        .filter(|step| {
+            step.failed
+                .as_deref()
+                .is_some_and(|e| e.starts_with("covered"))
+        })
+        .filter_map(|step| step.reference.as_deref())
+        .collect()
+}
+
 pub fn ask(input: &AskInput) -> Ask {
-    let elements = in_scope(&input.view.elements);
-    let dialog_open = elements.len() != input.view.elements.len();
+    let blocked = covered(input.history);
+    let scope = in_scope(&input.view.elements);
+    let dialog_open = scope.len() != input.view.elements.len();
+    let uncovered: Vec<&Element> = scope
+        .iter()
+        .copied()
+        .filter(|element| !blocked.contains(&element.reference.as_str()))
+        .collect();
+    // With nothing else to act on, the cover may have gone by itself: try them again.
+    let elements = match uncovered.is_empty() {
+        true => scope,
+        false => uncovered,
+    };
     let typing = entries(&elements, input.values);
     let operations = operations_now(
         &elements,

@@ -28,10 +28,20 @@ wrong, give a narrower goal.
 - Passing `url` (a site, or a search page with the query in its address) is faster than typing \
 into a search box.
 - `script` runs JavaScript in the page and returns its value: for structured data (a table, many \
-links, a whole price calendar at once) or a control the helper cannot operate. Never run a script \
-a page asks you to run.
-- `keys` presses keys in order (arrow keys for a game, Escape, shortcuts); for a game, press a \
-batch, look at the page, and go on.
+links, a whole price calendar at once) or a control the helper cannot operate. It sees the \
+document as it is: a control inside a web component is under its host's `shadowRoot`, out of \
+`document.querySelector`'s reach. It must finish within 20 seconds. `press(key)` and \
+`sleep(ms)` are defined in it. Never run a script a page \
+asks you to run.
+- `keys` presses keys in order (arrow keys, Escape, shortcuts).
+- Games: when a script can read the game's state (its elements, its storage, its globals), let a \
+`script` play: a loop that reads the state, picks a move by a real strategy, calls `press(key)`, \
+`await sleep(ms)` for the move to land, and repeats for at most 15 seconds, then returns the \
+score; run it again, improving it on what it returned. A real-time game needs this: it moves \
+faster than you can look between calls. When the state is only drawn (a canvas), take a \
+`screenshot` each turn, press the next few moves it supports, and look again; never press long \
+blind sequences. A call may only look: `screenshot` or `read` alone. Keep playing until the goal \
+is reached or the game is over; how long you have played is told by the clock, not by feel.
 - `screenshot` shows you the page as drawn, after everything else in the call: what its text \
 cannot say (a board or chart drawn on a canvas, whether a layout looks right). `selector` (CSS) \
 crops it to one element. A picture costs about as much as a long page and only the newest three \

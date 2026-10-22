@@ -66,6 +66,9 @@ pub(super) enum Cmd {
         script: String,
     },
     Navigate(String),
+    /// Close the window, as the person would but without stopping the task: it opens again,
+    /// shown or hidden, on its next use.
+    Close,
     /// Reframe the page (`viewport`): width, height.
     Resize(f64, f64),
     Exit(i32),
@@ -183,7 +186,6 @@ where
     // Changed, and `headless` read, on macOS only.
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut event_loop = EventLoopBuilder::<Cmd>::with_user_event().build();
-    #[cfg(not(target_os = "macos"))]
     let _ = headless;
     // The window never takes the keyboard: the person keeps typing where they were, and their keys
     // never land in the driven page.
@@ -191,9 +193,9 @@ where
     {
         use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
         event_loop.set_activate_ignoring_other_apps(false);
-        if headless {
-            event_loop.set_activation_policy(ActivationPolicy::Accessory);
-        }
+        // An accessory app: no Dock icon and no menu bar, whether its window is shown or not,
+        // so a window that appears mid-task never pulls the person out of their terminal.
+        event_loop.set_activation_policy(ActivationPolicy::Accessory);
     }
     let proxy = event_loop.create_proxy();
     let shared = Arc::new(Shared {
@@ -242,6 +244,11 @@ where
                 return;
             }
             (Cmd::Exit(code), _) => std::process::exit(code),
+            (Cmd::Close, _) => {
+                view = None;
+                shared.closed();
+                return;
+            }
             (command, Some(_)) => command,
             // A driver exists only once the window opened: with none now, it was closed.
             (Cmd::Call { id, .. } | Cmd::Eval { id, .. }, None) => {
@@ -283,7 +290,7 @@ where
             Cmd::Navigate(url) => {
                 let _ = webview.load_url(&url);
             }
-            Cmd::Open { .. } | Cmd::Exit(_) => {}
+            Cmd::Open { .. } | Cmd::Exit(_) | Cmd::Close => {}
         }
     })
 }

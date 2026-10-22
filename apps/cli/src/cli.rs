@@ -248,8 +248,8 @@ pub struct RunOptions {
         value_parser = RangedU64ValueParser::<u64>::new().range(1..=86_400))]
     pub timeout: u64,
 
-    /// Show the browser window (it is invisible by default, and opens only when the agent first
-    /// uses the browser).
+    /// Always show the browser window. By default it shows in a session (except in autonomous
+    /// mode) and stays hidden in exec; the agent can show or hide it per call.
     #[arg(long, help_heading = "Browser")]
     pub show_browser: bool,
 }

@@ -21,7 +21,10 @@ const LOAD_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub struct Page {
     browser: Browser,
+    /// Hidden unless a call asks to show it: the default the app chose for this run.
     headless: bool,
+    /// Whether the open window is hidden; it is opened again when a call wants the other.
+    hidden: Mutex<bool>,
     /// The page size the toolbar shows (`desktop`, `tablet`, `mobile`).
     size: Mutex<String>,
     driver: Mutex<Option<WebviewDriver>>,
@@ -32,22 +35,34 @@ impl Page {
         Self {
             browser,
             headless,
+            hidden: Mutex::new(headless),
             size: Mutex::new("desktop".into()),
             driver: Mutex::new(None),
         }
     }
 
     /// Load `url`, opening the window on it the first time (and again after the person closed
-    /// it); `title` names the window.
-    pub fn open(&self, url: &str, title: &str) -> ViewResult<()> {
+    /// it); `title` names the window. `show` overrides the run's default for this call: a window
+    /// open the other way is closed and opened again, on `url`.
+    pub fn open(&self, url: &str, title: &str, show: Option<bool>) -> ViewResult<()> {
         let mut driver = self.driver.lock().unwrap();
+        let hidden = show.map_or(self.headless, |show| !show);
+        let mut current = self.hidden.lock().unwrap();
         if let Some(open) = driver.as_ref().filter(|driver| driver.is_open()) {
-            return open.navigate(url);
+            if *current == hidden {
+                return open.navigate(url);
+            }
+            open.close();
+            let gone = std::time::Instant::now();
+            while open.is_open() && gone.elapsed() < Duration::from_secs(2) {
+                std::thread::sleep(Duration::from_millis(10));
+            }
         }
+        *current = hidden;
         let opened = self.browser.open(Window {
             url: url.to_string(),
             title: title.to_string(),
-            headless: self.headless,
+            headless: hidden,
             viewport: Viewport::DESKTOP,
         })?;
         // A slow page is used as it is: it says it is busy until it settles.

@@ -59,6 +59,9 @@ struct Args {
     script: Option<String>,
     read: bool,
     offset: usize,
+    /// Show the window to the person (`true`) or keep it hidden (`false`); unset, the run's
+    /// default applies.
+    show: Option<bool>,
 }
 
 pub struct BrowserTool<'a> {
@@ -141,10 +144,15 @@ impl BrowserTool<'_> {
         let url = match (url, self.page.is_open()) {
             (Some(url), _) => url,
             (None, false) => SEARCH_PAGE.to_string(),
+            // Only showing or hiding: the window opens again where it was.
+            (None, true) if args.show.is_some() => match self.page.observe() {
+                Ok(view) => view.location,
+                Err(_) => return,
+            },
             (None, true) => return,
         };
         let title = given(&args.goal).unwrap_or(&url).to_string();
-        match self.page.open(&url, &title) {
+        match self.page.open(&url, &title, args.show) {
             Ok(()) => report.push(format!("Opened {url}.")),
             Err(error) => report.push(format!("Opening {url} did not finish cleanly ({error}).")),
         }
@@ -288,6 +296,7 @@ fn parameters() -> Value {
         "goal": {"type": "string", "description": "Actions only, one page's worth, ending with how to tell they are done: 'Open the date grid and show November; done when its prices show'. Never 'find', 'note' or 'report': the helper cannot read for you, the page comes back to you after every call."},
         "values": {"type": "array", "items": {"type": "string"}, "description": "The exact strings the helper may type, in the form the site expects."},
         "size": {"type": "string", "enum": ["desktop", "tablet", "mobile"], "description": "Reframe the page first (layout only)."},
+        "show": {"type": "boolean", "description": "true shows the window so the person can watch (a page you built, a result to see); false keeps it hidden (a quick check). Leave it unset to follow the session's default."},
         "keys": {"type": "array", "items": {"type": "string"}, "description": "Keys to press after the goal, in order: [\"ArrowUp\", \"ArrowLeft\"], [\"Escape\"], [\"Ctrl+A\"]. Up to 500."},
         "key_delay_ms": {"type": "integer", "minimum": 0, "maximum": MAX_KEY_DELAY_MS, "description": "Pause between keys (default 60), for games that animate each move."},
         "script": {"type": "string", "description": "JavaScript run in the page after the goal: an expression, or statements whose last value is returned (await works)."},

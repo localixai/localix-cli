@@ -23,6 +23,7 @@ The browser CLI of 0.1.0 is now `llx` (also installed as `llx`): an ultrafast, l
 
 ### Added
 
+- **The browser shows itself in a session.** The window is visible by default in a session (hidden in `exec` and in autonomous mode), and the `browser` tool takes `show: true|false` per call; it never takes the keyboard. On macOS it stays out of the Dock either way.
 - **Coding tools:**
   - `read` returns numbered lines, up to 2000 lines and about 20 KB at a time (below what the agent keeps of one result, so its "read again with offset" hint is always true), or a directory's entries. It refuses binary files and anything but a regular file (a FIFO, a device such as `/dev/zero`), and cuts long lines.
   - `edit` makes an exact, unique replacement (or every match with `replace_all`), or creates a file. Writes are atomic and keep CRLF line endings and permissions. A failure says how to fix the call: the text was not found, it occurs more than once, or line numbers were pasted in. It refuses a read-only file and a file that changed while its approval question was open, writes a file with other hard links in place, and creates its temporary file new, so a symlink planted there is never written through.

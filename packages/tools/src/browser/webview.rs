@@ -223,6 +223,13 @@ fn action_args(epoch: &str, action: &Action) -> Value {
     }
 }
 
+impl WebviewDriver {
+    /// Close the window; calls waiting on it fail, and the next `Page::open` opens a new one.
+    pub fn close(&self) {
+        let _ = self.proxy.send_event(Cmd::Close);
+    }
+}
+
 impl Driver for WebviewDriver {
     fn navigate(&self, url: &str) -> BrowserResult<()> {
         self.open_or_closed()?;

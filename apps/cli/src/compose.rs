@@ -221,7 +221,10 @@ pub fn assemble(
         waited: &waited,
     };
     let ask = AskTool { person: &person };
-    let page = browser.map(|browser| Page::new(browser, !options.show_browser));
+    // Shown in a session, so the person watches what the agent does there; hidden when nobody
+    // watches (exec) or nobody is to be asked (autonomous). A call can still choose either way.
+    let shown = options.show_browser || (asks && started != Mode::Autonomous);
+    let page = browser.map(|browser| Page::new(browser, !shown));
     let browser_tool = page.as_ref().map(|page| BrowserTool {
         page,
         hands: &hands,

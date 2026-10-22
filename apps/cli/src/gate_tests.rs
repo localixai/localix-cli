@@ -184,7 +184,7 @@ mod terminal {
 
     use super::*;
 
-    const CHILD: &str = "LX_TEST_TERMINAL_CHILD";
+    const CHILD: &str = "LLX_TEST_TERMINAL_CHILD";
     const NAME: &str = "gate::tests::terminal::a_stop_ends_a_wait_on_the_controlling_terminal";
 
     #[test]

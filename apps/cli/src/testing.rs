@@ -30,7 +30,7 @@ impl Scratch {
     pub fn new() -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let name = format!(
-            "lx-cli-{}-{}-{}",
+            "llx-cli-{}-{}-{}",
             std::process::id(),
             session::now(),
             NEXT.fetch_add(1, Ordering::Relaxed)
@@ -173,7 +173,7 @@ pub fn composed(
     };
     let session = history.start();
     let setup = Setup {
-        options: Cli::try_parse_from(["lx"]).unwrap().run,
+        options: Cli::try_parse_from(["llx"]).unwrap().run,
         key: "test".into(),
         workspace: Workspace::new(scratch.path()).unwrap(),
         context: String::new(),

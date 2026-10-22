@@ -78,13 +78,13 @@ mode to have it carried out.";
 
 /// Why an effect is refused with no one to approve it.
 pub const NO_TERMINAL: &str = "no one is at a terminal to approve it; the person must rerun \
-lx with --yes (-y) or --mode bypass to allow commands, file changes and browser actions";
+llx with --yes (-y) or --mode bypass to allow commands, file changes and browser actions";
 
 /// Why plan mode refuses a command or a browser action with no one to approve it. It never points
 /// to bypass: that would turn a read-only request into one that changes files unasked.
 pub const PLAN_NO_TERMINAL: &str = "no one is at a terminal to approve it, and plan mode runs \
 nothing unapproved: plan from reading files, and say in the plan which commands to run, or that \
-the person can run lx at a terminal to approve each one";
+the person can run llx at a terminal to approve each one";
 
 /// Why a question gets no answer in autonomous mode.
 pub const AUTONOMOUS: &str = "nobody answers questions in autonomous mode: decide on your best \

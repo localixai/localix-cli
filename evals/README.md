@@ -8,15 +8,15 @@ OPENROUTER_API_KEY=sk-or-... python3 evals/run.py           # every task once
 python3 evals/run.py --only code                           # one kind: code or browser
 python3 evals/run.py --only fix-test,login --repeat 3      # some tasks, for stability
 python3 evals/run.py --jobs 6                              # more runs at once (default 3)
-LX_MODEL=<id> LX_DECISION_MODEL=<id> python3 evals/run.py   # other models
-python3 evals/run.py -- --max-turns 20                     # more lx arguments after --
+LLX_MODEL=<id> LLX_DECISION_MODEL=<id> python3 evals/run.py   # other models
+python3 evals/run.py -- --max-turns 20                     # more llx arguments after --
 ```
 
 ## How a run is judged
 
-Every run is `lx exec --json --yes -C <dir> --timeout 240 "<goal>"`, plus `--schema` when the task has one, then the task's `args`, then the arguments after `--`. A task whose `args` choose the mode (`--mode plan`) runs in that mode instead of `--yes` (lx refuses both), in a process session of its own: it has no terminal, so what the mode would ask is refused, as in CI, and the run never waits on you. Such a run does not stop on a Ctrl-C of `run.py`; it ends with its own timeout. `<dir>` is a new temporary directory that holds a copy of `evals/fixtures/<fixture>/`, or nothing when the task has no fixture. It is outside any git repository, so no AGENTS.md from this repository reaches the agent. A run passes when all of these hold:
+Every run is `llx exec --json --yes -C <dir> --timeout 240 "<goal>"`, plus `--schema` when the task has one, then the task's `args`, then the arguments after `--`. A task whose `args` choose the mode (`--mode plan`) runs in that mode instead of `--yes` (llx refuses both), in a process session of its own: it has no terminal, so what the mode would ask is refused, as in CI, and the run never waits on you. Such a run does not stop on a Ctrl-C of `run.py`; it ends with its own timeout. `<dir>` is a new temporary directory that holds a copy of `evals/fixtures/<fixture>/`, or nothing when the task has no fixture. It is outside any git repository, so no AGENTS.md from this repository reaches the agent. A run passes when all of these hold:
 
-- lx exits 0, and its last JSON line is a `run.completed` event.
+- llx exits 0, and its last JSON line is a `run.completed` event.
 - With a `schema`: the event has `data`.
 - Every `contains` string appears in the answer, ignoring case. With a schema, the data counts as part of the answer.
 - Every `matches` pattern is found in the answer: a Python regex, ignoring case. It is used for numbers, where a plain substring would match by accident.
@@ -41,7 +41,7 @@ Every task makes paid OpenRouter calls: a few tenths of a cent each with the def
 
 ## Tasks
 
-A task in `tasks.json` has an `id`, a `kind` (`code` or `browser`) and a `goal`. It can also have a `fixture`, `contains`, `matches`, `uses`, `avoids`, `check`, `schema` and `args` (more lx arguments, such as `["--mode", "plan"]`).
+A task in `tasks.json` has an `id`, a `kind` (`code` or `browser`) and a `goal`. It can also have a `fixture`, `contains`, `matches`, `uses`, `avoids`, `check`, `schema` and `args` (more llx arguments, such as `["--mode", "plan"]`).
 
 | Id | Kind | What it exercises |
 | --- | --- | --- |

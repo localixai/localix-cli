@@ -1,6 +1,6 @@
 # llx
 
-> llx (also installed as lx) is Localix's ultrafast, lightweight coding agent for the terminal.
+> llx (also installed as lx) is an ultrafast, lightweight coding agent for the terminal.
 > It reads and edits files, runs commands, and drives a real browser whose clicks and typing a
 > small decision model does. It is one synchronous Rust binary and works with any OpenRouter model.
 
@@ -18,5 +18,4 @@
 
 ## Links
 
-- Source and docs: https://github.com/rsaryev/localix-cli
-- Localix, the desktop app: https://localix.ai/
+- Source and docs: https://github.com/rsaryev/llx

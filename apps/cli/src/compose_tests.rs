@@ -56,7 +56,7 @@ fn entering_plan_remembers_the_mode_it_came_from() {
         assert_eq!(
             rig.before_plan,
             Mode::Default,
-            "lx --mode plan carries out in default"
+            "llx --mode plan carries out in default"
         );
         0
     });

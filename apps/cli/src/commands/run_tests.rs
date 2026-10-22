@@ -120,7 +120,7 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
         true => scratch.path().join("missing/last.txt"),
         false => scratch.path().join("last.txt"),
     };
-    let args = ["lx", "--json", "-o", last.to_str().unwrap(), "make a file"];
+    let args = ["llx", "--json", "-o", last.to_str().unwrap(), "make a file"];
     let options = Cli::try_parse_from(args).unwrap().run;
     let history = Sessions {
         dir: scratch.path().join("sessions"),
@@ -247,7 +247,7 @@ fn with_a_schema_and_no_data_the_answer_file_holds_no_prose() {
 #[test]
 fn a_session_needs_a_terminal_and_no_one_task_option() {
     let options = |args: &[&str]| {
-        Cli::try_parse_from(std::iter::once("lx").chain(args.iter().copied()))
+        Cli::try_parse_from(std::iter::once("llx").chain(args.iter().copied()))
             .unwrap()
             .run
     };
@@ -257,8 +257,8 @@ fn a_session_needs_a_terminal_and_no_one_task_option() {
         Err(Failure::Usage(why)) => why,
         other => panic!("not a usage error: {other:?}"),
     };
-    assert!(usage(session_allowed(Some("x"), &options(&[]), false)).contains("lx exec"));
-    assert!(usage(session_allowed(Some("-"), &options(&[]), true)).contains("lx exec"));
+    assert!(usage(session_allowed(Some("x"), &options(&[]), false)).contains("llx exec"));
+    assert!(usage(session_allowed(Some("-"), &options(&[]), true)).contains("llx exec"));
     for flag in [&["--json"][..], &["-o", "last.txt"], &["--schema", "{}"]] {
         assert!(usage(session_allowed(None, &options(flag), true)).contains("exec"));
     }

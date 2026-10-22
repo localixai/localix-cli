@@ -178,7 +178,7 @@ fn the_answer_goes_to_stdout_and_with_data_only_the_data() {
     let mismatch = Err("the result did not match the schema".into());
     let (stdout, stderr) = answer(&summary(&agent, &decision, Some(&mismatch)));
     assert!(stdout.is_empty());
-    assert!(stderr.ends_with("lx: the result did not match the schema\n"));
+    assert!(stderr.ends_with("llx: the result did not match the schema\n"));
 }
 
 #[test]

@@ -1,8 +1,8 @@
 [package]
-name = "localix-cli"
-description = "lx, the Localix CLI: an ultrafast, lightweight coding agent for the terminal: read, edit, bash, a browser and ask"
-homepage = "https://localix.ai"
-repository = "https://github.com/rsaryev/localix-cli"
+name = "llx"
+description = "llx: an ultrafast, lightweight coding agent for the terminal: read, edit, bash, a browser and ask"
+homepage = "https://llx.sh"
+repository = "https://github.com/rsaryev/llx"
 keywords = ["agent", "coding-agent", "cli", "llm", "browser"]
 categories = ["command-line-utilities", "development-tools"]
 version.workspace = true
@@ -12,7 +12,7 @@ license.workspace = true
 publish = false
 
 [[bin]]
-name = "lx"
+name = "llx"
 path = "src/main.rs"
 
 # The composition root (rule L4): the only package that depends on tools, providers and stores.

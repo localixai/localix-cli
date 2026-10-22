@@ -1,4 +1,4 @@
-//! `lx login`, `login --with-token`, `login status` and `logout`: the OpenRouter key, from
+//! `llx login`, `login --with-token`, `login status` and `logout`: the OpenRouter key, from
 //! `OPENROUTER_API_KEY` (which wins) or the file a sign-in saved.
 
 use std::io::{BufRead, IsTerminal, Read};
@@ -39,7 +39,7 @@ fn with_token() -> Result<i32, Failure> {
     let key = text.trim();
     if key.is_empty() || key.contains(|c: char| c.is_whitespace() || c.is_control()) {
         return Err(Failure::Usage(
-            "no key on stdin: printenv OPENROUTER_API_KEY | lx login --with-token".into(),
+            "no key on stdin: printenv OPENROUTER_API_KEY | llx login --with-token".into(),
         ));
     }
     let path = auth::save(APP, key)

@@ -98,7 +98,7 @@ fn a_missing_root_is_an_error() {
 fn a_denied_path_is_refused_however_it_is_reached() {
     let dir = Scratch::new();
     let secret = Scratch::new();
-    let key = secret.file("lx/credentials", "sk-or-secret");
+    let key = secret.file("llx/credentials", "sk-or-secret");
     let sessions = secret.path().join("sessions");
     std::fs::create_dir_all(&sessions).unwrap();
     let workspace = Workspace::new(dir.path())

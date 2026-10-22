@@ -40,8 +40,8 @@ use crate::person::TerminalPerson;
 
 /// Who calls OpenRouter: its attribution, the sign-in page, the folder the key is saved in.
 pub const APP: App = App {
-    name: "Localix CLI",
-    slug: "lx",
+    name: "llx",
+    slug: "llx",
     version: env!("CARGO_PKG_VERSION"),
 };
 
@@ -276,7 +276,7 @@ pub fn assemble(
         asks,
         started,
         told: started,
-        // `lx --mode plan`: carrying out the plan goes on in the default mode.
+        // `llx --mode plan`: carrying out the plan goes on in the default mode.
         before_plan: match started {
             Mode::Plan => Mode::Default,
             other => other,

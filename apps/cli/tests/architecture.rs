@@ -89,7 +89,7 @@ fn l4_only_apps_compose_packages() {
             );
         }
     }
-    assert!(packages.contains_key(&("apps".into(), "localix-cli".into())));
+    assert!(packages.contains_key(&("apps".into(), "llx".into())));
 }
 
 /// Words that name a particular tool or provider: the contracts, the agent and the hands must not

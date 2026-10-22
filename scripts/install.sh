@@ -1,25 +1,25 @@
 #!/bin/sh
-# Installs the lx binary from a GitHub release:
+# Installs the llx binary from a GitHub release:
 #
-#   curl -fsSL https://raw.githubusercontent.com/rsaryev/localix-cli/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh
 #
 # Environment:
-#   LX_VERSION      a release such as 0.2.0 (default: the latest)
-#   LX_INSTALL_DIR  where the binary goes (default: $HOME/.local/bin)
+#   LLX_VERSION      a release such as 0.2.0 (default: the latest)
+#   LLX_INSTALL_DIR  where the binary goes (default: $HOME/.local/bin)
 #
-# It downloads lx-<target>.tar.gz and SHA256SUMS from the release, refuses an archive whose
-# SHA-256 does not match, and replaces the binary in one rename, so a running lx is not torn.
+# It downloads llx-<target>.tar.gz and SHA256SUMS from the release, refuses an archive whose
+# SHA-256 does not match, and replaces the binary in one rename, so a running llx is not torn.
 # Everything runs from `main` on the last line: a download cut short by the network defines
 # functions at most, and runs nothing.
 set -eu
 
-repo="rsaryev/localix-cli"
-install_dir=${LX_INSTALL_DIR:-$HOME/.local/bin}
-version=${LX_VERSION:-}
+repo="rsaryev/llx"
+install_dir=${LLX_INSTALL_DIR:-$HOME/.local/bin}
+version=${LLX_VERSION:-}
 
 say() { printf '%s\n' "$*"; }
 fail() {
-  printf 'lx install: %s\n' "$*" >&2
+  printf 'llx install: %s\n' "$*" >&2
   exit 1
 }
 
@@ -78,7 +78,7 @@ sha256_of() {
 
 main() {
   target=$(detect_target)
-  archive="lx-$target.tar.gz"
+  archive="llx-$target.tar.gz"
   if [ -n "$version" ]; then
     base="https://github.com/$repo/releases/download/v${version#v}"
   else
@@ -97,19 +97,25 @@ main() {
   actual=$(sha256_of "$tmp/$archive")
   [ "$actual" = "$expected" ] || fail "checksum mismatch for $archive: expected $expected, got $actual"
 
-  tar -xzf "$tmp/$archive" -C "$tmp" lx
+  tar -xzf "$tmp/$archive" -C "$tmp" llx
   mkdir -p "$install_dir"
-  cp "$tmp/lx" "$install_dir/.lx.new"
-  chmod 755 "$install_dir/.lx.new"
-  mv -f "$install_dir/.lx.new" "$install_dir/lx"
+  cp "$tmp/llx" "$install_dir/.llx.new"
+  chmod 755 "$install_dir/.llx.new"
+  mv -f "$install_dir/.llx.new" "$install_dir/llx"
+  # The short name: a link to llx, never over a different program of that name.
+  if [ ! -e "$install_dir/lx" ] || [ "$(readlink "$install_dir/lx" 2>/dev/null)" = llx ]; then
+    ln -sf llx "$install_dir/lx"
+  else
+    say "Left $install_dir/lx alone: it is another program. Run llx instead."
+  fi
 
-  say "Installed $("$install_dir/lx" --version 2>/dev/null || echo lx) to $install_dir/lx"
+  say "Installed $("$install_dir/llx" --version 2>/dev/null || echo llx) to $install_dir/llx"
 
   # The binary links the system WebView; on Linux that is WebKitGTK, which may not be installed.
-  if [ "$(uname -s)" = Linux ] && ldd "$install_dir/lx" 2>/dev/null | grep -q 'not found'; then
+  if [ "$(uname -s)" = Linux ] && ldd "$install_dir/llx" 2>/dev/null | grep -q 'not found'; then
     say ""
-    say "lx needs libraries this system lacks:"
-    ldd "$install_dir/lx" | grep 'not found' | sed 's/^[[:space:]]*/  /'
+    say "llx needs libraries this system lacks:"
+    ldd "$install_dir/llx" | grep 'not found' | sed 's/^[[:space:]]*/  /'
     say "WebKitGTK 4.1 brings them, for example: sudo apt-get install libwebkit2gtk-4.1-0"
   fi
 
@@ -124,8 +130,8 @@ main() {
 
   say ""
   say "Next steps:"
-  say "  lx login     # sign in with OpenRouter (or export OPENROUTER_API_KEY)"
-  say "  lx doctor    # check the key, the models and the WebView"
+  say "  llx login     # sign in with OpenRouter (or export OPENROUTER_API_KEY)"
+  say "  llx doctor    # check the key, the models and the WebView"
 }
 
 main "$@"

@@ -1,4 +1,4 @@
-//! `lx sessions` and `lx resume`: every run is a session, kept as a JSON file of its tasks
+//! `llx sessions` and `llx resume`: every run is a session, kept as a JSON file of its tasks
 //! and how each ended. The conversation itself is not kept, so `resume` starts a new one that is
 //! told what the session asked before, and records into the same session.
 
@@ -18,15 +18,15 @@ const LISTED: usize = 30;
 /// Characters of a session's first task in the list.
 const TASK_CHARS: usize = 60;
 
-/// Where sessions are kept: `LX_SESSIONS`, else `~/.lx/sessions`.
+/// Where sessions are kept: `LLX_SESSIONS`, else `~/.lx/sessions`.
 pub fn store() -> Sessions {
-    let dir = match std::env::var_os("LX_SESSIONS").filter(|dir| !dir.is_empty()) {
+    let dir = match std::env::var_os("LLX_SESSIONS").filter(|dir| !dir.is_empty()) {
         Some(dir) => PathBuf::from(dir),
         None => {
             let home = std::env::var_os("HOME")
                 .or_else(|| std::env::var_os("USERPROFILE"))
                 .unwrap_or_default();
-            PathBuf::from(home).join(".lx/sessions")
+            PathBuf::from(home).join(".llx/sessions")
         }
     };
     Sessions { dir }
@@ -43,7 +43,7 @@ pub fn list() -> Result<i32, Failure> {
     Ok(exit::OK)
 }
 
-/// One session as `lx sessions` lists it: its id, when, how many tasks, where, the first one.
+/// One session as `llx sessions` lists it: its id, when, how many tasks, where, the first one.
 pub fn row(session: &Session) -> String {
     let first = session.turns.first().map_or("", |turn| turn.goal.as_str());
     let first = printable(&first.split_whitespace().collect::<Vec<_>>().join(" "));
@@ -81,7 +81,7 @@ fn home_relative(dir: &str) -> String {
     }
 }
 
-/// `lx resume` and `lx exec resume`: the session `id` names, else the newest one that ran in
+/// `llx resume` and `llx exec resume`: the session `id` names, else the newest one that ran in
 /// this workspace (else the newest of all, said so), going on with `prompt` as `kind`.
 pub fn resume(
     id: Option<&str>,
@@ -103,11 +103,11 @@ pub fn resume(
         Some(session) => session,
         None => store
             .load(id)
-            .map_err(|why| Failure::Usage(format!("{why}: `lx sessions` lists the saved ones")))?,
+            .map_err(|why| Failure::Usage(format!("{why}: `llx sessions` lists the saved ones")))?,
     };
     if !session.workspace.is_empty() && session.workspace != here {
         error::note(&format!(
-            "lx: session {} ran in {}; this one runs in {here}\n",
+            "llx: session {} ran in {}; this one runs in {here}\n",
             session.id,
             printable(&session.workspace)
         ));

@@ -1,28 +1,28 @@
-# Installs the lx binary on Windows from a GitHub release:
+# Installs the llx binary on Windows from a GitHub release:
 #
-#   irm https://raw.githubusercontent.com/rsaryev/localix-cli/main/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.ps1 | iex
 #
 # Environment:
-#   LX_VERSION      a release such as 0.2.0 (default: the latest)
-#   LX_INSTALL_DIR  where lx.exe goes (default: %LOCALAPPDATA%\Programs\lx)
+#   LLX_VERSION      a release such as 0.2.0 (default: the latest)
+#   LLX_INSTALL_DIR  where llx.exe goes (default: %LOCALAPPDATA%\Programs\llx)
 #
-# It downloads lx-x86_64-pc-windows-msvc.zip and SHA256SUMS, refuses an archive whose
+# It downloads llx-x86_64-pc-windows-msvc.zip and SHA256SUMS, refuses an archive whose
 # SHA-256 does not match, and adds the folder to the user's PATH.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$repo = 'rsaryev/localix-cli'
-$dir = if ($env:LX_INSTALL_DIR) { $env:LX_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Programs\lx' }
-$base = if ($env:LX_VERSION) {
-    "https://github.com/$repo/releases/download/v$($env:LX_VERSION.TrimStart('v'))"
+$repo = 'rsaryev/llx'
+$dir = if ($env:LLX_INSTALL_DIR) { $env:LLX_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Programs\llx' }
+$base = if ($env:LLX_VERSION) {
+    "https://github.com/$repo/releases/download/v$($env:LLX_VERSION.TrimStart('v'))"
 } else {
     "https://github.com/$repo/releases/latest/download"
 }
 
 if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64' -and $env:PROCESSOR_ARCHITEW6432 -ne 'AMD64') {
-    throw "lx install: no Windows build for $env:PROCESSOR_ARCHITECTURE yet"
+    throw "llx install: no Windows build for $env:PROCESSOR_ARCHITECTURE yet"
 }
-$archive = 'lx-x86_64-pc-windows-msvc.zip'
+$archive = 'llx-x86_64-pc-windows-msvc.zip'
 
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $tmp | Out-Null
@@ -32,18 +32,23 @@ try {
     Invoke-WebRequest -UseBasicParsing -Uri "$base/SHA256SUMS" -OutFile (Join-Path $tmp 'SHA256SUMS')
 
     $line = Get-Content (Join-Path $tmp 'SHA256SUMS') | Where-Object { ($_ -split '\s+\*?')[1] -eq $archive }
-    if (-not $line) { throw "lx install: SHA256SUMS lists no $archive" }
+    if (-not $line) { throw "llx install: SHA256SUMS lists no $archive" }
     $expected = ($line -split '\s+')[0].ToLower()
     $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $tmp $archive)).Hash.ToLower()
-    if ($actual -ne $expected) { throw "lx install: checksum mismatch for ${archive}: expected $expected, got $actual" }
+    if ($actual -ne $expected) { throw "llx install: checksum mismatch for ${archive}: expected $expected, got $actual" }
 
     Expand-Archive -Path (Join-Path $tmp $archive) -DestinationPath (Join-Path $tmp 'x') -Force
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
-    Copy-Item (Join-Path $tmp 'x\lx.exe') (Join-Path $dir 'lx.exe') -Force
+    Copy-Item (Join-Path $tmp 'x\llx.exe') (Join-Path $dir 'llx.exe') -Force
+    # The short name, unless another program already has it.
+    $short = Join-Path $dir 'lx.exe'
+    if (-not (Test-Path $short) -or ((Get-Item $short).Length -eq (Get-Item (Join-Path $dir 'llx.exe')).Length)) {
+        Copy-Item (Join-Path $dir 'llx.exe') $short -Force
+    }
 } finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
-Write-Host "Installed lx to $dir\lx.exe"
+Write-Host "Installed llx to $dir\llx.exe"
 
 $userPath = [string][Environment]::GetEnvironmentVariable('Path', 'User')
 if (-not (($userPath -split ';') -contains $dir)) {
@@ -54,5 +59,5 @@ if (-not (($userPath -split ';') -contains $dir)) {
 
 Write-Host ''
 Write-Host 'Next steps:'
-Write-Host '  lx login     # sign in with OpenRouter (or set OPENROUTER_API_KEY)'
-Write-Host '  lx doctor    # check the key, the models and the WebView2 runtime'
+Write-Host '  llx login     # sign in with OpenRouter (or set OPENROUTER_API_KEY)'
+Write-Host '  llx doctor    # check the key, the models and the WebView2 runtime'

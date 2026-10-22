@@ -9,7 +9,7 @@
 # Host targets: macOS builds aarch64 and x86_64, and joins them into universal-apple-darwin;
 # Linux builds its own architecture (glibc); Windows (Git Bash) builds x86_64-pc-windows-msvc.
 #
-# Archives: lx-<target>.tar.gz (.zip on Windows) holding lx (lx.exe), README.md and
+# Archives: llx-<target>.tar.gz (.zip on Windows) holding llx (llx.exe), README.md and
 # LICENSE at the top level.
 set -eu
 
@@ -48,12 +48,12 @@ package() {
   stage=$(mktemp -d)
   case "$target" in
     *windows*)
-      cp "$binary" "$stage/lx.exe"
-      archive="lx-$target.zip"
+      cp "$binary" "$stage/llx.exe"
+      archive="llx-$target.zip"
       ;;
     *)
-      cp "$binary" "$stage/lx"
-      archive="lx-$target.tar.gz"
+      cp "$binary" "$stage/llx"
+      archive="llx-$target.tar.gz"
       ;;
   esac
   cp README.md LICENSE "$stage/"
@@ -66,7 +66,7 @@ package() {
         (cd "$stage" && zip -q -r "$dist/$archive" .)
       fi
       ;;
-    *) tar -C "$stage" -czf "$dist/$archive" lx README.md LICENSE ;;
+    *) tar -C "$stage" -czf "$dist/$archive" llx README.md LICENSE ;;
   esac
   rm -rf "$stage"
   echo "packaged $archive"
@@ -83,8 +83,8 @@ for target in $targets; do
   fi
   cargo build --release --locked --target "$target"
   case "$target" in
-    *windows*) package "$target" "$target_dir/$target/release/lx.exe" ;;
-    *) package "$target" "$target_dir/$target/release/lx" ;;
+    *windows*) package "$target" "$target_dir/$target/release/llx.exe" ;;
+    *) package "$target" "$target_dir/$target/release/llx" ;;
   esac
 done
 
@@ -94,16 +94,16 @@ built() {
   return 1
 }
 if built aarch64-apple-darwin && built x86_64-apple-darwin; then
-  universal="$(mktemp -d)/lx"
+  universal="$(mktemp -d)/llx"
   lipo -create -output "$universal" \
-    "$target_dir/aarch64-apple-darwin/release/lx" "$target_dir/x86_64-apple-darwin/release/lx"
+    "$target_dir/aarch64-apple-darwin/release/llx" "$target_dir/x86_64-apple-darwin/release/llx"
   package universal-apple-darwin "$universal"
   rm -rf "$(dirname "$universal")"
 fi
 
 (
   cd "$dist"
-  for archive in lx-*; do sha256 "$archive"; done >SHA256SUMS
+  for archive in llx-*; do sha256 "$archive"; done >SHA256SUMS
 )
-echo "lx $version -> dist/"
+echo "llx $version -> dist/"
 ls -l "$dist"

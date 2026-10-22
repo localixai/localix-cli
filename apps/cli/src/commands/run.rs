@@ -29,7 +29,7 @@ use crate::interrupt;
 use crate::mode::{self, Mode};
 use crate::output::{Start, Summary};
 
-/// The workspace `options` name (`-C`, else the current directory), with lx's own key and
+/// The workspace `options` name (`-C`, else the current directory), with llx's own key and
 /// sessions off limits to the tools: a prompt injection must not read them into the conversation.
 pub fn root(options: &RunOptions) -> Result<Workspace, Failure> {
     let root = options.cd.as_deref().unwrap_or(Path::new("."));
@@ -63,8 +63,8 @@ pub enum Work {
 
 /// What a session needs that `exec` does not, as a usage error.
 const SESSION_TERMINAL: &str = "a session needs a terminal on stdin: run one task with \
-`lx exec \"<task>\"` (or -p)";
-const ONE_TASK: &str = "--json, --schema and -o answer one task: run it with `lx exec` (or -p)";
+`llx exec \"<task>\"` (or -p)";
+const ONE_TASK: &str = "--json, --schema and -o answer one task: run it with `llx exec` (or -p)";
 const EXEC_PROMPT: &str = "exec runs one task: give it as the prompt, or `-` to read it from stdin";
 
 /// The work `kind` asks of `prompt`; stdin is read only for one task (a session reads it line by
@@ -233,7 +233,7 @@ impl Rig<'_> {
         self.session.record(turn, location.as_deref());
         if let Err(error) = self.history.save(&self.session) {
             self.output
-                .note(&format!("lx: the session was not saved: {error}\n"));
+                .note(&format!("llx: the session was not saved: {error}\n"));
         }
     }
 }

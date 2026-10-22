@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Runs evals/tasks.json through lx and reports success, time and cost per task.
+"""Runs evals/tasks.json through llx and reports success, time and cost per task.
 
 Usage: OPENROUTER_API_KEY=... python3 evals/run.py [--only id,kind] [--repeat N] [--jobs N]
-       [--bin path] [--record] [-- extra lx args]
+       [--bin path] [--record] [-- extra llx args]
 
-Each run is `lx exec --json --yes -C <dir> [task args] "<goal>"` in a fresh temporary directory
+Each run is `llx exec --json --yes -C <dir> [task args] "<goal>"` in a fresh temporary directory
 (a copy of the task's fixture, or empty), outside any git repository so no AGENTS.md reaches the
 agent. A task whose `args` set a mode (`--mode plan`) runs in it instead of `--yes`, with no
-terminal to ask on. A run passes when lx exits 0, the answer (and the data, with a schema) holds
+terminal to ask on. A run passes when llx exits 0, the answer (and the data, with a schema) holds
 every `contains` string and `matches` pattern, every `uses` call was made and no `avoids` call
 was, and the task's `check` command exits 0 in that directory afterwards. The summary ends with
 totals per kind.
@@ -19,14 +19,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURES = os.path.join(ROOT, "evals", "fixtures")
-TIMEOUT_S = 240  # lx's own --timeout for one task
+TIMEOUT_S = 240  # llx's own --timeout for one task
 HANG_S = TIMEOUT_S + 60  # past this the process is killed: a run that never ends is a failure
 CHECK_S = 60
 MODE_FLAGS = ("--mode", "--permission-mode")
 
 
 def events(stdout):
-    """The JSON lines lx printed; anything else on stdout is ignored."""
+    """The JSON lines llx printed; anything else on stdout is ignored."""
     parsed = []
     for line in stdout.splitlines():
         try:
@@ -40,7 +40,7 @@ def events(stdout):
 
 def workdir(task):
     """A fresh directory for one run: the fixture copied in, or nothing."""
-    path = tempfile.mkdtemp(prefix=f"lx-eval-{task['id']}-")
+    path = tempfile.mkdtemp(prefix=f"llx-eval-{task['id']}-")
     if task.get("fixture"):
         shutil.copytree(os.path.join(FIXTURES, task["fixture"]), path, dirs_exist_ok=True)
     return path
@@ -64,7 +64,7 @@ def check(task, work):
 
 
 def own_mode(args):
-    """Whether a task's `args` choose the mode: then it runs in that mode, not with --yes (lx
+    """Whether a task's `args` choose the mode: then it runs in that mode, not with --yes (llx
     refuses both at once)."""
     return any(a in MODE_FLAGS or a.startswith(tuple(f + "=" for f in MODE_FLAGS)) for a in args)
 
@@ -125,7 +125,7 @@ def run(job, binary, extra, out_dir):
         args += ["--schema", json.dumps(task["schema"])]
     args += own + extra + [task["goal"]]
     # Sessions go beside the results, not into the person's own ~/.lx/sessions.
-    env = dict(os.environ, LX_SESSIONS=os.path.join(out_dir, "sessions"))
+    env = dict(os.environ, LLX_SESSIONS=os.path.join(out_dir, "sessions"))
     started = time.time()
     try:
         # A mode that asks (plan) would ask on the terminal run.py was started from: a session of
@@ -233,9 +233,9 @@ def main():
     parser.add_argument("--only", help="comma-separated task ids or kinds (code, browser)")
     parser.add_argument("--repeat", type=int, default=1, help="runs per task")
     parser.add_argument("--jobs", type=int, default=3, help="runs at once")
-    parser.add_argument("--bin", default=os.path.join(ROOT, "target/release/lx"))
+    parser.add_argument("--bin", default=os.path.join(ROOT, "target/release/llx"))
     parser.add_argument("--record", action="store_true", help="add this run to benchmarks/ (history, README metrics)")
-    parser.add_argument("extra", nargs="*", help="after --: more lx arguments, such as -m MODEL")
+    parser.add_argument("extra", nargs="*", help="after --: more llx arguments, such as -m MODEL")
     opts = parser.parse_args()
     if not os.access(opts.bin, os.X_OK):
         sys.exit(f"{opts.bin} is missing: cargo build --release, or pass --bin")

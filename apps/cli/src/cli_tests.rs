@@ -4,7 +4,7 @@ use clap::error::ErrorKind;
 use super::*;
 
 fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
-    Cli::try_parse_from(std::iter::once("lx").chain(args.iter().copied()))
+    Cli::try_parse_from(std::iter::once("llx").chain(args.iter().copied()))
 }
 
 #[test]

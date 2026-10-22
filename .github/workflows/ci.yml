@@ -114,7 +114,7 @@ jobs:
       - name: Check the binary size
         shell: bash
         run: |
-          size=$(wc -c < target/release/lx | tr -d ' ')
+          size=$(wc -c < target/release/llx | tr -d ' ')
           kib=$((size / 1024))
           limit_kib=$((LIMIT_BYTES / 1024))
           {
@@ -122,10 +122,10 @@ jobs:
             echo
             echo "| binary | size | limit |"
             echo "| --- | --- | --- |"
-            echo "| \`lx\` (x86_64-unknown-linux-gnu) | $size bytes ($kib KiB) | $limit_kib KiB |"
+            echo "| \`llx\` (x86_64-unknown-linux-gnu) | $size bytes ($kib KiB) | $limit_kib KiB |"
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "lx: $size bytes (limit $LIMIT_BYTES)"
+          echo "llx: $size bytes (limit $LIMIT_BYTES)"
           if [ "$size" -gt "$LIMIT_BYTES" ]; then
-            echo "::error::target/release/lx is $kib KiB, over the $limit_kib KiB limit"
+            echo "::error::target/release/llx is $kib KiB, over the $limit_kib KiB limit"
             exit 1
           fi

@@ -1,4 +1,4 @@
-//! lx, the Localix CLI: an ultrafast, lightweight coding agent for the terminal. It reads, edits and runs commands in a
+//! llx: an ultrafast, lightweight coding agent for the terminal. It reads, edits and runs commands in a
 //! workspace, and drives a native browser window whose clicks and typing a decision model does.
 //! This binary parses the command line and runs a command. It exits here, or in the browser host
 //! once that owns the main thread (its event loop never returns): there, with the code the run

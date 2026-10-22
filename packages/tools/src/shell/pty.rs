@@ -58,7 +58,7 @@ pub fn spawn(command: &str, dir: &Path, hidden: &[&str], needle: Option<&str>) -
     unsafe {
         shell.pre_exec(|| {
             // A terminal's signals, whatever this process inherited: a shell starts a background
-            // job (`lx exec … &`, `cargo test &`) with SIGINT and SIGQUIT ignored, an ignored
+            // job (`llx exec … &`, `cargo test &`) with SIGINT and SIGQUIT ignored, an ignored
             // signal stays ignored across exec, and Ctrl-C would then do nothing.
             for signal in [libc::SIGINT, libc::SIGQUIT] {
                 libc::signal(signal, libc::SIG_DFL);

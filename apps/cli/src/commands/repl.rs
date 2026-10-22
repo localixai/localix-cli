@@ -1,4 +1,4 @@
-//! The prompt line: `lx` at a terminal, after its first message when one was given. Each line is
+//! The prompt line: `llx` at a terminal, after its first message when one was given. Each line is
 //! the next task, in the same conversation, workspace, browser window and session; a line ending
 //! in `\` goes on on the next. `/new` starts over, `/status` says where things stand, `/mode`
 //! shows or switches the mode, `/plan` enters plan mode, and Ctrl-D or `/exit` quits. A plan
@@ -21,7 +21,7 @@ with \\ to go on on the next.
   /help             this help
   /exit             quit (also /quit, or Ctrl-D)\n";
 
-/// What Shift+Tab types. The line is read in the terminal's cooked mode, so the key reaches lx only
+/// What Shift+Tab types. The line is read in the terminal's cooked mode, so the key reaches llx only
 /// with Enter after it: a single-key toggle would need a line editor of its own.
 const SHIFT_TAB: &str = "\u{1b}[Z";
 
@@ -75,7 +75,7 @@ pub fn run(rig: &mut Rig, first: Option<&str>) -> i32 {
         mode => format!(" · {}", mode.name()),
     };
     rig.output.note(&format!(
-        "lx {} · {} · {}{mode}\n{}",
+        "llx {} · {} · {}{mode}\n{}",
         env!("CARGO_PKG_VERSION"),
         rig.options.models.model,
         rig.workspace.root().display(),

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. lx is meant to stay small and fast: a few tools (read, edit, bash, the
+Thanks for helping. llx is meant to stay small and fast: a few tools (read, edit, bash, the
 browser), synchronous code, no async runtime, and a release binary of about 1.6 MB. A change that
 adds a dependency has to earn its size.
 
@@ -34,7 +34,7 @@ cargo test --workspace          # on a Linux server: xvfb-run -a cargo test --wo
 ```
 
 CI also checks the minimum Rust version, and fails when the Linux release binary passes 2.5 MiB
-(`cargo build --release && ls -la target/release/lx`).
+(`cargo build --release && ls -la target/release/llx`).
 
 For changes to the loop, the page probe or the instructions, run the live evals too
 (`python3 evals/run.py --repeat 3`; paid, about $0.03) and put the result in the pull request.

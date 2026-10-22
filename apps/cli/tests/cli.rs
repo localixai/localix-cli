@@ -14,7 +14,7 @@ impl Home {
     fn new() -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "lx-e2e-{}-{}",
+            "llx-e2e-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
@@ -27,19 +27,19 @@ impl Home {
         &self.0
     }
 
-    /// `lx args…` with this home, no key in the environment and stdin closed.
-    fn lx(&self, args: &[&str]) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_lx"));
+    /// `llx args…` with this home, no key in the environment and stdin closed.
+    fn llx(&self, args: &[&str]) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_llx"));
         command
             .args(args)
             .env("HOME", &self.0)
             .env("USERPROFILE", &self.0)
             .env("XDG_CONFIG_HOME", self.0.join("config"))
             .env("APPDATA", self.0.join("config"))
-            .env("LX_SESSIONS", self.0.join("sessions"))
+            .env("LLX_SESSIONS", self.0.join("sessions"))
             .env_remove("OPENROUTER_API_KEY")
-            .env_remove("LX_MODEL")
-            .env_remove("LX_DECISION_MODEL")
+            .env_remove("LLX_MODEL")
+            .env_remove("LLX_DECISION_MODEL")
             .stdin(Stdio::null());
         command
     }
@@ -67,11 +67,11 @@ fn help_and_version_exit_zero() {
     let help = home.run(&["--help"]);
     assert_eq!(help.status.code(), Some(0));
     let shown = text(&help.stdout);
-    assert!(shown.contains("Usage: lx [OPTIONS] [PROMPT]"), "{shown}");
+    assert!(shown.contains("Usage: llx [OPTIONS] [PROMPT]"), "{shown}");
     assert!(shown.contains("Examples:"));
     let version = home.run(&["--version"]);
     assert_eq!(version.status.code(), Some(0));
-    assert!(text(&version.stdout).starts_with("lx "));
+    assert!(text(&version.stdout).starts_with("llx "));
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn login_status_without_a_key_exits_three() {
 fn login_status_shows_the_key_masked() {
     let home = Home::new();
     let out = home
-        .lx(&["login", "status"])
+        .llx(&["login", "status"])
         .env("OPENROUTER_API_KEY", FAKE_KEY)
         .output()
         .unwrap();
@@ -113,7 +113,7 @@ fn login_status_shows_the_key_masked() {
 fn a_key_from_stdin_is_saved_reported_and_forgotten() {
     let home = Home::new();
     let mut login = home
-        .lx(&["login", "--with-token"])
+        .llx(&["login", "--with-token"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -151,12 +151,12 @@ fn a_session_without_a_terminal_points_to_exec() {
     let home = Home::new();
     for args in [&["fix the tests"][..], &[], &["--json", "x"]] {
         let out = home
-            .lx(args)
+            .llx(args)
             .env("OPENROUTER_API_KEY", FAKE_KEY)
             .output()
             .unwrap();
         assert_eq!(out.status.code(), Some(3), "{args:?}");
-        assert!(text(&out.stderr).contains("lx exec"), "{args:?}");
+        assert!(text(&out.stderr).contains("llx exec"), "{args:?}");
     }
 }
 
@@ -189,15 +189,15 @@ fn sessions_and_resume_with_none_saved() {
     assert_eq!(list.status.code(), Some(0));
     assert_eq!(text(&list.stdout), "No saved sessions.\n");
     let resume = home
-        .lx(&["resume", "--last"])
+        .llx(&["resume", "--last"])
         .env("OPENROUTER_API_KEY", FAKE_KEY)
         .output()
         .unwrap();
     assert_eq!(resume.status.code(), Some(3));
-    assert!(text(&resume.stderr).contains("lx sessions"));
+    assert!(text(&resume.stderr).contains("llx sessions"));
 }
 
-/// `lx … | head -1`, where the reader is gone before anything is written.
+/// `llx … | head -1`, where the reader is gone before anything is written.
 fn into_a_closed_pipe(command: &mut Command) -> Output {
     let (reader, writer) = std::io::pipe().unwrap();
     drop(reader);
@@ -265,7 +265,7 @@ fn resuming_a_session_from_elsewhere_says_where_it_ran() {
     let home = Home::new();
     save_session(&home, "1700000000-cd34", "/elsewhere/repo");
     let resume = home
-        .lx(&["resume", "--last"])
+        .llx(&["resume", "--last"])
         .env("OPENROUTER_API_KEY", FAKE_KEY)
         .output()
         .unwrap();
@@ -283,12 +283,12 @@ fn resuming_a_session_from_elsewhere_says_where_it_ran() {
 fn a_saved_key_is_private_even_over_an_older_file() {
     use std::os::unix::fs::PermissionsExt;
     let home = Home::new();
-    let path = home.path().join("config/lx/credentials");
+    let path = home.path().join("config/llx/credentials");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, "old").unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
     let mut login = home
-        .lx(&["login", "--with-token"])
+        .llx(&["login", "--with-token"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .spawn()

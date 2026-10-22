@@ -1,4 +1,4 @@
-//! The command line: what `lx --help` shows. Parsing only; what each command does is in
+//! The command line: what `llx --help` shows. Parsing only; what each command does is in
 //! `commands/`.
 
 use std::path::PathBuf;
@@ -9,21 +9,21 @@ use openrouter::{chat, system_one};
 
 use crate::mode::Mode;
 
-const USAGE: &str = "lx [OPTIONS] [PROMPT]\n       \
-    lx exec [OPTIONS] [PROMPT | -]\n       \
-    lx <COMMAND>";
+const USAGE: &str = "llx [OPTIONS] [PROMPT]\n       \
+    llx exec [OPTIONS] [PROMPT | -]\n       \
+    llx <COMMAND>";
 
-const ABOUT: &str = "lx: Localix's ultrafast, lightweight coding agent for the terminal";
+const ABOUT: &str = "llx: an ultrafast, lightweight coding agent for the terminal";
 
-const LONG_ABOUT: &str = "lx: Localix's ultrafast, lightweight coding agent for the terminal.
+const LONG_ABOUT: &str = "llx: an ultrafast, lightweight coding agent for the terminal.
 
 It works in a directory (the current one, or -C DIR) with five tools: read, edit, bash (on \
 unix it can keep a program that asks, such as a REPL, open in a terminal session until the task \
 ends), a browser whose clicks and typing are done by a fast decision model, and ask, a question \
 to you (in a session only).
 
-With no command, lx opens a session at the terminal: PROMPT, when given, is its first message, \
-and each line you type goes on from the last. `lx exec` (or -p) runs one task without a session \
+With no command, llx opens a session at the terminal: PROMPT, when given, is its first message, \
+and each line you type goes on from the last. `llx exec` (or -p) runs one task without a session \
 and exits, with the answer alone on stdout: for scripts, CI and pipes.
 
 The mode (--mode) decides what runs without asking. In default, commands, file changes and \
@@ -38,28 +38,28 @@ Ctrl-C stops the task (the command running and every terminal session are killed
 question or approval ends); a second Ctrl-C quits.";
 
 const EXAMPLES: &str = "Examples:
-  lx                                              a session at the terminal
-  lx \"fix the failing test in src/parse.rs\"       a session that starts with this task
-  lx -c                                           go on with the last session here
-  lx --mode plan \"how should we split src/parse.rs?\"
+  llx                                              a session at the terminal
+  llx \"fix the failing test in src/parse.rs\"       a session that starts with this task
+  llx -c                                           go on with the last session here
+  llx --mode plan \"how should we split src/parse.rs?\"
                                                   a session that plans before it changes anything
-  lx exec -y \"run the tests and fix what fails\"   one task, then exit
-  git diff | lx -p \"review this change\"           stdin is added to the prompt
-  lx exec - < task.md                             the prompt from stdin
-  lx exec --json -y \"update the changelog\" | jq -c 'select(.type == \"tool.call\")'
-  lx exec --schema '{\"type\":\"object\",\"properties\":{\"version\":{\"type\":\"string\"}}}' \\
+  llx exec -y \"run the tests and fix what fails\"   one task, then exit
+  git diff | llx -p \"review this change\"           stdin is added to the prompt
+  llx exec - < task.md                             the prompt from stdin
+  llx exec --json -y \"update the changelog\" | jq -c 'select(.type == \"tool.call\")'
+  llx exec --schema '{\"type\":\"object\",\"properties\":{\"version\":{\"type\":\"string\"}}}' \\
       \"which version is this crate?\"
-  lx exec resume --last \"now update the README\"
+  llx exec resume --last \"now update the README\"
 
 Exit codes: 0 achieved, 1 not achieved, 2 out of turns or time, 3 environment or usage,
 130 interrupted.
 
-Environment: OPENROUTER_API_KEY (else the key `lx login` saved), LX_MODEL,
-LX_DECISION_MODEL, LX_SESSIONS (where sessions are kept, default ~/.lx/sessions).";
+Environment: OPENROUTER_API_KEY (else the key `llx login` saved), LLX_MODEL,
+LLX_DECISION_MODEL, LLX_SESSIONS (where sessions are kept, default ~/.lx/sessions).";
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "lx",
+    name = "llx",
     version,
     about = ABOUT,
     long_about = LONG_ABOUT,
@@ -71,10 +71,10 @@ pub struct Cli {
     /// The first message of the session; with -p, the task (`-` reads it from stdin).
     #[arg(value_name = "PROMPT")]
     pub prompt: Option<String>,
-    /// Run the prompt as one task and exit, as `lx exec` does.
+    /// Run the prompt as one task and exit, as `llx exec` does.
     #[arg(short = 'p', long)]
     pub print: bool,
-    /// Go on with the newest session of this directory, as `lx resume --last` does.
+    /// Go on with the newest session of this directory, as `llx resume --last` does.
     #[arg(short = 'c', long = "continue")]
     pub resume_last: bool,
     #[command(flatten)]
@@ -128,7 +128,7 @@ pub enum ExecCommand {
 #[derive(Args, Debug)]
 #[command(args_conflicts_with_subcommands = true)]
 pub struct LoginArgs {
-    /// Read the key from stdin instead of signing in: `printenv KEY | lx login --with-token`.
+    /// Read the key from stdin instead of signing in: `printenv KEY | llx login --with-token`.
     #[arg(long)]
     pub with_token: bool,
     #[command(subcommand)]
@@ -143,7 +143,7 @@ pub enum LoginAction {
 
 #[derive(Args, Debug)]
 pub struct ResumeArgs {
-    /// The session to continue (see `lx sessions`).
+    /// The session to continue (see `llx sessions`).
     #[arg(value_name = "ID")]
     pub id: Option<String>,
     /// Continue the newest session; the first argument is then the prompt.
@@ -162,7 +162,7 @@ impl ResumeArgs {
     pub fn target(&self) -> Result<(Option<&str>, Option<&str>), String> {
         match (self.last, self.id.as_deref(), self.prompt.as_deref()) {
             (true, Some(_), Some(_)) => {
-                Err("with --last, give only the prompt: lx resume --last \"<task>\"".into())
+                Err("with --last, give only the prompt: llx resume --last \"<task>\"".into())
             }
             (true, first, None) => Ok((None, first)),
             (true, None, prompt) => Ok((None, prompt)),
@@ -176,10 +176,10 @@ impl ResumeArgs {
 #[command(next_help_heading = "Model")]
 pub struct ModelOptions {
     /// The agent's chat model, an OpenRouter model id.
-    #[arg(short = 'm', long, value_name = "MODEL", env = "LX_MODEL", default_value = chat::DEFAULT_MODEL)]
+    #[arg(short = 'm', long, value_name = "MODEL", env = "LLX_MODEL", default_value = chat::DEFAULT_MODEL)]
     pub model: String,
     /// The decision model that clicks and types in the browser.
-    #[arg(long, value_name = "MODEL", env = "LX_DECISION_MODEL", default_value = system_one::DEFAULT_MODEL)]
+    #[arg(long, value_name = "MODEL", env = "LLX_DECISION_MODEL", default_value = system_one::DEFAULT_MODEL)]
     pub decision_model: String,
 }
 

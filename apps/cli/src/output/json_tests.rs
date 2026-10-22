@@ -1,0 +1,113 @@
+use decision_loop::meter::Spend;
+use decision_loop::step::Operation;
+
+use super::*;
+
+fn bash_call() -> ToolCall {
+    ToolCall {
+        id: "c1".into(),
+        name: "bash".into(),
+        arguments: json!({"command": "ls"}),
+    }
+}
+
+#[test]
+fn a_call_and_its_result_share_an_id() {
+    let call_event = call(&bash_call(), 5);
+    assert_eq!(call_event["type"], "tool.call");
+    assert_eq!(call_event["arguments"]["command"], "ls");
+    let done = Ok(ToolOutput {
+        report: "exit 0".into(),
+        state: Some("### Page".into()),
+    });
+    let result_event = result(&bash_call(), &done, 9);
+    assert_eq!(result_event["type"], "tool.result");
+    assert_eq!(result_event["id"], call_event["id"]);
+    assert_eq!(result_event["failed"], false);
+    assert_eq!(result_event["output"], "exit 0");
+    assert_eq!(result_event["state"], "### Page");
+    let fatal = Err(ToolError::Fatal("gone".into()));
+    let failed = result(&bash_call(), &fatal, 9);
+    assert_eq!(
+        (failed["failed"].clone(), failed["fatal"].clone()),
+        (json!(true), json!(true))
+    );
+    assert_eq!(failed["output"], "gone");
+    assert!(failed.get("state").is_none());
+}
+
+#[test]
+fn a_step_carries_what_the_hands_did() {
+    let step = GoalStep {
+        operation: Operation::Click,
+        reference: Some("e7".into()),
+        element: Some("button \"Search\"".into()),
+        value: None,
+        probability: 0.91,
+        changed: Some(true),
+        failed: None,
+        new_view: false,
+    };
+    let event = super::step(&step, 3);
+    assert_eq!(event["type"], "step");
+    assert_eq!(event["operation"], "CLICK");
+    assert_eq!(event["target"], "button \"Search\"");
+    assert_eq!(event["line"], step.trace_line());
+}
+
+#[test]
+fn the_run_completes_with_its_status_usage_and_data() {
+    let agent = AgentSpend {
+        calls: 2,
+        cost: 0.5,
+        millis: 1200,
+        ..AgentSpend::default()
+    };
+    let decision = Spend {
+        calls: 7,
+        cost: 0.25,
+        millis: 3400,
+        ..Spend::default()
+    };
+    let data = Ok(json!({"n": 1}));
+    let summary = Summary {
+        status: "achieved",
+        code: 0,
+        answer: "Done.",
+        data: Some(&data),
+        error: None,
+        agent: &agent,
+        decision: &decision,
+        millis: 42,
+        session: "1-ab",
+    };
+    let event = completed(&summary);
+    assert_eq!(event["type"], "run.completed");
+    assert_eq!(event["status"], "achieved");
+    assert_eq!(event["exit_code"], 0);
+    assert_eq!(event["data"], json!({"n": 1}));
+    // evals/run.py reads these: a rename must fail here, not report zeros there.
+    assert_eq!(event["usage"]["agent"]["calls"], 2);
+    assert_eq!(event["usage"]["agent"]["ms"], 1200);
+    assert_eq!(event["usage"]["decision"]["calls"], 7);
+    assert_eq!(event["usage"]["decision"]["ms"], 3400);
+    assert_eq!(event["usage"]["decision"]["cost_usd"], 0.25);
+    assert_eq!(event["usage"]["cost_usd"], 0.75);
+    assert_eq!(event["duration_ms"], 42);
+    assert!(event["error"].is_null());
+}
+
+#[test]
+fn the_run_starts_with_the_schema_version() {
+    let start = Start {
+        goal: "fix it",
+        session: "1-ab",
+        model: "m",
+        decision_model: "d",
+        workspace: "/w",
+    };
+    let event = started(&start);
+    assert_eq!(event["type"], "run.started");
+    assert_eq!(event["schema"], SCHEMA);
+    assert_eq!(event["workspace"], "/w");
+}

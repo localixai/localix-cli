@@ -1,0 +1,176 @@
+name: release
+
+# A pushed tag vX.Y.Z (RELEASING.md) builds the archives on each platform and publishes them as
+# the GitHub release vX.Y.Z, with the CHANGELOG section as its notes. A tag with a suffix
+# (v1.0.0-rc.1) becomes a prerelease, so `releases/latest` (install.sh) skips it.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+# Two pushes of one tag never race to create the same release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Fails before any build when the tag and Cargo.toml disagree or CHANGELOG.md has no section.
+  check:
+    name: check the tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Tag matches the workspace version
+        id: version
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the workspace version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: CHANGELOG.md has the version's notes
+        run: sh scripts/release-notes.sh "${{ steps.version.outputs.version }}" > /dev/null
+
+  # The tests of the tagged commit, on every platform, as CI runs them: a tag on a commit whose CI
+  # was red, or never ran, ships nothing.
+  test:
+    name: test (${{ matrix.os }})
+    needs: check
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/linux-deps
+        with:
+          extra: xvfb
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # the stable branch, 2026-10-01
+        with:
+          toolchain: stable
+          components: clippy
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test
+        if: runner.os != 'Linux'
+        run: cargo test --workspace --locked
+      # packages/tools/tests/browser.rs opens a real WebView window, which needs a display.
+      - name: Test (virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a cargo test --workspace --locked
+
+  build:
+    name: build (${{ matrix.name }})
+    needs: [check, test]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # arm64 runner; x86_64 is cross-built with Xcode, and dist.sh joins both into universal.
+          - name: macos
+            os: macos-14
+            targets: aarch64-apple-darwin x86_64-apple-darwin
+            smoke: target/aarch64-apple-darwin/release/lxsurf
+          # The oldest supported Ubuntu, for the oldest glibc the binary links against.
+          - name: linux
+            os: ubuntu-22.04
+            targets: x86_64-unknown-linux-gnu
+            smoke: target/x86_64-unknown-linux-gnu/release/lxsurf
+          - name: windows
+            os: windows-latest
+            targets: x86_64-pc-windows-msvc
+            smoke: target/x86_64-pc-windows-msvc/release/lxsurf.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/linux-deps
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # the stable branch, 2026-10-01
+        with:
+          toolchain: stable
+      # No rust-cache here: a release is built from a clean state, never from a shared cache.
+      - name: Build the archives
+        shell: bash
+        run: sh scripts/dist.sh ${{ matrix.targets }}
+      - name: Smoke test
+        shell: bash
+        run: |
+          "${{ matrix.smoke }}" --version
+          if [ "$RUNNER_OS" = macOS ]; then
+            # The universal download runs as it was packaged and holds both architectures.
+            tar -xzf dist/lxsurf-universal-apple-darwin.tar.gz -C "$RUNNER_TEMP" lxsurf
+            "$RUNNER_TEMP/lxsurf" --version
+            archs=$(lipo -archs "$RUNNER_TEMP/lxsurf")
+            case "$archs" in *x86_64*arm64* | *arm64*x86_64*) ;; *)
+              echo "::error::universal binary holds only: $archs"; exit 1 ;;
+            esac
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ matrix.name }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # A signed statement of which workflow and commit built each archive:
+      # `gh attestation verify lxsurf-<target>.tar.gz --repo rsaryev/decision-loop`.
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: dist-*
+          path: artifacts
+      # Each platform's SHA256SUMS joined into one, then checked against the downloaded archives.
+      - name: Merge the archives and their checksums
+        shell: bash
+        run: |
+          mkdir dist
+          cp artifacts/dist-*/lxsurf-* dist/
+          cat artifacts/dist-*/SHA256SUMS | sort -k 2 > dist/SHA256SUMS
+          (cd dist && sha256sum --check --strict SHA256SUMS)
+          test "$(wc -l < dist/SHA256SUMS)" -eq "$(find dist -name 'lxsurf-*' | wc -l)"
+          # The installers of this version, for `releases/download/vX.Y.Z/install.sh`.
+          cp scripts/install.sh scripts/install.ps1 dist/
+          ls -l dist
+      - name: Attest where the archives were built
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/lxsurf-*
+      - name: Release notes
+        run: sh scripts/release-notes.sh "${{ needs.check.outputs.version }}" > notes.md
+      - name: Create the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          # shellcheck disable=SC2086 # prerelease is one flag or nothing
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag --title "lxsurf $VERSION" --notes-file notes.md $prerelease

@@ -1,0 +1,255 @@
+//! One command run to its end, its deadline, or until it is stopped. On unix the shell starts a
+//! session of its own: it has no controlling terminal, so a program that opens the terminal to
+//! prompt (a password, a passphrase) fails at once instead of stopping in the background until the
+//! deadline, and one signal to the session's process group ends everything it started. Its output
+//! is read on threads, so a command that fills one pipe while the other is read never stalls.
+
+use std::io::{self, Read};
+use std::path::Path;
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::thread;
+use std::time::{Duration, Instant};
+
+use super::output::Output;
+
+/// How long the output may stay open after the shell exits: a background process it started may
+/// hold the pipes, and is not waited for.
+const DRAIN_GRACE: Duration = Duration::from_millis(500);
+/// How long a killed process is given to be reaped.
+const KILL_WAIT: Duration = Duration::from_secs(2);
+/// The longest pause between looks at the command: the first ones are short, so a quick command
+/// returns at once, and a stop is noticed within this.
+const POLL: Duration = Duration::from_millis(50);
+
+/// The shell commands run with, as a person would type it.
+#[cfg(unix)]
+pub const SHELL: &str = "sh -c";
+#[cfg(windows)]
+pub const SHELL: &str = "cmd /C";
+
+/// What to run, and the bounds it runs in.
+pub struct Job<'a> {
+    pub command: &'a str,
+    pub dir: &'a Path,
+    pub timeout: Duration,
+    /// Environment variables the command must not see: the app's own secrets.
+    pub hidden: &'a [&'a str],
+    /// Whether the person stopped the task: the command is killed as soon as it says so.
+    pub stop: &'a dyn Fn() -> bool,
+}
+
+/// How a command ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ending {
+    Exit(i32),
+    /// Ended by a signal it did not handle; only unix has them.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    Signal(i32),
+    /// Past its deadline; `killed` once it and everything it started are known to be gone.
+    TimedOut {
+        killed: bool,
+    },
+    /// Stopped by the person; `killed` as for a timeout.
+    Stopped {
+        killed: bool,
+    },
+    /// Neither a code nor a signal could be read.
+    Unknown,
+}
+
+#[derive(Debug)]
+pub struct Finished {
+    pub ending: Ending,
+    pub elapsed: Duration,
+    pub stdout: String,
+    pub stderr: String,
+    /// The output was still open when it was taken: a background process holds it.
+    pub open: bool,
+}
+
+/// Run `job` in a shell, with no input.
+pub fn run(job: &Job) -> io::Result<Finished> {
+    let mut shell = shell(job.command);
+    for name in job.hidden {
+        shell.env_remove(name);
+    }
+    let mut child = shell
+        .current_dir(job.dir)
+        // Nothing waits for an answer or a pager: there is no one to type or page.
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_PAGER", "cat")
+        .env("PAGER", "cat")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let started = Instant::now();
+    let (closed, readers) = mpsc::channel();
+    let stdout = drain(child.stdout.take(), closed.clone());
+    let stderr = drain(child.stderr.take(), closed);
+    let (ending, elapsed) = watch(&mut child, job, started)?;
+    let open = !drained(&readers, 2);
+    Ok(Finished {
+        ending,
+        elapsed,
+        stdout: text(&stdout),
+        stderr: text(&stderr),
+        open,
+    })
+}
+
+/// Wait for `child` to exit, killing it at its deadline or when the person stops the task.
+fn watch(child: &mut Child, job: &Job, started: Instant) -> io::Result<(Ending, Duration)> {
+    let deadline = started + job.timeout;
+    let mut pause = Duration::from_millis(1);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok((ending(status), started.elapsed())),
+            Ok(None) => {}
+            Err(error) => {
+                kill(child);
+                return Err(error);
+            }
+        }
+        let late = Instant::now() >= deadline;
+        if late || (job.stop)() {
+            let elapsed = started.elapsed();
+            let killed = kill(child);
+            let ending = match late {
+                true => Ending::TimedOut { killed },
+                false => Ending::Stopped { killed },
+            };
+            return Ok((ending, elapsed));
+        }
+        thread::sleep(pause.min(deadline.saturating_duration_since(Instant::now())));
+        pause = (pause * 2).min(POLL);
+    }
+}
+
+#[cfg(unix)]
+fn shell(command: &str) -> Command {
+    use std::os::unix::process::CommandExt;
+    let mut shell = Command::new("sh");
+    shell.arg("-c").arg(command);
+    // SAFETY: setsid is async-signal-safe, and nothing else runs between fork and exec. The new
+    // session's process group has the shell's pid, which `kill` signals.
+    unsafe {
+        shell.pre_exec(|| match libc::setsid() {
+            -1 => Err(io::Error::last_os_error()),
+            _ => Ok(()),
+        });
+    }
+    shell
+}
+
+#[cfg(windows)]
+fn shell(command: &str) -> Command {
+    use std::os::windows::process::CommandExt;
+    // cmd parses its own command line: passed raw, the command reaches it as written.
+    let mut shell = Command::new("cmd");
+    shell.arg("/C").raw_arg(command);
+    shell
+}
+
+/// Kill the command and everything it started; whether all of it is known to be gone.
+#[cfg(unix)]
+fn kill(child: &mut Child) -> bool {
+    let group = -(child.id() as libc::pid_t);
+    // SAFETY: kill only sends a signal; it touches nothing in this process.
+    let signalled = unsafe { libc::kill(group, libc::SIGKILL) } == 0;
+    // No process left in the group: everything it started is gone already.
+    let gone = !signalled && io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
+    if !signalled {
+        let _ = child.kill();
+    }
+    reaped(child) && (signalled || gone)
+}
+
+/// Kill the command and everything it started (the process tree); whether all of it is known to
+/// be gone.
+#[cfg(windows)]
+fn kill(child: &mut Child) -> bool {
+    let tree = Command::new("taskkill")
+        .args(["/PID", &child.id().to_string(), "/T", "/F"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success());
+    if !tree {
+        let _ = child.kill();
+    }
+    reaped(child) && tree
+}
+
+/// Whether `child` exited within [`KILL_WAIT`] of being killed.
+fn reaped(child: &mut Child) -> bool {
+    let deadline = Instant::now() + KILL_WAIT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => return true,
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
+            _ => return false,
+        }
+    }
+}
+
+/// Read `pipe` to its end into an [`Output`] on a thread; say so on `closed` when it ends.
+fn drain(pipe: Option<impl Read + Send + 'static>, closed: Sender<()>) -> Arc<Mutex<Output>> {
+    let output = Arc::new(Mutex::new(Output::default()));
+    let Some(mut pipe) = pipe else {
+        let _ = closed.send(());
+        return output;
+    };
+    let shared = Arc::clone(&output);
+    thread::spawn(move || {
+        let mut buffer = [0; 8192];
+        loop {
+            match pipe.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(read) => shared
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .push(&buffer[..read]),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(_) => break,
+            }
+        }
+        let _ = closed.send(());
+    });
+    output
+}
+
+/// Whether `count` readers closed within [`DRAIN_GRACE`].
+fn drained(readers: &Receiver<()>, count: usize) -> bool {
+    let deadline = Instant::now() + DRAIN_GRACE;
+    (0..count).all(|_| {
+        readers
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .is_ok()
+    })
+}
+
+fn text(output: &Mutex<Output>) -> String {
+    output.lock().unwrap_or_else(PoisonError::into_inner).text()
+}
+
+fn ending(status: ExitStatus) -> Ending {
+    if let Some(code) = status.code() {
+        return Ending::Exit(code);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return Ending::Signal(signal);
+        }
+    }
+    Ending::Unknown
+}
+
+#[cfg(test)]
+#[path = "process_tests.rs"]
+mod tests;

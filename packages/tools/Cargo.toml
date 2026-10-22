@@ -1,6 +1,6 @@
 [package]
 name = "tools"
-description = "The tools the decision loop drives: a native browser window"
+description = "The agent's tools: files read and edited, shell commands, a native browser window"
 publish = false
 version.workspace = true
 edition.workspace = true
@@ -20,7 +20,10 @@ serde_json.workspace = true
 tao.workspace = true
 wry.workspace = true
 
-# Already in the tree through wry: messages and blocks to the WKWebView behind the window.
+# A command's own session and the kill of its process group (setsid, kill).
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+# Already in the tree through wry: messages to the WKWebView behind the window.
 [target.'cfg(target_os = "macos")'.dependencies]
-block2.workspace = true
 objc2.workspace = true

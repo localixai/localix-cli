@@ -1,12 +1,13 @@
-//! Exit codes: the contract scripts and test runners read.
+//! Exit codes: the contract scripts, CI jobs and other agents read. Changing one is a breaking
+//! change (see CHANGELOG.md).
 
-/// The goal was reached and every expectation held.
+/// The goal was reached (or the agent answered without saying it was not).
 pub const OK: i32 = 0;
-/// The goal was not reached, or an expectation was false: the tested app failed.
+/// The agent answered that the goal was not reached, or the data did not match `--schema`.
 pub const FAILED: i32 = 1;
-/// Limits or the timeout ran out before an outcome: the run could not decide.
+/// Turns or the time limit ran out before an answer.
 pub const EXHAUSTED: i32 = 2;
-/// The environment is not ready: no key, no network, no WebView runtime, a bad argument.
+/// The environment or the command line is not ready: no key, no network, a bad argument.
 pub const ENVIRONMENT: i32 = 3;
-/// Interrupted by Ctrl-C, SIGTERM or closing the window.
+/// Interrupted: Ctrl-C, or the browser window closed by the person.
 pub const INTERRUPTED: i32 = 130;

@@ -1,10 +1,10 @@
 //! What a run spent: every call to the decision model goes through a meter, so the report counts
-//! all of them (actions, the expectation checks).
+//! all of them.
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use contracts::model::DecideError;
 use contracts::model::{Decider, Decision, Question};
@@ -32,17 +32,6 @@ impl Spend {
         self.output_tokens += output;
         self.cost += cost;
         self.millis += millis;
-    }
-
-    pub fn json(&self) -> Value {
-        json!({
-            "model": self.model,
-            "calls": self.calls,
-            "input_tokens": self.input_tokens,
-            "output_tokens": self.output_tokens,
-            "cost_usd": self.cost,
-            "ms": self.millis,
-        })
     }
 }
 
@@ -76,19 +65,6 @@ impl Decider for MeteredDecider<'_> {
         );
         Ok(decision)
     }
-}
-
-/// `12,345`
-pub fn thousands(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::new();
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
 }
 
 #[cfg(test)]

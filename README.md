@@ -1,111 +1,200 @@
 # lxsurf
 
-`lxsurf` takes a goal in plain words, surfs a native browser window there and answers. A small agent (a chat model, [Claude Haiku](https://openrouter.ai/anthropic/claude-haiku-5.5) by default) plans and reads; its one tool is the browser, whose hands are a decision model ([Jev](https://openrouter.ai/docs/guides/community/jev)) that clicks and types.
+[![ci](https://github.com/rsaryev/decision-loop/actions/workflows/ci.yml/badge.svg)](https://github.com/rsaryev/decision-loop/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/rsaryev/decision-loop?include_prereleases&sort=semver)](https://github.com/rsaryev/decision-loop/releases)
 
-```bash
-$ lxsurf 'find the cheapest flights from Cyprus to Georgia in November'
-   2.0s ▸ browser goal: Search one-way flights from Larnaca to Tbilisi for November… · url: https://www.google.com/travel/flights?q=…
-   5.6s     CLICK button "Accept all" [below] [e5] · 99% · new view
-  28.5s ▸ browser goal: Open the Date grid and show prices for all of November 2026; done when the calendar shows prices · read: true
-achieved in 33.8s · 31 actions · $0.0067
-  time     6.5s agent · 11.6s decision model · 15.7s browser
-The cheapest November date from Larnaca to Tbilisi is Friday, November 27, 2026, at €88 (one way, economy)…
+lxsurf is a small, fast coding agent that runs in your terminal. It has four tools:
+
+- `read` and `edit` for files;
+- `bash` for commands;
+- a real browser. The agent says what to do on a page, and a cheap decision model does the clicking and typing.
+
+It is one binary of about 1.6 MB, with synchronous code and no async runtime. There are no plugins, no MCP servers and no extra tools: a model with a shell and a browser needs little more.
+
+```text
+$ lxsurf -y "the tests in tests/parse.rs fail: fix the parser, not the tests"
+   1.1s ▸ bash cargo test --test parse
+   3.4s ▸ read src/parse.rs
+   5.0s ▸ edit src/parse.rs
+   6.2s ▸ bash cargo test --test parse
+achieved in 9.0s · 5 turns · $0.0058
+  agent    anthropic/claude-haiku-5.5 · 23,410 in (17,920 cached) · 655 out · $0.0058 · 6.1s
+  session  1792675200-3fa2
+parse_range treated an empty upper bound as 0; it now means "to the end". All 14 tests pass.
 ```
 
-- **An agent and its hands.** The agent splits the goal into short tasks, one page's worth each, writes the exact strings to type, and checks every page it gets back. The hands carry a task out step by step: each step is one decision-model request choosing an operation and a control among what the page shows. Model output never becomes a selector, coordinates or code.
-- **Native and small.** The browser is the system WebView (WKWebView, WebView2, WebKitGTK); the release binary is about 1.6 MB, with no async runtime.
-- **Built for scripts and tests.** Stable exit codes, `--json`, `--schema` for data, `--expect` checks, `lxsurf check` for PASS/FAIL, screenshots, invisible under CI.
+The output above is an example: times, tokens and cost vary from run to run. The trace goes to stderr and the answer alone to stdout, so `lxsurf "..." > answer.md` keeps only the answer.
 
 ## Install
 
 ```bash
-cargo install --path apps/cli          # from a clone; the binary is `lxsurf`
-lxsurf login                           # or: export OPENROUTER_API_KEY=sk-or-...
-lxsurf doctor
+curl -fsSL https://raw.githubusercontent.com/rsaryev/decision-loop/master/scripts/install.sh | sh
 ```
 
-Linux needs WebKitGTK (`libwebkit2gtk-4.1-0`) and a display (`xvfb-run` on servers). Windows needs the WebView2 runtime (preinstalled on Windows 11).
+- **macOS and Linux x86_64:** the script downloads the latest release and checks it against `SHA256SUMS`, then installs `lxsurf` into `~/.local/bin`. To install a given version, set `LXSURF_VERSION=0.2.0`. To install elsewhere, set `LXSURF_INSTALL_DIR`.
+- **Windows:** run `irm https://raw.githubusercontent.com/rsaryev/decision-loop/master/scripts/install.ps1 | iex`.
+- **From a clone:** run `cargo install --locked --path apps/cli` (the tested `Cargo.lock`). It needs Rust 1.88 or newer.
 
-## Use
+lxsurf uses the system's own WebView for the browser:
+
+- macOS has WKWebView built in.
+- Windows needs WebView2, which comes with Windows 11.
+- Linux needs WebKitGTK (`libwebkit2gtk-4.1-0`) and a display. Without a display, lxsurf runs without the browser tool.
+
+## Quick start
 
 ```bash
-lxsurf 'What is the cheapest one-way flight from Zurich to London next Friday?'
-lxsurf 'Top 3 stories on Hacker News' --schema '{"type":"array","items":{"type":"string"}}'
-lxsurf check 'On http://localhost:3000 sign up as ada@example.com' --expect "The welcome page is shown"
-lxsurf --no-llm 'Open https://the-internet.herokuapp.com/login and log in as "tomsmith" with "SuperSecretPassword!"'
-lxsurf --keep-open                                            # a chat: goals one after another
+lxsurf login        # sign in with OpenRouter in your browser; or export OPENROUTER_API_KEY=sk-or-...
+lxsurf doctor       # checks the key, both models, the WebView and the shell
+cd your-project
+lxsurf "explain how errors are handled in this crate"
+```
+
+## Usage
+
+```bash
+lxsurf "fix the failing test in src/parse.rs"                 # one task, then exit
+lxsurf -y "run the tests and fix what fails"                  # allow commands and edits without asking
+lxsurf                                                        # the prompt line: each line is the next task
+git diff | lxsurf "review this change"                        # piped stdin is added to the prompt
+lxsurf - < task.md                                            # the prompt from stdin
+lxsurf -y "fix the lint" </dev/null                           # from a script whose stdin stays open
+lxsurf -C ../site "open http://localhost:3000 and check that sign-up works"
+lxsurf --json -y "update the changelog" | jq -c 'select(.type == "tool.call")'
+lxsurf --schema '{"type":"object","properties":{"version":{"type":"string"}},"required":["version"]}' \
+    "which version is this crate?"                            # the data alone on stdout
+lxsurf resume --last "now update the README"                  # go on with the newest session
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--schema SCHEMA` | Answer as JSON matching this JSON Schema (inline or `@file`), alone on stdout |
-| `--expect STATEMENT` | Must hold on the final page; repeatable; a false one fails the run |
-| `--no-llm` | No agent: the hands take the whole goal from the page it names, typing only quoted strings or words of the goal |
-| `--model ID` | The agent's chat model (env `LXSURF_MODEL`, default `anthropic/claude-haiku-5.5`) |
-| `--decision-model ID` | The hands' decision model (env `LXSURF_DECISION_MODEL`, default `~typesafe/jev-latest`); `lxsurf models` lists them |
-| `--screenshot FILE` | Save a picture of the final page (PNG; macOS) |
-| `--headless` / `--show` | Force the window invisible or visible (default: visible in a terminal, invisible under CI or when piped; `LXSURF_HEADLESS=1` makes invisible the default) |
-| `--json` | One JSON object on stdout (`schema: 3`) |
-| `--trace FILE` | Every call and step, with timestamps |
-| `--max-turns N` / `--max-steps N` / `--timeout S` | Agent turns (30), actions per task of the hands (40), seconds per goal (600) |
-| `--keep-open` | Stay open after the goal: in a terminal, type the next goal (same window and conversation), or `/snapshot`, `/screenshot [FILE]`; Ctrl-D quits |
-| `-c` / `--continue`, `--resume ID` | Continue the newest session, or this one, on the page it left |
-| `--dry-run` | Open the page the goal names and print what the hands read, no key needed |
+| `-C, --cd DIR` | The workspace: paths resolve in it and files change only inside it. Default: the current directory. |
+| `-y, --yes` | Allow commands, file changes and browser actions without asking. |
+| `--json` | One JSON event per line on stdout (see [`--json`](#--json)). |
+| `--schema SCHEMA` | End with data matching this JSON Schema (inline, or `@file`), printed alone on stdout. |
+| `-o, --output-last-message FILE` | Also write the final answer, or the data with `--schema`, to FILE. With `--schema` and no data that matched, the file is left empty. |
+| `-v, --verbose` | Show each tool result and model turn in the trace. With `--json`, the trace also goes to stderr. |
+| `-m, --model MODEL` | The agent's chat model, any OpenRouter model id. Env `LXSURF_MODEL`, default `anthropic/claude-haiku-5.5`. |
+| `--decision-model MODEL` | The browser's decision model. Env `LXSURF_DECISION_MODEL`, default `~typesafe/jev-latest`. |
+| `--max-turns N` | Model turns for one task (50; 1 to 10000). |
+| `--max-steps N` | Actions for one browser task of the decision model (40; 1 to 10000). |
+| `--timeout SECONDS` | Seconds one task may take (1800; at most 86400). It stops at the first model turn past them. |
+| `--show-browser` | Show the browser window. It is invisible by default, and opens only when the browser is first used. |
 
-Commands: `check`, `login`, `logout`, `models`, `doctor`, `sessions`, `skills list|get`.
+Commands:
 
-Every run is saved as a session in `~/.lxsurf/sessions/<id>.json` (env `LXSURF_SESSIONS` moves it): each goal, how it ended and where it left the page. `lxsurf sessions` lists them. The browser itself stays private: cookies and site state last as long as the window.
+- `login`: sign in with OpenRouter. `login --with-token` reads the key from stdin instead (at a terminal, with the echo off), and `login status` shows where the key comes from, masked.
+- `logout`: forget the saved key.
+- `sessions`: list the saved sessions, newest first, with the directory each ran in.
+- `resume [ID | --last] [PROMPT]`: continue a session. `--last` is the newest session that ran in this workspace (else the newest of all, with a note).
+- `doctor`: check that everything a run needs is in place.
 
-| Exit code | Meaning |
+Every run is saved as a session in `~/.lxsurf/sessions/<id>.json`; set `LXSURF_SESSIONS` to keep them elsewhere. A session records each task and how it ended, but not the conversation itself. `resume` therefore starts a new conversation that is told the earlier tasks, the directory they ran in, and where the browser was. In the prompt line, each task continues the same conversation.
+
+Given a PROMPT, stdin that is not a terminal is read to its end and added to the prompt, and lxsurf says so on stderr. A caller whose stdin stays open (a harness with a pipe, `ssh` without `-n`, a `while read` loop) should pass `</dev/null`.
+
+## Approvals
+
+`read` never asks. `edit`, `bash` and `browser` ask before they act, through one gate (`browser` when a call opens an address, hands over a goal, presses keys or runs a script; reading a page does not ask). The answer depends on how lxsurf was started:
+
+| Started | What happens |
 | --- | --- |
-| 0 | Goal reached, every `--expect` held |
-| 1 | Goal not reached, an `--expect` was false, or the data did not match `--schema` |
-| 2 | Turns, actions or the timeout ran out |
-| 3 | Environment not ready (key, network, WebView, arguments) |
-| 130 | Interrupted |
+| At a terminal | Each effect is shown in full on one line (`bash: cargo test`, `bash: rm -rf build  (in ~/src, outside the workspace)`, `edit: edit src/lib.rs (+3 -1 lines)`); line breaks show as `⏎`, and control characters are escaped, so what you approve is what runs. Answer `y` to allow it, `n` or Enter to refuse it, `n <why>` to refuse it and tell the agent why, or `a` to allow that tool for the rest of the run. Only the bare word approves: `yes, and...` is asked again. What was typed before the question appeared is discarded. The question goes to the terminal itself, so this works while stdin is a pipe, stdout carries JSON and stderr goes to a file. |
+| With `-y` / `--yes` | Everything is allowed without asking. |
+| With no terminal and no `-y` | Commands, edits and browser actions are refused, and the agent is told the person must rerun with `--yes`. Reading still works. |
 
-## How it works
+Ctrl-C stops the task: the command running is killed with everything it started, nothing more is approved, and the task ends at its next model turn as `interrupted` (exit 130), with its `run.completed` event and its session saved. A second Ctrl-C quits at once. At the prompt line, Ctrl-C quits. Closing the browser window stops the task the same way; in the prompt line the window opens again on the next task.
 
-1. **The agent plans.** The chat model reads the goal and calls `browser`: open an address, hand the hands a short `goal` with the `values` to type, press keys, run a script or read the whole text. One call at a time, each answered with what happened and the page as it is now.
-2. **The hands act.** For a task, each step observes the page as an outline (every control with its ref and state: `radio "Large" [checked] [ref=e6]`) and asks the decision model one request: which operation (CLICK, TYPE_TEXT, SELECT, PRESS_ENTER, SCROLL, WAIT, DONE, BLOCKED) and its target, value or wait. Guards stop a run that repeats itself or loops; the hands resume it until DONE, BLOCKED or the budget.
-3. **The agent checks and answers.** It reads every page itself (a DONE is not proof), sets narrower tasks when one stops short, and answers with a closing `RESULT:` line, or calls `result` with the data when there is a `--schema`.
+A refusal goes back to the model as a failed call with its reason, and it is told not to work around it.
+
+## Project instructions
+
+lxsurf reads `AGENTS.md` files the way Codex does: from the git repository's root down to the workspace, root first. Each one covers its own directory tree, a deeper file wins over a shallower one, and the task you give wins over both. Each file is capped at 16 KiB and all of them together at 32 KiB, with a note when something was cut. They reach the agent in a context block with the environment: the workspace, the OS, the date, the approval policy, and whether a browser is available (the shell is named in the `bash` tool's description).
+
+## Tools
+
+| Tool | What it does |
+| --- | --- |
+| `read` | A file's lines, numbered, up to 2000 lines and about 20 KB at a time (`offset`, `limit`), or a directory's entries. Long lines are cut, binary files and anything but regular files (a FIFO, a device) refused. It reads anywhere (a dependency's source, a system header) except lxsurf's own key and sessions. |
+| `edit` | Exact replacement: `old_string` must occur once, unless `replace_all` is set. An empty `old_string` creates a file. Writes are atomic (a new temporary file, then a rename) and keep CRLF line endings and permissions; a read-only file is refused, and a file with other hard links is written in place. It asks the gate, refuses to write when the file changed while the question was open, and changes only files inside the workspace. |
+| `bash` | `sh -c` (`cmd /C` on Windows) in the workspace or a `workdir`, with stdin closed. On Unix it runs in its own session, with no terminal, so a program that prompts fails at once; git and pagers are told not to prompt or page. A timeout (120 s by default, at most 600 s) or Ctrl-C kills it with everything it started. Commands do not see `OPENROUTER_API_KEY`. Each stream keeps its first and last 5,000 bytes. A non-zero exit is a normal result. It asks the gate. |
+| `browser` | A native WebView window. The agent opens an http(s) address, or hands a short task with the exact values to type to the decision model, which clicks, types, selects and scrolls one step at a time. It can also press keys, run a script in the page, read the whole text, or change the page size. Each call returns what happened and the page as an outline. It asks the gate before anything a page sees. |
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | The task was achieved, or the agent answered without saying it was not |
+| 1 | The agent answered that the task was not achieved, or the data did not match `--schema` |
+| 2 | Turns or the time limit ran out before an answer |
+| 3 | The environment or the command line is not ready: no key, no network, a model error, a bad argument |
+| 130 | Interrupted: Ctrl-C (or SIGTERM), or the browser window was closed |
+
+With `--json`, a closed stdout (`lxsurf --json ... | head -1`) ends the run quietly at its next turn, with exit 0. Without it nothing is written to stdout until the answer, so the run goes on to its end and then exits 0.
+
+## `--json`
+
+`--json` prints one event per line on stdout, in the order things happen. Every event has a `type`, and `ms` is the time since the task started.
+
+| Event | Fields |
+| --- | --- |
+| `run.started` | `schema` (4), `goal`, `session`, `model`, `decision_model`, `workspace` |
+| `tool.call` | `id`, `name`, `arguments` |
+| `tool.result` | `id`, `name`, `failed`, `fatal`, `output`, and `state` when the tool left one |
+| `step` | One browser action: `operation`, `target`, `value`, `probability`, `changed`, `failed`, `line` |
+| `turn` | One model turn: `model`, `input_tokens`, `cached_tokens`, `output_tokens`, `cost_usd`, `model_ms` |
+| `run.completed` | `status` (`achieved`, `not_achieved`, `unstated`, `exhausted`, `error`, `interrupted`), `exit_code`, `answer`, `data` or `data_error`, `error`, `session`, `usage` {`agent`, `decision`, `cost_usd`}, `duration_ms` |
+
+The exit codes and these events are a public contract. A breaking change bumps `schema` and is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Architecture
 
-Packages and an app, dependencies pointing inward only (checked by `apps/cli/tests/architecture.rs`):
+The workspace is split into packages and one app. Every dependency points inward, and `apps/cli/tests/architecture.rs` checks that:
 
 | Package | What it is | Depends on |
 | --- | --- | --- |
-| `packages/contracts` | Ports only: the chat model, the agent's tools, the view the hands drive, the decision model, the hands, the history | nothing |
-| `packages/agent` | The agent: the chat model's loop over tools, the conversation, `--schema` | `contracts` |
-| `packages/decision-loop` | The hands: a task carried out on a view with the decision model | `contracts` |
-| `packages/tools` | The browser: the agent's `browser` tool and the page as a view | `contracts` |
-| `packages/openrouter` | The models' provider (chat and decision) and signing in | `contracts` |
-| `packages/session` | A history store: sessions as JSON files | `contracts` |
-| `apps/cli` | The `lxsurf` binary: composes the packages | all |
+| `packages/contracts` | Ports only: the chat model, the tools, the gate, the view the browser's hands drive, the decision model, the hands, the history | nothing |
+| `packages/agent` | The agent: the chat model's loop over tools, the conversation, `--schema`, the system prompt | `contracts` |
+| `packages/decision-loop` | The browser's hands: a short task carried out on a view, one decision-model request per step | `contracts` |
+| `packages/tools` | `read`, `edit`, `bash`, the workspace, and the browser (window, driver, page probe) | `contracts` |
+| `packages/openrouter` | The models' provider (chat and decision models) and signing in | `contracts` |
+| `packages/session` | Sessions as JSON files | `contracts` |
+| `apps/cli` | The `lxsurf` binary: the command line, the approvals, the context, the output; it composes the packages | all of the above |
 
-The agent knows its tools only by their specs, the hands know views only by their protocol, and neither names a tool or a provider.
-
-## For AI agents
-
-Install the skill with `npx skills add <this repository>`, or add this repository as a Claude Code plugin marketplace. The installed skill is a stub; the guides ship inside the binary so they always match it:
-
-```bash
-lxsurf skills get core      # goals, data, JSON, models, sessions, trust boundaries
-lxsurf skills get testing   # end-to-end checks and CI
-```
+The agent knows its tools only by their specs, the hands know a view only through its protocol, and neither names a tool or a provider. A tool asks the gate before an effect, but only the app answers it.
 
 ## Trust boundaries
 
-Page content is data, never instructions: the agent is told so, and every page reaches it marked untrusted. The decision model only chooses among the operations and controls a page offers and types only the strings it was given. Only http(s) pages load; downloads and other schemes are refused. A password field is typed into but its value is never read back.
+- **Tool output is data, not instructions.** File contents, command output and pages are untrusted. The system prompt says so, and every page reaches the agent marked as untrusted content. This lowers the risk of prompt injection without removing it: approve commands with that in mind, and use `-y` in places where a wrong command costs little.
+- **The workspace limits `edit`, not `bash`.** `edit` changes only files inside the workspace, after following symlinks. `bash` is a real shell with your permissions, and there is no sandbox: the gate is what stands between the model and your machine. A `workdir` outside the workspace is named as such in the question.
+- **lxsurf's own files are off limits** to `read` and `edit`, symlinks included: the saved key and the sessions directory.
+- **The browser's decision model only chooses** among the operations and controls a page offers, and types only the strings the agent gave it. Its output never becomes a selector, coordinates or code. Only http(s) pages load; downloads and other schemes are refused. A password field is typed into, but its value is never read back.
+- **Keys:** the key `lxsurf login` saves lives in `~/.config/lxsurf/credentials` (under `XDG_CONFIG_HOME` when set, `%APPDATA%` on Windows), mode 0600 on Unix, also when an older file was wider. `lxsurf logout` removes it. `OPENROUTER_API_KEY` wins over it when set, and commands never see it.
+
+Known gaps:
+
+- On Windows, Ctrl-C ends lxsurf and the commands it started at once (they share the console), with no `run.completed` event, and `login --with-token` shows the key as it is pasted.
 
 ## Metrics
 
 <!-- metrics:start -->
-Not measured yet for the agent: run `python3 evals/run.py --record`.
+Latest run, 2026-10-22 22:17 on Darwin 25.6.0 arm64: the agent on anthropic/claude-haiku-5.5, the browser's hands on ~typesafe/jev-latest, from [benchmarks/HISTORY.md](benchmarks/HISTORY.md):
+
+| Metric | Value |
+| --- | --- |
+| Eval runs passed | 24/24 (browser 16/16, code 8/8) |
+| Task time, median / p90 | 8.5 s / 21.2 s |
+| Cost per task | $0.0020 |
+| Start (`--version`) | 3.8 ms |
+| Memory at start (`--help`) | 9.6 MB |
+| Release binary | 1.59 MB |
 <!-- metrics:end -->
 
-`python3 evals/run.py --record` runs the live tasks (logins, forms, dropdowns, checkboxes, TodoMVC, dynamic loading, search engines, quizzes behind consent banners, a Google Flights search), measures the binary, appends a dated file to `benchmarks/runs/`, regenerates [benchmarks/HISTORY.md](benchmarks/HISTORY.md) and this table. See [evals/README.md](evals/README.md).
+`python3 evals/run.py --record` runs the live evals, then appends a dated file to `benchmarks/runs/` and regenerates [benchmarks/HISTORY.md](benchmarks/HISTORY.md) and this block. The coding tasks write and run a script, fix a failing test, rename a function across files and answer questions about code, each on a small fixture. The browser tasks cover a login, forms, a TodoMVC app, delayed content, search, a quiz behind a consent banner and a Google Flights search. See [evals/README.md](evals/README.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) (the layer rules and the checks). Report security issues as described in [SECURITY.md](SECURITY.md).
 
 ## License
 

@@ -1,10 +1,11 @@
-# lxsurf: a goal in, an agent surfs a native browser window there and answers.
+# lxsurf: a small, fast coding agent for the terminal: read, edit, bash, and a native browser
+# whose clicks and typing a decision model does.
 #
 # Packages and apps, dependencies pointing inward only (AGENTS.md, rules L1-L5):
-#   packages/contracts      ports only: chat model, the agent's tools, the view, decision model, hands, history
+#   packages/contracts      ports only: chat model, tools, gate, view, decision model, hands, history
 #   packages/agent          the agent: a chat model's loop over tools
-#   packages/decision-loop  the hands: a task carried out on a view with a decision model
-#   packages/tools          the tools: a native browser window
+#   packages/decision-loop  the browser's hands: a task carried out on a view with a decision model
+#   packages/tools          the tools: read, edit, bash, the workspace, a native browser window
 #   packages/openrouter     the models' provider: OpenRouter's chat and decision models, sign-in
 #   packages/session        a history store: sessions as JSON files
 #   apps/cli                the `lxsurf` binary: composes the packages
@@ -26,9 +27,10 @@ openrouter = { path = "packages/openrouter" }
 session = { path = "packages/session" }
 tools = { path = "packages/tools" }
 base64 = "0.23.1"
-block2 = "0.6"
 clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 getrandom = "0.3"
+# Already in the tree through tao and wry: the few unix calls std has no wrapper for.
+libc = "0.2"
 objc2 = "0.6"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

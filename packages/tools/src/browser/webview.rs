@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 use tao::event_loop::EventLoopProxy;
 
-use super::host::{Cmd, Loads, Shared};
+use super::host::{Cmd, Loads, Shared, WINDOW_CLOSED};
 use super::script::script_forms;
 use super::{Action, BrowserError, BrowserResult, Driver, Observation, PageText};
 
@@ -45,8 +45,21 @@ impl WebviewDriver {
         Self { proxy, shared }
     }
 
+    /// Whether the window is open: the person may have closed it.
+    pub fn is_open(&self) -> bool {
+        self.shared.open.load(Ordering::SeqCst)
+    }
+
+    fn open_or_closed(&self) -> BrowserResult<()> {
+        match self.is_open() {
+            true => Ok(()),
+            false => Err(closed()),
+        }
+    }
+
     /// One probe call, answered over IPC or refused while the page has no probe.
     fn call(&self, name: &'static str, args: Value, timeout: Duration) -> BrowserResult<Value> {
+        self.open_or_closed()?;
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = mpsc::channel();
         self.shared.pending.lock().unwrap().insert(id, sender);
@@ -78,7 +91,7 @@ impl WebviewDriver {
         loop {
             match self.call(name, args.clone(), CALL_TIMEOUT) {
                 Ok(Value::Null) | Err(BrowserError::Unavailable(_))
-                    if Instant::now() < deadline =>
+                    if Instant::now() < deadline && self.is_open() =>
                 {
                     std::thread::sleep(Duration::from_millis(30));
                 }
@@ -108,6 +121,7 @@ impl WebviewDriver {
 
 impl WebviewDriver {
     fn run_script(&self, form: &str) -> BrowserResult<Value> {
+        self.open_or_closed()?;
         let before = self.loads();
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = mpsc::channel();
@@ -142,6 +156,7 @@ impl WebviewDriver {
             Ok(Err(error)) if error.starts_with("script_not_started") => {
                 Err(BrowserError::Unavailable(error))
             }
+            Ok(Err(error)) if error == WINDOW_CLOSED => Err(closed()),
             Ok(Err(error)) => Err(BrowserError::Refused(error)),
             Err(_) => Err(BrowserError::Unavailable(
                 "the script did not finish in time".into(),
@@ -174,8 +189,15 @@ impl WebviewDriver {
     }
 }
 
+/// Why nothing can be done on the page: the person closed the window.
+fn closed() -> BrowserError {
+    BrowserError::Unavailable("the browser window was closed".into())
+}
+
 fn classify(error: &str) -> BrowserError {
-    if error.starts_with("probe_not_ready") {
+    if error == WINDOW_CLOSED {
+        closed()
+    } else if error.starts_with("probe_not_ready") {
         BrowserError::Unavailable(error.to_string())
     } else if error.starts_with("stale") {
         BrowserError::Stale(error.to_string())
@@ -203,6 +225,7 @@ fn action_args(epoch: &str, action: &Action) -> Value {
 
 impl Driver for WebviewDriver {
     fn navigate(&self, url: &str) -> BrowserResult<()> {
+        self.open_or_closed()?;
         let before = self.loads();
         self.proxy
             .send_event(Cmd::Navigate(url.to_string()))
@@ -218,6 +241,7 @@ impl Driver for WebviewDriver {
         let deadline = Instant::now() + timeout;
         let mut parsed: Option<Instant> = None;
         loop {
+            self.open_or_closed()?;
             let loads = self.loads();
             if loads.started > 0 && loads.finished >= loads.started {
                 return Ok(());
@@ -322,19 +346,5 @@ impl Driver for WebviewDriver {
         let value = self.call_ready("read", json!({"offset": offset, "limit": limit}))?;
         serde_json::from_value(value)
             .map_err(|error| BrowserError::Unavailable(format!("unreadable text: {error}")))
-    }
-}
-
-impl WebviewDriver {
-    /// A PNG of what the page shows now.
-    pub fn capture(&self) -> BrowserResult<Vec<u8>> {
-        let (reply, taken) = mpsc::channel();
-        self.proxy
-            .send_event(Cmd::Capture(reply))
-            .map_err(|_| BrowserError::Unavailable("the browser window is gone".into()))?;
-        taken
-            .recv_timeout(CALL_TIMEOUT)
-            .map_err(|_| BrowserError::Unavailable("the page did not draw a snapshot".into()))?
-            .map_err(BrowserError::Unavailable)
     }
 }

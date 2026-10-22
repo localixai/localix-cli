@@ -18,7 +18,7 @@ pub struct ToolSpec {
 pub struct ToolOutput {
     /// What happened: kept for the rest of the conversation.
     pub report: String,
-    /// The state the call left (a page, a screen): only the newest one matters, so an agent may
+    /// The state the call left (a view, a screen): only the newest one matters, so an agent may
     /// drop older ones to keep the conversation short.
     pub state: Option<String>,
 }
@@ -26,7 +26,7 @@ pub struct ToolOutput {
 /// Why a call did nothing useful.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ToolError {
-    /// The call failed, but another call can do better (wrong arguments, a page that refused): the
+    /// The call failed, but another call can do better (wrong arguments, a view that refused): the
     /// model reads why.
     Failed(String),
     /// Nothing will work now (what the tool depends on is unreachable): the run ends.

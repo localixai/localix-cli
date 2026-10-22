@@ -5,7 +5,7 @@
 use std::sync::Mutex;
 use std::time::Duration;
 
-use contracts::view::{Action, Capture, Observation, View, ViewError, ViewResult};
+use contracts::view::{Action, Observation, View, ViewError, ViewResult};
 
 use super::{Browser, Driver, PageText, Viewport, WebviewDriver, Window, toolbar};
 
@@ -18,8 +18,6 @@ form, the answer or option is picked before Next, Continue or Submit.";
 
 /// How long a page may take to become usable before it is used anyway.
 const LOAD_TIMEOUT: Duration = Duration::from_secs(20);
-/// Characters of the document an expectation is judged on.
-const CONTENT_LIMIT: usize = 4000;
 
 pub struct Page {
     browser: Browser,
@@ -39,10 +37,11 @@ impl Page {
         }
     }
 
-    /// Load `url`, opening the window on it the first time; `title` names the window.
+    /// Load `url`, opening the window on it the first time (and again after the person closed
+    /// it); `title` names the window.
     pub fn open(&self, url: &str, title: &str) -> ViewResult<()> {
         let mut driver = self.driver.lock().unwrap();
-        if let Some(open) = driver.as_ref() {
+        if let Some(open) = driver.as_ref().filter(|driver| driver.is_open()) {
             return open.navigate(url);
         }
         let opened = self.browser.open(Window {
@@ -58,7 +57,11 @@ impl Page {
     }
 
     pub fn is_open(&self) -> bool {
-        self.driver.lock().unwrap().is_some()
+        self.driver
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(WebviewDriver::is_open)
     }
 
     /// The open window's driver, for what only a browser has (scripts, keys, the whole text).
@@ -67,6 +70,7 @@ impl Page {
             .lock()
             .unwrap()
             .clone()
+            .filter(WebviewDriver::is_open)
             .ok_or_else(|| ViewError::Unavailable("the browser window is not open".into()))
     }
 
@@ -126,17 +130,5 @@ impl View for Page {
             Some(reference) if toolbar::owns(reference) => self.toolbar(action),
             _ => self.driver()?.act(epoch, action),
         }
-    }
-
-    fn capture(&self) -> ViewResult<Option<Capture>> {
-        let bytes = self.driver()?.capture()?;
-        Ok(Some(Capture {
-            mime: "image/png",
-            bytes,
-        }))
-    }
-
-    fn content(&self) -> ViewResult<String> {
-        self.read(0, CONTENT_LIMIT).map(|text| text.text)
     }
 }

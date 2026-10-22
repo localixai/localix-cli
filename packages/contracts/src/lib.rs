@@ -8,9 +8,11 @@
 //! - [`model`]: the decision-model port: typed questions answered with probabilities. A provider
 //!   package implements [`model::Decider`].
 //! - [`hands`]: a short task carried out on a view. The decision loop implements [`hands::Hands`].
+//! - [`gate`]: a tool asks before an effect (a command, a file change); the app answers.
 //! - [`history`]: the session-history port. A store package implements [`history::History`].
 
 pub mod chat;
+pub mod gate;
 pub mod hands;
 pub mod history;
 pub mod model;

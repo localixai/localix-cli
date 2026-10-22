@@ -10,6 +10,10 @@ pub struct Session {
     /// Unix seconds.
     pub created: u64,
     pub updated: u64,
+    /// Where its goals ran, as the app names it (a directory): a session continued elsewhere is
+    /// told apart from one continued in place. Empty in sessions saved before it was kept.
+    #[serde(default)]
+    pub workspace: String,
     /// Where the last goal left its tool (its `Observation::location`): where a continued session
     /// resumes.
     #[serde(default)]

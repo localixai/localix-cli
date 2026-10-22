@@ -1,8 +1,8 @@
 [package]
 name = "cli"
-description = "lxsurf: a goal in, an agent surfs a native browser window there and answers"
-keywords = ["agent", "browser", "decision-model", "automation", "e2e"]
-categories = ["command-line-utilities", "development-tools::testing"]
+description = "lxsurf: a fast, small coding agent for the terminal: read, edit, bash and a browser"
+keywords = ["agent", "coding-agent", "cli", "llm", "browser"]
+categories = ["command-line-utilities", "development-tools"]
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -22,6 +22,8 @@ openrouter.workspace = true
 session.workspace = true
 tools.workspace = true
 clap.workspace = true
-getrandom.workspace = true
-serde.workspace = true
 serde_json.workspace = true
+
+# Signals, the terminal's pending input and its echo: calls std has no wrapper for.
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true

@@ -1,0 +1,6 @@
+region,item,amount
+north,widget,120.50
+south,gadget,75.25
+east,widget,300.00
+"west, outlet",gizmo,42.75
+north,gizmo,61.45

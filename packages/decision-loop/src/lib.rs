@@ -7,8 +7,6 @@
 pub mod ask;
 pub mod choice;
 pub mod decision_loop;
-pub mod expect;
 pub mod goal;
 pub mod meter;
 pub mod step;
-pub mod values;

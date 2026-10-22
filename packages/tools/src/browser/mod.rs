@@ -8,7 +8,6 @@ mod host;
 mod page;
 mod platform;
 mod script;
-mod start;
 mod tool;
 mod toolbar;
 mod viewport;
@@ -23,7 +22,6 @@ pub use contracts::view::{
 };
 pub use host::{Browser, Window, host, run};
 pub use page::Page;
-pub use start::{SEARCH_PAGE, url_in};
 pub use tool::BrowserTool;
 pub use viewport::Viewport;
 pub use webview::WebviewDriver;

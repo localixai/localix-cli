@@ -283,17 +283,6 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
         assert_eq!(driver.observe().unwrap().title, "Second", "{button}");
     }
 
-    // A picture of the page for the person, taken in the invisible window too.
-    #[cfg(target_os = "macos")]
-    {
-        let png = driver.capture().unwrap();
-        assert!(
-            png.starts_with(b"\x89PNG") && png.len() > 1000,
-            "{} bytes",
-            png.len()
-        );
-    }
-
     // A parsed page is used after a short grace: a slow image (an ad, a video) does not hold the
     // run until it arrives, nor makes the page busy.
     let started = std::time::Instant::now();

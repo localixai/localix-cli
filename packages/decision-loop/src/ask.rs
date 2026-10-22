@@ -19,9 +19,10 @@ Do not repeat satisfied steps. Set every requested control; a matching result al
 it was set. Do not toggle a control already in the requested state. SCROLL only to reveal a needed
 control that is not offered. WAIT only when the needed control is absent or results are still
 loading; recent WAITs are not evidence of loading. DONE requires visible evidence that ALL of the
-goal is satisfied. When the goal names a count (three questions, two items), count the matching
-steps in the numbered recent actions and choose DONE once it is reached: never do more than the
-goal asks. BLOCKED means nothing offered can progress.";
+goal is satisfied. Do each action the goal names once, in order, and never more than it asks: when
+it names a count (three questions, two items), count the matching steps in the numbered recent
+actions; once the recent actions include the goal's last action and the view responded, choose
+DONE. BLOCKED means nothing offered can progress.";
 
 const TARGET: &str =
     "Choose the best offered target IF the next operation is the one this question names.

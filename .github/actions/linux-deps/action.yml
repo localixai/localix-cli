@@ -1,0 +1,22 @@
+name: Linux dependencies
+description: >-
+  WebKitGTK headers for wry and tao on Linux (the browser tool links the system WebView), plus
+  any extra packages a job needs, such as xvfb for the tests that open a real window.
+inputs:
+  extra:
+    description: Extra apt packages, space separated.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install WebKitGTK
+      if: runner.os == 'Linux'
+      shell: bash
+      env:
+        EXTRA: ${{ inputs.extra }}
+      run: |
+        sudo apt-get update -q
+        # shellcheck disable=SC2086 # EXTRA is a list of package names
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+          libwebkit2gtk-4.1-dev $EXTRA

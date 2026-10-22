@@ -1,6 +1,6 @@
 [package]
 name = "openrouter"
-description = "A decision-model provider: OpenRouter's decision models, and signing in for a key"
+description = "A model provider: OpenRouter's chat and decision models, and signing in for a key"
 publish = false
 version.workspace = true
 edition.workspace = true

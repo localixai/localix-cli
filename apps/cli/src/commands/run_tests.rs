@@ -1,0 +1,247 @@
+use clap::Parser;
+use contracts::chat::{Completion, ToolCall};
+use serde_json::json;
+use session::Sessions;
+
+use super::*;
+use crate::cli::Cli;
+use crate::compose::{Models, assemble};
+use crate::gate::NO_TERMINAL;
+use crate::interrupt::Interrupt;
+use crate::output::Output;
+use crate::testing::{Captured, NoDecider, Scratch, ScriptedChat};
+
+#[test]
+fn an_answer_ends_with_the_code_its_result_line_says() {
+    let ended = |status: Status| Ended::of(&status, None, None, 60);
+    assert_eq!(ended(Status::Achieved).code, exit::OK);
+    assert_eq!(ended(Status::Unstated).code, exit::OK);
+    assert_eq!(ended(Status::NotAchieved).code, exit::FAILED);
+    assert_eq!(ended(Status::NotAchieved).status, "not_achieved");
+    let exhausted = ended(Status::Exhausted);
+    assert_eq!(exhausted.code, exit::EXHAUSTED);
+    assert!(exhausted.error.unwrap().contains("--max-turns"));
+    let error = ended(Status::Error("no network".into()));
+    assert_eq!(
+        error,
+        Ended {
+            status: "error",
+            code: exit::ENVIRONMENT,
+            error: Some("no network".into())
+        }
+    );
+}
+
+#[test]
+fn data_that_does_not_match_fails_the_run() {
+    let mismatch = Err("the result did not match the schema".to_string());
+    let ended = Ended::of(&Status::Achieved, Some(&mismatch), None, 60);
+    assert_eq!(ended.code, exit::FAILED);
+    let data = Ok(json!({"n": 1}));
+    assert_eq!(
+        Ended::of(&Status::Achieved, Some(&data), None, 60).code,
+        exit::OK
+    );
+}
+
+#[test]
+fn the_time_limit_is_exhaustion_whatever_the_model_said() {
+    let model_unreachable = Status::Error("the time limit ran out".into());
+    let ended = Ended::of(&model_unreachable, None, Some(Halt::TimedOut), 90);
+    assert_eq!(ended.status, "exhausted");
+    assert_eq!(ended.code, exit::EXHAUSTED);
+    assert!(ended.error.unwrap().contains("90 s"));
+    let closed = Ended::of(&model_unreachable, None, Some(Halt::Closed), 90);
+    assert_eq!(closed.code, exit::OK);
+}
+
+#[test]
+fn a_task_counts_only_what_it_spent() {
+    let before = Spend {
+        model: "d".into(),
+        calls: 2,
+        input_tokens: 100,
+        output_tokens: 10,
+        cost: 0.5,
+        millis: 300,
+    };
+    let now = Spend {
+        calls: 5,
+        input_tokens: 400,
+        output_tokens: 40,
+        cost: 1.25,
+        millis: 900,
+        ..before.clone()
+    };
+    let spent = since(&now, &before);
+    assert_eq!(
+        (
+            spent.calls,
+            spent.input_tokens,
+            spent.output_tokens,
+            spent.millis
+        ),
+        (3, 300, 30, 600)
+    );
+    assert!((spent.cost - 0.75).abs() < 1e-9);
+}
+
+#[test]
+fn an_interrupted_task_ends_with_130() {
+    let ended = Ended::of(
+        &Status::Error("the person stopped the task".into()),
+        None,
+        Some(Halt::Interrupted),
+        60,
+    );
+    assert_eq!(
+        (ended.status, ended.code),
+        ("interrupted", exit::INTERRUPTED)
+    );
+}
+
+/// What one composed task did: its events, the `-o` file, the session saved.
+struct Done {
+    code: i32,
+    events: Vec<Value>,
+    last: String,
+    session: Session,
+    made: bool,
+}
+
+/// Run one task through the whole composition, with a scripted model: one command, then an
+/// answer. Nothing but the models is faked.
+/// `unwritable`: `-o` names a file in a directory that does not exist.
+fn compose_one(approvals: Approvals, unwritable: bool, schema: Option<Value>) -> Done {
+    let scratch = Scratch::new();
+    let work = scratch.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    let last = match unwritable {
+        true => scratch.path().join("missing/last.txt"),
+        false => scratch.path().join("last.txt"),
+    };
+    let args = [
+        "lxsurf",
+        "--json",
+        "-o",
+        last.to_str().unwrap(),
+        "make a file",
+    ];
+    let options = Cli::try_parse_from(args).unwrap().run;
+    let history = Sessions {
+        dir: scratch.path().join("sessions"),
+    };
+    let session = history.start();
+    let setup = Setup {
+        options,
+        key: "test".into(),
+        workspace: Workspace::new(&work).unwrap(),
+        context: String::new(),
+        schema,
+        approvals,
+        history,
+        session,
+    };
+    let call = ToolCall {
+        id: "c1".into(),
+        name: "bash".into(),
+        arguments: json!({"command": "echo hi > made.txt"}),
+    };
+    let chat = ScriptedChat::new(vec![
+        Completion {
+            calls: vec![call],
+            ..Completion::default()
+        },
+        Completion {
+            text: Some("Done.\nRESULT: achieved".into()),
+            ..Completion::default()
+        },
+    ]);
+    let models = Models {
+        chat: &chat,
+        decider: &NoDecider,
+    };
+    let out = Captured::default();
+    let output = Output::with(
+        true,
+        false,
+        Box::new(out.clone()),
+        Box::new(Captured::default()),
+    );
+    let interrupt = Interrupt::new();
+    let mut saved = None;
+    let code = assemble(setup, models, &output, &interrupt, None, |rig| {
+        let code = rig.task("make a file");
+        saved = Some(rig.history.load(Some(&rig.session.id)).unwrap());
+        code
+    });
+    Done {
+        code,
+        events: out
+            .text()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect(),
+        last: std::fs::read_to_string(&last).unwrap_or_default(),
+        session: saved.unwrap(),
+        made: work.join("made.txt").exists(),
+    }
+}
+
+#[test]
+fn a_composed_task_reports_in_order_writes_its_answer_and_is_saved() {
+    let done = compose_one(Approvals::Yes, false, None);
+    let types: Vec<&str> = done
+        .events
+        .iter()
+        .map(|event| event["type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        [
+            "run.started",
+            "turn",
+            "tool.call",
+            "tool.result",
+            "turn",
+            "run.completed"
+        ]
+    );
+    let completed = &done.events[5];
+    assert_eq!(completed["status"], "achieved");
+    assert_eq!(completed["exit_code"], done.code);
+    assert_eq!(done.code, exit::OK);
+    assert!(done.made, "the command ran");
+    assert_eq!(done.last, "Done.\n");
+    assert_eq!(done.session.turns.len(), 1);
+    assert_eq!(done.session.turns[0].status, "achieved");
+}
+
+#[test]
+fn with_no_one_to_approve_nothing_runs_and_the_model_is_told_why() {
+    let done = compose_one(Approvals::Refuse, false, None);
+    let result = &done.events[3];
+    assert_eq!(result["type"], "tool.result");
+    assert_eq!(result["failed"], true);
+    assert!(result["output"].as_str().unwrap().contains(NO_TERMINAL));
+    assert!(!done.made);
+}
+
+#[test]
+fn a_failed_answer_file_is_in_the_exit_code_the_report_gives() {
+    let done = compose_one(Approvals::Yes, true, None);
+    let completed = done.events.last().unwrap();
+    assert_eq!(done.code, exit::ENVIRONMENT);
+    assert_eq!(completed["exit_code"], exit::ENVIRONMENT);
+    assert!(completed["error"].as_str().unwrap().starts_with("-o "));
+}
+
+#[test]
+fn with_a_schema_and_no_data_the_answer_file_holds_no_prose() {
+    let done = compose_one(Approvals::Yes, false, Some(json!({"type": "object"})));
+    assert_eq!(
+        done.last, "",
+        "prose where data is expected would break the reader"
+    );
+    assert_ne!(done.code, exit::OK);
+}

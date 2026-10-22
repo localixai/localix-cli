@@ -1,0 +1,34 @@
+//! The gate port: a tool asks before an effect outside the conversation (running a command,
+//! changing a file), and whoever composes the tools decides: the person at a terminal, a flag, a
+//! policy. A tool knows nothing of who answers.
+
+/// What a tool is about to do, as the person reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Effect<'a> {
+    /// The tool asking, by its spec name.
+    pub tool: &'a str,
+    /// What it will do, in full and on one line: the command, or the file and its +/- lines.
+    /// Whoever answers judges this text alone, so nothing that matters is left out of it.
+    pub summary: &'a str,
+}
+
+/// The answer to an effect.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Verdict {
+    Allow,
+    /// Not allowed, and why: the tool says so to the model, which can try another way.
+    Deny(String),
+}
+
+pub trait Gate {
+    fn check(&self, effect: Effect) -> Verdict;
+}
+
+/// A gate that allows everything: `--yes`, and tests.
+pub struct Open;
+
+impl Gate for Open {
+    fn check(&self, _: Effect) -> Verdict {
+        Verdict::Allow
+    }
+}

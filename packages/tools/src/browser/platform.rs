@@ -1,7 +1,5 @@
 //! What differs by platform: where a headless window goes, keeping it rendering, the user agent.
 
-use std::sync::mpsc::Sender;
-
 use tao::window::WindowBuilder;
 
 #[cfg(not(target_os = "macos"))]
@@ -68,59 +66,6 @@ pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
 
 #[cfg(not(target_os = "macos"))]
 pub(super) fn keep_rendering(_webview: &wry::WebView, _headless: bool) {}
-
-/// A PNG of what the WebView shows, sent to `reply` once WebKit has drawn it: WKWebView's own
-/// snapshot, which works in an invisible window too. Called on the main thread.
-#[cfg(target_os = "macos")]
-pub(super) fn capture(webview: &wry::WebView, reply: Sender<Result<Vec<u8>, String>>) {
-    use std::sync::Mutex;
-
-    use block2::RcBlock;
-    use objc2::runtime::AnyObject;
-    use objc2::{class, msg_send};
-    use wry::WebViewExtMacOS;
-
-    /// NSBitmapImageFileTypePNG.
-    const PNG: usize = 4;
-    let reply = Mutex::new(Some(reply));
-    let done = RcBlock::new(move |image: *mut AnyObject, _error: *mut AnyObject| {
-        let Some(reply) = reply.lock().unwrap().take() else {
-            return;
-        };
-        if image.is_null() {
-            let _ = reply.send(Err("WebKit took no snapshot".into()));
-            return;
-        }
-        let bytes = unsafe {
-            let tiff: *mut AnyObject = msg_send![image, TIFFRepresentation];
-            let rep: *mut AnyObject = msg_send![class!(NSBitmapImageRep), imageRepWithData: tiff];
-            let properties: *mut AnyObject = msg_send![class!(NSDictionary), dictionary];
-            let png: *mut AnyObject =
-                msg_send![rep, representationUsingType: PNG, properties: properties];
-            if png.is_null() {
-                None
-            } else {
-                let length: usize = msg_send![png, length];
-                let start: *const u8 = msg_send![png, bytes];
-                Some(std::slice::from_raw_parts(start, length).to_vec())
-            }
-        };
-        let _ = reply.send(bytes.ok_or_else(|| "the snapshot could not be encoded".into()));
-    });
-    let view = webview.webview();
-    unsafe {
-        let _: () = msg_send![
-            &*view,
-            takeSnapshotWithConfiguration: std::ptr::null::<AnyObject>(),
-            completionHandler: &*done
-        ];
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-pub(super) fn capture(_webview: &wry::WebView, reply: Sender<Result<Vec<u8>, String>>) {
-    let _ = reply.send(Err("screenshots are taken on macOS only".into()));
-}
 
 /// The installed Safari's user agent. A plain WKWebView omits the `Version/… Safari/…` tokens,
 /// and sites such as Google then serve a legacy page.

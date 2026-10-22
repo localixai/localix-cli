@@ -15,6 +15,8 @@ use sha2::{Digest, Sha256};
 use crate::{App, auth_page};
 
 const AUTHORIZE_URL: &str = "https://openrouter.ai/auth";
+/// The environment variable a key comes from first.
+pub const KEY_VARIABLE: &str = "OPENROUTER_API_KEY";
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// `<config>/<app slug>/credentials`.
@@ -33,7 +35,7 @@ pub enum KeySource {
 }
 
 pub fn key(app: App) -> Option<(String, KeySource)> {
-    if let Some(key) = std::env::var("OPENROUTER_API_KEY")
+    if let Some(key) = std::env::var(KEY_VARIABLE)
         .ok()
         .filter(|key| !key.trim().is_empty())
     {
@@ -52,7 +54,15 @@ pub fn save(app: App, key: &str) -> std::io::Result<PathBuf> {
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    options.open(&path)?.write_all(key.as_bytes())?;
+    let mut file = options.open(&path)?;
+    // The mode above applies only to a new file: one saved before with wider permissions (by
+    // hand, or under another umask) is narrowed before the key goes in.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    }
+    file.write_all(key.as_bytes())?;
     Ok(path)
 }
 

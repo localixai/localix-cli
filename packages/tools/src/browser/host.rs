@@ -4,7 +4,7 @@
 //! IPC channel, matched by call id and a per-run token the page cannot read.
 
 use std::collections::HashMap;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -16,7 +16,7 @@ use tao::window::WindowBuilder;
 use wry::{NewWindowResponse, PageLoadEvent, WebViewBuilder};
 
 use super::guard::{allowed, token};
-use super::platform::{capture, conceal, keep_rendering, user_agent};
+use super::platform::{conceal, keep_rendering, user_agent};
 use super::viewport::Viewport;
 use super::webview::WebviewDriver;
 use super::{BrowserError, BrowserResult};
@@ -68,8 +68,6 @@ pub(super) enum Cmd {
     Navigate(String),
     /// Reframe the page (`viewport`): width, height.
     Resize(f64, f64),
-    /// A PNG of what the page shows; the reply comes when the WebView has drawn it.
-    Capture(Sender<Result<Vec<u8>, String>>),
     Exit(i32),
 }
 
@@ -78,6 +76,8 @@ pub(super) type Reply = Result<Value, String>;
 /// State the event loop and the worker share.
 pub(super) struct Shared {
     pub token: String,
+    /// Whether the window is open now: the person may close it, and it opens again when needed.
+    pub open: AtomicBool,
     pub next_id: AtomicU64,
     pub pending: Mutex<HashMap<u64, Sender<Reply>>>,
     pub loads: Mutex<Loads>,
@@ -99,6 +99,17 @@ impl Shared {
         if let Some(sender) = self.pending.lock().unwrap().remove(&id) {
             let _ = sender.send(reply);
         }
+    }
+
+    /// The window was closed: every call waiting on it fails now, rather than at its timeout, and
+    /// the load counts start over, so a window opened again waits for its own first document.
+    fn closed(&self) {
+        self.open.store(false, Ordering::SeqCst);
+        for (_, sender) in self.pending.lock().unwrap().drain() {
+            let _ = sender.send(Err(WINDOW_CLOSED.into()));
+        }
+        *self.loads.lock().unwrap() = Loads::default();
+        self.loaded.notify_all();
     }
 
     fn navigation_requested(&self) {
@@ -160,14 +171,20 @@ impl Browser {
 }
 
 /// Take the main thread for the browser's event loop and run `work` on a worker thread with a
-/// handle that opens the window when it is needed. The process exits with the code `work`
-/// returns, or with `closed` when the person closes the window. `headless` is decided here: an
-/// invisible window keeps the app out of the Dock.
-pub fn host<F>(headless: bool, closed: i32, work: F) -> !
+/// handle that opens the window when it is needed. The event loop never returns, so the process
+/// exits here, with the code `work` returns. When the person closes the window, every call waiting
+/// on it fails, `on_close` runs (the app decides what that means for its task), and the window
+/// opens again on its next use. `headless` is decided here: an invisible window keeps the app out
+/// of the Dock.
+pub fn host<F>(headless: bool, on_close: fn(), work: F) -> !
 where
     F: FnOnce(Browser) -> i32 + Send + 'static,
 {
+    // Changed, and `headless` read, on macOS only.
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut event_loop = EventLoopBuilder::<Cmd>::with_user_event().build();
+    #[cfg(not(target_os = "macos"))]
+    let _ = headless;
     // The window never takes the keyboard: the person keeps typing where they were, and their keys
     // never land in the driven page.
     #[cfg(target_os = "macos")]
@@ -181,6 +198,7 @@ where
     let proxy = event_loop.create_proxy();
     let shared = Arc::new(Shared {
         token: token(),
+        open: AtomicBool::new(false),
         next_id: AtomicU64::new(1),
         pending: Mutex::new(HashMap::new()),
         loads: Mutex::new(Loads::default()),
@@ -205,13 +223,16 @@ where
                 ..
             } = event
             {
-                std::process::exit(closed);
+                view = None;
+                shared.closed();
+                on_close();
             }
             return;
         };
         let command = match (command, &view) {
             (Cmd::Open { window, reply }, None) => {
                 let opened = open(&window, target, &shared, proxy.clone());
+                shared.open.store(opened.is_ok(), Ordering::SeqCst);
                 let _ = reply.send(opened.as_ref().map(|_| ()).map_err(String::clone));
                 view = opened.ok();
                 return;
@@ -222,9 +243,9 @@ where
             }
             (Cmd::Exit(code), _) => std::process::exit(code),
             (command, Some(_)) => command,
-            // Nothing to call before the window opens.
+            // A driver exists only once the window opened: with none now, it was closed.
             (Cmd::Call { id, .. } | Cmd::Eval { id, .. }, None) => {
-                shared.answer(id, Err("probe_not_ready: no window yet".into()));
+                shared.answer(id, Err(WINDOW_CLOSED.into()));
                 return;
             }
             (_, None) => return,
@@ -259,7 +280,6 @@ where
                 }
             }
             Cmd::Resize(width, height) => native.set_inner_size(LogicalSize::new(width, height)),
-            Cmd::Capture(reply) => capture(webview, reply),
             Cmd::Navigate(url) => {
                 let _ = webview.load_url(&url);
             }
@@ -274,18 +294,22 @@ pub fn run<F>(window: Window, work: F) -> !
 where
     F: FnOnce(WebviewDriver) -> i32 + Send + 'static,
 {
-    host(window.headless, CLOSED_EXIT, move |browser| {
-        match browser.open(window) {
+    host(
+        window.headless,
+        || std::process::exit(CLOSED_EXIT),
+        move |browser| match browser.open(window) {
             Ok(driver) => work(driver),
             Err(error) => {
                 eprintln!("{error}");
                 ENVIRONMENT_EXIT
             }
-        }
-    })
+        },
+    )
 }
 
 const CLOSED_EXIT: i32 = 130;
+/// The answer to every call while the window is closed.
+pub(super) const WINDOW_CLOSED: &str = "window_closed";
 const ENVIRONMENT_EXIT: i32 = 3;
 
 /// The window and its WebView, shown without taking focus.

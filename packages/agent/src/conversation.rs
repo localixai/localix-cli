@@ -8,7 +8,9 @@ use contracts::tool::ToolOutput;
 
 /// Characters kept before older states are dropped (about 30k tokens).
 const BUDGET: usize = 120_000;
-/// Characters one tool result may take (about 6k tokens).
+/// Characters one tool result may take (about 6k tokens). A last resort only: each tool keeps its
+/// own output under this (a file window, a command's streams), so its paging hints stay true and
+/// the model is never told it saw a whole file whose middle was cut here.
 const MAX_RESULT: usize = 24_000;
 const OMITTED: &str = "(state omitted: a newer result follows)";
 /// What a call left without a result (a run that ended mid-turn) is answered with.

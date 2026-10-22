@@ -63,6 +63,28 @@ fn a_result_too_long_keeps_its_head_and_tail() {
 }
 
 #[test]
+fn a_whole_tool_window_comes_through_unshortened() {
+    // About what a file window or a command's two streams take at most: 20 KB and a header.
+    let window: String = (1..=2000)
+        .map(|n| format!("{n:>6}\t{}\n", "x".repeat(2)))
+        .collect();
+    let report = format!(
+        "src/lib.rs (lines 1-2000 of 2000)\n{window}{}",
+        "y".repeat(3000)
+    );
+    assert!(report.chars().count() > 20_000);
+    let mut conversation = Conversation::new("rules");
+    conversation.result(
+        "1",
+        ToolOutput {
+            report: report.clone(),
+            state: None,
+        },
+    );
+    assert_eq!(results(&conversation), [report]);
+}
+
+#[test]
 fn calls_left_unanswered_are_closed_before_the_conversation_goes_on() {
     let mut conversation = Conversation::new("rules");
     let call = |id: &str| ToolCall {

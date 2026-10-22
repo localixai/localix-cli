@@ -1,0 +1,166 @@
+{
+ "date": "2026-10-22 22:17",
+ "version": "0.1.0 (d4ec6a2+dirty)",
+ "commit": "d4ec6a2",
+ "host": "Darwin 25.6.0 arm64",
+ "models": {
+  "agent": "anthropic/claude-haiku-5.5",
+  "decision": "~typesafe/jev-latest"
+ },
+ "runs": 24,
+ "passed": 24,
+ "median_s": 8.5,
+ "p90_s": 21.2,
+ "cost_per_run": 0.00198,
+ "cli": {
+  "binary_mb": 1.59,
+  "start_ms": 3.8,
+  "rss_mb": 9.6
+ },
+ "tasks": {
+  "sum-csv": {
+   "kind": "code",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 5.7,
+   "agent_s": 5.6,
+   "jev_s": 0.0,
+   "turns": 4.5,
+   "tool_calls": 3.5,
+   "decisions": 0.0,
+   "cost": 0.00065
+  },
+  "fix-test": {
+   "kind": "code",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 6.7,
+   "agent_s": 6.5,
+   "jev_s": 0.0,
+   "turns": 5.5,
+   "tool_calls": 4.5,
+   "decisions": 0.0,
+   "cost": 0.00075
+  },
+  "rename": {
+   "kind": "code",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 4.3,
+   "agent_s": 4.2,
+   "jev_s": 0.0,
+   "turns": 3.0,
+   "tool_calls": 2.0,
+   "decisions": 0.0,
+   "cost": 0.0004
+  },
+  "explain": {
+   "kind": "code",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 5.2,
+   "agent_s": 5.2,
+   "jev_s": 0.0,
+   "turns": 3.5,
+   "tool_calls": 2.5,
+   "decisions": 0.0,
+   "cost": 0.00055
+  },
+  "login": {
+   "kind": "browser",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 6.9,
+   "agent_s": 2.9,
+   "jev_s": 1.4,
+   "turns": 2.0,
+   "tool_calls": 1.0,
+   "decisions": 4.0,
+   "cost": 0.0007
+  },
+  "dynamic": {
+   "kind": "browser",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 28.9,
+   "agent_s": 4.8,
+   "jev_s": 3.5,
+   "turns": 3.0,
+   "tool_calls": 2.0,
+   "decisions": 9.5,
+   "cost": 0.00135
+  },
+  "todomvc": {
+   "kind": "browser",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 10.1,
+   "agent_s": 4.3,
+   "jev_s": 3.3,
+   "turns": 3.0,
+   "tool_calls": 2.0,
+   "decisions": 9.5,
+   "cost": 0.00175
+  },
+  "pizza-form": {
+   "kind": "browser",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 15.1,
+   "agent_s": 6.4,
+   "jev_s": 5.1,
+   "turns": 4.5,
+   "tool_calls": 3.5,
+   "decisions": 14.0,
+   "cost": 0.0025
+  },
+  "wiki-search": {
+   "kind": "browser",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 12.3,
+   "agent_s": 5.3,
+   "jev_s": 2.4,
+   "turns": 3.0,
+   "tool_calls": 2.0,
+   "decisions": 5.5,
+   "cost": 0.00365
+  },
+  "hn-top": {
+   "kind": "browser",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 7.5,
+   "agent_s": 3.9,
+   "jev_s": 0.9,
+   "turns": 2.5,
+   "tool_calls": 2.5,
+   "decisions": 2.0,
+   "cost": 0.00185
+  },
+  "quiz-choose": {
+   "kind": "browser",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 17.8,
+   "agent_s": 4.8,
+   "jev_s": 5.5,
+   "turns": 2.5,
+   "tool_calls": 1.5,
+   "decisions": 15.0,
+   "cost": 0.0044
+  },
+  "flights-search": {
+   "kind": "browser",
+   "runs": 2,
+   "passed": 2,
+   "median_s": 18.2,
+   "agent_s": 4.6,
+   "jev_s": 6.2,
+   "turns": 2.5,
+   "tool_calls": 2.5,
+   "decisions": 17.5,
+   "cost": 0.0052
+  }
+ }
+}

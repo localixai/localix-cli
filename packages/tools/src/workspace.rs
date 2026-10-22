@@ -1,0 +1,202 @@
+//! The directory the coding tools work in. Paths the model writes resolve against its root; a file
+//! may be read anywhere (a dependency's source, a system header), but changed only inside the root,
+//! so a slip in a path never touches the rest of the machine.
+
+use std::io;
+use std::path::{Component, Path, PathBuf};
+
+use contracts::tool::ToolError;
+
+#[derive(Debug, Clone)]
+pub struct Workspace {
+    /// Canonical, so a path is compared with it after symlinks are resolved.
+    root: PathBuf,
+    /// Files and directories no tool may read or change, however they are reached (the app's own
+    /// key and records): canonical where they exist.
+    denied: Vec<PathBuf>,
+}
+
+impl Workspace {
+    /// The workspace at `root`, which must exist.
+    pub fn new(root: impl AsRef<Path>) -> io::Result<Self> {
+        Ok(Self {
+            root: canonical(root.as_ref())?,
+            denied: vec![],
+        })
+    }
+
+    /// The same workspace, with `paths` (and everything under them) off limits to the tools.
+    pub fn denying(mut self, paths: impl IntoIterator<Item = PathBuf>) -> Self {
+        self.denied
+            .extend(paths.into_iter().map(|path| real(&path)));
+        self
+    }
+
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// Where `path` points, for reading: relative to the root, or absolute; `~` is the home
+    /// directory. `.` and `..` are resolved by name, so the result is clean in reports.
+    pub fn readable(&self, path: &str) -> Result<PathBuf, ToolError> {
+        let path = path.trim();
+        if path.is_empty() {
+            return Err(ToolError::Failed("the path is empty".into()));
+        }
+        let given = home(path).unwrap_or_else(|| PathBuf::from(path));
+        let wanted = normal(&self.root.join(given));
+        if !self.denied.is_empty() {
+            // Where it really is: a symlink to a denied file is denied too.
+            let real = real(&wanted);
+            if self.denied.iter().any(|denied| real.starts_with(denied)) {
+                return Err(ToolError::Failed(format!(
+                    "{} is off limits to the tools",
+                    wanted.display()
+                )));
+            }
+        }
+        Ok(wanted)
+    }
+
+    /// Where `path` points, for changing: as [`Self::readable`], but only inside the root once
+    /// symlinks are followed. The result is the real location, so a write through a symlink lands
+    /// on its target instead of replacing the link.
+    pub fn writable(&self, path: &str) -> Result<PathBuf, ToolError> {
+        let wanted = self.readable(path)?;
+        let real = real(&wanted);
+        if !real.starts_with(&self.root) {
+            return Err(ToolError::Failed(format!(
+                "{} is outside the workspace {}: files are changed only inside it",
+                wanted.display(),
+                self.root.display()
+            )));
+        }
+        Ok(real)
+    }
+
+    /// `path` as a report shows it: relative to the root when inside it, else as it is.
+    pub fn shown(&self, path: &Path) -> String {
+        match path.strip_prefix(&self.root) {
+            Ok(inside) if inside.as_os_str().is_empty() => ".".into(),
+            Ok(inside) => inside.display().to_string(),
+            Err(_) => path.display().to_string(),
+        }
+    }
+}
+
+/// `~` or `~/rest` in the home directory, when it is known.
+fn home(path: &str) -> Option<PathBuf> {
+    let rest = path.strip_prefix('~')?;
+    if !(rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\')) {
+        return None;
+    }
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+    Some(PathBuf::from(home).join(rest.trim_start_matches(['/', '\\'])))
+}
+
+/// `path` with `.` dropped and each `..` taking off the name before it, without touching the disk.
+fn normal(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// `path` with its deepest existing ancestor canonicalized: symlinks on the way are followed, and
+/// the names that do not exist yet (a file to create) are kept as they are.
+fn real(path: &Path) -> PathBuf {
+    let mut existing = path.to_path_buf();
+    let mut missing = vec![];
+    loop {
+        if let Ok(canonical) = canonical(&existing) {
+            return missing
+                .iter()
+                .rev()
+                .fold(canonical, |acc: PathBuf, name| acc.join(name));
+        }
+        match (existing.file_name(), existing.parent()) {
+            (Some(name), Some(parent)) => {
+                missing.push(name.to_os_string());
+                existing = parent.to_path_buf();
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
+}
+
+/// `path` canonicalized, as a person writes it. On Windows, `canonicalize` returns a verbatim path
+/// (`\\?\C:\...`), which cmd.exe cannot use as its directory (it falls back to C:\Windows) and
+/// which reads oddly in every report; it is turned back into the plain form when that means the
+/// same file, as the `dunce` crate does.
+fn canonical(path: &Path) -> io::Result<PathBuf> {
+    path.canonicalize().map(|path| plain(&path))
+}
+
+#[cfg(not(windows))]
+fn plain(path: &Path) -> PathBuf {
+    path.to_path_buf()
+}
+
+#[cfg(windows)]
+fn plain(path: &Path) -> PathBuf {
+    path.to_str()
+        .and_then(unverbatim)
+        .map_or_else(|| path.to_path_buf(), PathBuf::from)
+}
+
+/// `\\?\C:\rest` as `C:\rest`, and `\\?\UNC\server\share` as `\\server\share`, when the plain
+/// form names the same file: shorter than MAX_PATH, and with no name Windows reads otherwise (a
+/// device such as `NUL`, a trailing dot or space). `None` keeps the verbatim form.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn unverbatim(path: &str) -> Option<String> {
+    const MAX_PATH: usize = 260;
+    let rest = path.strip_prefix(r"\\?\")?;
+    let (plain, names) = match rest.strip_prefix(r"UNC\") {
+        Some(share) => (format!(r"\\{share}"), share),
+        None => {
+            let drive = rest.as_bytes();
+            let lettered = drive.len() >= 3
+                && drive[0].is_ascii_alphabetic()
+                && drive[1] == b':'
+                && drive[2] == b'\\';
+            if !lettered {
+                return None;
+            }
+            (rest.to_string(), &rest[3..])
+        }
+    };
+    let ordinary = names
+        .split('\\')
+        .filter(|name| !name.is_empty())
+        .all(ordinary);
+    (plain.len() < MAX_PATH && ordinary).then_some(plain)
+}
+
+/// A file name that means itself outside a verbatim path.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn ordinary(name: &str) -> bool {
+    if name.ends_with(['.', ' ']) || name.contains(['/', ':', '*', '?', '"', '<', '>', '|']) {
+        return false;
+    }
+    let stem = name.split('.').next().unwrap_or(name).trim_end();
+    let stem = stem.to_ascii_uppercase();
+    let numbered = stem.len() == 4
+        && (stem.starts_with("COM") || stem.starts_with("LPT"))
+        && stem.as_bytes()[3].is_ascii_digit();
+    !numbered
+        && !matches!(
+            stem.as_str(),
+            "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+        )
+}
+
+#[cfg(test)]
+#[path = "workspace_tests.rs"]
+mod tests;

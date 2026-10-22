@@ -1,6 +1,6 @@
 [package]
 name = "contracts"
-description = "lxsurf's contracts: the view protocol, the model ports, the hands port, the history port"
+description = "lxsurf's contracts: the chat-model, tool, gate, view, decision-model, hands and history ports"
 publish = false
 version.workspace = true
 edition.workspace = true

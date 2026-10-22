@@ -1,6 +1,6 @@
 [package]
 name = "session"
-description = "A history store: sessions of goals as JSON files"
+description = "A history store: sessions of tasks as JSON files"
 publish = false
 version.workspace = true
 edition.workspace = true

@@ -1,102 +1,90 @@
 [
  {
+  "id": "sum-csv",
+  "kind": "code",
+  "fixture": "sum-csv",
+  "goal": "Write a Python script total.py (standard library only) that prints the sum of the amount column in sales.csv. Run it and tell me the total.",
+  "contains": ["599.95"],
+  "check": "python3 total.py | grep -q '599\\.95'"
+ },
+ {
+  "id": "fix-test",
+  "kind": "code",
+  "fixture": "fix-test",
+  "goal": "The unit tests in this directory fail (python3 -m unittest). Find the bug and fix it in the code, not in the tests, then run the tests again.",
+  "check": "python3 -m unittest -q && cmp -s test_stats.py \"$FIXTURE/test_stats.py\""
+ },
+ {
+  "id": "rename",
+  "kind": "code",
+  "fixture": "rename",
+  "goal": "Rename the function area_of_circle to circle_area everywhere in this project, then run python3 report.py to make sure it still works.",
+  "check": "! grep -rq --include='*.py' area_of_circle . && grep -q 'def circle_area' geometry.py && python3 report.py | grep -q 'circle: 78.54'"
+ },
+ {
+  "id": "explain",
+  "kind": "code",
+  "fixture": "explain",
+  "goal": "Without changing any file: which port does server.py use when APP_PORT is not set, and how many times does connect() retry after its first failed attempt? Answer with both numbers.",
+  "contains": ["8417"],
+  "matches": ["\\b(6|six)\\b"],
+  "check": "diff -r -x __pycache__ \"$FIXTURE\" ."
+ },
+ {
   "id": "login",
-  "goal": "Open https://the-internet.herokuapp.com/login and: log in with username \"tomsmith\" and password \"SuperSecretPassword!\"",
-  "expect": [
-   "The page says You logged into a secure area"
-  ]
- },
- {
-  "id": "dropdown",
-  "goal": "Open https://the-internet.herokuapp.com/dropdown and: select Option 2 in the dropdown.",
-  "expect": [
-   "Option 2 is the selected value of the dropdown"
-  ]
- },
- {
-  "id": "checkboxes",
-  "goal": "Open https://the-internet.herokuapp.com/checkboxes and: make sure both checkboxes are checked.",
-  "expect": [
-   "Both checkboxes are checked"
-  ]
- },
- {
-  "id": "add-remove",
-  "goal": "Open https://the-internet.herokuapp.com/add_remove_elements/ and: add three elements, then delete one of them.",
-  "expect": [
-   "There are exactly two Delete buttons on the page"
-  ]
+  "kind": "browser",
+  "goal": "Open https://the-internet.herokuapp.com/login and log in with username \"tomsmith\" and password \"SuperSecretPassword!\". Tell me the message the page shows after logging in.",
+  "contains": ["secure area"]
  },
  {
   "id": "dynamic",
-  "goal": "Open https://the-internet.herokuapp.com/dynamic_loading/1 and: start the loading and wait until it finishes.",
-  "expect": [
-   "The page shows the text Hello World!"
-  ]
+  "kind": "browser",
+  "goal": "Open https://the-internet.herokuapp.com/dynamic_loading/1, start the loading and wait until it finishes. What text appears?",
+  "contains": ["Hello World"]
  },
  {
   "id": "todomvc",
-  "goal": "Open https://todomvc.com/examples/react/dist/ and: add three todos: \"buy milk\", \"walk the dog\", \"write code\". Then mark walk the dog as completed.",
-  "expect": [
-   "The todo list has buy milk, walk the dog and write code",
-   "walk the dog is marked completed and 2 items are left"
-  ]
+  "kind": "browser",
+  "goal": "Open https://todomvc.com/examples/react/dist/ and add three todos: \"buy milk\", \"walk the dog\", \"write code\". Then mark walk the dog as completed and tell me how many items are left.",
+  "matches": ["\\b(2|two)\\b"]
  },
  {
   "id": "pizza-form",
-  "goal": "Open https://httpbin.org/forms/post and: order a large pizza with bacon and extra cheese for customer \"Ada Lovelace\", phone \"555-0100\", email \"ada@example.com\", preferred delivery time \"19:30\", then submit the order.",
-  "expect": [
-   "The page shows submitted form data where custname is Ada Lovelace",
-   "The submitted data has size large and toppings bacon and cheese"
-  ]
+  "kind": "browser",
+  "goal": "Open https://httpbin.org/forms/post and order a large pizza with bacon and extra cheese for customer \"Ada Lovelace\", phone \"555-0100\", email \"ada@example.com\", preferred delivery time \"19:30\", then submit the order. Report the customer name, size and toppings the server received.",
+  "contains": ["Ada Lovelace", "large", "bacon", "cheese"]
  },
  {
   "id": "wiki-search",
-  "goal": "Open https://en.wikipedia.org/wiki/Main_Page and: search Wikipedia for \"Rust programming language\" and open its article.",
-  "expect": [
-   "The page is the Wikipedia article about the Rust programming language"
-  ]
- },
- {
-  "id": "ddg-type",
-  "goal": "Open https://duckduckgo.com/ and: search for \"rust borrow checker explained\", then open the first search result.",
-  "expect": [
-   "The current page is not a DuckDuckGo page"
-  ]
+  "kind": "browser",
+  "goal": "Open https://en.wikipedia.org/wiki/Main_Page, search Wikipedia for \"Rust programming language\" and open its article. Who designed the language, according to the article?",
+  "contains": ["Graydon Hoare"]
  },
  {
   "id": "hn-top",
-  "goal": "Open https://news.ycombinator.com and: open the comments page of the top story.",
-  "expect": [
-   "The page is a Hacker News comments page for a story"
-  ]
+  "kind": "browser",
+  "goal": "Open https://news.ycombinator.com and open the comments page of the top story. Give its title and the address of the comments page.",
+  "schema": {
+   "type": "object",
+   "properties": {"title": {"type": "string"}, "comments_url": {"type": "string"}},
+   "required": ["title", "comments_url"]
+  },
+  "contains": ["news.ycombinator.com/item?id="]
  },
  {
   "id": "quiz-choose",
-  "goal": "Open https://www.w3schools.com/quiztest/quiztest.asp?qtest=JS and: accept the cookie banner, then choose the answer \"<script>\" and click Next.",
-  "expect": [
-   "The page shows question 2 of the quiz"
-  ]
- },
- {
-  "id": "quiz-wait",
-  "goal": "Open https://www.w3schools.com/quiztest/quiztest.asp?qtest=JS and: accept the cookie banner, select the radio \"<script>\" and click \"Next\", then wait for the next question to appear.",
-  "expect": [
-   "The page shows question 2 of the quiz"
-  ]
- },
- {
-  "id": "quiz-three",
-  "goal": "Open https://www.w3schools.com/quiztest/quiztest.asp?qtest=JS and: accept the cookie banner, then answer the first three questions: for each, choose an answer and click Next.",
-  "expect": [
-   "The page shows question 4 of the quiz"
-  ]
+  "kind": "browser",
+  "goal": "Open https://www.w3schools.com/quiztest/quiztest.asp?qtest=JS, accept the cookie banner, choose the answer \"<script>\" and click Next. Which question does the quiz show now?",
+  "matches": ["\\b2 of 25\\b|question (no\\.? ?|number |#)?2\\b"]
  },
  {
   "id": "flights-search",
-  "goal": "Open https://www.google.com/travel/flights?hl=en and: search one-way flights from \"Zurich\" to \"London\" on \"Nov 20\".",
-  "expect": [
-   "The page shows flight results from Zurich to London"
-  ]
+  "kind": "browser",
+  "goal": "Open https://www.google.com/travel/flights?hl=en and search one-way flights from \"Zurich\" to \"London\" on \"Nov 20\". Give the cheapest price shown and its airline.",
+  "schema": {
+   "type": "object",
+   "properties": {"price": {"type": "string"}, "airline": {"type": "string"}},
+   "required": ["price", "airline"]
+  }
  }
 ]

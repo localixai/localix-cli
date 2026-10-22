@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Something a decision model can see and act on: a page, a screen.
+/// Something a decision model can see and act on: a document, a screen.
 pub trait View {
     /// How the view's world behaves, where it is not obvious (how its forms or menus work).
     fn conventions(&self) -> &str {
@@ -13,22 +13,6 @@ pub trait View {
     fn observe(&self) -> ViewResult<Observation>;
     /// Perform `action` against the observation with `epoch`, then let the view settle.
     fn act(&self, epoch: &str, action: &Action) -> ViewResult<()>;
-    /// Everything readable, beyond what is in view: what expectations are judged on.
-    fn content(&self) -> ViewResult<String> {
-        self.observe().map(|observation| observation.text)
-    }
-    /// A picture of what the view shows, for the person; `None` from a view that cannot take one.
-    fn capture(&self) -> ViewResult<Option<Capture>> {
-        Ok(None)
-    }
-}
-
-/// A picture of a view.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Capture {
-    /// `image/png`.
-    pub mime: &'static str,
-    pub bytes: Vec<u8>,
 }
 
 /// One atomic read of what the view shows: the controls one can see and use, and the text around.

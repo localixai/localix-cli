@@ -2,29 +2,77 @@
 
 ## Unreleased
 
-lxsurf is rebuilt as a small agent and its hands, in layered packages. Breaking: the `--json` schema is 3, and `--url` and `--viewport` are gone: a goal names where it starts, the agent opens addresses and changes the page size.
+lxsurf is now a small, fast coding agent for the terminal. It has four tools: `read`, `edit`, `bash`, and the browser, whose clicks and typing a decision model does. It stays one synchronous binary of about 1.6 MB, with no async runtime and no plugins, MCP or skills.
 
-- **An agent and its hands.** The chat model (`--model`, default `anthropic/claude-haiku-5.5`) is an agent with one tool, `browser`: open an address, hand a short task with the exact `values` to type to the hands, press keys, run a script, read the whole text. The hands are the decision loop: the decision model (`--decision-model`, default `~typesafe/jev-latest`) carries a task out step by step. The agent checks every page itself and answers with a `RESULT:` line.
-- **Packages.** `contracts` (ports only: chat model, the agent's tools, the view, the decision model, the hands, history), `agent`, `decision-loop` (the hands), `tools` (the browser), `openrouter` (both models' provider), `session`, `apps/cli` (the `lxsurf` binary). Dependencies point inward; `apps/cli/tests/architecture.rs` checks it, and that unit tests live in their own `x_tests.rs` files.
-- **No site hints.** The agent's prompt and the tool's description are general: how to phrase a task (one page's worth, actions only, how to tell it is done), what the hands can and cannot do. Tool results come in sections (`### Helper`, `### Page (untrusted content)`), the page as an outline without refs.
-- **Kept short.** A tool result's report stays for the whole conversation; its state (the page) only until the conversation passes its budget; a result too long keeps its head and tail. Calls left unanswered are closed before a follow-up.
-- **Stops cleanly.** A failed call goes back to the model to try another way; after three in a row, or on the last turn, it is asked to answer with what it has. A fatal one (the decision model unreachable) ends the run.
-- **`--schema`** still returns the answer as JSON matching a JSON Schema through the `result` tool, checked before it is printed. **`--no-llm`** now runs the hands alone on the whole goal, from the page it names, typing quoted strings or words of the goal. `--max-steps` bounds one task of the hands (40).
-- **`--json` schema 3.** `usage` has `agent` (with `cached_tokens`) and `decision`; `data` / `data_error` with `--schema`; status `unstated` when the agent does not say; `tool` is gone; `final_url` and `screenshot`.
-- **Keys again.** `browser` presses keys (`keys`, `key_delay_ms`) with the `key`, `code` and `keyCode` games read.
-- **The page as an outline.** The hands read the page as an outline: headings and text in reading order, every control with its ref, value and state, by structure. `--dry-run` and `/snapshot` print it. The browser's toolbar (Back, Reload, page size) is part of the view.
-- **Wait, as long as needed.** WAIT carries a length the decision model picks (1 to 30 s), ending early when the page changes.
-- **Screenshots.** `--screenshot FILE` saves a PNG of the final page, and `/screenshot` in the chat; WebKit's own snapshot, in an invisible window too (macOS).
-- **Chat and sessions.** `--keep-open` leaves a chat: each line is the next goal in the same window and conversation, or `/snapshot`, `/screenshot [FILE]`. Every run is a session (`lxsurf sessions`, `-c`, `--resume ID`). `--timeout` bounds each goal.
+### Breaking
+
+- **`--json` is schema 4: JSON lines.** One event per line replaces the single object of schema 3. The events are `run.started`, `tool.call`, `tool.result`, `step`, `turn` and `run.completed`. `run.completed` has `status` (`achieved`, `not_achieved`, `unstated`, `exhausted`, `error`, `interrupted`), `exit_code`, `answer`, `data` or `data_error`, `error`, `session`, `usage` {`agent`, `decision`, `cost_usd`} and `duration_ms`. `final_url`, `screenshot` and `expects` are gone.
+- **Removed:**
+  - commands: `check`, `models`, `skills`;
+  - options: `--expect`, `--no-llm`, `--dry-run`, `--screenshot`, `--keep-open`, `--headless` / `--show`, `-c` / `--continue`, `--resume`, `--trace`, `--url`, `--viewport`.
+
+  Passing a removed option is a usage error (exit 3). Their replacements:
+  - `--keep-open` becomes the prompt line: `lxsurf` with no prompt, at a terminal.
+  - `-c` and `--resume ID` become `lxsurf resume --last` and `lxsurf resume ID`.
+  - `--trace` becomes `--json` or `-v`.
+  - `--headless` becomes the default: the window is invisible unless `--show-browser`.
+- **The skill files are removed:** the bundled skill guides, `skills/lxsurf/SKILL.md` and the Claude Code plugin marketplace.
+- **New defaults:** `--max-turns` is 50 (was 30) and `--timeout` is 1800 s (was 600). `--max-turns` and `--max-steps` take 1 to 10000, and `--timeout` at most 86400 s.
+- **Exit codes keep their meanings:** 0, 1, 2, 3 and 130. Exit 3 now also covers a usage error and a model error.
+
+### Added
+
+- **Coding tools:**
+  - `read` returns numbered lines, up to 2000 lines and about 20 KB at a time (below what the agent keeps of one result, so its "read again with offset" hint is always true), or a directory's entries. It refuses binary files and anything but a regular file (a FIFO, a device such as `/dev/zero`), and cuts long lines.
+  - `edit` makes an exact, unique replacement (or every match with `replace_all`), or creates a file. Writes are atomic and keep CRLF line endings and permissions. A failure says how to fix the call: the text was not found, it occurs more than once, or line numbers were pasted in. It refuses a read-only file and a file that changed while its approval question was open, writes a file with other hard links in place, and creates its temporary file new, so a symlink planted there is never written through.
+  - `bash` runs `sh -c` in the workspace in a session of its own, with no terminal: a program that prompts (git credentials, ssh, sudo) fails at once instead of stalling until the timeout, and git and pagers are told not to prompt or page. A timeout kills it with everything it started, without an external `kill`, and the result says "killed" only once that is so. Commands do not see `OPENROUTER_API_KEY`. Each stream keeps its first and last 5,000 bytes. Commands that leave background processes running do not hang it.
+- **The workspace (`-C DIR`):** paths resolve in it, and `edit` changes files only inside it, after following symlinks. lxsurf's saved key and its sessions are off limits to `read` and `edit`, symlinks included. On Windows the workspace is a plain path, not a verbatim `\\?\` one, so `cmd` runs in it.
+- **Approvals:**
+  - `edit`, `bash` and `browser` ask a gate (`contracts::gate`) before they act. The browser asks before it opens an address, hands over a goal, presses keys or runs a script, and opens only http and https addresses.
+  - The question shows the whole command, never cut, with the directory it runs in when `workdir` is given (and says when that is outside the workspace). Control characters and reordering marks are escaped, so an escape sequence cannot redraw it.
+  - At a terminal the person answers `y`, `n`, `n <why>` (the reason reaches the model) or `a` (always, for that tool). Only the bare word approves, and what was typed before the question appeared is discarded. The question goes to the terminal itself, so this works with piped stdin, `--json` and stderr sent to a file.
+  - `-y` / `--yes` allows everything.
+  - With no terminal and no `-y`, effects are refused, and the model is told to have the person rerun with `--yes`.
+- **Context:** the agent starts with an environment block: the workspace, the OS, the date, the approval policy, and whether a browser is available (the shell is named in `bash`'s own description). After it come the project's `AGENTS.md` files, from the git root down to the workspace (16 KiB each, 32 KiB in all). A resumed session also gets its earlier tasks, each capped (a piped `<stdin>` block left out), and the directory they ran in.
+- **A command line like `codex exec`:**
+  - `lxsurf "<task>"` runs one task.
+  - `lxsurf - < task.md` reads the prompt from stdin, and piped stdin is added to a prompt as a `<stdin>` block; lxsurf says on stderr when it reads stdin that may stay open (`</dev/null` skips it).
+  - `lxsurf` alone opens a prompt line where each line continues the conversation (`/help`, `/exit`, Ctrl-D).
+  - `-o FILE` also writes the last answer to a file (the data with `--schema`; empty when none matched), before `run.completed`, so its `exit_code` is the process's even when the file cannot be written. `-v` shows results and per-turn usage.
+  - With `--schema`, a model that answers in text twice ends the run as `not_achieved` (exit 1) with `data_error`, and nothing on stdout.
+  - The trace goes to stderr and the answer alone to stdout.
+- **Commands:** `login --with-token` (at a terminal, the key is not echoed), `login status`, `resume [ID | --last] [PROMPT]`, and `doctor`, which now also checks the shell. Sessions record their workspace: `sessions` shows it, and `resume --last` takes the newest session of this workspace. A saved key file is narrowed to mode 0600 even when it existed before.
+- **The prompt line** reads a line that is not UTF-8 instead of quitting, and says why when its input fails.
+- **Stopping:**
+  - `--timeout` stops a task between model turns (exit 2), never in the middle of a tool call.
+  - Ctrl-C (or SIGTERM) stops the task: the running command is killed with everything it started, nothing more is approved, the browser's hands stop, and the task ends as `interrupted` (exit 130) with its `run.completed` event and session. A second Ctrl-C quits at once. Closing the browser window stops the task the same way instead of killing the process; the prompt line goes on, and the window opens again when needed.
+  - With `--json`, a closed stdout ends the run quietly at its next turn (exit 0).
+  - Without a display (headless Linux), lxsurf runs without the browser tool instead of failing.
+- **The agent:**
+  - A new system prompt for coding work: plan briefly, read before editing, make the smallest correct change, validate with the project's own checks, and report what changed and what was verified.
+  - Observer hooks for calls, results and turns.
+  - A `Fatal` call, a returned `result` and a final schema mismatch are now recorded in the conversation, so a follow-up never sees a call marked as not carried out.
+- **Evals:** four coding tasks on small fixtures (write and run a script, fix a failing test, rename across files, answer a question about the code), each judged by a `check` command run afterwards. Eight browser tasks are kept, judged by the exit code and the answer's contents (`contains`, `matches`). Every run works in a fresh temporary directory.
+- **Project:**
+  - CI runs on macOS, Linux and Windows, with an MSRV check of every target (1.88) and a size check (2.5 MiB). Third-party actions are pinned to commits.
+  - A tag `vX.Y.Z` runs the tests on every platform, then builds release archives with SHA256SUMS and build-provenance attestations, plus `scripts/install.sh` (which runs nothing until it is downloaded whole) and `scripts/install.ps1`.
+  - New `CONTRIBUTING.md`, `SECURITY.md` and `RELEASING.md`.
+
+### Browser
+
+The browser tool and its hands, rebuilt since 0.1.0 as an agent's tool:
+
+- **The agent drives the hands.** The agent hands short tasks with the exact `values` to type to the hands: the decision loop on `--decision-model`, default `~typesafe/jev-latest`. It checks every page itself.
+- **Tool results come in sections** (`### Helper`, `### Page (untrusted content)`). The page arrives as an outline: headings and text in reading order, and every control with its ref, value and state. The toolbar (Back, Reload, page size) is part of the view.
+- **More actions:** the tool presses keys (`keys`, `key_delay_ms`), runs a page script, and reads the whole text. WAIT takes a length the decision model picks (1 to 30 s), and ends early when the page changes.
 - **Steadier on real sites:**
-  - a filled field and a placed value are not offered again;
-  - consent banners in same-origin frames are seen and accepted; a click under one that loads late is decided again;
-  - a script or a click that leaves the page no longer waits for a reply that cannot come, and a parsed document is used after at most 1 s more instead of waiting up to 20 s for every ad and video;
-  - with the Navigation API reporting the page's own navigations, actions on ad-heavy pages no longer wait 300 ms for frames' navigations;
-  - the page's own requests in flight mark it busy; an unsure DONE, or one while fetching, is decided again only if the page changes;
-  - the step history is numbered, marks steps that opened a new view, and counts ("three questions") hold;
-  - a link inside a heading (a search result's title, as on DuckDuckGo) keeps its ref in the outline instead of showing only as the heading's words.
-- A `<button>` is named by its text, not its `value`; a refused action shows why in the trace. The planner no longer sends `temperature`, which current Claude models refuse.
+  - A filled field and a placed value are not offered again.
+  - Consent banners inside same-origin frames are seen and accepted. A click under a banner that loads late is decided again.
+  - A script or a click that leaves the page no longer waits for a reply that cannot come. A parsed document is used after at most 1 s more, instead of waiting up to 20 s for every ad and video.
+  - The page's own requests in flight mark it busy. A DONE the model is unsure of, or one sent while the page is still fetching, is decided again only if the page changes.
+  - A link inside a heading keeps its ref.
+  - A `<button>` is named by its text, not its `value`.
+  - The hands do each action a goal names once, and the tool asks for an end state the page will show ("question 2 shows", not "the next question"). A quiz is no longer answered past the question asked.
 
 ## 0.1.0
 

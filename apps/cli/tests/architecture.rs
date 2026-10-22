@@ -98,10 +98,13 @@ const TOOL_WORDS: &[&str] = &[
     "browser",
     "webview",
     "web page",
+    "page",
     "openrouter",
     "jev",
     "url",
     "html",
+    "bash",
+    "sh -c",
 ];
 
 #[test]

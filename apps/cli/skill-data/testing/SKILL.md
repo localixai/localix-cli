@@ -5,11 +5,10 @@ description: Writing end-to-end checks in plain words with decision-loop check a
 
 # decision-loop for tests
 
-A check is a goal plus statements that must hold afterwards. decision-loop drives the page, then judges each statement against the final page.
+A check is a goal plus statements that must hold afterwards. The goal names the page it starts on; decision-loop drives it, then judges each statement against the final page.
 
 ```bash
-decision-loop check 'Sign up with email "ada@example.com" and password "Str0ng!pass"' \
-  --url http://localhost:3000/signup \
+decision-loop check 'On http://localhost:3000/signup sign up with email "ada@example.com" and password "Str0ng!pass"' \
   --expect "The page welcomes ada@example.com" \
   --expect "No error message is shown"
 # PASS            (exit 0)
@@ -29,7 +28,7 @@ Spawn the binary and assert on the exit code; keep `--json` output as the failur
 import { spawnSync } from 'node:child_process'
 
 test('checkout works', () => {
-  const run = spawnSync('decision-loop', ['check', 'Buy the cheapest T-shirt in size "M"', '--url', 'http://localhost:3000',
+  const run = spawnSync('decision-loop', ['check', 'On http://localhost:3000 buy the cheapest T-shirt in size "M"',
     '--expect', 'The order confirmation page is shown', '--json'], { encoding: 'utf8', timeout: 300_000 })
   expect(run.status, run.stdout).toBe(0)
 })
@@ -40,7 +39,7 @@ test('checkout works', () => {
 import json, subprocess
 
 def test_login():
-    run = subprocess.run(["decision-loop", "check", 'Log in with username "demo" and password "demo"', "--url", "http://localhost:8000",
+    run = subprocess.run(["decision-loop", "check", 'On http://localhost:8000 log in with username "demo" and password "demo"',
                           "--expect", "The dashboard is shown", "--json"], capture_output=True, text=True)
     assert run.returncode == 0, json.loads(run.stdout)["answer"]
 ```
@@ -49,7 +48,7 @@ def test_login():
 
 ```yaml
 # GitHub Actions
-- run: decision-loop check "Open the pricing page and read the Pro plan price" --url "$PREVIEW_URL" --expect "The Pro plan price is shown"
+- run: decision-loop check "On $PREVIEW_URL open the pricing page" --expect "The Pro plan price is shown"
   env:
     OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 ```

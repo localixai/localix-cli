@@ -1,4 +1,4 @@
-//! Without a chat model, the decision model still needs strings to type. Code finds candidates in
+//! The decision model types only strings it is offered. Code finds candidates in
 //! the goal and the decision model picks one: what it
 //! types is always a verbatim span of the goal.
 

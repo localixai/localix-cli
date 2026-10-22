@@ -3,7 +3,7 @@
 # Packages and apps, dependencies pointing inward only (AGENTS.md, rules L1-L5):
 #   packages/agent          contracts: the tool protocol, the decision-model port, the history port
 #   packages/decision-loop  the loop: picks a tool for a goal and drives it with a decision model
-#   packages/browser        a tool: a native WebView window
+#   packages/tools          the tools: a native browser window
 #   packages/openrouter     a decision-model provider: OpenRouter's decision models, sign-in
 #   packages/session        a history store: sessions as JSON files
 #   apps/cli                the `decision-loop` binary: composes the packages
@@ -20,9 +20,9 @@ license = "MIT"
 [workspace.dependencies]
 agent = { path = "packages/agent" }
 decision-loop = { path = "packages/decision-loop" }
-browser = { path = "packages/browser" }
 openrouter = { path = "packages/openrouter" }
 session = { path = "packages/session" }
+tools = { path = "packages/tools" }
 base64 = "0.23.1"
 block2 = "0.6"
 clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }

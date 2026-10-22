@@ -44,6 +44,8 @@ pub struct AskInput<'a> {
     pub view: &'a Observation,
     pub values: &'a [String],
     pub history: &'a [GoalStep],
+    /// The other tools the goal could move to: (name, description).
+    pub others: &'a [(String, String)],
 }
 
 /// The request, plus what each head offered so the answer can be read back.
@@ -110,6 +112,8 @@ fn operations_now(
                     recent.len() == 3 && recent.iter().all(|step| step.operation.scroll());
                 !(repeated || scrolling)
             }
+            // Another tool is a control to click (see `tool_controls`), not an operation to name.
+            Operation::Switch => false,
             _ => true,
         })
         .collect()
@@ -152,13 +156,53 @@ fn entries(elements: &[&Element], values: &[String]) -> Vec<(String, String, Str
 
 const MAX_ENTRIES: usize = 80;
 
+/// The ref prefix of the controls that move the goal to another tool.
+const SWITCH_REF: &str = "switch:";
+
+/// The other tools as controls beside the view's own: clicking one goes on there, from where this
+/// view is. A model picks a visible control far more readily than an abstract operation.
+fn tool_controls(others: &[(String, String)]) -> Vec<Element> {
+    others
+        .iter()
+        .map(|(name, description)| Element {
+            reference: format!("{SWITCH_REF}{name}"),
+            role: "tool".into(),
+            name: format!("{name}: {description}"),
+            value: None,
+            states: vec![],
+            editable: false,
+            dialog: false,
+            options: vec![],
+        })
+        .collect()
+}
+
+/// The outline, with the other tools after it.
+fn with_tools(outline: &str, tools: &[Element]) -> String {
+    if tools.is_empty() {
+        return outline.to_string();
+    }
+    let mut out = format!("{outline}\n- other tools (go on there, from this place)");
+    for tool in tools {
+        out.push_str(&format!(
+            "\n  - {} [ref={}]",
+            tool.describe(),
+            tool.reference
+        ));
+    }
+    out
+}
+
 /// The waits the model can choose, in seconds; each ends early when the view changes.
 const WAITS: [&str; 7] = ["1", "2", "3", "5", "10", "20", "30"];
 /// A WAIT whose length the model did not name.
 const DEFAULT_WAIT: &str = "2";
 
 pub fn ask(input: &AskInput) -> Ask {
-    let elements = in_scope(&input.view.elements);
+    let switches = tool_controls(input.others);
+    let mut elements = in_scope(&input.view.elements);
+    let dialog_open = elements.len() != input.view.elements.len();
+    elements.extend(switches.iter());
     let typing = entries(&elements, input.values);
     let operations = operations_now(
         &elements,
@@ -275,11 +319,11 @@ pub fn ask(input: &AskInput) -> Ask {
     } else {
         json!({
             "goal": goal,
-            "view": {"location": input.view.location, "title": input.view.title, "outline": input.view.outline},
+            "view": {"location": input.view.location, "title": input.view.title, "outline": with_tools(&input.view.outline, &switches)},
             "recent_actions": recent,
         })
     };
-    if elements.len() != input.view.elements.len() {
+    if dialog_open {
         state["dialog_open"] = json!(true);
     }
     Ask {
@@ -312,12 +356,15 @@ impl Ask {
         };
         match operation {
             Operation::Click => {
-                pick.reference = Some(
-                    head("click_target")
-                        .ok_or("no offered element to click")?
-                        .0
-                        .to_string(),
-                );
+                let target = head("click_target").ok_or("no offered element to click")?.0;
+                match target.strip_prefix(SWITCH_REF) {
+                    // Clicking another tool moves the goal there.
+                    Some(tool) => {
+                        pick.operation = Operation::Switch;
+                        pick.value = Some(tool.to_string());
+                    }
+                    None => pick.reference = Some(target.to_string()),
+                }
             }
             Operation::Wait => {
                 pick.value = Some(

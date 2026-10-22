@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use agent::tool::{Action, Capture, Observation, Tool, ToolError, ToolResult};
 
-use crate::start::{SEARCH_PAGE, url_in};
-use crate::{Browser, Driver, Viewport, WebviewDriver, Window};
+use super::start::{SEARCH_PAGE, url_in};
+use super::{Browser, Driver, Viewport, WebviewDriver, Window, toolbar};
 
 /// How web pages behave where it is not obvious: forms, suggestions, date pickers, results.
 const CONVENTIONS: &str = "A form sends only once its required fields are filled and its Search, \
@@ -24,26 +24,42 @@ const CONTENT_LIMIT: usize = 4000;
 
 pub struct BrowserTool {
     browser: Browser,
-    /// Where the first goal starts when it names no site (`--url`).
-    start_page: Option<String>,
     headless: bool,
-    viewport: Viewport,
+    /// The page size the toolbar shows (`desktop`, `tablet`, `mobile`).
+    size: Mutex<String>,
     driver: Mutex<Option<WebviewDriver>>,
 }
 
 impl BrowserTool {
-    pub fn new(
-        browser: Browser,
-        start_page: Option<String>,
-        headless: bool,
-        viewport: Viewport,
-    ) -> Self {
+    pub fn new(browser: Browser, headless: bool) -> Self {
         Self {
             browser,
-            start_page,
             headless,
-            viewport,
+            size: Mutex::new("desktop".into()),
             driver: Mutex::new(None),
+        }
+    }
+
+    /// A toolbar control: back, reload, or a page size.
+    fn toolbar(&self, action: &Action) -> ToolResult<()> {
+        let driver = self.driver()?;
+        match action {
+            Action::Click { reference } if reference == toolbar::BACK => {
+                driver.evaluate("history.back()").map(|_| ())
+            }
+            Action::Click { reference } if reference == toolbar::RELOAD => {
+                driver.evaluate("location.reload()").map(|_| ())
+            }
+            Action::Select { value, .. } => {
+                let (width, height) = toolbar::size(value)
+                    .ok_or_else(|| ToolError::Refused(format!("no page size {value}")))?;
+                driver.resize(width, height)?;
+                *self.size.lock().unwrap() = value.clone();
+                Ok(())
+            }
+            _ => Err(ToolError::Refused(
+                "a toolbar control is clicked, or the page size selected".into(),
+            )),
         }
     }
 
@@ -71,22 +87,22 @@ impl Tool for BrowserTool {
         CONVENTIONS
     }
 
-    fn start(&self, goal: &str) -> ToolResult<()> {
+    fn start(&self, goal: &str, at: Option<&str>) -> ToolResult<()> {
+        // A web address another tool left off at comes first, then one the goal names.
+        let named = at.and_then(url_in).or_else(|| url_in(goal));
         let mut driver = self.driver.lock().unwrap();
         match driver.as_ref() {
-            Some(open) => match url_in(goal) {
+            Some(open) => match named {
                 Some(url) => open.navigate(&url),
                 None => Ok(()),
             },
             None => {
-                let url = url_in(goal)
-                    .or_else(|| self.start_page.clone())
-                    .unwrap_or_else(|| SEARCH_PAGE.into());
+                let url = named.unwrap_or_else(|| SEARCH_PAGE.into());
                 let opened = self.browser.open(Window {
                     url,
                     title: goal.to_string(),
                     headless: self.headless,
-                    viewport: self.viewport.clone(),
+                    viewport: Viewport::DESKTOP,
                 })?;
                 // A slow page is used as it is: it says it is busy until it settles.
                 let _ = opened.wait_loaded(LOAD_TIMEOUT);
@@ -97,11 +113,24 @@ impl Tool for BrowserTool {
     }
 
     fn observe(&self) -> ToolResult<Observation> {
-        self.driver()?.observe().map(Observation::from)
+        let mut view = Observation::from(self.driver()?.observe()?);
+        let controls = toolbar::controls(&self.size.lock().unwrap());
+        view.outline = format!("{}\n{}", toolbar::outline(&controls), view.outline);
+        view.elements.splice(0..0, controls);
+        Ok(view)
     }
 
     fn act(&self, epoch: &str, action: &Action) -> ToolResult<()> {
-        self.driver()?.act(epoch, action)
+        let reference = match action {
+            Action::Click { reference }
+            | Action::Type { reference, .. }
+            | Action::Select { reference, .. } => Some(reference.as_str()),
+            _ => None,
+        };
+        match reference {
+            Some(reference) if toolbar::owns(reference) => self.toolbar(action),
+            _ => self.driver()?.act(epoch, action),
+        }
     }
 
     fn capture(&self) -> ToolResult<Option<Capture>> {

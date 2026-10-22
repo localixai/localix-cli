@@ -1,48 +1,42 @@
 [
  {
   "id": "login",
-  "url": "https://the-internet.herokuapp.com/login",
-  "goal": "Log in with username \"tomsmith\" and password \"SuperSecretPassword!\"",
+  "goal": "Open https://the-internet.herokuapp.com/login and: log in with username \"tomsmith\" and password \"SuperSecretPassword!\"",
   "expect": [
    "The page says You logged into a secure area"
   ]
  },
  {
   "id": "dropdown",
-  "url": "https://the-internet.herokuapp.com/dropdown",
-  "goal": "Select Option 2 in the dropdown.",
+  "goal": "Open https://the-internet.herokuapp.com/dropdown and: select Option 2 in the dropdown.",
   "expect": [
    "Option 2 is the selected value of the dropdown"
   ]
  },
  {
   "id": "checkboxes",
-  "url": "https://the-internet.herokuapp.com/checkboxes",
-  "goal": "Make sure both checkboxes are checked.",
+  "goal": "Open https://the-internet.herokuapp.com/checkboxes and: make sure both checkboxes are checked.",
   "expect": [
    "Both checkboxes are checked"
   ]
  },
  {
   "id": "add-remove",
-  "url": "https://the-internet.herokuapp.com/add_remove_elements/",
-  "goal": "Add three elements, then delete one of them.",
+  "goal": "Open https://the-internet.herokuapp.com/add_remove_elements/ and: add three elements, then delete one of them.",
   "expect": [
    "There are exactly two Delete buttons on the page"
   ]
  },
  {
   "id": "dynamic",
-  "url": "https://the-internet.herokuapp.com/dynamic_loading/1",
-  "goal": "Start the loading and wait until it finishes.",
+  "goal": "Open https://the-internet.herokuapp.com/dynamic_loading/1 and: start the loading and wait until it finishes.",
   "expect": [
    "The page shows the text Hello World!"
   ]
  },
  {
   "id": "todomvc",
-  "url": "https://todomvc.com/examples/react/dist/",
-  "goal": "Add three todos: \"buy milk\", \"walk the dog\", \"write code\". Then mark walk the dog as completed.",
+  "goal": "Open https://todomvc.com/examples/react/dist/ and: add three todos: \"buy milk\", \"walk the dog\", \"write code\". Then mark walk the dog as completed.",
   "expect": [
    "The todo list has buy milk, walk the dog and write code",
    "walk the dog is marked completed and 2 items are left"
@@ -50,8 +44,7 @@
  },
  {
   "id": "pizza-form",
-  "url": "https://httpbin.org/forms/post",
-  "goal": "Order a large pizza with bacon and extra cheese for customer \"Ada Lovelace\", phone \"555-0100\", email \"ada@example.com\", preferred delivery time \"19:30\", then submit the order.",
+  "goal": "Open https://httpbin.org/forms/post and: order a large pizza with bacon and extra cheese for customer \"Ada Lovelace\", phone \"555-0100\", email \"ada@example.com\", preferred delivery time \"19:30\", then submit the order.",
   "expect": [
    "The page shows submitted form data where custname is Ada Lovelace",
    "The submitted data has size large and toppings bacon and cheese"
@@ -59,56 +52,49 @@
  },
  {
   "id": "wiki-search",
-  "url": "https://en.wikipedia.org/wiki/Main_Page",
-  "goal": "Search Wikipedia for \"Rust programming language\" and open its article.",
+  "goal": "Open https://en.wikipedia.org/wiki/Main_Page and: search Wikipedia for \"Rust programming language\" and open its article.",
   "expect": [
    "The page is the Wikipedia article about the Rust programming language"
   ]
  },
  {
   "id": "ddg-type",
-  "url": "https://duckduckgo.com/",
-  "goal": "Search for \"rust borrow checker explained\", then open the first search result.",
+  "goal": "Open https://duckduckgo.com/ and: search for \"rust borrow checker explained\", then open the first search result.",
   "expect": [
    "The current page is not a DuckDuckGo page"
   ]
  },
  {
   "id": "hn-top",
-  "url": "https://news.ycombinator.com",
-  "goal": "Open the comments page of the top story.",
+  "goal": "Open https://news.ycombinator.com and: open the comments page of the top story.",
   "expect": [
    "The page is a Hacker News comments page for a story"
   ]
  },
  {
   "id": "quiz-choose",
-  "url": "https://www.w3schools.com/quiztest/quiztest.asp?qtest=JS",
-  "goal": "Accept the cookie banner, then choose the answer \"<script>\" and click Next.",
+  "goal": "Open https://www.w3schools.com/quiztest/quiztest.asp?qtest=JS and: accept the cookie banner, then choose the answer \"<script>\" and click Next.",
   "expect": [
    "The page shows question 2 of the quiz"
   ]
  },
  {
   "id": "quiz-wait",
-  "url": "https://www.w3schools.com/quiztest/quiztest.asp?qtest=JS",
-  "goal": "Accept the cookie banner, select the radio \"<script>\" and click \"Next\", then wait for the next question to appear.",
+  "goal": "Open https://www.w3schools.com/quiztest/quiztest.asp?qtest=JS and: accept the cookie banner, select the radio \"<script>\" and click \"Next\", then wait for the next question to appear.",
   "expect": [
    "The page shows question 2 of the quiz"
   ]
  },
  {
   "id": "quiz-three",
-  "url": "https://www.w3schools.com/quiztest/quiztest.asp?qtest=JS",
-  "goal": "Accept the cookie banner, then answer the first three questions: for each, choose an answer and click Next.",
+  "goal": "Open https://www.w3schools.com/quiztest/quiztest.asp?qtest=JS and: accept the cookie banner, then answer the first three questions: for each, choose an answer and click Next.",
   "expect": [
    "The page shows question 4 of the quiz"
   ]
  },
  {
   "id": "flights-search",
-  "url": "https://www.google.com/travel/flights?hl=en",
-  "goal": "Search one-way flights from \"Zurich\" to \"London\" on \"Nov 20\".",
+  "goal": "Open https://www.google.com/travel/flights?hl=en and: search one-way flights from \"Zurich\" to \"London\" on \"Nov 20\".",
   "expect": [
    "The page shows flight results from Zurich to London"
   ]

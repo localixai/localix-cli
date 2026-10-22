@@ -21,14 +21,13 @@ use super::viewport::Viewport;
 use super::webview::WebviewDriver;
 use super::{BrowserError, BrowserResult};
 
-/// One script from six files: snapshot, same-origin frames, the outline, actions, keys, then
-/// evaluate and the IPC entry point.
+/// One script from five files: snapshot, same-origin frames, the outline, actions, then evaluate
+/// and the IPC entry point.
 const PROBE: &str = concat!(
     include_str!("probe/snapshot.js"),
     include_str!("probe/frames.js"),
     include_str!("probe/outline.js"),
     include_str!("probe/act.js"),
-    include_str!("probe/keys.js"),
     include_str!("probe/evaluate.js"),
 );
 /// Off-screen placement of a headless window where the OS allows it (see platform.rs).
@@ -44,7 +43,7 @@ pub struct Window {
     pub title: String,
     /// Keep the window off screen and out of the Dock; the page still renders.
     pub headless: bool,
-    /// The page's size, and the user agent of a tablet or phone.
+    /// The page's size.
     pub viewport: Viewport,
 }
 
@@ -368,12 +367,7 @@ fn webview<'a>(
             NewWindowResponse::Deny
         })
         .with_background_throttling(wry::BackgroundThrottlingPolicy::Disabled);
-    if let Some(agent) = window
-        .viewport
-        .user_agent
-        .map(String::from)
-        .or_else(user_agent)
-    {
+    if let Some(agent) = user_agent() {
         builder = builder.with_user_agent(agent);
     }
     Ok(builder)

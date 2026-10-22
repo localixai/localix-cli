@@ -31,6 +31,8 @@ pub struct Options {
     pub trace: Option<std::path::PathBuf>,
     /// Save a picture of the final view here.
     pub screenshot: Option<std::path::PathBuf>,
+    /// Where an earlier session left off: the first tool resumes there.
+    pub resume_at: Option<String>,
     pub verbose: bool,
 }
 
@@ -86,7 +88,7 @@ pub fn run(options: &Options, toolbox: &Toolbox, model: &dyn Decider) -> Finishe
         on_step: &on_step,
         max_actions: options.max_steps,
     }
-    .run(&options.goal, &values);
+    .run(&options.goal, &values, options.resume_at.as_deref());
     let tool = outcome.tool.as_deref().and_then(|name| toolbox.get(name));
     let outcome = outcome.run;
     let status = match &outcome.stop {

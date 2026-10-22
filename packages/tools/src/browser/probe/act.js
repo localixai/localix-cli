@@ -157,21 +157,6 @@
     })
   }
 
-  // Animation frames in half a second: whether this window still renders (the headless check).
-  function frames() {
-    return new Promise((resolve) => {
-      let count = 0
-      const start = performance.now()
-      const tick = () => {
-        count++
-        if (performance.now() - start < 500) requestAnimationFrame(tick)
-        else resolve({ frames: count, visibility: document.visibilityState })
-      }
-      requestAnimationFrame(tick)
-      setTimeout(() => resolve({ frames: count, visibility: document.visibilityState }), 1500)
-    })
-  }
-
   // The whole document's readable text, a window of it at a time.
   function read(args) {
     const text = (document.body?.innerText || '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n')

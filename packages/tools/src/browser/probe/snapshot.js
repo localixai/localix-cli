@@ -1,4 +1,4 @@
-// The page side of the browser tool (six files, concatenated into one script by host.rs): an atomic snapshot of what a person can see and use, and the execution
+// The page side of the browser tool (five files, concatenated into one script by host.rs): an atomic snapshot of what a person can see and use, and the execution
 // of one action on an element that snapshot observed. Installed before any page script runs, so the
 // token and the IPC post captured here cannot be replaced by the page. No caller reaches this file
 // with a selector or code: an action names an observed element by its ref.
@@ -217,22 +217,7 @@
       elements,
       omitted,
       busy: busy(),
-      fields: fields(),
     }
-  }
-
-  // The form as it is filled in, including fields a modal hides from the element list (a date
-  // picker covers "Where from?"): label and value, never a password's.
-  function fields() {
-    const out = []
-    for (const e of document.querySelectorAll('input,textarea,select,[role="combobox"]')) {
-      if (out.length >= 20 || secret(e) || e.type === 'password' || e.type === 'checkbox' || e.type === 'radio') continue
-      if (!e.checkVisibility({ checkVisibilityCSS: true })) continue
-      const value = valueOf(e, roleOf(e) || '').trim()
-      const name = nameOf(e)
-      if (value && name && !out.some((f) => f.name === name)) out.push({ name, value: value.slice(0, 80) })
-    }
-    return out
   }
 
   // Whether the page says it is still working: a document still parsing or fetching, a busy

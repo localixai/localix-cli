@@ -1,6 +1,6 @@
 [package]
-name = "browser"
-description = "A tool: a native browser window (the system WebView), observed and acted on by refs"
+name = "tools"
+description = "The tools the decision loop drives: a native browser window"
 publish = false
 version.workspace = true
 edition.workspace = true
@@ -8,7 +8,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [[test]]
-name = "driver"
+name = "browser"
 harness = false
 
 # The tool protocol only (rule L3): a tool knows nothing of the loop or the model.

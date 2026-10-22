@@ -7,8 +7,8 @@ Instructions for AI coding agents working on this repository.
 Packages and an app; every dependency points inward (rules L1-L5 below).
 
 - `packages/agent`: the contracts. `tool.rs` (the tool protocol: `Observation` with an outline and refs, `Action`, `Tool`, `Capture`), `model.rs` (the decision-model port: typed questions, `Decider`), `history.rs` (sessions, `History`). No logic, no technology.
-- `packages/decision-loop`: the loop. `decision_loop.rs` (picks a tool from the `Toolbox`, starts it, resumes runs, hands a BLOCKED goal on), `goal.rs` (one run: observe, decide, act, its guards), `ask.rs` (the question each step asks: operation and target heads, the wait length), `step.rs`, `choice.rs`, `values.rs` (quoted strings from the goal), `expect.rs`, `meter.rs`, `toolbox.rs`.
-- `packages/browser`: a tool. `host.rs` (tao event loop on the main thread, the window opened on demand), `webview.rs` (the driver), `tool.rs` (`BrowserTool`: the protocol, conventions of web pages), `platform.rs` (what differs by OS, the macOS snapshot), `probe/*.js` (the page side: snapshot, same-origin frames, outline, actions and settle, keys, evaluate).
+- `packages/decision-loop`: the loop. `decision_loop.rs` (picks a tool from the `Toolbox`, starts it, resumes runs, moves the goal to another tool when the model clicks it, hands a BLOCKED goal on), `goal.rs` (one run: observe, decide, act, its guards), `ask.rs` (the question each step asks: operation and target heads, the wait length), `step.rs`, `choice.rs`, `values.rs` (quoted strings from the goal), `expect.rs`, `meter.rs`, `toolbox.rs`.
+- `packages/tools`: the tools, a module each. `browser/` (`host.rs`: tao event loop on the main thread, the window opened on demand; `webview.rs`: the driver; `tool.rs`: `BrowserTool` and the conventions of web pages; `toolbar.rs`: Back, Reload, page size; `platform.rs`: what differs by OS, the macOS snapshot; `probe/*.js`: the page side: snapshot, same-origin frames, outline, actions and settle, evaluate).
 - `packages/openrouter`: a decision-model provider (`system_one.rs`), its HTTP client, and signing in (`auth.rs`, `auth_page.rs`). It is told who calls it (`App`).
 - `packages/session`: a history store, sessions as JSON files.
 - `apps/cli`: the `decision-loop` binary and the composition root: builds the provider, registers the tools in a `Toolbox`, keeps sessions, the chat (`chat.rs`), reports (`report.rs`), `exit.rs` (the exit-code contract), `skill-data/` (guides served by `decision-loop skills get`; `skills/decision-loop/SKILL.md` is a thin stub).
@@ -20,9 +20,10 @@ Layers (checked by `apps/cli/tests/architecture.rs`):
 
 - L1: `agent` depends on no workspace package.
 - L2: `decision-loop` depends only on `agent`.
-- L3: tools, providers and stores (every other package under `packages/`) depend only on `agent`: a tool knows nothing of the loop or the model, a provider nothing of tools.
+- L3: tools, providers and stores (every other package under `packages/`) depend only on `agent`: a tool knows nothing of the loop, the model or the other tools, a provider nothing of tools.
 - L4: only apps compose packages; nothing depends on an app.
-- L5: `agent` and `decision-loop` name no tool or provider (no browser, page, URL, OpenRouter, model name). What a tool's world is like comes through `Tool::description` and `Tool::conventions`.
+- L5: `agent` and `decision-loop` name no tool or provider (no browser, page, URL, OpenRouter, model name). What a tool's world is like comes through `Tool::description` and `Tool::conventions`; a tool's own controls (a browser's toolbar) are part of its view.
+- The app has the goal and nothing tool-specific: no start page, no page size. A goal names where it starts; a tool offers its own settings as controls.
 
 Behaviour:
 
@@ -43,8 +44,8 @@ Update together: `--help` text (clap doc comments), `README.md`, `apps/cli/skill
 ```bash
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace          # unit tests, the layer rules, packages/browser/tests/driver.rs (a real headless window)
+cargo test --workspace          # unit tests, the layer rules, packages/tools/tests/browser.rs (a real headless window)
 python3 evals/run.py --repeat 3 # live, paid (about $0.03); run for loop, probe or instruction changes
 ```
 
-`packages/browser/tests/driver.rs` has its own `main` (the event loop needs the main thread). Add a fixture under `packages/browser/tests/fixtures/` and an assertion there for every driver or probe fix, and confirm it fails without the fix. `DECISION_LOOP_DEBUG=1` prints each decision's state and answers; `BROWSER_DEBUG=1` prints action timings and navigation events.
+`packages/tools/tests/browser.rs` has its own `main` (the event loop needs the main thread). Add a fixture under `packages/tools/tests/fixtures/` and an assertion there for every driver or probe fix, and confirm it fails without the fix. `DECISION_LOOP_DEBUG=1` prints each decision's state and answers; `BROWSER_DEBUG=1` prints action timings and navigation events.

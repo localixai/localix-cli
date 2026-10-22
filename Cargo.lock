@@ -124,20 +124,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "browser"
-version = "0.1.0"
-dependencies = [
- "agent",
- "block2",
- "getrandom 0.3.4",
- "objc2",
- "serde",
- "serde_json",
- "tao",
- "wry",
-]
-
-[[package]]
 name = "bytes"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -243,7 +229,6 @@ name = "cli"
 version = "0.1.0"
 dependencies = [
  "agent",
- "browser",
  "clap",
  "decision-loop",
  "getrandom 0.3.4",
@@ -251,6 +236,7 @@ dependencies = [
  "serde",
  "serde_json",
  "session",
+ "tools",
 ]
 
 [[package]]
@@ -2572,6 +2558,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c"
 dependencies = [
  "winnow 1.0.4",
+]
+
+[[package]]
+name = "tools"
+version = "0.1.0"
+dependencies = [
+ "agent",
+ "block2",
+ "getrandom 0.3.4",
+ "objc2",
+ "serde",
+ "serde_json",
+ "tao",
+ "wry",
 ]
 
 [[package]]

@@ -13,10 +13,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def run(job, binary, extra, trace_dir):
     index, task = job
     args = [binary, task["goal"], "--json", "--headless", "--timeout", "240"]
-    if task.get("url"):
-        args += ["--url", task["url"]]
-    if task.get("schema"):
-        args += ["--schema", json.dumps(task["schema"])]
     for statement in task.get("expect", []):
         args += ["--expect", statement]
     trace = os.path.join(trace_dir, f"{task['id']}-{index}.json")
@@ -30,14 +26,13 @@ def run(job, binary, extra, trace_dir):
         out = {"status": "crash", "answer": proc.stderr[-300:], "usage": {}, "expects": []}
     answer = out.get("answer") or ""
     contains = all(s.lower() in answer.lower() for s in task.get("answer_contains", []))
-    has_data = not task.get("schema") or isinstance(out.get("data"), dict)
-    ok = proc.returncode == 0 and contains and has_data
+    ok = proc.returncode == 0 and contains
     usage = out.get("usage", {})
-    planner, decision = usage.get("planner") or {}, usage.get("decision") or {}
+    decision = usage.get("decision") or {}
     stop = answer.split("\n", 1)[0].removeprefix("Stopped: ")
     return {"id": task["id"], "ok": ok, "stop": stop, "exit": proc.returncode, "status": out.get("status"),
-            "wall": round(wall, 1), "turns": planner.get("calls"), "decisions": decision.get("calls"),
-            "planner_s": round((planner.get("ms") or 0) / 1000, 1), "decision_s": round((decision.get("ms") or 0) / 1000, 1),
+            "wall": round(wall, 1), "tool": out.get("tool"), "decisions": decision.get("calls"),
+            "decision_s": round((decision.get("ms") or 0) / 1000, 1),
             "browser_s": round((usage.get("browser_ms") or 0) / 1000, 1),
             "cost": round(usage.get("cost_usd") or 0, 4),
             "tokens_per_decision": round((decision.get("input_tokens") or 0) / max(1, decision.get("calls") or 0)),

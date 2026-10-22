@@ -53,6 +53,8 @@ pub struct GoalRun<'a> {
     pub on_step: &'a dyn Fn(&GoalStep),
     /// Actions this run may take (not counting the steps it resumes from).
     pub max_actions: usize,
+    /// The other tools the goal may move to: (name, description).
+    pub others: &'a [(String, String)],
 }
 
 fn action_of(pick: &Pick) -> Option<Action> {
@@ -72,7 +74,7 @@ fn action_of(pick: &Pick) -> Option<Action> {
         Operation::PressEnter => Action::PressEnter { reference: None },
         Operation::ScrollDown => Action::ScrollDown,
         Operation::ScrollUp => Action::ScrollUp,
-        Operation::Wait | Operation::Done | Operation::Blocked => return None,
+        Operation::Wait | Operation::Switch | Operation::Done | Operation::Blocked => return None,
     })
 }
 
@@ -178,6 +180,7 @@ impl GoalRun<'_> {
                 view: &view,
                 values,
                 history: &outcome.steps,
+                others: self.others,
             });
             if std::env::var_os("DECISION_LOOP_DEBUG").is_some() {
                 eprintln!("decision state: {}", request.state);
@@ -245,6 +248,14 @@ impl GoalRun<'_> {
                 }
             }
             match pick.operation {
+                Operation::Switch => {
+                    (self.on_step)(&step);
+                    let tool = step.value.clone().unwrap_or_default();
+                    outcome.steps.push(step);
+                    outcome.stop = Stop::Switch(tool);
+                    outcome.view = Some(view);
+                    break;
+                }
                 Operation::Done | Operation::Blocked => {
                     (self.on_step)(&step);
                     outcome.steps.push(step);

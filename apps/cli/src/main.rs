@@ -7,14 +7,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent::history::History;
-use agent::tool::Tool;
-use browser::{BrowserTool, Viewport};
 use clap::{Args, Parser, Subcommand};
 use decision_loop::toolbox::Toolbox;
 use openrouter::App;
 use openrouter::client::OpenRouter;
 use openrouter::system_one::{self, SystemOne};
 use session::Sessions;
+use tools::browser::{self, BrowserTool};
 
 mod chat;
 mod doctor;
@@ -78,23 +77,16 @@ enum SkillsAction {
 
 #[derive(Args, Clone)]
 struct RunArgs {
-    /// What to do on the web, in plain words; `-` reads it from stdin.
+    /// What to do, in plain words (name the site or file it starts from); `-` reads it from stdin.
     goal: Option<String>,
-    /// Page the browser starts on (default: a site the goal names, else a search page).
-    #[arg(long)]
-    url: Option<String>,
     /// A statement that must hold on the final page; repeatable. Any false one fails the run.
     #[arg(long = "expect", value_name = "STATEMENT")]
     expects: Vec<String>,
-    /// Keep the browser window invisible. Default under CI or when not in a terminal; set
+    /// Keep tools' windows invisible. Default under CI or when not in a terminal; set
     /// DECISION_LOOP_HEADLESS=1 to make it the default everywhere.
     #[arg(long, env = "DECISION_LOOP_HEADLESS", value_parser = clap::builder::BoolishValueParser::new())]
     headless: bool,
-    /// Page size: desktop (default), tablet, mobile, or WIDTHxHEIGHT. Tablet and mobile also
-    /// present as iOS Safari so sites serve their mobile layout.
-    #[arg(long, default_value = "desktop")]
-    viewport: String,
-    /// Show the window even where it would be invisible by default (wins over --headless).
+    /// Show tools' windows even where they would be invisible by default (wins over --headless).
     #[arg(long)]
     show: bool,
     /// Decision model (an OpenRouter decision model id; see `models`).
@@ -125,7 +117,8 @@ struct RunArgs {
     /// Continue the saved session with this id (see `sessions`).
     #[arg(long, value_name = "ID")]
     resume: Option<String>,
-    /// Open the browser, print what the decision model would be offered, and exit.
+    /// Start every tool for the goal, print what each shows (what the decision model would read),
+    /// and exit; no key needed.
     #[arg(long)]
     dry_run: bool,
     /// Trace on stderr even with --json.
@@ -199,8 +192,6 @@ fn surf(mut args: RunArgs, check: bool) -> ! {
                 .unwrap_or_else(|message| quit(exit::ENVIRONMENT, &message)),
         ),
     };
-    let viewport =
-        Viewport::parse(&args.viewport).unwrap_or_else(|message| quit(exit::ENVIRONMENT, &message));
     let key = if args.dry_run {
         String::new()
     } else {
@@ -225,21 +216,24 @@ fn surf(mut args: RunArgs, check: bool) -> ! {
             "no display for the browser window: run under `xvfb-run decision-loop …`",
         );
     }
-    let start_page = args.url.clone().or_else(|| {
-        resumed
-            .as_ref()
-            .map(|session| session.location.clone())
-            .filter(|location| !location.is_empty())
-    });
+    // A continued session resumes where its last goal left its tool.
+    let resume_at = resumed
+        .as_ref()
+        .map(|session| session.location.clone())
+        .filter(|location| !location.is_empty());
     let timeout = Duration::from_secs(args.timeout);
     let deadline = Deadline::start();
     browser::host(headless, exit::INTERRUPTED, move |host| {
-        let browser = Arc::new(BrowserTool::new(host, start_page, headless, viewport));
-        if args.dry_run {
-            return dry_run(&args, &browser, goal.as_deref().unwrap_or(""));
-        }
         let toolbox = Toolbox::default();
-        toolbox.add(browser);
+        toolbox.add(Arc::new(BrowserTool::new(host, headless)));
+        if args.dry_run {
+            return dry_run(
+                &args,
+                &toolbox,
+                goal.as_deref().unwrap_or(""),
+                resume_at.as_deref(),
+            );
+        }
         let client = OpenRouter::new(key, APP);
         let model = SystemOne {
             client: &client,
@@ -255,6 +249,7 @@ fn surf(mut args: RunArgs, check: bool) -> ! {
             check,
             trace: args.trace.clone(),
             screenshot: args.screenshot.clone(),
+            resume_at: resume_at.clone(),
             verbose: args.verbose,
         };
         let turn = |options: &run::Options, session: &mut agent::history::Session| {
@@ -266,6 +261,8 @@ fn surf(mut args: RunArgs, check: bool) -> ! {
             Some(_) => turn(&options, &mut session),
             None => exit::OK,
         };
+        // Only the first goal resumes; the next ones go on from where the last one left off.
+        options.resume_at = None;
         if !args.keep_open {
             return code;
         }
@@ -280,6 +277,7 @@ fn surf(mut args: RunArgs, check: bool) -> ! {
         options.check = false;
         options.trace = None;
         options.screenshot = None;
+        options.resume_at = None;
         eprintln!("decision-loop: type the next goal, or /help (Ctrl-D to quit)");
         while let Some(next) = chat::next_line() {
             if chat::command(&next, &toolbox, &session) {
@@ -314,33 +312,22 @@ fn sessions() {
     }
 }
 
-/// Open the browser and print its element table: what the decision model would be offered.
-fn dry_run(args: &RunArgs, browser: &BrowserTool, goal: &str) -> i32 {
-    let observation = match browser.start(goal).and_then(|()| browser.observe()) {
-        Ok(observation) => observation,
-        Err(error) => {
-            eprintln!("decision-loop: {error}");
-            return exit::ENVIRONMENT;
-        }
-    };
-    let frames = if args.verbose {
-        browser.driver().and_then(|driver| driver.frames()).ok()
-    } else {
-        None
-    };
-    if args.json {
-        let mut value = serde_json::to_value(&observation).unwrap_or_default();
-        if let Some(frames) = frames {
-            value["frames"] = frames;
-        }
-        println!("{value}");
-    } else {
-        print!("{}", report::view_table(&observation));
-        if let Some(frames) = frames {
-            eprintln!("rendering: {frames}");
+/// Start every tool for `goal` and print what each shows: what the decision model would read.
+fn dry_run(args: &RunArgs, toolbox: &Toolbox, goal: &str, at: Option<&str>) -> i32 {
+    let mut code = exit::OK;
+    for tool in toolbox.tools() {
+        match tool.start(goal, at).and_then(|()| tool.observe()) {
+            Ok(view) if args.json => {
+                println!("{}", serde_json::json!({"tool": tool.name(), "view": view}))
+            }
+            Ok(view) => print!("== {}\n{}", tool.name(), report::view_table(&view)),
+            Err(error) => {
+                eprintln!("decision-loop: {}: {error}", tool.name());
+                code = exit::ENVIRONMENT;
+            }
         }
     }
-    exit::OK
+    code
 }
 
 fn quit(code: i32, message: &str) -> ! {

@@ -33,7 +33,7 @@
   }
 
   const ready = () => document.readyState
-  const CALLS = { snapshot, act, settle, frames, read, settled, keys, ready }
+  const CALLS = { snapshot, act, settle, read, settled, ready }
   Object.defineProperty(window, '__dloop_call', {
     value(id, name, args) {
       const reply = (body) => post(JSON.stringify({ t: TOKEN, id, ...body }))

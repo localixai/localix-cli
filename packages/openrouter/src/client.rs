@@ -1,4 +1,4 @@
-//! The one HTTP client: OpenRouter for both the chat model and the decision model. One agent keeps
+//! The one HTTP client to OpenRouter. One agent keeps
 //! the connection alive across steps, so a decision costs a request, not a handshake.
 
 use std::time::{Duration, Instant};

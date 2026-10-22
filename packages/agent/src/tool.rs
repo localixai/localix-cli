@@ -14,8 +14,10 @@ pub trait Tool {
     fn conventions(&self) -> &str {
         ""
     }
-    /// Get ready for `goal`: open, or go where the goal names. Called before every goal.
-    fn start(&self, goal: &str) -> ToolResult<()>;
+    /// Get ready for `goal`: open, or go where the goal names. `at` is where another tool left off
+    /// (its `Observation::location`) when the goal moves here from it; a tool goes there if it
+    /// can. Called before every goal, and on every move.
+    fn start(&self, goal: &str, at: Option<&str>) -> ToolResult<()>;
     fn observe(&self) -> ToolResult<Observation>;
     /// Perform `action` against the observation with `epoch`, then let the tool settle.
     fn act(&self, epoch: &str, action: &Action) -> ToolResult<()>;
@@ -58,18 +60,9 @@ pub struct Observation {
     /// The tool says it is still working (loading, fetching, a progress bar, "Loading…").
     #[serde(default)]
     pub busy: bool,
-    /// Filled form fields, including those a modal hides from `elements`.
-    #[serde(default)]
-    pub fields: Vec<Field>,
     /// How far the view is scrolled: a scroll that moved nothing is told apart from one that did.
     #[serde(default)]
     pub scroll: i64,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct Field {
-    pub name: String,
-    pub value: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]

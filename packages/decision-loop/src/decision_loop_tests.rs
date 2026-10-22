@@ -21,7 +21,7 @@ impl Tool for Quiz {
     fn description(&self) -> &str {
         "a quiz"
     }
-    fn start(&self, _: &str) -> ToolResult<()> {
+    fn start(&self, _: &str, _: Option<&str>) -> ToolResult<()> {
         Ok(())
     }
     fn observe(&self) -> ToolResult<Observation> {
@@ -45,7 +45,6 @@ impl Tool for Quiz {
             }],
             omitted: 0,
             busy: false,
-            fields: vec![],
         })
     }
     fn act(&self, _: &str, _: &Action) -> ToolResult<()> {
@@ -103,7 +102,7 @@ fn run(stuck: bool) -> GoalOutcome {
         on_step: &|_| {},
         max_actions: 100,
     }
-    .run("Answer all 25 questions", &[])
+    .run("Answer all 25 questions", &[], None)
     .run
 }
 
@@ -140,7 +139,7 @@ impl Tool for Still {
     fn description(&self) -> &str {
         "a still view"
     }
-    fn start(&self, _: &str) -> ToolResult<()> {
+    fn start(&self, _: &str, _: Option<&str>) -> ToolResult<()> {
         Ok(())
     }
     fn observe(&self) -> ToolResult<Observation> {
@@ -190,7 +189,7 @@ fn the_model_picks_a_tool_and_a_blocked_one_hands_the_goal_on() {
         on_step: &|_| {},
         max_actions: 10,
     }
-    .run("Find the route", &[]);
+    .run("Find the route", &[], None);
     assert_eq!(outcome.tool.as_deref(), Some("web"));
     assert_eq!(outcome.run.stop, Stop::Done { probability: 1.0 });
 }
@@ -203,6 +202,6 @@ fn an_empty_toolbox_blocks() {
         on_step: &|_| {},
         max_actions: 10,
     }
-    .run("Anything", &[]);
+    .run("Anything", &[], None);
     assert_eq!((outcome.tool, outcome.run.stop), (None, Stop::Blocked));
 }

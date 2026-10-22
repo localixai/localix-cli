@@ -6,7 +6,7 @@ use std::net::TcpListener;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::time::Duration;
 
-use browser::{Action, BrowserError, Driver, Observation, WebviewDriver, Window};
+use tools::browser::{self, Action, BrowserError, Driver, Observation, WebviewDriver, Window};
 
 /// Serves `tests/fixtures` on an ephemeral port; returns its origin.
 fn serve() -> String {
@@ -195,27 +195,16 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
         .map(|e| e.name.clone())
         .collect();
     assert_eq!(days, ["5 (2026-12-05)", "5 €120 (January 2027)"]);
-    // Keys reach the page as a game reads them.
-    driver.navigate(&format!("{origin}/keys.html")).unwrap();
-    driver
-        .press(&["Up".into(), "ArrowLeft".into(), "a".into()], 0)
-        .unwrap();
-    assert_eq!(
-        driver.observe().unwrap().title,
-        "keys:ArrowUp/ArrowUp/38;ArrowLeft/ArrowLeft/37;a/KeyA/65;"
-    );
-
-    // A modal hides the form from the controls, not its values; a password never shows.
+    // A modal hides the form from the controls; a password's value never shows.
     driver.navigate(&format!("{origin}/modal.html")).unwrap();
     let page = driver.observe().unwrap();
     let names: Vec<&str> = page.elements.iter().map(|e| e.name.as_str()).collect();
     assert_eq!(names, ["Done"]);
-    let fields: Vec<(&str, &str)> = page
-        .fields
-        .iter()
-        .map(|f| (f.name.as_str(), f.value.as_str()))
-        .collect();
-    assert_eq!(fields, [("Where from?", "Larnaca")]);
+    assert!(
+        !page.outline.contains("secret") && !page.text.contains("secret"),
+        "{}",
+        page.outline
+    );
     driver.navigate(&format!("{origin}/dropdown.html")).unwrap();
 
     // Scripts: an expression, statements (last value), a body with its own return, a throw.

@@ -1,6 +1,6 @@
 //! The browser tool: a native window on the system WebView, observed and acted on through a probe
 //! script in the page. [`BrowserTool`] implements the tool protocol (`agent::tool::Tool`);
-//! [`Driver`] is the browser's own, fuller surface (navigate, read, keys, scripts).
+//! [`Driver`] is the browser's own, fuller surface (navigate, read, scripts).
 
 mod guard;
 mod host;
@@ -8,6 +8,7 @@ mod platform;
 mod script;
 mod start;
 mod tool;
+mod toolbar;
 mod viewport;
 mod webview;
 
@@ -16,7 +17,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 pub use agent::tool::{
-    Action, Element, Field, SelectOption, ToolError as BrowserError, ToolResult as BrowserResult,
+    Action, Element, SelectOption, ToolError as BrowserError, ToolResult as BrowserResult,
 };
 pub use host::{Browser, Window, host, run};
 pub use start::url_in;
@@ -52,9 +53,6 @@ pub struct Observation {
     /// The page says it is still working (parsing, fetching its own data, a progress bar).
     #[serde(default)]
     pub busy: bool,
-    /// Filled form fields, including those a modal hides from `elements`.
-    #[serde(default)]
-    pub fields: Vec<Field>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -80,7 +78,6 @@ impl From<Observation> for agent::tool::Observation {
             elements: page.elements,
             omitted: page.omitted,
             busy: page.busy,
-            fields: page.fields,
             scroll: page.scroll.y,
         }
     }
@@ -97,9 +94,6 @@ pub trait Driver {
     fn act(&self, epoch: &str, action: &Action) -> BrowserResult<()>;
     /// Reframe the page to `width`×`height` (layout only: the user agent stays), then let it settle.
     fn resize(&self, width: f64, height: f64) -> BrowserResult<()>;
-    /// Press `keys` (chords such as "ArrowUp", "Ctrl+A") on the focused element, `delay_ms` apart,
-    /// then let the page settle.
-    fn press(&self, keys: &[String], delay_ms: u64) -> BrowserResult<()>;
     /// Run `source` (JavaScript) in the page and return its value as text, then let the page settle.
     fn evaluate(&self, source: &str) -> BrowserResult<String>;
     /// The document's readable text from `offset`, at most `limit` characters.

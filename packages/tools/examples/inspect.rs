@@ -1,7 +1,7 @@
 //! Opens a page and prints scripts' results: a probe for building the snapshot. `cargo run --example inspect -- <url> <script>...` (each script runs in turn).
 use std::time::Duration;
 
-use browser::{Driver, Window};
+use tools::browser::{self, Driver, Window};
 
 fn main() {
     let mut args = std::env::args().skip(1);

@@ -15,12 +15,13 @@ use agent::model::{DecideError, Decider, Question};
 use crate::choice::valid_choice;
 use crate::step::{GoalStep, Operation};
 use crate::toolbox::{SharedTool, Toolbox};
-use agent::tool::Tool;
 
 /// Actions one goal run takes before the loop looks at how it stopped.
 const SEGMENT: usize = 20;
 /// Runs in a row that stopped without a step that changed the tool: the goal is stuck.
 const MAX_STALLS: usize = 2;
+/// Moves between tools in one goal: past this, the goal stays where it is.
+const MAX_SWITCHES: usize = 8;
 
 pub struct DecisionLoop<'a> {
     /// The tools there are now; read each time a tool is picked.
@@ -45,7 +46,8 @@ fn actions(steps: &[GoalStep]) -> usize {
 }
 
 impl DecisionLoop<'_> {
-    pub fn run(&self, goal: &str, values: &[String]) -> LoopOutcome {
+    /// Drive `goal`; `at` is where an earlier session left off, for the first tool to resume from.
+    pub fn run(&self, goal: &str, values: &[String], at: Option<&str>) -> LoopOutcome {
         let mut tried: Vec<String> = vec![];
         let mut last: Option<LoopOutcome> = None;
         let mut spent = 0;
@@ -67,20 +69,22 @@ impl DecisionLoop<'_> {
                 }
             };
             tried.push(tool.name().to_string());
-            let name = Some(tool.name().to_string());
-            if let Err(error) = tool.start(goal) {
+            if let Err(error) = tool.start(goal, at) {
                 let stop = Stop::ActionFailed(format!("{} could not start: {error}", tool.name()));
                 last = Some(LoopOutcome {
-                    tool: name,
+                    tool: Some(tool.name().to_string()),
                     run: GoalOutcome::stopped(stop),
                 });
                 continue;
             }
             let budget = self.max_actions.saturating_sub(spent);
-            let run = self.drive(tool.as_ref(), goal, values, budget);
+            let (run, ended) = self.drive(tool, goal, values, budget);
             spent += actions(&run.steps);
             let blocked = matches!(run.stop, Stop::Blocked);
-            last = Some(LoopOutcome { tool: name, run });
+            last = Some(LoopOutcome {
+                tool: Some(ended.name().to_string()),
+                run,
+            });
             if !blocked || spent >= self.max_actions {
                 return last.unwrap();
             }
@@ -125,17 +129,37 @@ impl DecisionLoop<'_> {
             .clone())
     }
 
-    fn drive(&self, tool: &dyn Tool, goal: &str, values: &[String], budget: usize) -> GoalOutcome {
+    /// Drive `tool` toward `goal`, moving to another tool when the model says so; the outcome and
+    /// the tool it ended with.
+    fn drive(
+        &self,
+        mut tool: SharedTool,
+        goal: &str,
+        values: &[String],
+        budget: usize,
+    ) -> (GoalOutcome, SharedTool) {
         let mut steps = vec![];
-        let (mut decisions, mut cost, mut millis, mut stalls) = (0, 0.0, 0, 0);
+        let (mut decisions, mut cost, mut millis, mut stalls, mut switches) = (0, 0.0, 0, 0, 0);
         loop {
             let left = budget.saturating_sub(actions(&steps));
             let before = steps.len();
+            let others: Vec<(String, String)> = self
+                .toolbox
+                .tools()
+                .iter()
+                .filter(|other| other.name() != tool.name())
+                .map(|other| (other.name().to_string(), other.description().to_string()))
+                .collect();
             let mut outcome = GoalRun {
-                tool,
+                tool: tool.as_ref(),
                 decider: self.decider,
                 on_step: self.on_step,
                 max_actions: SEGMENT.min(left),
+                others: if switches < MAX_SWITCHES {
+                    &others
+                } else {
+                    &[]
+                },
             }
             .resume(goal, values, steps);
             decisions += outcome.decisions;
@@ -144,12 +168,33 @@ impl DecisionLoop<'_> {
             let moved = outcome.steps[before..]
                 .iter()
                 .any(|step| step.changed == Some(true) && step.failed.is_none());
-            stalls = if moved { 0 } else { stalls + 1 };
             let again = match &outcome.stop {
                 Stop::Done { .. } | Stop::Blocked | Stop::Unreachable(_) => false,
                 // Its share of actions spent: a checkpoint, not a failure.
                 Stop::Limit => left > SEGMENT,
+                Stop::Switch(name) => {
+                    let at = outcome.view.as_ref().map(|view| view.location.clone());
+                    match self.toolbox.get(name) {
+                        Some(next) => match next.start(goal, at.as_deref()) {
+                            Ok(()) => {
+                                switches += 1;
+                                tool = next;
+                                true
+                            }
+                            Err(error) => {
+                                outcome.stop =
+                                    Stop::ActionFailed(format!("{name} could not start: {error}"));
+                                false
+                            }
+                        },
+                        None => {
+                            outcome.stop = Stop::NoDecision(format!("there is no tool {name}"));
+                            false
+                        }
+                    }
+                }
                 Stop::Repeated | Stop::Cycling | Stop::ActionFailed(_) | Stop::NoDecision(_) => {
+                    stalls = if moved { 0 } else { stalls + 1 };
                     stalls < MAX_STALLS && left > 0
                 }
             };
@@ -157,7 +202,7 @@ impl DecisionLoop<'_> {
                 outcome.decisions = decisions;
                 outcome.cost = cost;
                 outcome.decision_millis = millis;
-                return outcome;
+                return (outcome, tool);
             }
             steps = outcome.steps;
         }

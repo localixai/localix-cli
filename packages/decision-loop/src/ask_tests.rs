@@ -25,7 +25,6 @@ fn view(elements: Vec<Element>) -> Observation {
         elements,
         omitted: 0,
         busy: false,
-        fields: vec![],
     }
 }
 
@@ -59,6 +58,7 @@ fn offers_only_what_each_operation_can_act_on() {
         view: &view,
         values: &values,
         history: &[],
+        others: &[],
     });
     let keys = |head: &str| ask.offered[head].keys().cloned().collect::<Vec<_>>();
     assert_eq!(keys("click_target"), ["e1", "e2"]);
@@ -112,6 +112,7 @@ fn typing_offers_whole_field_value_pairs_and_skips_what_is_already_there() {
         view: &view,
         values: &values,
         history: &[],
+        others: &[],
     });
     let offered: Vec<&Value> = ask.offered["type_entry"].values().collect();
     // "Where from?" holds a value: filled. "Larnaca" is in a field: placed. Neither is offered.
@@ -149,6 +150,7 @@ fn a_dialog_scopes_the_offer_and_scrolling_stops_when_it_stops_moving() {
         view: &view,
         values: &[],
         history: std::slice::from_ref(&still),
+        others: &[],
     });
     assert_eq!(
         ask.offered["click_target"].keys().collect::<Vec<_>>(),
@@ -167,6 +169,7 @@ fn a_dialog_scopes_the_offer_and_scrolling_stops_when_it_stops_moving() {
         view: &view,
         values: &[],
         history: &[idle],
+        others: &[],
     });
     assert!(
         !ask.offered["operation"].contains_key("WAIT"),
@@ -195,6 +198,7 @@ fn a_settled_view_offers_no_wait_after_a_step_that_showed_something() {
             view: &view,
             values: &[],
             history,
+            others: &[],
         });
         ask.offered["operation"].contains_key("WAIT")
     };
@@ -227,6 +231,7 @@ fn the_model_chooses_how_long_to_wait() {
         view: &view,
         values: &[],
         history: &[],
+        others: &[],
     });
     assert!(ask.offered["wait_for"].contains_key("10"));
     let answers = [
@@ -247,4 +252,33 @@ fn the_model_chooses_how_long_to_wait() {
         new_view: false,
     };
     assert_eq!(step.trace_line(), "WAIT 10s · 100%");
+}
+
+#[test]
+fn another_tool_is_a_control_and_clicking_it_moves_the_goal() {
+    let view = view(vec![element("e1", "link", "src/main.rs:12")]);
+    let others = [("read".to_string(), "Read files".to_string())];
+    let ask = ask(&AskInput {
+        goal: "Find it and open it",
+        conventions: "",
+        view: &view,
+        values: &[],
+        history: &[],
+        others: &others,
+    });
+    assert!(ask.offered["click_target"].contains_key("switch:read"));
+    assert!(
+        !ask.offered["operation"].contains_key("SWITCH"),
+        "not an operation to name"
+    );
+    let answers = [
+        ("operation".into(), choice("CLICK")),
+        ("click_target".into(), choice("switch:read")),
+    ]
+    .into();
+    let pick = ask.read(&answers).unwrap();
+    assert_eq!(
+        (pick.operation, pick.value.as_deref(), pick.reference),
+        (Operation::Switch, Some("read"), None)
+    );
 }

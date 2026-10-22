@@ -53,7 +53,7 @@ pub fn doctor(model: &str) -> i32 {
             println!("✗ decision model {model}: {error}");
         }
     }
-    if browser::has_display() {
+    if tools::browser::has_display() {
         println!("✓ system WebView");
     } else {
         ok = false;

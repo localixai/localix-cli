@@ -1,6 +1,6 @@
 # Evals
 
-Live tasks against real sites, run through the release binary. Every task measures the decision model (Jev) alone: `--no-llm`, so the goal goes straight to it, as a person would type it, with the strings to type in quotes. No chat model is involved. Each task is judged by its exit code: Jev must say DONE, and its `--expect` statements must hold on the final page.
+Live tasks against real sites, run through the release binary. Every task is one goal, as a person would type it: the site it starts on named in it, the strings to type in quotes. Each task is judged by its exit code: Jev must say DONE, and its `--expect` statements must hold on the final page.
 
 ```bash
 cargo build --release

@@ -59,7 +59,7 @@ mod tests {
         fn description(&self) -> &str {
             "a test tool"
         }
-        fn start(&self, _: &str) -> ToolResult<()> {
+        fn start(&self, _: &str, _: Option<&str>) -> ToolResult<()> {
             Ok(())
         }
         fn observe(&self) -> ToolResult<Observation> {

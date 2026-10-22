@@ -47,7 +47,6 @@ mod covered {
             }],
             omitted: 0,
             busy: false,
-            fields: vec![],
         }
     }
 
@@ -58,7 +57,7 @@ mod covered {
         fn description(&self) -> &str {
             "a quiz"
         }
-        fn start(&self, _: &str) -> ToolResult<()> {
+        fn start(&self, _: &str, _: Option<&str>) -> ToolResult<()> {
             Ok(())
         }
         fn observe(&self) -> ToolResult<Observation> {
@@ -131,6 +130,7 @@ mod covered {
             decider: &model,
             on_step: &|_| {},
             max_actions: 5,
+            others: &[],
         }
         .run("Click Next", &[]);
         assert_eq!(outcome.stop, Stop::Done { probability: 1.0 });
@@ -185,6 +185,7 @@ mod covered {
             decider: &model,
             on_step: &|_| {},
             max_actions: 5,
+            others: &[],
         }
         .run("Answer three questions", &[]);
         assert_eq!(outcome.stop, Stop::Done { probability: 0.55 });

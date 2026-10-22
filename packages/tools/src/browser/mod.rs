@@ -10,6 +10,7 @@ mod host;
 mod page;
 mod platform;
 mod script;
+mod tab_view;
 mod tabs;
 mod tool;
 mod toolbar;

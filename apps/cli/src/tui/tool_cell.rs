@@ -137,11 +137,26 @@ fn describe(name: &str, args: &Value) -> What {
             what(("Asking", "Asked"), subject)
         }
         "browser" => {
-            let parts: Vec<&str> = [text("url"), text("goal")]
+            let flag = |key: &str| args.get(key) == Some(&Value::Bool(true));
+            let mut parts: Vec<String> = [text("url"), text("goal")]
                 .into_iter()
                 .filter(|part| !part.is_empty())
+                .map(str::to_string)
                 .collect();
-            what(("Browsing", "Browsed"), flat(&parts.join(" · ")))
+            if !text("script").is_empty() {
+                parts.push("a script".into());
+            }
+            if flag("screenshot") {
+                parts.push(match text("selector") {
+                    "" => "a screenshot".into(),
+                    selector => format!("a screenshot of {selector}"),
+                });
+            }
+            match (parts.is_empty(), flag("close")) {
+                (true, true) => what(("Closing", "Closed"), "the browser".into()),
+                (true, false) => what(("Reading", "Read"), "the page".into()),
+                (false, _) => what(("Browsing", "Browsed"), flat(&parts.join(" · "))),
+            }
         }
         _ => what(("Calling", "Called"), name.to_string()),
     }

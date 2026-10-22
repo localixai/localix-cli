@@ -155,3 +155,18 @@ fn a_question_shows_what_the_person_answered() {
       └ - colour: Blue
     ");
 }
+
+#[test]
+fn a_browser_call_says_what_it_takes() {
+    insta::assert_snapshot!([
+        shown("browser", json!({"screenshot": true, "selector": "#board"}), State::Running, 80),
+        shown("browser", json!({"script": "1 + 1"}), State::Running, 80),
+        shown("browser", json!({"close": true}), State::Running, 80),
+        shown("browser", json!({}), State::Running, 80),
+    ].join("\n"), @r"
+    • Browsing a screenshot of #board
+    • Browsing a script
+    • Closing the browser
+    • Reading the page
+    ");
+}

@@ -127,7 +127,7 @@ pub fn summary(summary: &Summary) -> String {
         out.push_str(&format!("  session  {}\n", summary.session));
     }
     if let Some(error) = summary.error {
-        out.push_str(&format!("lxsurf: {error}\n"));
+        out.push_str(&format!("lx: {error}\n"));
     }
     out
 }
@@ -142,7 +142,7 @@ pub fn answer(summary: &Summary) -> (String, String) {
     };
     match summary.data {
         Some(Ok(data)) => (data.to_string(), line(prose)),
-        Some(Err(why)) => (String::new(), format!("{}lxsurf: {why}\n", line(prose))),
+        Some(Err(why)) => (String::new(), format!("{}lx: {why}\n", line(prose))),
         None => (prose.to_string(), String::new()),
     }
 }

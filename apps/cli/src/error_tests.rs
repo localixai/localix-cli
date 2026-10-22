@@ -22,10 +22,10 @@ fn a_closed_pipe_ends_quietly() {
 #[test]
 fn a_message_names_the_program_and_the_way_out() {
     let message = Failure::SignedOut.message().unwrap();
-    assert!(message.starts_with("lxsurf: not signed in"));
-    assert!(message.contains("lxsurf login"));
+    assert!(message.starts_with("lx: not signed in"));
+    assert!(message.contains("lx login"));
     assert_eq!(
         Failure::Usage("the prompt is empty".into()).message(),
-        Some("lxsurf: the prompt is empty".into())
+        Some("lx: the prompt is empty".into())
     );
 }

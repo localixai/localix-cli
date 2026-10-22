@@ -120,13 +120,7 @@ fn compose_one(approvals: Approvals, unwritable: bool, schema: Option<Value>) ->
         true => scratch.path().join("missing/last.txt"),
         false => scratch.path().join("last.txt"),
     };
-    let args = [
-        "lxsurf",
-        "--json",
-        "-o",
-        last.to_str().unwrap(),
-        "make a file",
-    ];
+    let args = ["lx", "--json", "-o", last.to_str().unwrap(), "make a file"];
     let options = Cli::try_parse_from(args).unwrap().run;
     let history = Sessions {
         dir: scratch.path().join("sessions"),

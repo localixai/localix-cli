@@ -33,8 +33,8 @@ use crate::output::Output;
 
 /// Who calls OpenRouter: its attribution, the sign-in page, the folder the key is saved in.
 pub const APP: App = App {
-    name: "lxsurf",
-    slug: "lxsurf",
+    name: "Localix CLI",
+    slug: "lx",
     version: env!("CARGO_PKG_VERSION"),
 };
 

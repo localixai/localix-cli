@@ -1,20 +1,20 @@
 name: Bug report
-description: lxsurf did something wrong, crashed, or would not build.
+description: lx did something wrong, crashed, or would not build.
 labels: [bug]
 body:
   - type: input
     id: version
     attributes:
       label: Version
-      description: The output of `lxsurf --version`.
-      placeholder: lxsurf 0.1.0
+      description: The output of `lx --version`.
+      placeholder: lx 0.1.0
     validations:
       required: true
   - type: input
     id: platform
     attributes:
       label: Platform
-      description: OS and architecture, and how lxsurf was installed.
+      description: OS and architecture, and how lx was installed.
       placeholder: macOS 15 arm64, install.sh
     validations:
       required: true
@@ -38,5 +38,5 @@ body:
       label: Output
       description: >-
         The terminal output, ideally with `--trace` or `DECISION_LOOP_DEBUG=1` (and `BROWSER_DEBUG=1`
-        for page timing). `lxsurf doctor` helps with setup problems.
+        for page timing). `lx doctor` helps with setup problems.
       render: text

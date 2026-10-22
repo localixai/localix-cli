@@ -12,9 +12,9 @@ pub mod system_one;
 /// its key is saved in.
 #[derive(Debug, Clone, Copy)]
 pub struct App {
-    /// "lxsurf": OpenRouter's attribution and the sign-in page.
+    /// "Localix CLI": OpenRouter's attribution and the sign-in page.
     pub name: &'static str,
-    /// "lxsurf": the user agent and the config folder.
+    /// "lx": the user agent and the config folder.
     pub slug: &'static str,
     pub version: &'static str,
 }

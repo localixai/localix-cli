@@ -9,7 +9,7 @@
 # Host targets: macOS builds aarch64 and x86_64, and joins them into universal-apple-darwin;
 # Linux builds its own architecture (glibc); Windows (Git Bash) builds x86_64-pc-windows-msvc.
 #
-# Archives: lxsurf-<target>.tar.gz (.zip on Windows) holding lxsurf (lxsurf.exe), README.md and
+# Archives: lx-<target>.tar.gz (.zip on Windows) holding lx (lx.exe), README.md and
 # LICENSE at the top level.
 set -eu
 
@@ -48,12 +48,12 @@ package() {
   stage=$(mktemp -d)
   case "$target" in
     *windows*)
-      cp "$binary" "$stage/lxsurf.exe"
-      archive="lxsurf-$target.zip"
+      cp "$binary" "$stage/lx.exe"
+      archive="lx-$target.zip"
       ;;
     *)
-      cp "$binary" "$stage/lxsurf"
-      archive="lxsurf-$target.tar.gz"
+      cp "$binary" "$stage/lx"
+      archive="lx-$target.tar.gz"
       ;;
   esac
   cp README.md LICENSE "$stage/"
@@ -66,7 +66,7 @@ package() {
         (cd "$stage" && zip -q -r "$dist/$archive" .)
       fi
       ;;
-    *) tar -C "$stage" -czf "$dist/$archive" lxsurf README.md LICENSE ;;
+    *) tar -C "$stage" -czf "$dist/$archive" lx README.md LICENSE ;;
   esac
   rm -rf "$stage"
   echo "packaged $archive"
@@ -83,8 +83,8 @@ for target in $targets; do
   fi
   cargo build --release --locked --target "$target"
   case "$target" in
-    *windows*) package "$target" "$target_dir/$target/release/lxsurf.exe" ;;
-    *) package "$target" "$target_dir/$target/release/lxsurf" ;;
+    *windows*) package "$target" "$target_dir/$target/release/lx.exe" ;;
+    *) package "$target" "$target_dir/$target/release/lx" ;;
   esac
 done
 
@@ -94,16 +94,16 @@ built() {
   return 1
 }
 if built aarch64-apple-darwin && built x86_64-apple-darwin; then
-  universal="$(mktemp -d)/lxsurf"
+  universal="$(mktemp -d)/lx"
   lipo -create -output "$universal" \
-    "$target_dir/aarch64-apple-darwin/release/lxsurf" "$target_dir/x86_64-apple-darwin/release/lxsurf"
+    "$target_dir/aarch64-apple-darwin/release/lx" "$target_dir/x86_64-apple-darwin/release/lx"
   package universal-apple-darwin "$universal"
   rm -rf "$(dirname "$universal")"
 fi
 
 (
   cd "$dist"
-  for archive in lxsurf-*; do sha256 "$archive"; done >SHA256SUMS
+  for archive in lx-*; do sha256 "$archive"; done >SHA256SUMS
 )
-echo "lxsurf $version -> dist/"
+echo "lx $version -> dist/"
 ls -l "$dist"

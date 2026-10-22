@@ -19,7 +19,7 @@ impl Scratch {
             .duration_since(UNIX_EPOCH)
             .map_or(0, |since| since.as_nanos());
         let name = format!(
-            "lxsurf-tools-{}-{nanos}-{}",
+            "lx-tools-{}-{nanos}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         );

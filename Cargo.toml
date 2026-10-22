@@ -1,5 +1,5 @@
-# lxsurf: a small, fast coding agent for the terminal: read, edit, bash, and a native browser
-# whose clicks and typing a decision model does.
+# lx, the Localix CLI: an ultrafast, lightweight coding agent for the terminal: read, edit, bash,
+# and a native browser whose clicks and typing a decision model does.
 #
 # Packages and apps, dependencies pointing inward only (AGENTS.md, rules L1-L5):
 #   packages/contracts      ports only: chat model, tools, gate, view, decision model, hands, history
@@ -8,7 +8,7 @@
 #   packages/tools          the tools: read, edit, bash, the workspace, a native browser window
 #   packages/openrouter     the models' provider: OpenRouter's chat and decision models, sign-in
 #   packages/session        a history store: sessions as JSON files
-#   apps/cli                the `lxsurf` binary: composes the packages
+#   apps/cli                the `lx` binary: composes the packages
 [workspace]
 resolver = "3"
 members = ["packages/*", "apps/*"]

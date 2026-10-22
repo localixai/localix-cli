@@ -1,6 +1,6 @@
 [package]
 name = "contracts"
-description = "lxsurf's contracts: the chat-model, tool, gate, view, decision-model, hands and history ports"
+description = "The Localix CLI's contracts: the chat-model, tool, gate, view, decision-model, hands and history ports"
 publish = false
 version.workspace = true
 edition.workspace = true

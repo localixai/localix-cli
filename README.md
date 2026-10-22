@@ -1,9 +1,9 @@
-# lxsurf
+# Localix CLI
 
-[![ci](https://github.com/rsaryev/decision-loop/actions/workflows/ci.yml/badge.svg)](https://github.com/rsaryev/decision-loop/actions/workflows/ci.yml)
-[![release](https://img.shields.io/github/v/release/rsaryev/decision-loop?include_prereleases&sort=semver)](https://github.com/rsaryev/decision-loop/releases)
+[![ci](https://github.com/rsaryev/localix-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/rsaryev/localix-cli/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/rsaryev/localix-cli?include_prereleases&sort=semver)](https://github.com/rsaryev/localix-cli/releases)
 
-lxsurf is a small, fast coding agent that runs in your terminal. It has four tools:
+`lx` is [Localix](https://localix.ai)'s ultrafast, lightweight coding agent for the terminal. Where the [Localix desktop app](https://github.com/rsaryev/localix) is a whole development environment, `lx` is one small command. It has four tools:
 
 - `read` and `edit` for files;
 - `bash` for commands;
@@ -12,7 +12,7 @@ lxsurf is a small, fast coding agent that runs in your terminal. It has four too
 It is one binary of about 1.6 MB, with synchronous code and no async runtime. There are no plugins, no MCP servers and no extra tools: a model with a shell and a browser needs little more.
 
 ```text
-$ lxsurf -y "the tests in tests/parse.rs fail: fix the parser, not the tests"
+$ lx -y "the tests in tests/parse.rs fail: fix the parser, not the tests"
    1.1s ▸ bash cargo test --test parse
    3.4s ▸ read src/parse.rs
    5.0s ▸ edit src/parse.rs
@@ -23,47 +23,47 @@ achieved in 9.0s · 5 turns · $0.0058
 parse_range treated an empty upper bound as 0; it now means "to the end". All 14 tests pass.
 ```
 
-The output above is an example: times, tokens and cost vary from run to run. The trace goes to stderr and the answer alone to stdout, so `lxsurf "..." > answer.md` keeps only the answer.
+The output above is an example: times, tokens and cost vary from run to run. The trace goes to stderr and the answer alone to stdout, so `lx "..." > answer.md` keeps only the answer.
 
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rsaryev/decision-loop/master/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/rsaryev/localix-cli/master/scripts/install.sh | sh
 ```
 
-- **macOS and Linux x86_64:** the script downloads the latest release and checks it against `SHA256SUMS`, then installs `lxsurf` into `~/.local/bin`. To install a given version, set `LXSURF_VERSION=0.2.0`. To install elsewhere, set `LXSURF_INSTALL_DIR`.
-- **Windows:** run `irm https://raw.githubusercontent.com/rsaryev/decision-loop/master/scripts/install.ps1 | iex`.
+- **macOS and Linux x86_64:** the script downloads the latest release and checks it against `SHA256SUMS`, then installs `lx` into `~/.local/bin`. To install a given version, set `LX_VERSION=0.2.0`. To install elsewhere, set `LX_INSTALL_DIR`.
+- **Windows:** run `irm https://raw.githubusercontent.com/rsaryev/localix-cli/master/scripts/install.ps1 | iex`.
 - **From a clone:** run `cargo install --locked --path apps/cli` (the tested `Cargo.lock`). It needs Rust 1.88 or newer.
 
-lxsurf uses the system's own WebView for the browser:
+lx uses the system's own WebView for the browser:
 
 - macOS has WKWebView built in.
 - Windows needs WebView2, which comes with Windows 11.
-- Linux needs WebKitGTK (`libwebkit2gtk-4.1-0`) and a display. Without a display, lxsurf runs without the browser tool.
+- Linux needs WebKitGTK (`libwebkit2gtk-4.1-0`) and a display. Without a display, lx runs without the browser tool.
 
 ## Quick start
 
 ```bash
-lxsurf login        # sign in with OpenRouter in your browser; or export OPENROUTER_API_KEY=sk-or-...
-lxsurf doctor       # checks the key, both models, the WebView and the shell
+lx login        # sign in with OpenRouter in your browser; or export OPENROUTER_API_KEY=sk-or-...
+lx doctor       # checks the key, both models, the WebView and the shell
 cd your-project
-lxsurf "explain how errors are handled in this crate"
+lx "explain how errors are handled in this crate"
 ```
 
 ## Usage
 
 ```bash
-lxsurf "fix the failing test in src/parse.rs"                 # one task, then exit
-lxsurf -y "run the tests and fix what fails"                  # allow commands and edits without asking
-lxsurf                                                        # the prompt line: each line is the next task
-git diff | lxsurf "review this change"                        # piped stdin is added to the prompt
-lxsurf - < task.md                                            # the prompt from stdin
-lxsurf -y "fix the lint" </dev/null                           # from a script whose stdin stays open
-lxsurf -C ../site "open http://localhost:3000 and check that sign-up works"
-lxsurf --json -y "update the changelog" | jq -c 'select(.type == "tool.call")'
-lxsurf --schema '{"type":"object","properties":{"version":{"type":"string"}},"required":["version"]}' \
+lx "fix the failing test in src/parse.rs"                 # one task, then exit
+lx -y "run the tests and fix what fails"                  # allow commands and edits without asking
+lx                                                        # the prompt line: each line is the next task
+git diff | lx "review this change"                        # piped stdin is added to the prompt
+lx - < task.md                                            # the prompt from stdin
+lx -y "fix the lint" </dev/null                           # from a script whose stdin stays open
+lx -C ../site "open http://localhost:3000 and check that sign-up works"
+lx --json -y "update the changelog" | jq -c 'select(.type == "tool.call")'
+lx --schema '{"type":"object","properties":{"version":{"type":"string"}},"required":["version"]}' \
     "which version is this crate?"                            # the data alone on stdout
-lxsurf resume --last "now update the README"                  # go on with the newest session
+lx resume --last "now update the README"                  # go on with the newest session
 ```
 
 | Option | Meaning |
@@ -74,8 +74,8 @@ lxsurf resume --last "now update the README"                  # go on with the n
 | `--schema SCHEMA` | End with data matching this JSON Schema (inline, or `@file`), printed alone on stdout. |
 | `-o, --output-last-message FILE` | Also write the final answer, or the data with `--schema`, to FILE. With `--schema` and no data that matched, the file is left empty. |
 | `-v, --verbose` | Show each tool result and model turn in the trace. With `--json`, the trace also goes to stderr. |
-| `-m, --model MODEL` | The agent's chat model, any OpenRouter model id. Env `LXSURF_MODEL`, default `anthropic/claude-haiku-5.5`. |
-| `--decision-model MODEL` | The browser's decision model. Env `LXSURF_DECISION_MODEL`, default `~typesafe/jev-latest`. |
+| `-m, --model MODEL` | The agent's chat model, any OpenRouter model id. Env `LX_MODEL`, default `anthropic/claude-haiku-5.5`. |
+| `--decision-model MODEL` | The browser's decision model. Env `LX_DECISION_MODEL`, default `~typesafe/jev-latest`. |
 | `--max-turns N` | Model turns for one task (50; 1 to 10000). |
 | `--max-steps N` | Actions for one browser task of the decision model (40; 1 to 10000). |
 | `--timeout SECONDS` | Seconds one task may take (1800; at most 86400). It stops at the first model turn past them. |
@@ -89,13 +89,13 @@ Commands:
 - `resume [ID | --last] [PROMPT]`: continue a session. `--last` is the newest session that ran in this workspace (else the newest of all, with a note).
 - `doctor`: check that everything a run needs is in place.
 
-Every run is saved as a session in `~/.lxsurf/sessions/<id>.json`; set `LXSURF_SESSIONS` to keep them elsewhere. A session records each task and how it ended, but not the conversation itself. `resume` therefore starts a new conversation that is told the earlier tasks, the directory they ran in, and where the browser was. In the prompt line, each task continues the same conversation.
+Every run is saved as a session in `~/.lx/sessions/<id>.json`; set `LX_SESSIONS` to keep them elsewhere. A session records each task and how it ended, but not the conversation itself. `resume` therefore starts a new conversation that is told the earlier tasks, the directory they ran in, and where the browser was. In the prompt line, each task continues the same conversation.
 
-Given a PROMPT, stdin that is not a terminal is read to its end and added to the prompt, and lxsurf says so on stderr. A caller whose stdin stays open (a harness with a pipe, `ssh` without `-n`, a `while read` loop) should pass `</dev/null`.
+Given a PROMPT, stdin that is not a terminal is read to its end and added to the prompt, and lx says so on stderr. A caller whose stdin stays open (a harness with a pipe, `ssh` without `-n`, a `while read` loop) should pass `</dev/null`.
 
 ## Approvals
 
-`read` never asks. `edit`, `bash` and `browser` ask before they act, through one gate (`browser` when a call opens an address, hands over a goal, presses keys or runs a script; reading a page does not ask). The answer depends on how lxsurf was started:
+`read` never asks. `edit`, `bash` and `browser` ask before they act, through one gate (`browser` when a call opens an address, hands over a goal, presses keys or runs a script; reading a page does not ask). The answer depends on how lx was started:
 
 | Started | What happens |
 | --- | --- |
@@ -109,13 +109,13 @@ A refusal goes back to the model as a failed call with its reason, and it is tol
 
 ## Project instructions
 
-lxsurf reads `AGENTS.md` files the way Codex does: from the git repository's root down to the workspace, root first. Each one covers its own directory tree, a deeper file wins over a shallower one, and the task you give wins over both. Each file is capped at 16 KiB and all of them together at 32 KiB, with a note when something was cut. They reach the agent in a context block with the environment: the workspace, the OS, the date, the approval policy, and whether a browser is available (the shell is named in the `bash` tool's description).
+lx reads `AGENTS.md` files the way Codex does: from the git repository's root down to the workspace, root first. Each one covers its own directory tree, a deeper file wins over a shallower one, and the task you give wins over both. Each file is capped at 16 KiB and all of them together at 32 KiB, with a note when something was cut. They reach the agent in a context block with the environment: the workspace, the OS, the date, the approval policy, and whether a browser is available (the shell is named in the `bash` tool's description).
 
 ## Tools
 
 | Tool | What it does |
 | --- | --- |
-| `read` | A file's lines, numbered, up to 2000 lines and about 20 KB at a time (`offset`, `limit`), or a directory's entries. Long lines are cut, binary files and anything but regular files (a FIFO, a device) refused. It reads anywhere (a dependency's source, a system header) except lxsurf's own key and sessions. |
+| `read` | A file's lines, numbered, up to 2000 lines and about 20 KB at a time (`offset`, `limit`), or a directory's entries. Long lines are cut, binary files and anything but regular files (a FIFO, a device) refused. It reads anywhere (a dependency's source, a system header) except lx's own key and sessions. |
 | `edit` | Exact replacement: `old_string` must occur once, unless `replace_all` is set. An empty `old_string` creates a file. Writes are atomic (a new temporary file, then a rename) and keep CRLF line endings and permissions; a read-only file is refused, and a file with other hard links is written in place. It asks the gate, refuses to write when the file changed while the question was open, and changes only files inside the workspace. |
 | `bash` | `sh -c` (`cmd /C` on Windows) in the workspace or a `workdir`, with stdin closed. On Unix it runs in its own session, with no terminal, so a program that prompts fails at once; git and pagers are told not to prompt or page. A timeout (120 s by default, at most 600 s) or Ctrl-C kills it with everything it started. Commands do not see `OPENROUTER_API_KEY`. Each stream keeps its first and last 5,000 bytes. A non-zero exit is a normal result. It asks the gate. |
 | `browser` | A native WebView window. The agent opens an http(s) address, or hands a short task with the exact values to type to the decision model, which clicks, types, selects and scrolls one step at a time. It can also press keys, run a script in the page, read the whole text, or change the page size. Each call returns what happened and the page as an outline. It asks the gate before anything a page sees. |
@@ -130,7 +130,7 @@ lxsurf reads `AGENTS.md` files the way Codex does: from the git repository's roo
 | 3 | The environment or the command line is not ready: no key, no network, a model error, a bad argument |
 | 130 | Interrupted: Ctrl-C (or SIGTERM), or the browser window was closed |
 
-With `--json`, a closed stdout (`lxsurf --json ... | head -1`) ends the run quietly at its next turn, with exit 0. Without it nothing is written to stdout until the answer, so the run goes on to its end and then exits 0.
+With `--json`, a closed stdout (`lx --json ... | head -1`) ends the run quietly at its next turn, with exit 0. Without it nothing is written to stdout until the answer, so the run goes on to its end and then exits 0.
 
 ## `--json`
 
@@ -159,7 +159,7 @@ The workspace is split into packages and one app. Every dependency points inward
 | `packages/tools` | `read`, `edit`, `bash`, the workspace, and the browser (window, driver, page probe) | `contracts` |
 | `packages/openrouter` | The models' provider (chat and decision models) and signing in | `contracts` |
 | `packages/session` | Sessions as JSON files | `contracts` |
-| `apps/cli` | The `lxsurf` binary: the command line, the approvals, the context, the output; it composes the packages | all of the above |
+| `apps/cli` | The `lx` binary: the command line, the approvals, the context, the output; it composes the packages | all of the above |
 
 The agent knows its tools only by their specs, the hands know a view only through its protocol, and neither names a tool or a provider. A tool asks the gate before an effect, but only the app answers it.
 
@@ -167,13 +167,13 @@ The agent knows its tools only by their specs, the hands know a view only throug
 
 - **Tool output is data, not instructions.** File contents, command output and pages are untrusted. The system prompt says so, and every page reaches the agent marked as untrusted content. This lowers the risk of prompt injection without removing it: approve commands with that in mind, and use `-y` in places where a wrong command costs little.
 - **The workspace limits `edit`, not `bash`.** `edit` changes only files inside the workspace, after following symlinks. `bash` is a real shell with your permissions, and there is no sandbox: the gate is what stands between the model and your machine. A `workdir` outside the workspace is named as such in the question.
-- **lxsurf's own files are off limits** to `read` and `edit`, symlinks included: the saved key and the sessions directory.
+- **lx's own files are off limits** to `read` and `edit`, symlinks included: the saved key and the sessions directory.
 - **The browser's decision model only chooses** among the operations and controls a page offers, and types only the strings the agent gave it. Its output never becomes a selector, coordinates or code. Only http(s) pages load; downloads and other schemes are refused. A password field is typed into, but its value is never read back.
-- **Keys:** the key `lxsurf login` saves lives in `~/.config/lxsurf/credentials` (under `XDG_CONFIG_HOME` when set, `%APPDATA%` on Windows), mode 0600 on Unix, also when an older file was wider. `lxsurf logout` removes it. `OPENROUTER_API_KEY` wins over it when set, and commands never see it.
+- **Keys:** the key `lx login` saves lives in `~/.config/lx/credentials` (under `XDG_CONFIG_HOME` when set, `%APPDATA%` on Windows), mode 0600 on Unix, also when an older file was wider. `lx logout` removes it. `OPENROUTER_API_KEY` wins over it when set, and commands never see it.
 
 Known gaps:
 
-- On Windows, Ctrl-C ends lxsurf and the commands it started at once (they share the console), with no `run.completed` event, and `login --with-token` shows the key as it is pasted.
+- On Windows, Ctrl-C ends lx and the commands it started at once (they share the console), with no `run.completed` event, and `login --with-token` shows the key as it is pasted.
 
 ## Metrics
 

@@ -19,7 +19,7 @@ impl Scratch {
     pub fn new() -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let name = format!(
-            "lxsurf-cli-{}-{}-{}",
+            "lx-cli-{}-{}-{}",
             std::process::id(),
             session::now(),
             NEXT.fetch_add(1, Ordering::Relaxed)

@@ -1,4 +1,4 @@
-//! The contracts every part of lxsurf speaks, and nothing else: no logic, no technology.
+//! The contracts every part of the Localix CLI speaks, and nothing else: no logic, no technology.
 //! - [`chat`]: the chat-model port: a conversation in, the next message out. A provider package
 //!   implements [`chat::Chat`].
 //! - [`tool`]: the agent's tools: a spec the model reads and a call that returns text. A tool

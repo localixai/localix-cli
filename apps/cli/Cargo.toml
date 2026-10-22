@@ -1,6 +1,8 @@
 [package]
-name = "cli"
-description = "lxsurf: a fast, small coding agent for the terminal: read, edit, bash and a browser"
+name = "localix-cli"
+description = "lx, the Localix CLI: an ultrafast, lightweight coding agent for the terminal: read, edit, bash and a browser"
+homepage = "https://localix.ai"
+repository = "https://github.com/rsaryev/localix-cli"
 keywords = ["agent", "coding-agent", "cli", "llm", "browser"]
 categories = ["command-line-utilities", "development-tools"]
 version.workspace = true
@@ -10,7 +12,7 @@ license.workspace = true
 publish = false
 
 [[bin]]
-name = "lxsurf"
+name = "lx"
 path = "src/main.rs"
 
 # The composition root (rule L4): the only package that depends on tools, providers and stores.

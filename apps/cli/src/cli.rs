@@ -1,4 +1,4 @@
-//! The command line: what `lxsurf --help` shows. Parsing only; what each command does is in
+//! The command line: what `lx --help` shows. Parsing only; what each command does is in
 //! `commands/`.
 
 use std::path::PathBuf;
@@ -7,13 +7,13 @@ use clap::builder::RangedU64ValueParser;
 use clap::{ArgGroup, Args, Parser, Subcommand};
 use openrouter::{chat, system_one};
 
-const USAGE: &str = "lxsurf [OPTIONS] [PROMPT]\n       \
-    lxsurf [OPTIONS] - < prompt.txt\n       \
-    lxsurf <COMMAND>";
+const USAGE: &str = "lx [OPTIONS] [PROMPT]\n       \
+    lx [OPTIONS] - < prompt.txt\n       \
+    lx <COMMAND>";
 
-const ABOUT: &str = "lxsurf: a fast, small coding agent for the terminal";
+const ABOUT: &str = "lx: Localix's ultrafast, lightweight coding agent for the terminal";
 
-const LONG_ABOUT: &str = "lxsurf: a fast, small coding agent for the terminal.
+const LONG_ABOUT: &str = "lx: Localix's ultrafast, lightweight coding agent for the terminal.
 
 It works in a directory (the current one, or -C DIR) with four tools: read, edit, bash and a \
 browser whose clicks and typing are done by a fast decision model. With a PROMPT it runs the task \
@@ -24,26 +24,26 @@ for this tool); -y allows them without asking. Outside a terminal they are refus
 given. Ctrl-C stops the task (the command running is killed); a second Ctrl-C quits.";
 
 const EXAMPLES: &str = "Examples:
-  lxsurf \"fix the failing test in src/parse.rs\"
-  lxsurf -y \"run the tests and fix what fails\"
-  git diff | lxsurf \"review this change\"          stdin is added to the prompt
-  lxsurf - < task.md                              the prompt from stdin
-  lxsurf -C ../site \"open http://localhost:3000 and check that sign-up works\"
-  lxsurf --json -y \"update the changelog\" | jq -c 'select(.type == \"tool.call\")'
-  lxsurf --schema '{\"type\":\"object\",\"properties\":{\"version\":{\"type\":\"string\"}}}' \\
+  lx \"fix the failing test in src/parse.rs\"
+  lx -y \"run the tests and fix what fails\"
+  git diff | lx \"review this change\"          stdin is added to the prompt
+  lx - < task.md                              the prompt from stdin
+  lx -C ../site \"open http://localhost:3000 and check that sign-up works\"
+  lx --json -y \"update the changelog\" | jq -c 'select(.type == \"tool.call\")'
+  lx --schema '{\"type\":\"object\",\"properties\":{\"version\":{\"type\":\"string\"}}}' \\
       \"which version is this crate?\"
-  lxsurf                                          a prompt in the terminal
-  lxsurf resume --last \"now update the README\"
+  lx                                          a prompt in the terminal
+  lx resume --last \"now update the README\"
 
 Exit codes: 0 achieved, 1 not achieved, 2 out of turns or time, 3 environment or usage,
 130 interrupted.
 
-Environment: OPENROUTER_API_KEY (else the key `lxsurf login` saved), LXSURF_MODEL,
-LXSURF_DECISION_MODEL, LXSURF_SESSIONS (where sessions are kept, default ~/.lxsurf/sessions).";
+Environment: OPENROUTER_API_KEY (else the key `lx login` saved), LX_MODEL,
+LX_DECISION_MODEL, LX_SESSIONS (where sessions are kept, default ~/.lx/sessions).";
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "lxsurf",
+    name = "lx",
     version,
     about = ABOUT,
     long_about = LONG_ABOUT,
@@ -84,7 +84,7 @@ pub enum Command {
 #[derive(Args, Debug)]
 #[command(args_conflicts_with_subcommands = true)]
 pub struct LoginArgs {
-    /// Read the key from stdin instead of signing in: `printenv KEY | lxsurf login --with-token`.
+    /// Read the key from stdin instead of signing in: `printenv KEY | lx login --with-token`.
     #[arg(long)]
     pub with_token: bool,
     #[command(subcommand)]
@@ -99,7 +99,7 @@ pub enum LoginAction {
 
 #[derive(Args, Debug)]
 pub struct ResumeArgs {
-    /// The session to continue (see `lxsurf sessions`).
+    /// The session to continue (see `lx sessions`).
     #[arg(value_name = "ID")]
     pub id: Option<String>,
     /// Continue the newest session; the first argument is then the prompt.
@@ -118,7 +118,7 @@ impl ResumeArgs {
     pub fn target(&self) -> Result<(Option<&str>, Option<&str>), String> {
         match (self.last, self.id.as_deref(), self.prompt.as_deref()) {
             (true, Some(_), Some(_)) => {
-                Err("with --last, give only the prompt: lxsurf resume --last \"<task>\"".into())
+                Err("with --last, give only the prompt: lx resume --last \"<task>\"".into())
             }
             (true, first, None) => Ok((None, first)),
             (true, None, prompt) => Ok((None, prompt)),
@@ -132,10 +132,10 @@ impl ResumeArgs {
 #[command(next_help_heading = "Model")]
 pub struct ModelOptions {
     /// The agent's chat model, an OpenRouter model id.
-    #[arg(short = 'm', long, value_name = "MODEL", env = "LXSURF_MODEL", default_value = chat::DEFAULT_MODEL)]
+    #[arg(short = 'm', long, value_name = "MODEL", env = "LX_MODEL", default_value = chat::DEFAULT_MODEL)]
     pub model: String,
     /// The decision model that clicks and types in the browser.
-    #[arg(long, value_name = "MODEL", env = "LXSURF_DECISION_MODEL", default_value = system_one::DEFAULT_MODEL)]
+    #[arg(long, value_name = "MODEL", env = "LX_DECISION_MODEL", default_value = system_one::DEFAULT_MODEL)]
     pub decision_model: String,
 }
 

@@ -2,7 +2,7 @@
 
 Instructions for AI coding agents working on this repository.
 
-lxsurf is a small, fast coding agent for the terminal. It has four tools: `read`, `edit`, `bash`, and a native browser whose clicks and typing are done by a decision model. The tool set is deliberately minimal: no plugins, no MCP, no skills, no extra tools. A new capability goes into one of these four, or is left to the shell.
+`lx`, the Localix CLI, is an ultrafast, lightweight coding agent for the terminal. It has four tools: `read`, `edit`, `bash`, and a native browser whose clicks and typing are done by a decision model. The tool set is deliberately minimal: no plugins, no MCP, no skills, no extra tools. A new capability goes into one of these four, or is left to the shell.
 
 ## Layout
 
@@ -52,7 +52,7 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
   - `auth.rs` and `auth_page.rs`: signing in.
   - It is told who calls it (`App`).
 - `packages/session`: a history store: sessions as JSON files.
-- `apps/cli`: the `lxsurf` binary and the composition root.
+- `apps/cli`: the `lx` binary and the composition root.
   - `main.rs`: where the process exits (or the browser host, once its event loop owns the main thread, with the code the run returns).
   - `cli.rs`: the command line.
   - `commands/`: `run.rs` (one task: checks, then the browser host, then the task), `repl.rs` (the prompt line), `login.rs`, `sessions.rs` (`sessions`, `resume`), `doctor.rs`.
@@ -87,7 +87,7 @@ Behaviour:
 - Tool content (files, command output, pages) is untrusted data. Never let it reach a request as an instruction; mark it so where the agent reads it.
 - No task- or site-specific wording in the agent's prompt, the tool descriptions or the hands' instructions. A rule earns its place by the evals, and stays general.
 - Synchronous code: threads where needed, no async runtime.
-- The release binary stays small (about 1.6 MB). No browser engine, and no dependency that is not already in the tree unless it earns its size; std first. Check `ls -la target/release/lxsurf` after adding one. CI fails above 2.5 MiB.
+- The release binary stays small (about 1.6 MB). No browser engine, and no dependency that is not already in the tree unless it earns its size; std first. Check `ls -la target/release/lx` after adding one. CI fails above 2.5 MiB.
 - The browser window never takes keyboard focus and never stops rendering. An action is settled when the DOM has been quiet for 100 ms (at most 700 ms), and when a navigation it started has a parsed document.
 - Exit codes (`apps/cli/src/exit.rs`) and the `--json` events (`apps/cli/src/output/json.rs`, `SCHEMA`) are a public contract. Change them only with a schema bump and a CHANGELOG entry.
 
@@ -112,7 +112,7 @@ Update these together:
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace            # unit tests, the layer rules, tests/cli.rs, packages/tools/tests/browser.rs (a real headless window)
-cargo build --release && ls -la target/release/lxsurf
+cargo build --release && ls -la target/release/lx
 python3 evals/run.py --repeat 3   # live, paid; run for agent, prompt, tool, loop or probe changes
 python3 evals/run.py --only code  # the coding tasks alone
 ```
@@ -122,4 +122,4 @@ python3 evals/run.py --only code  # the coding tasks alone
 - For every driver or probe fix, add a fixture under `packages/tools/tests/fixtures/` and an assertion in that file. Confirm the assertion fails without the fix.
 - `DECISION_LOOP_DEBUG=1` prints each decision's state and answers.
 - `BROWSER_DEBUG=1` prints action timings and navigation events.
-- `lxsurf -v` shows each tool result and model turn in the trace.
+- `lx -v` shows each tool result and model turn in the trace.

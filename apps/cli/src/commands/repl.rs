@@ -1,4 +1,4 @@
-//! The prompt line: `lxsurf` with no prompt, at a terminal. Each line is the next task, in the
+//! The prompt line: `lx` with no prompt, at a terminal. Each line is the next task, in the
 //! same conversation, workspace, browser window and session; a line ending in `\` goes on on the
 //! next. Ctrl-D or `/exit` quits. The time limit is per task, so waiting for the person to type
 //! never times out.
@@ -23,7 +23,7 @@ pub enum Entry {
 
 pub fn run(rig: &mut Rig) -> i32 {
     rig.output.note(&format!(
-        "lxsurf {} · {} · {}\n{}",
+        "lx {} · {} · {}\n{}",
         env!("CARGO_PKG_VERSION"),
         rig.options.models.model,
         rig.workspace.root().display(),
@@ -71,7 +71,7 @@ pub fn read(input: &mut dyn BufRead, shown: &dyn Fn(&str)) -> Option<String> {
             Ok(_) => {}
             Err(error) => {
                 shown(&format!(
-                    "\nlxsurf: the prompt line could not be read: {error}\n"
+                    "\nlx: the prompt line could not be read: {error}\n"
                 ));
                 return None;
             }

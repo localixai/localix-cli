@@ -1,4 +1,4 @@
-//! `lxsurf doctor`: is everything a run needs in place? The key, both models (each asked one tiny
+//! `lx doctor`: is everything a run needs in place? The key, both models (each asked one tiny
 //! question), the WebView the browser tool opens, and the shell `bash` runs in. A missing display
 //! only leaves the browser out, so it warns without failing.
 
@@ -51,7 +51,7 @@ pub fn doctor(models: &ModelOptions) -> Result<i32, Failure> {
     let Some((key, source)) = auth::key(APP) else {
         line(
             Mark::Fail,
-            "no OpenRouter key: set OPENROUTER_API_KEY or run `lxsurf login`",
+            "no OpenRouter key: set OPENROUTER_API_KEY or run `lx login`",
         )?;
         return Ok(exit::ENVIRONMENT);
     };

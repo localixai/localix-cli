@@ -2,21 +2,22 @@
 
 ## Unreleased
 
-lxsurf is now a small, fast coding agent for the terminal. It has four tools: `read`, `edit`, `bash`, and the browser, whose clicks and typing a decision model does. It stays one synchronous binary of about 1.6 MB, with no async runtime and no plugins, MCP or skills.
+The browser CLI of 0.1.0 is now `lx`, the Localix CLI: an ultrafast, lightweight coding agent for the terminal. It has four tools: `read`, `edit`, `bash`, and the browser, whose clicks and typing a decision model does. It stays one synchronous binary of about 1.6 MB, with no async runtime and no plugins, MCP or skills.
 
 ### Breaking
 
+- **Renamed to `lx`, the Localix CLI.** The command is `lx` (it was `decision-loop`), the repository `rsaryev/localix-cli`. The key is kept in `~/.config/lx/credentials`, sessions in `~/.lx/sessions`, and the variables are `LX_MODEL`, `LX_DECISION_MODEL`, `LX_SESSIONS`, `LX_VERSION` and `LX_INSTALL_DIR`.
 - **`--json` is schema 4: JSON lines.** One event per line replaces the single object of schema 3. The events are `run.started`, `tool.call`, `tool.result`, `step`, `turn` and `run.completed`. `run.completed` has `status` (`achieved`, `not_achieved`, `unstated`, `exhausted`, `error`, `interrupted`), `exit_code`, `answer`, `data` or `data_error`, `error`, `session`, `usage` {`agent`, `decision`, `cost_usd`} and `duration_ms`. `final_url`, `screenshot` and `expects` are gone.
 - **Removed:**
   - commands: `check`, `models`, `skills`;
   - options: `--expect`, `--no-llm`, `--dry-run`, `--screenshot`, `--keep-open`, `--headless` / `--show`, `-c` / `--continue`, `--resume`, `--trace`, `--url`, `--viewport`.
 
   Passing a removed option is a usage error (exit 3). Their replacements:
-  - `--keep-open` becomes the prompt line: `lxsurf` with no prompt, at a terminal.
-  - `-c` and `--resume ID` become `lxsurf resume --last` and `lxsurf resume ID`.
+  - `--keep-open` becomes the prompt line: `lx` with no prompt, at a terminal.
+  - `-c` and `--resume ID` become `lx resume --last` and `lx resume ID`.
   - `--trace` becomes `--json` or `-v`.
   - `--headless` becomes the default: the window is invisible unless `--show-browser`.
-- **The skill files are removed:** the bundled skill guides, `skills/lxsurf/SKILL.md` and the Claude Code plugin marketplace.
+- **The skill files are removed:** the bundled skill guides, `skills/lx/SKILL.md` and the Claude Code plugin marketplace.
 - **New defaults:** `--max-turns` is 50 (was 30) and `--timeout` is 1800 s (was 600). `--max-turns` and `--max-steps` take 1 to 10000, and `--timeout` at most 86400 s.
 - **Exit codes keep their meanings:** 0, 1, 2, 3 and 130. Exit 3 now also covers a usage error and a model error.
 
@@ -26,7 +27,7 @@ lxsurf is now a small, fast coding agent for the terminal. It has four tools: `r
   - `read` returns numbered lines, up to 2000 lines and about 20 KB at a time (below what the agent keeps of one result, so its "read again with offset" hint is always true), or a directory's entries. It refuses binary files and anything but a regular file (a FIFO, a device such as `/dev/zero`), and cuts long lines.
   - `edit` makes an exact, unique replacement (or every match with `replace_all`), or creates a file. Writes are atomic and keep CRLF line endings and permissions. A failure says how to fix the call: the text was not found, it occurs more than once, or line numbers were pasted in. It refuses a read-only file and a file that changed while its approval question was open, writes a file with other hard links in place, and creates its temporary file new, so a symlink planted there is never written through.
   - `bash` runs `sh -c` in the workspace in a session of its own, with no terminal: a program that prompts (git credentials, ssh, sudo) fails at once instead of stalling until the timeout, and git and pagers are told not to prompt or page. A timeout kills it with everything it started, without an external `kill`, and the result says "killed" only once that is so. Commands do not see `OPENROUTER_API_KEY`. Each stream keeps its first and last 5,000 bytes. Commands that leave background processes running do not hang it.
-- **The workspace (`-C DIR`):** paths resolve in it, and `edit` changes files only inside it, after following symlinks. lxsurf's saved key and its sessions are off limits to `read` and `edit`, symlinks included. On Windows the workspace is a plain path, not a verbatim `\\?\` one, so `cmd` runs in it.
+- **The workspace (`-C DIR`):** paths resolve in it, and `edit` changes files only inside it, after following symlinks. lx's saved key and its sessions are off limits to `read` and `edit`, symlinks included. On Windows the workspace is a plain path, not a verbatim `\\?\` one, so `cmd` runs in it.
 - **Approvals:**
   - `edit`, `bash` and `browser` ask a gate (`contracts::gate`) before they act. The browser asks before it opens an address, hands over a goal, presses keys or runs a script, and opens only http and https addresses.
   - The question shows the whole command, never cut, with the directory it runs in when `workdir` is given (and says when that is outside the workspace). Control characters and reordering marks are escaped, so an escape sequence cannot redraw it.
@@ -35,9 +36,9 @@ lxsurf is now a small, fast coding agent for the terminal. It has four tools: `r
   - With no terminal and no `-y`, effects are refused, and the model is told to have the person rerun with `--yes`.
 - **Context:** the agent starts with an environment block: the workspace, the OS, the date, the approval policy, and whether a browser is available (the shell is named in `bash`'s own description). After it come the project's `AGENTS.md` files, from the git root down to the workspace (16 KiB each, 32 KiB in all). A resumed session also gets its earlier tasks, each capped (a piped `<stdin>` block left out), and the directory they ran in.
 - **A command line like `codex exec`:**
-  - `lxsurf "<task>"` runs one task.
-  - `lxsurf - < task.md` reads the prompt from stdin, and piped stdin is added to a prompt as a `<stdin>` block; lxsurf says on stderr when it reads stdin that may stay open (`</dev/null` skips it).
-  - `lxsurf` alone opens a prompt line where each line continues the conversation (`/help`, `/exit`, Ctrl-D).
+  - `lx "<task>"` runs one task.
+  - `lx - < task.md` reads the prompt from stdin, and piped stdin is added to a prompt as a `<stdin>` block; lx says on stderr when it reads stdin that may stay open (`</dev/null` skips it).
+  - `lx` alone opens a prompt line where each line continues the conversation (`/help`, `/exit`, Ctrl-D).
   - `-o FILE` also writes the last answer to a file (the data with `--schema`; empty when none matched), before `run.completed`, so its `exit_code` is the process's even when the file cannot be written. `-v` shows results and per-turn usage.
   - With `--schema`, a model that answers in text twice ends the run as `not_achieved` (exit 1) with `data_error`, and nothing on stdout.
   - The trace goes to stderr and the answer alone to stdout.
@@ -47,7 +48,7 @@ lxsurf is now a small, fast coding agent for the terminal. It has four tools: `r
   - `--timeout` stops a task between model turns (exit 2), never in the middle of a tool call.
   - Ctrl-C (or SIGTERM) stops the task: the running command is killed with everything it started, nothing more is approved, the browser's hands stop, and the task ends as `interrupted` (exit 130) with its `run.completed` event and session. A second Ctrl-C quits at once. Closing the browser window stops the task the same way instead of killing the process; the prompt line goes on, and the window opens again when needed.
   - With `--json`, a closed stdout ends the run quietly at its next turn (exit 0).
-  - Without a display (headless Linux), lxsurf runs without the browser tool instead of failing.
+  - Without a display (headless Linux), lx runs without the browser tool instead of failing.
 - **The agent:**
   - A new system prompt for coding work: plan briefly, read before editing, make the smallest correct change, validate with the project's own checks, and report what changed and what was verified.
   - Observer hooks for calls, results and turns.

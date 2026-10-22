@@ -26,7 +26,7 @@ use crate::input::{self, Prompt};
 use crate::interrupt;
 use crate::output::{Start, Summary};
 
-/// The workspace `options` name (`-C`, else the current directory), with lxsurf's own key and
+/// The workspace `options` name (`-C`, else the current directory), with lx's own key and
 /// sessions off limits to the tools: a prompt injection must not read them into the conversation.
 pub fn root(options: &RunOptions) -> Result<Workspace, Failure> {
     let root = options.cd.as_deref().unwrap_or(Path::new("."));
@@ -178,7 +178,7 @@ impl Rig<'_> {
         self.session.record(turn, location.as_deref());
         if let Err(error) = self.history.save(&self.session) {
             self.output
-                .note(&format!("lxsurf: the session was not saved: {error}\n"));
+                .note(&format!("lx: the session was not saved: {error}\n"));
         }
     }
 }

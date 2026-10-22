@@ -84,11 +84,11 @@ fn ends() -> bool {
 pub fn waiting(arg: Option<&str>, stdin: Stdin) -> Option<&'static str> {
     match (arg, stdin) {
         (Some("-"), Stdin::Terminal) => {
-            Some("lxsurf: reading the prompt from stdin; end it with Ctrl-D\n")
+            Some("lx: reading the prompt from stdin; end it with Ctrl-D\n")
         }
         (Some("-"), _) | (None, _) => None,
         (Some(_), Stdin::Stream) => {
-            Some("lxsurf: reading additional input from stdin (</dev/null to skip it)\n")
+            Some("lx: reading additional input from stdin (</dev/null to skip it)\n")
         }
         _ => None,
     }
@@ -104,7 +104,7 @@ pub fn assemble(arg: Option<&str>, stdin: Option<&str>) -> Result<Prompt, Failur
         (Some("-") | None, Some(text)) => text.to_string(),
         (Some("-") | None, None) => {
             return Err(Failure::Usage(
-                "no prompt: lxsurf \"<task>\", or pipe one in (stdin was empty)".into(),
+                "no prompt: lx \"<task>\", or pipe one in (stdin was empty)".into(),
             ));
         }
         (Some(prompt), Some(text)) => format!("{}\n\n<stdin>\n{text}\n</stdin>", prompt.trim()),

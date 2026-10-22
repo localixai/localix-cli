@@ -14,7 +14,7 @@ impl Home {
     fn new() -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "lxsurf-e2e-{}-{}",
+            "lx-e2e-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
@@ -27,25 +27,25 @@ impl Home {
         &self.0
     }
 
-    /// `lxsurf args…` with this home, no key in the environment and stdin closed.
-    fn lxsurf(&self, args: &[&str]) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_lxsurf"));
+    /// `lx args…` with this home, no key in the environment and stdin closed.
+    fn lx(&self, args: &[&str]) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_lx"));
         command
             .args(args)
             .env("HOME", &self.0)
             .env("USERPROFILE", &self.0)
             .env("XDG_CONFIG_HOME", self.0.join("config"))
             .env("APPDATA", self.0.join("config"))
-            .env("LXSURF_SESSIONS", self.0.join("sessions"))
+            .env("LX_SESSIONS", self.0.join("sessions"))
             .env_remove("OPENROUTER_API_KEY")
-            .env_remove("LXSURF_MODEL")
-            .env_remove("LXSURF_DECISION_MODEL")
+            .env_remove("LX_MODEL")
+            .env_remove("LX_DECISION_MODEL")
             .stdin(Stdio::null());
         command
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        self.lxsurf(args).output().unwrap()
+        self.lx(args).output().unwrap()
     }
 }
 
@@ -67,14 +67,11 @@ fn help_and_version_exit_zero() {
     let help = home.run(&["--help"]);
     assert_eq!(help.status.code(), Some(0));
     let shown = text(&help.stdout);
-    assert!(
-        shown.contains("Usage: lxsurf [OPTIONS] [PROMPT]"),
-        "{shown}"
-    );
+    assert!(shown.contains("Usage: lx [OPTIONS] [PROMPT]"), "{shown}");
     assert!(shown.contains("Examples:"));
     let version = home.run(&["--version"]);
     assert_eq!(version.status.code(), Some(0));
-    assert!(text(&version.stdout).starts_with("lxsurf "));
+    assert!(text(&version.stdout).starts_with("lx "));
 }
 
 #[test]
@@ -99,7 +96,7 @@ fn login_status_without_a_key_exits_three() {
 fn login_status_shows_the_key_masked() {
     let home = Home::new();
     let out = home
-        .lxsurf(&["login", "status"])
+        .lx(&["login", "status"])
         .env("OPENROUTER_API_KEY", FAKE_KEY)
         .output()
         .unwrap();
@@ -112,7 +109,7 @@ fn login_status_shows_the_key_masked() {
 fn a_key_from_stdin_is_saved_reported_and_forgotten() {
     let home = Home::new();
     let mut login = home
-        .lxsurf(&["login", "--with-token"])
+        .lx(&["login", "--with-token"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -149,7 +146,7 @@ fn a_run_without_a_key_stops_before_any_model() {
 fn bad_run_arguments_are_usage_errors() {
     let home = Home::new();
     let with_key = |args: &[&str]| {
-        home.lxsurf(args)
+        home.lx(args)
             .env("OPENROUTER_API_KEY", FAKE_KEY)
             .output()
             .unwrap()
@@ -174,15 +171,15 @@ fn sessions_and_resume_with_none_saved() {
     assert_eq!(list.status.code(), Some(0));
     assert_eq!(text(&list.stdout), "No saved sessions.\n");
     let resume = home
-        .lxsurf(&["resume", "--last"])
+        .lx(&["resume", "--last"])
         .env("OPENROUTER_API_KEY", FAKE_KEY)
         .output()
         .unwrap();
     assert_eq!(resume.status.code(), Some(3));
-    assert!(text(&resume.stderr).contains("lxsurf sessions"));
+    assert!(text(&resume.stderr).contains("lx sessions"));
 }
 
-/// `lxsurf … | head -1`, where the reader is gone before anything is written.
+/// `lx … | head -1`, where the reader is gone before anything is written.
 fn into_a_closed_pipe(command: &mut Command) -> Output {
     let (reader, writer) = std::io::pipe().unwrap();
     drop(reader);
@@ -196,15 +193,15 @@ fn into_a_closed_pipe(command: &mut Command) -> Output {
 #[test]
 fn a_closed_stdout_ends_quietly_with_zero() {
     let home = Home::new();
-    let help = into_a_closed_pipe(&mut home.lxsurf(&["--help"]));
+    let help = into_a_closed_pipe(&mut home.lx(&["--help"]));
     assert_eq!(help.status.code(), Some(0));
     let status = into_a_closed_pipe(
-        home.lxsurf(&["login", "status"])
+        home.lx(&["login", "status"])
             .env("OPENROUTER_API_KEY", FAKE_KEY),
     );
     assert_eq!(status.status.code(), Some(0));
     assert!(status.stderr.is_empty(), "{}", text(&status.stderr));
-    let sessions = into_a_closed_pipe(&mut home.lxsurf(&["sessions"]));
+    let sessions = into_a_closed_pipe(&mut home.lx(&["sessions"]));
     assert_eq!(sessions.status.code(), Some(0));
     assert!(sessions.stderr.is_empty());
 }
@@ -250,7 +247,7 @@ fn resuming_a_session_from_elsewhere_says_where_it_ran() {
     let home = Home::new();
     save_session(&home, "1700000000-cd34", "/elsewhere/repo");
     let resume = home
-        .lxsurf(&["resume", "--last"])
+        .lx(&["resume", "--last"])
         .env("OPENROUTER_API_KEY", FAKE_KEY)
         .output()
         .unwrap();
@@ -268,12 +265,12 @@ fn resuming_a_session_from_elsewhere_says_where_it_ran() {
 fn a_saved_key_is_private_even_over_an_older_file() {
     use std::os::unix::fs::PermissionsExt;
     let home = Home::new();
-    let path = home.path().join("config/lxsurf/credentials");
+    let path = home.path().join("config/lx/credentials");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, "old").unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
     let mut login = home
-        .lxsurf(&["login", "--with-token"])
+        .lx(&["login", "--with-token"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .spawn()

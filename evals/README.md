@@ -8,15 +8,15 @@ OPENROUTER_API_KEY=sk-or-... python3 evals/run.py           # every task once
 python3 evals/run.py --only code                           # one kind: code or browser
 python3 evals/run.py --only fix-test,login --repeat 3      # some tasks, for stability
 python3 evals/run.py --jobs 6                              # more runs at once (default 3)
-LXSURF_MODEL=<id> LXSURF_DECISION_MODEL=<id> python3 evals/run.py   # other models
-python3 evals/run.py -- --max-turns 20                     # more lxsurf arguments after --
+LX_MODEL=<id> LX_DECISION_MODEL=<id> python3 evals/run.py   # other models
+python3 evals/run.py -- --max-turns 20                     # more lx arguments after --
 ```
 
 ## How a run is judged
 
-Every run is `lxsurf --json --yes -C <dir> --timeout 240 "<goal>"`, plus `--schema` when the task has one. `<dir>` is a new temporary directory that holds a copy of `evals/fixtures/<fixture>/`, or nothing when the task has no fixture. It is outside any git repository, so no AGENTS.md from this repository reaches the agent. A run passes when all of these hold:
+Every run is `lx --json --yes -C <dir> --timeout 240 "<goal>"`, plus `--schema` when the task has one. `<dir>` is a new temporary directory that holds a copy of `evals/fixtures/<fixture>/`, or nothing when the task has no fixture. It is outside any git repository, so no AGENTS.md from this repository reaches the agent. A run passes when all of these hold:
 
-- lxsurf exits 0, and its last JSON line is a `run.completed` event.
+- lx exits 0, and its last JSON line is a `run.completed` event.
 - With a `schema`: the event has `data`.
 - Every `contains` string appears in the answer, ignoring case. With a schema, the data counts as part of the answer.
 - Every `matches` pattern is found in the answer: a Python regex, ignoring case. It is used for numbers, where a plain substring would match by accident.
@@ -29,7 +29,7 @@ Results land in `evals/results/<timestamp>/`, which git ignores:
 - `<task>-<n>.jsonl`: the run's events.
 - `<task>-<n>.stderr`: whatever the run printed on stderr.
 - `summary.json`: the table, with the reasons.
-- `sessions/`: the sessions the runs saved, kept here instead of your `~/.lxsurf/sessions`.
+- `sessions/`: the sessions the runs saved, kept here instead of your `~/.lx/sessions`.
 
 `--record` also appends the run to `benchmarks/runs/<date>.json` (tracked in git). It then regenerates `benchmarks/HISTORY.md` (every run, plus per-task changes against the previous run) and the metrics block in the main README.
 

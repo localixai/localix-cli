@@ -73,7 +73,7 @@ impl Approvals {
 pub struct Denying;
 
 pub const NO_TERMINAL: &str = "no one is at a terminal to approve it; the person must rerun \
-lxsurf with --yes (-y) to allow commands, file changes and browser actions";
+lx with --yes (-y) to allow commands, file changes and browser actions";
 
 impl Gate for Denying {
     fn check(&self, _: Effect) -> Verdict {

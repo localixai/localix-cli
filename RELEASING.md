@@ -14,7 +14,7 @@ A release is a pushed tag `vX.Y.Z`; CI builds and publishes the rest.
 4. Tag and push the tag:
 
    ```bash
-   git tag -a vX.Y.Z -m "lxsurf X.Y.Z"
+   git tag -a vX.Y.Z -m "lx X.Y.Z"
    git push origin vX.Y.Z
    ```
 
@@ -34,13 +34,13 @@ A version with a suffix (`v1.0.0-rc.1`) is published as a prerelease, which `ins
      WebKitGTK 4.1;
    - Windows (`windows-latest`): `x86_64-pc-windows-msvc`.
 
-   Each archive (`lxsurf-<target>.tar.gz`, `.zip` on Windows) holds the binary, `README.md` and
+   Each archive (`lx-<target>.tar.gz`, `.zip` on Windows) holds the binary, `README.md` and
    `LICENSE`. The binary is run with `--version` before upload.
 3. **publish**: joins every platform's `SHA256SUMS`, checks them against the archives, and runs
    `gh release create vX.Y.Z` with the archives, `SHA256SUMS`, `install.sh` and `install.ps1`,
    and the CHANGELOG section as the notes.
 
-`scripts/install.sh` and `scripts/install.ps1` read `releases/latest` (or `LXSURF_VERSION`) and
+`scripts/install.sh` and `scripts/install.ps1` read `releases/latest` (or `LX_VERSION`) and
 verify the archive against `SHA256SUMS`, so a release is installable as soon as it is published.
 
 ## Locally

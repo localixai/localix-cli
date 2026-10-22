@@ -63,7 +63,7 @@ pub fn window_closed() {
 #[cfg(unix)]
 pub fn install() {
     extern "C" fn on_signal(_: libc::c_int) {
-        const NOTE: &[u8] = b"\nlxsurf: stopping the task (Ctrl-C again quits now)\n";
+        const NOTE: &[u8] = b"\nlx: stopping the task (Ctrl-C again quits now)\n";
         if PROCESS.stop() {
             // SAFETY: _exit is async-signal-safe; nothing is left to flush that matters more than
             // quitting when asked twice.

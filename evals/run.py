@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Runs evals/tasks.json through lxsurf and reports success, time and cost per task.
+"""Runs evals/tasks.json through lx and reports success, time and cost per task.
 
 Usage: OPENROUTER_API_KEY=... python3 evals/run.py [--only id,kind] [--repeat N] [--jobs N]
-       [--bin path] [--record] [-- extra lxsurf args]
+       [--bin path] [--record] [-- extra lx args]
 
-Each run is `lxsurf --json --yes -C <dir> "<goal>"` in a fresh temporary directory (a copy of the
+Each run is `lx --json --yes -C <dir> "<goal>"` in a fresh temporary directory (a copy of the
 task's fixture, or empty), outside any git repository so no AGENTS.md reaches the agent. A run
-passes when lxsurf exits 0, the answer (and the data, with a schema) holds every `contains` string
+passes when lx exits 0, the answer (and the data, with a schema) holds every `contains` string
 and `matches` pattern, and the task's `check` command exits 0 in that directory afterwards.
 
 Live: every task makes paid OpenRouter calls; browser tasks open real sites.
@@ -16,13 +16,13 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURES = os.path.join(ROOT, "evals", "fixtures")
-TIMEOUT_S = 240  # lxsurf's own --timeout for one task
+TIMEOUT_S = 240  # lx's own --timeout for one task
 HANG_S = TIMEOUT_S + 60  # past this the process is killed: a run that never ends is a failure
 CHECK_S = 60
 
 
 def events(stdout):
-    """The JSON lines lxsurf printed; anything else on stdout is ignored."""
+    """The JSON lines lx printed; anything else on stdout is ignored."""
     parsed = []
     for line in stdout.splitlines():
         try:
@@ -36,7 +36,7 @@ def events(stdout):
 
 def workdir(task):
     """A fresh directory for one run: the fixture copied in, or nothing."""
-    path = tempfile.mkdtemp(prefix=f"lxsurf-eval-{task['id']}-")
+    path = tempfile.mkdtemp(prefix=f"lx-eval-{task['id']}-")
     if task.get("fixture"):
         shutil.copytree(os.path.join(FIXTURES, task["fixture"]), path, dirs_exist_ok=True)
     return path
@@ -91,8 +91,8 @@ def run(job, binary, extra, out_dir):
     if task.get("schema"):
         args += ["--schema", json.dumps(task["schema"])]
     args += extra + [task["goal"]]
-    # Sessions go beside the results, not into the person's own ~/.lxsurf/sessions.
-    env = dict(os.environ, LXSURF_SESSIONS=os.path.join(out_dir, "sessions"))
+    # Sessions go beside the results, not into the person's own ~/.lx/sessions.
+    env = dict(os.environ, LX_SESSIONS=os.path.join(out_dir, "sessions"))
     started = time.time()
     try:
         proc = subprocess.run(args, capture_output=True, text=True, env=env, timeout=HANG_S,
@@ -160,9 +160,9 @@ def main():
     parser.add_argument("--only", help="comma-separated task ids or kinds (code, browser)")
     parser.add_argument("--repeat", type=int, default=1, help="runs per task")
     parser.add_argument("--jobs", type=int, default=3, help="runs at once")
-    parser.add_argument("--bin", default=os.path.join(ROOT, "target/release/lxsurf"))
+    parser.add_argument("--bin", default=os.path.join(ROOT, "target/release/lx"))
     parser.add_argument("--record", action="store_true", help="add this run to benchmarks/ (history, README metrics)")
-    parser.add_argument("extra", nargs="*", help="after --: more lxsurf arguments, such as -m MODEL")
+    parser.add_argument("extra", nargs="*", help="after --: more lx arguments, such as -m MODEL")
     opts = parser.parse_args()
     if not os.access(opts.bin, os.X_OK):
         sys.exit(f"{opts.bin} is missing: cargo build --release, or pass --bin")

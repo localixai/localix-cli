@@ -1,25 +1,25 @@
 #!/bin/sh
-# Installs the lxsurf binary from a GitHub release:
+# Installs the lx binary from a GitHub release:
 #
-#   curl -fsSL https://raw.githubusercontent.com/rsaryev/decision-loop/master/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/rsaryev/localix-cli/master/scripts/install.sh | sh
 #
 # Environment:
-#   LXSURF_VERSION      a release such as 0.2.0 (default: the latest)
-#   LXSURF_INSTALL_DIR  where the binary goes (default: $HOME/.local/bin)
+#   LX_VERSION      a release such as 0.2.0 (default: the latest)
+#   LX_INSTALL_DIR  where the binary goes (default: $HOME/.local/bin)
 #
-# It downloads lxsurf-<target>.tar.gz and SHA256SUMS from the release, refuses an archive whose
-# SHA-256 does not match, and replaces the binary in one rename, so a running lxsurf is not torn.
+# It downloads lx-<target>.tar.gz and SHA256SUMS from the release, refuses an archive whose
+# SHA-256 does not match, and replaces the binary in one rename, so a running lx is not torn.
 # Everything runs from `main` on the last line: a download cut short by the network defines
 # functions at most, and runs nothing.
 set -eu
 
-repo="rsaryev/decision-loop"
-install_dir=${LXSURF_INSTALL_DIR:-$HOME/.local/bin}
-version=${LXSURF_VERSION:-}
+repo="rsaryev/localix-cli"
+install_dir=${LX_INSTALL_DIR:-$HOME/.local/bin}
+version=${LX_VERSION:-}
 
 say() { printf '%s\n' "$*"; }
 fail() {
-  printf 'lxsurf install: %s\n' "$*" >&2
+  printf 'lx install: %s\n' "$*" >&2
   exit 1
 }
 
@@ -78,7 +78,7 @@ sha256_of() {
 
 main() {
   target=$(detect_target)
-  archive="lxsurf-$target.tar.gz"
+  archive="lx-$target.tar.gz"
   if [ -n "$version" ]; then
     base="https://github.com/$repo/releases/download/v${version#v}"
   else
@@ -97,19 +97,19 @@ main() {
   actual=$(sha256_of "$tmp/$archive")
   [ "$actual" = "$expected" ] || fail "checksum mismatch for $archive: expected $expected, got $actual"
 
-  tar -xzf "$tmp/$archive" -C "$tmp" lxsurf
+  tar -xzf "$tmp/$archive" -C "$tmp" lx
   mkdir -p "$install_dir"
-  cp "$tmp/lxsurf" "$install_dir/.lxsurf.new"
-  chmod 755 "$install_dir/.lxsurf.new"
-  mv -f "$install_dir/.lxsurf.new" "$install_dir/lxsurf"
+  cp "$tmp/lx" "$install_dir/.lx.new"
+  chmod 755 "$install_dir/.lx.new"
+  mv -f "$install_dir/.lx.new" "$install_dir/lx"
 
-  say "Installed $("$install_dir/lxsurf" --version 2>/dev/null || echo lxsurf) to $install_dir/lxsurf"
+  say "Installed $("$install_dir/lx" --version 2>/dev/null || echo lx) to $install_dir/lx"
 
   # The binary links the system WebView; on Linux that is WebKitGTK, which may not be installed.
-  if [ "$(uname -s)" = Linux ] && ldd "$install_dir/lxsurf" 2>/dev/null | grep -q 'not found'; then
+  if [ "$(uname -s)" = Linux ] && ldd "$install_dir/lx" 2>/dev/null | grep -q 'not found'; then
     say ""
-    say "lxsurf needs libraries this system lacks:"
-    ldd "$install_dir/lxsurf" | grep 'not found' | sed 's/^[[:space:]]*/  /'
+    say "lx needs libraries this system lacks:"
+    ldd "$install_dir/lx" | grep 'not found' | sed 's/^[[:space:]]*/  /'
     say "WebKitGTK 4.1 brings them, for example: sudo apt-get install libwebkit2gtk-4.1-0"
   fi
 
@@ -124,8 +124,8 @@ main() {
 
   say ""
   say "Next steps:"
-  say "  lxsurf login     # sign in with OpenRouter (or export OPENROUTER_API_KEY)"
-  say "  lxsurf doctor    # check the key, the models and the WebView"
+  say "  lx login     # sign in with OpenRouter (or export OPENROUTER_API_KEY)"
+  say "  lx doctor    # check the key, the models and the WebView"
 }
 
 main "$@"

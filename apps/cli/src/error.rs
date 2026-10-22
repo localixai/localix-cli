@@ -15,7 +15,7 @@ pub enum Failure {
     Environment(String),
     /// No OpenRouter key, from the environment or a sign-in.
     SignedOut,
-    /// The reader of stdout went away (`lxsurf … | head -1`): nothing is left to tell anyone, so
+    /// The reader of stdout went away (`lx … | head -1`): nothing is left to tell anyone, so
     /// the command ends quietly, like any Unix filter.
     Closed,
 }
@@ -33,7 +33,7 @@ impl Failure {
     pub fn message(&self) -> Option<String> {
         match self {
             Self::Closed => None,
-            other => Some(format!("lxsurf: {other}")),
+            other => Some(format!("lx: {other}")),
         }
     }
 
@@ -51,8 +51,8 @@ impl fmt::Display for Failure {
         match self {
             Self::Usage(message) | Self::Environment(message) => f.write_str(message),
             Self::SignedOut => f.write_str(
-                "not signed in: set OPENROUTER_API_KEY, or run `lxsurf login` \
-                 (`lxsurf login --with-token` reads a key from stdin)",
+                "not signed in: set OPENROUTER_API_KEY, or run `lx login` \
+                 (`lx login --with-token` reads a key from stdin)",
             ),
             Self::Closed => f.write_str("the output was closed"),
         }

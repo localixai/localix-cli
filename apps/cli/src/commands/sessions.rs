@@ -1,4 +1,4 @@
-//! `lxsurf sessions` and `lxsurf resume`: every run is a session, kept as a JSON file of its tasks
+//! `lx sessions` and `lx resume`: every run is a session, kept as a JSON file of its tasks
 //! and how each ended. The conversation itself is not kept, so `resume` starts a new one that is
 //! told what the session asked before, and records into the same session.
 
@@ -18,15 +18,15 @@ const LISTED: usize = 30;
 /// Characters of a session's first task in the list.
 const TASK_CHARS: usize = 60;
 
-/// Where sessions are kept: `LXSURF_SESSIONS`, else `~/.lxsurf/sessions`.
+/// Where sessions are kept: `LX_SESSIONS`, else `~/.lx/sessions`.
 pub fn store() -> Sessions {
-    let dir = match std::env::var_os("LXSURF_SESSIONS").filter(|dir| !dir.is_empty()) {
+    let dir = match std::env::var_os("LX_SESSIONS").filter(|dir| !dir.is_empty()) {
         Some(dir) => PathBuf::from(dir),
         None => {
             let home = std::env::var_os("HOME")
                 .or_else(|| std::env::var_os("USERPROFILE"))
                 .unwrap_or_default();
-            PathBuf::from(home).join(".lxsurf/sessions")
+            PathBuf::from(home).join(".lx/sessions")
         }
     };
     Sessions { dir }
@@ -43,7 +43,7 @@ pub fn list() -> Result<i32, Failure> {
     Ok(exit::OK)
 }
 
-/// One session as `lxsurf sessions` lists it: its id, when, how many tasks, where, the first one.
+/// One session as `lx sessions` lists it: its id, when, how many tasks, where, the first one.
 pub fn row(session: &Session) -> String {
     let first = session.turns.first().map_or("", |turn| turn.goal.as_str());
     let first = printable(&first.split_whitespace().collect::<Vec<_>>().join(" "));
@@ -81,7 +81,7 @@ fn home_relative(dir: &str) -> String {
     }
 }
 
-/// `lxsurf resume`: the session asked for, then its next task, or the prompt line. `--last` is
+/// `lx resume`: the session asked for, then its next task, or the prompt line. `--last` is
 /// the newest session that ran in this workspace (else the newest of all, said so).
 pub fn resume(args: ResumeArgs) -> Result<i32, Failure> {
     let (id, prompt) = args.target().map_err(Failure::Usage)?;
@@ -97,13 +97,13 @@ pub fn resume(args: ResumeArgs) -> Result<i32, Failure> {
     };
     let session = match newest_here {
         Some(session) => session,
-        None => store.load(id).map_err(|why| {
-            Failure::Usage(format!("{why}: `lxsurf sessions` lists the saved ones"))
-        })?,
+        None => store
+            .load(id)
+            .map_err(|why| Failure::Usage(format!("{why}: `lx sessions` lists the saved ones")))?,
     };
     if !session.workspace.is_empty() && session.workspace != here {
         error::note(&format!(
-            "lxsurf: session {} ran in {}; this one runs in {here}\n",
+            "lx: session {} ran in {}; this one runs in {here}\n",
             session.id,
             printable(&session.workspace)
         ));

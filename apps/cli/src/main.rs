@@ -4,6 +4,7 @@
 //! once that owns the main thread (its event loop never returns): there, with the code the run
 //! returns. Nothing else exits.
 
+mod attach;
 mod brake;
 mod choice;
 mod cli;

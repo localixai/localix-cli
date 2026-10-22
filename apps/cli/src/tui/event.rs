@@ -1,6 +1,7 @@
 //! What reaches the interface: from the session (a task started, a call ran, a question waits)
 //! and from the terminal (a key, a paste, a new size). Questions carry where their answer goes.
 
+use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 
 use contracts::person::{Answer, Question};
@@ -18,6 +19,22 @@ pub enum Approval {
     No(Option<String>),
 }
 
+/// What the person sent: the text, and the pictures attached to it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Typed {
+    pub text: String,
+    pub images: Vec<PathBuf>,
+}
+
+impl From<&str> for Typed {
+    fn from(text: &str) -> Self {
+        Self {
+            text: text.into(),
+            images: vec![],
+        }
+    }
+}
+
 pub enum Event {
     /// The session's first row: the version and what it runs with.
     Header(Vec<String>),
@@ -27,7 +44,7 @@ pub enum Event {
     /// The mode changed: its name, `default` included.
     Mode(String),
     /// The session takes its next entry; `None` goes back when the person quits.
-    Ready(Sender<Option<String>>),
+    Ready(Sender<Option<Typed>>),
     TaskStarted(String),
     Call {
         name: String,

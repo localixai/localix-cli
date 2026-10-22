@@ -176,9 +176,15 @@ fn attempt(rig: &mut Rig, task: &str, input: &mut dyn BufRead, shown: &dyn Fn(&s
 }
 
 /// The next entry: from the interface, or read after the prompt.
-fn ask_entry(rig: &Rig, input: &mut dyn BufRead, shown: &dyn Fn(&str)) -> Option<String> {
-    match &rig.ui {
-        Some(ui) => ui.next_entry(),
+fn ask_entry(rig: &mut Rig, input: &mut dyn BufRead, shown: &dyn Fn(&str)) -> Option<String> {
+    match rig.ui.clone() {
+        Some(ui) => {
+            let typed = ui.next_entry()?;
+            if !typed.images.is_empty() {
+                rig.attached = typed.images;
+            }
+            Some(typed.text)
+        }
         None => read(input, shown, &prompt(rig.mode.get())),
     }
 }

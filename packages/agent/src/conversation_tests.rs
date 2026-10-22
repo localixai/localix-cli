@@ -155,3 +155,23 @@ fn a_picture_follows_its_result_and_only_the_newest_three_stay() {
         messages[8]
     );
 }
+
+#[test]
+fn a_picture_the_person_attached_follows_their_message_with_its_name() {
+    let mut conversation = Conversation::new("rules");
+    conversation.push(Message::User("Goal: make it look like this".into()));
+    let image = Image {
+        media_type: "image/png".into(),
+        data: "iVBORw0KGgo=".into(),
+        width: 640,
+        height: 480,
+    };
+    conversation.attach("mockup.png", image.clone());
+    assert_eq!(
+        conversation.messages().last(),
+        Some(&Message::Image {
+            caption: "The person attached mockup.png (640x480).".into(),
+            image,
+        })
+    );
+}

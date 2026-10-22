@@ -58,7 +58,7 @@ fn an_entry_goes_to_the_session_when_it_waits_and_is_queued_while_it_works() {
     app.event(Event::TaskStarted("first".into()), now);
     typed(&mut app, "second", now);
     app.event(key(KeyCode::Enter), now);
-    assert_eq!(app.queued, ["second"]);
+    assert_eq!(app.queued, [Typed::from("second")]);
     let (reply, entries) = channel();
     app.event(Event::Ready(reply), now);
     assert_eq!(entries.try_recv(), Ok(Some("second".into())));
@@ -248,4 +248,60 @@ fn a_call_the_person_refused_says_what_they_said_not_an_error() {
     • Skipped git log
       └ You said no: not this repository
     ");
+}
+
+#[test]
+fn at_offers_files_and_enter_puts_the_path_in_without_sending() {
+    let now = Instant::now();
+    let mut app = app();
+    app.files = crate::tui::mention::Files::with(vec!["src/main.rs".into(), "README.md".into()]);
+    let (reply, entries) = channel();
+    app.event(Event::Ready(reply), now);
+    typed(&mut app, "explain @mai", now);
+    assert_eq!(
+        app.offers(),
+        [crate::tui::keys::Offer::File("src/main.rs".into())]
+    );
+    app.event(key(KeyCode::Enter), now);
+    assert_eq!(app.composer.text(), "explain src/main.rs ");
+    assert!(entries.try_recv().is_err(), "nothing was sent");
+}
+
+#[test]
+fn dropped_files_become_marks_and_go_with_the_message() {
+    let now = Instant::now();
+    let dir = crate::testing::Scratch::new();
+    let picture = dir.path().join("Screenshot at 2.26.05\u{202f}AM.png");
+    std::fs::write(&picture, b"\x89PNG\r\n\x1a\n").unwrap();
+    let notes = dir.path().join("notes.md");
+    std::fs::write(&notes, "# notes").unwrap();
+    let mut app = app();
+    app.pasted = dir.path().join("kept");
+    let (reply, entries) = channel();
+    app.event(Event::Ready(reply), now);
+    typed(&mut app, "compare ", now);
+    let dropped = format!(
+        "{} {}",
+        picture.display().to_string().replace(' ', "\\ "),
+        notes.display()
+    );
+    app.event(Event::Paste(dropped), now);
+    assert_eq!(
+        app.composer.text(),
+        "compare [image: Screenshot at 2.26.05\u{202f}AM.png] [file: notes.md]"
+    );
+    app.event(key(KeyCode::Enter), now);
+    let sent = entries.try_recv().unwrap().unwrap();
+    assert_eq!(
+        sent.text,
+        format!(
+            "compare [image: Screenshot at 2.26.05\u{202f}AM.png] {}",
+            notes.display()
+        )
+    );
+    assert_eq!(sent.images.len(), 1);
+    assert!(
+        sent.images[0].starts_with(dir.path().join("kept")),
+        "a kept copy is sent"
+    );
 }

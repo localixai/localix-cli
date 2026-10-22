@@ -7,6 +7,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::app::{Action, App, QUIT_WINDOW_MS, SHIFT_TAB};
 use super::composer::Edit;
+use super::event::Typed;
 use super::questions;
 
 impl App {
@@ -44,7 +45,10 @@ impl App {
             }
             KeyCode::Esc if self.busy.is_some() && !self.stopping => return Some(self.stop()),
             KeyCode::BackTab => self.send(SHIFT_TAB.into()),
-            KeyCode::Tab => self.complete(),
+            KeyCode::Char('v') if ctrl => return Some(Action::Clipboard),
+            KeyCode::Tab => {
+                self.complete();
+            }
             KeyCode::Up | KeyCode::Down if !self.offers().is_empty() => {
                 let last = self.offers().len() - 1;
                 self.offered = match key.code {
@@ -53,16 +57,31 @@ impl App {
                 };
             }
             KeyCode::Enter if !self.offers().is_empty() && key.modifiers.is_empty() => {
-                self.complete();
+                // A file goes into the text; a command is sent as soon as it is chosen.
+                if let Some(Offer::File(_)) = self.complete() {
+                    return None;
+                }
                 let entry = self.composer.text();
                 self.composer.clear();
-                self.send(entry.trim_end().to_string());
+                let (text, images) = self.composer.take_attached(&entry);
+                self.send(Typed {
+                    text: text.trim_end().to_string(),
+                    images,
+                });
             }
             _ => {
+                if key.code == KeyCode::Char('@') {
+                    self.files.load();
+                }
+                // A path typed or dropped in without a paste becomes its mark before it is sent.
+                if key.code == KeyCode::Enter && key.modifiers.is_empty() {
+                    self.adopt_paths();
+                }
                 if let Edit::Sent(entry) = self.composer.key(key)
                     && !entry.trim().is_empty()
                 {
-                    self.send(entry);
+                    let (text, images) = self.composer.take_attached(&entry);
+                    self.send(Typed { text, images });
                 }
                 self.offered = self.offered.min(self.offers().len().saturating_sub(1));
             }
@@ -76,7 +95,17 @@ impl App {
     }
 
     /// The commands the composer's text could be the start of: only while it is `/` and a name.
-    pub fn offers(&self) -> Vec<&(String, String)> {
+    /// What the composer's text offers: the commands its `/` could start, or the files its
+    /// `@` word could name.
+    pub fn offers(&self) -> Vec<Offer> {
+        if let Some((_, query)) = self.composer.mention() {
+            return self
+                .files
+                .matching(&query)
+                .into_iter()
+                .map(Offer::File)
+                .collect();
+        }
         let text = self.composer.text();
         let Some(typed) = text.strip_prefix('/') else {
             return vec![];
@@ -87,15 +116,35 @@ impl App {
         self.commands
             .iter()
             .filter(|(name, _)| name.starts_with(typed))
+            .map(|(name, what)| Offer::Command(name.clone(), what.clone()))
             .collect()
     }
 
-    fn complete(&mut self) {
+    /// The marked offer put in: a command replaces the text, a file its `@` word.
+    fn complete(&mut self) -> Option<Offer> {
         let offers = self.offers();
-        if let Some((name, _)) = offers.get(self.offered.min(offers.len().saturating_sub(1))) {
-            let name = format!("/{name}");
-            self.composer.set(&name);
+        let offer = offers
+            .get(self.offered.min(offers.len().saturating_sub(1)))
+            .cloned();
+        match &offer {
+            Some(Offer::Command(name, _)) => self.composer.set(&format!("/{name}")),
+            Some(Offer::File(path)) => {
+                if let Some((start, _)) = self.composer.mention() {
+                    self.composer.replace(start, &format!("{path} "));
+                }
+            }
+            None => {}
         }
         self.offered = 0;
+        offer
     }
+}
+
+/// One thing the composer offers to put in.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Offer {
+    /// A command's name and what it does.
+    Command(String, String),
+    /// A workspace file's path.
+    File(String),
 }

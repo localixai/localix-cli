@@ -3,7 +3,7 @@
 //! failing, the model is asked to answer with what it has.
 
 use contracts::chat::{Chat, Completion, Message, Request, ToolCall};
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Image, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
 use crate::answer;
@@ -78,13 +78,35 @@ struct Tally {
 impl Agent<'_> {
     /// Reach `goal` in a new conversation, which opens with the context.
     pub fn run(&self, goal: &str) -> Run {
-        self.reach(self.tell(None, &self.goal(goal)))
+        self.run_with(goal, &[])
     }
 
     /// Reach `goal` in `conversation`, after what was done there before. The context is not
     /// repeated: the conversation already opens with it.
     pub fn follow_up(&self, conversation: Conversation, goal: &str) -> Run {
-        self.reach(self.tell(Some(conversation), &self.goal(goal)))
+        self.follow_up_with(conversation, goal, &[])
+    }
+
+    /// `run`, with the pictures the person attached to the goal, each with its name.
+    pub fn run_with(&self, goal: &str, attached: &[(String, Image)]) -> Run {
+        self.reach(self.attach(self.tell(None, &self.goal(goal)), attached))
+    }
+
+    /// `follow_up`, with the pictures the person attached to the goal.
+    pub fn follow_up_with(
+        &self,
+        conversation: Conversation,
+        goal: &str,
+        attached: &[(String, Image)],
+    ) -> Run {
+        self.reach(self.attach(self.tell(Some(conversation), &self.goal(goal)), attached))
+    }
+
+    fn attach(&self, mut conversation: Conversation, attached: &[(String, Image)]) -> Conversation {
+        for (name, image) in attached {
+            conversation.attach(name, image.clone());
+        }
+        conversation
     }
 
     /// Say `message` at the end of `conversation` (its open calls closed first), or open a new one

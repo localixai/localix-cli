@@ -17,6 +17,7 @@ path = "src/main.rs"
 
 # The composition root (rule L4): the only package that depends on tools, providers and stores.
 [dependencies]
+base64.workspace = true
 agent.workspace = true
 contracts.workspace = true
 decision-loop.workspace = true

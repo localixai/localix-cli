@@ -18,6 +18,7 @@ use ratatui::text::{Line, Span};
 
 use super::app::App;
 use super::cells::duration;
+use super::keys::Offer;
 use super::screen::Cursor;
 use super::style;
 use super::tool_cell::{self, State};
@@ -75,7 +76,7 @@ pub fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
     }
     for entry in &app.queued {
         let entry = cut(
-            &printable(&entry.replace('\n', " ")),
+            &printable(&entry.text.replace('\n', " ")),
             width.saturating_sub(4),
         );
         out.push(Line::from(Span::styled(
@@ -104,15 +105,24 @@ pub fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
     };
     out.extend(rows);
     let offers = app.offers();
-    for (at, (name, what)) in offers.iter().enumerate() {
+    for (at, offer) in offers.iter().enumerate() {
         let marked = at == app.offered.min(offers.len() - 1);
         let name_style = if marked { style::bold() } else { style::dim() };
         // Cut, not wrapped: the names stay in a column.
-        let what = cut(&printable(what), width.saturating_sub(14));
-        out.push(Line::from(vec![
-            Span::styled(format!("  /{name:<10}"), name_style),
-            Span::styled(format!(" {what}"), style::dim()),
-        ]));
+        let line = match offer {
+            Offer::Command(name, what) => {
+                let what = cut(&printable(what), width.saturating_sub(14));
+                Line::from(vec![
+                    Span::styled(format!("  /{name:<10}"), name_style),
+                    Span::styled(format!(" {what}"), style::dim()),
+                ])
+            }
+            Offer::File(path) => Line::from(Span::styled(
+                format!("  {}", cut(&printable(path), width.saturating_sub(2))),
+                name_style,
+            )),
+        };
+        out.push(line);
     }
     if let Some(footer) = footer(app) {
         out.push(Line::from(Span::styled(

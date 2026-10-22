@@ -13,10 +13,12 @@ use serde_json::Value;
 
 use super::cells::{self, End};
 use super::composer::Composer;
-use super::event::{Approval, Event};
+use super::event::{Approval, Event, Typed};
+use super::mention::Files;
 use super::questions;
 use super::select::{Picked, Select};
 use super::tool_cell::{self, State};
+use crate::attach;
 
 /// What the person asked for that the interface cannot do itself.
 #[derive(Debug, PartialEq)]
@@ -25,6 +27,8 @@ pub enum Action {
     Stop,
     /// Leave the session now.
     Quit,
+    /// Attach the clipboard's picture.
+    Clipboard,
 }
 
 /// What Shift+Tab sends: the session reads it as the plan-mode switch.
@@ -48,6 +52,10 @@ pub struct App {
     pub commands: Vec<(String, String)>,
     /// The command marked among those offered.
     pub offered: usize,
+    /// The workspace's files, for `@`.
+    pub files: Files,
+    /// Where pictures dropped in are kept.
+    pub pasted: std::path::PathBuf,
     pub mode: String,
     /// When the task running started.
     pub busy: Option<Instant>,
@@ -56,9 +64,9 @@ pub struct App {
     /// The latest actions of the browser's hands under the call running.
     pub steps: Vec<String>,
     /// Entries sent while the session was busy, oldest first.
-    pub queued: VecDeque<String>,
+    pub queued: VecDeque<Typed>,
     /// The session waits for its next entry here.
-    pub(super) waiting: Option<Sender<Option<String>>>,
+    pub(super) waiting: Option<Sender<Option<Typed>>>,
     pub select: Option<(Select, Open)>,
     /// Ctrl-C at an empty prompt: a second one quits, until this moment.
     pub quitting: Option<Instant>,
@@ -84,6 +92,8 @@ impl App {
             composer: Composer::default(),
             commands,
             offered: 0,
+            files: Files::new(None),
+            pasted: attach::pasted_dir(),
             mode: "default".into(),
             busy: None,
             running: None,
@@ -226,7 +236,11 @@ impl App {
             Event::Key(key) => return self.key(key, now),
             Event::Paste(text) => match &mut self.select {
                 Some((select, _)) => select.paste(&text),
-                None => self.composer.paste(&text),
+                // A file dragged into the terminal arrives as its path: it becomes a mark.
+                None => {
+                    self.composer.paste(&text);
+                    self.adopt_paths();
+                }
             },
             Event::Resize(width, height) => {
                 self.width = width as usize;
@@ -238,7 +252,7 @@ impl App {
     }
 
     /// An entry for the session: now if it waits for one, else after what is queued.
-    pub(super) fn send(&mut self, entry: String) {
+    pub(super) fn send(&mut self, entry: Typed) {
         match self.waiting.take() {
             Some(reply) => {
                 if reply.send(Some(entry.clone())).is_err() {
@@ -247,6 +261,13 @@ impl App {
             }
             None => self.queued.push_back(entry),
         }
+    }
+
+    /// Each path in the composer that names a file becomes its mark; a picture is kept a copy of.
+    pub fn adopt_paths(&mut self) {
+        let dir = self.pasted.clone();
+        let keep = |path: &std::path::Path| attach::keep(path, &dir);
+        self.composer.adopt(&attach::resolve, &keep);
     }
 
     /// The person is leaving: the session's wait ends with nothing.

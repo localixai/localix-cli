@@ -119,6 +119,8 @@ pub struct Rig<'a> {
     pub before_plan: Mode,
     /// The interface the session is shown in, at a terminal.
     pub ui: Option<Ui>,
+    /// The pictures the person attached to the next task.
+    pub attached: Vec<std::path::PathBuf>,
     /// What the agent thinks with now.
     pub choice: Choice,
     pub live: Option<&'a Live>,
@@ -312,6 +314,7 @@ pub fn assemble(
             other => other,
         },
         ui,
+        attached: vec![],
         choice,
         live: models.live,
     };

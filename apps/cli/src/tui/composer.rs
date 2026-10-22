@@ -7,12 +7,15 @@
 //! first or the last one walk the earlier entries. Ctrl+U, Ctrl+K and Ctrl+W delete to the
 //! start, to the end and the word before.
 
+use std::path::{Path, PathBuf};
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthChar;
 
 use super::style;
 use super::wrap::width as columns;
+use crate::attach::Dropped;
 
 /// What a key did.
 #[derive(Debug, PartialEq)]
@@ -36,6 +39,8 @@ pub struct Composer {
     walking: Option<(usize, String)>,
     /// A secret: each character is drawn as a dot.
     masked: bool,
+    /// The pictures attached, each with the mark that stands for it in the text.
+    attached: Vec<(String, Dropped)>,
 }
 
 impl Composer {
@@ -61,6 +66,106 @@ impl Composer {
     pub fn set(&mut self, text: &str) {
         self.text = text.chars().collect();
         self.at = self.text.len();
+    }
+
+    /// Attach the picture at `path`: a mark for it goes in the text where the cursor is.
+    pub fn attach(&mut self, path: PathBuf) {
+        let mark = self.mark(&Dropped::Image(path.clone()));
+        if self.at > 0 && !self.text[self.at - 1].is_whitespace() {
+            self.insert(' ');
+        }
+        for c in mark.chars() {
+            self.insert(c);
+        }
+        self.insert(' ');
+        self.attached.push((mark, Dropped::Image(path)));
+    }
+
+    /// Every path in the text that names a file (dropped in, pasted, typed whole) turned into a
+    /// mark: `[image: shot.png]` for a picture, `[file: notes.md]` for anything else. `resolve`
+    /// says what a word names; `keep` keeps a picture somewhere lasting.
+    pub fn adopt(
+        &mut self,
+        resolve: &dyn Fn(&str) -> Option<Dropped>,
+        keep: &dyn Fn(&Path) -> PathBuf,
+    ) {
+        for (start, end) in words(&self.text).into_iter().rev() {
+            let word: String = self.text[start..end].iter().collect();
+            let looks = word.contains('/') || word.starts_with('~');
+            let Some(dropped) = looks.then(|| resolve(&word)).flatten() else {
+                continue;
+            };
+            // The mark has the name as the person knows it; a picture is sent from its copy.
+            let mark = self.mark(&dropped);
+            let dropped = match dropped {
+                Dropped::Image(path) => Dropped::Image(keep(&path)),
+                file => file,
+            };
+            let at_end = self.at >= end;
+            let shift = mark.chars().count() as isize - (end - start) as isize;
+            self.text.splice(start..end, mark.chars());
+            if at_end {
+                self.at = (self.at as isize + shift) as usize;
+            } else if self.at > start {
+                self.at = start + mark.chars().count();
+            }
+            self.attached.push((mark, dropped));
+        }
+    }
+
+    /// The mark for `dropped`, numbered when its name is already taken.
+    fn mark(&self, dropped: &Dropped) -> String {
+        let (kind, path) = match dropped {
+            Dropped::Image(path) => ("image", path),
+            Dropped::File(path) => ("file", path),
+        };
+        let name = path.file_name().map_or_else(
+            || path.display().to_string(),
+            |n| n.to_string_lossy().to_string(),
+        );
+        let mut mark = format!("[{kind}: {name}]");
+        let mut n = 2;
+        while self.attached.iter().any(|(taken, _)| *taken == mark) {
+            mark = format!("[{kind}: {name} #{n}]");
+            n += 1;
+        }
+        mark
+    }
+
+    /// What is sent for `sent`: its text with each file's mark turned back into the file's path
+    /// (the agent reads it), and the pictures whose marks are still there. A mark deleted from
+    /// the text takes its attachment with it.
+    pub fn take_attached(&mut self, sent: &str) -> (String, Vec<PathBuf>) {
+        let mut text = sent.to_string();
+        let mut images = vec![];
+        for (mark, dropped) in std::mem::take(&mut self.attached) {
+            if !text.contains(mark.as_str()) {
+                continue;
+            }
+            match dropped {
+                Dropped::Image(path) => images.push(path),
+                Dropped::File(path) => text = text.replace(&mark, &path.display().to_string()),
+            }
+        }
+        (text, images)
+    }
+
+    /// The `@` word the cursor is at the end of: where it starts, and what follows the `@`.
+    pub fn mention(&self) -> Option<(usize, String)> {
+        let start = self.text[..self.at]
+            .iter()
+            .rposition(|c| c.is_whitespace())
+            .map_or(0, |at| at + 1);
+        let word: String = self.text[start..self.at].iter().collect();
+        word.strip_prefix('@').map(|rest| (start, rest.to_string()))
+    }
+
+    /// The text from `from` to the cursor replaced with `with`.
+    pub fn replace(&mut self, from: usize, with: &str) {
+        self.delete(from, self.at);
+        for c in with.chars() {
+            self.insert(c);
+        }
     }
 
     /// Text that arrived as one paste: its lines are kept, nothing is sent.
@@ -281,6 +386,40 @@ impl Composer {
             None => {}
         }
     }
+}
+
+/// The words of `text` as ranges: split at whitespace, except inside quotes or after a
+/// backslash, as a shell (and a terminal writing a dropped file) splits them.
+fn words(text: &[char]) -> Vec<(usize, usize)> {
+    let mut out = vec![];
+    let mut start = None;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for (at, c) in text.iter().enumerate() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match (*c, quote) {
+            ('\\', _) => escaped = true,
+            (q, None) if q == '\'' || q == '"' => quote = Some(q),
+            (q, Some(open)) if q == open => quote = None,
+            // Only the whitespace a shell splits at: a name may hold others (U+202F in a
+            // screenshot's name).
+            (c, None) if c.is_ascii_whitespace() => {
+                if let Some(from) = start.take() {
+                    out.push((from, at));
+                }
+                continue;
+            }
+            _ => {}
+        }
+        start.get_or_insert(at);
+    }
+    if let Some(from) = start {
+        out.push((from, text.len()));
+    }
+    out
 }
 
 #[cfg(test)]

@@ -9,10 +9,12 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use contracts::history::{History, Session, Turn};
+use contracts::tool::Image;
 use contracts::view::View;
 use serde_json::Value;
 use tools::workspace::Workspace;
 
+use crate::attach;
 use crate::choice;
 use crate::cli::RunOptions;
 use crate::commands::{repl, sessions};
@@ -148,13 +150,17 @@ pub fn run(
         // A session takes the terminal for its interface; without one (no size to draw at), it
         // runs on the plain prompt line.
         let running = match &work {
-            Work::Session(_) => tui::start(repl::commands()).ok(),
+            Work::Session(_) => tui::start(repl::commands(), setup.workspace.root()).ok(),
             Work::One(_) => None,
         };
         setup.ui = running.as_ref().map(|running| running.ui.clone());
-        let code = compose(setup, browser, |rig| match work {
-            Work::One(task) => rig.task(&task),
-            Work::Session(first) => repl::run(rig, first.as_deref()),
+        let code = compose(setup, browser, |rig| {
+            // `--image` goes with the first task, wherever it comes from.
+            rig.attached = rig.options.images.clone();
+            match work {
+                Work::One(task) => rig.task(&task),
+                Work::Session(first) => repl::run(rig, first.as_deref()),
+            }
         });
         drop(running);
         code
@@ -179,11 +185,12 @@ impl Rig<'_> {
             decision_model: &self.options.models.decision_model,
             workspace: &workspace,
         });
+        let attached = self.pictures();
         self.brake.arm(Duration::from_secs(self.options.timeout));
         self.interrupt.begin();
         let run = match self.told_of_mode() {
-            Some(before) => self.agent.follow_up(before, goal),
-            None => self.agent.run(goal),
+            Some(before) => self.agent.follow_up_with(before, goal, &attached),
+            None => self.agent.run_with(goal, &attached),
         };
         let halt = self.brake.halted();
         self.sessions.close_all();
@@ -216,6 +223,18 @@ impl Rig<'_> {
         };
         self.output.completed(&summary);
         if self.output.closed() { exit::OK } else { code }
+    }
+
+    /// The pictures attached to this task, read; one that cannot be is left out, and said.
+    fn pictures(&mut self) -> Vec<(String, Image)> {
+        let mut out = vec![];
+        for path in std::mem::take(&mut self.attached) {
+            match attach::read(&path) {
+                Ok(picture) => out.push((picture.name, picture.image)),
+                Err(why) => self.output.note(&format!("llx: not attached: {why}\n")),
+            }
+        }
+        out
     }
 
     /// `-o FILE`: the final answer, or with `--schema` the data. With `--schema` and no data that

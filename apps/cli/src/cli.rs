@@ -203,6 +203,18 @@ pub struct RunOptions {
     )]
     pub cd: Option<PathBuf>,
 
+    /// Pictures (PNG, JPEG, GIF, WebP) attached to the first task, as the person's own: a
+    /// mockup, a screenshot of a bug. Repeat it, or separate them with commas. In a session,
+    /// drag a picture in, paste its path, or press Ctrl+V for the clipboard's.
+    #[arg(
+        short = 'i',
+        long = "image",
+        value_name = "FILE",
+        value_delimiter = ',',
+        help_heading = "Workspace"
+    )]
+    pub images: Vec<PathBuf>,
+
     /// Allow commands, file changes and browser actions without asking: --mode bypass. Also
     /// accepted as --yolo and --dangerously-skip-permissions.
     #[arg(short = 'y', long, help_heading = "Approvals",

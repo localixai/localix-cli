@@ -13,9 +13,10 @@ pub mod asking;
 pub mod cells;
 pub mod composer;
 pub mod event;
-mod keys;
+pub mod keys;
 pub mod live;
 pub mod markdown;
+pub mod mention;
 pub mod questions;
 pub mod screen;
 pub mod select;
@@ -32,7 +33,7 @@ use contracts::person::{Answer, Question};
 use crossterm::event::{Event as Terminal, KeyEventKind};
 
 use self::app::{Action, App};
-use self::event::{Approval, Event};
+use self::event::{Approval, Event, Typed};
 use self::screen::Screen;
 use crate::interrupt;
 
@@ -57,7 +58,7 @@ pub struct Running {
 }
 
 /// Takes the terminal and starts drawing; `commands` are what `/` offers.
-pub fn start(commands: Vec<(String, String)>) -> io::Result<Running> {
+pub fn start(commands: Vec<(String, String)>, root: &std::path::Path) -> io::Result<Running> {
     let (width, height) = crossterm::terminal::size()?;
     crossterm::terminal::enable_raw_mode()?;
     let mut out = io::stdout();
@@ -71,7 +72,8 @@ pub fn start(commands: Vec<(String, String)>) -> io::Result<Running> {
     let (events, inbox) = channel();
     let keys = events.clone();
     std::thread::spawn(move || read_keys(&keys));
-    let app = App::new(width as usize, height as usize, commands);
+    let mut app = App::new(width as usize, height as usize, commands);
+    app.files = mention::Files::new(Some(root.to_path_buf()));
     let thread = std::thread::spawn(move || draw(app, &inbox));
     Ok(Running {
         ui: Ui { events },
@@ -127,15 +129,33 @@ fn draw(mut app: App, inbox: &Receiver<Event>) {
             Err(RecvTimeoutError::Timeout) => None,
             Err(RecvTimeoutError::Disconnected) => break,
         };
-        // Everything that came at once is drawn once.
+        // Everything that came at once is drawn once. Many characters at once are a paste from
+        // a terminal that does not mark pastes (a dropped file among them).
+        let mut typed = 0;
         for event in first.into_iter().chain(inbox.try_iter()) {
+            if let Event::Key(key) = &event
+                && matches!(key.code, crossterm::event::KeyCode::Char(_))
+            {
+                typed += 1;
+            }
             let quit = matches!(event, Event::Quit);
             match app.event(event, Instant::now()) {
                 Some(Action::Stop) => stop(&mut screen, &mut app),
+                Some(Action::Clipboard) => {
+                    match crate::attach::clipboard(&crate::attach::pasted_dir()) {
+                        Ok(path) => app.composer.attach(path),
+                        Err(why) => {
+                            app.event(Event::Note(why), Instant::now());
+                        }
+                    }
+                }
                 Some(Action::Quit) if quit => over = true,
                 Some(Action::Quit) => app.leave(),
                 None => {}
             }
+        }
+        if typed >= 4 && app.select.is_none() {
+            app.adopt_paths();
         }
         let now = Instant::now();
         let history = app.take_history();
@@ -170,7 +190,7 @@ impl Ui {
     }
 
     /// The person's next entry; `None` when they leave.
-    pub fn next_entry(&self) -> Option<String> {
+    pub fn next_entry(&self) -> Option<Typed> {
         let (reply, answer) = channel();
         self.send(Event::Ready(reply));
         answer.recv().ok().flatten()

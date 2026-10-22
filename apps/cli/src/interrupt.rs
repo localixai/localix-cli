@@ -1,9 +1,10 @@
 //! The person stopping a task: Ctrl-C (SIGINT) or SIGTERM during it, or closing the browser
 //! window. The task ends the way the time limit ends it: the command running is killed with
 //! everything it started (commands run in their own session, so the terminal's signal never
-//! reaches them), the gate approves nothing more, and the task ends at its next model turn as
-//! `interrupted` (exit 130), with its `run.completed` event and its session saved. A second signal,
-//! or one while no task runs (at the prompt line), quits at once.
+//! reaches them), and so is every terminal session `bash` keeps; the gate approves nothing more,
+//! and the task ends at its next model turn as `interrupted` (exit 130), with its `run.completed`
+//! event and its session saved. A second signal, or one while no task runs (at the prompt line),
+//! quits at once, killing the terminal sessions first.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -65,6 +66,8 @@ pub fn install() {
     extern "C" fn on_signal(_: libc::c_int) {
         const NOTE: &[u8] = b"\nlx: stopping the task (Ctrl-C again quits now)\n";
         if PROCESS.stop() {
+            // Only atomics and kill: _exit skips the destructors that would close the sessions.
+            tools::shell::kill_all_now();
             // SAFETY: _exit is async-signal-safe; nothing is left to flush that matters more than
             // quitting when asked twice.
             unsafe { libc::_exit(crate::exit::INTERRUPTED) };
@@ -73,7 +76,7 @@ pub fn install() {
         unsafe { libc::write(2, NOTE.as_ptr().cast(), NOTE.len()) };
     }
     // SAFETY: the action is fully initialized before it is installed, and the handler does only
-    // what a signal handler may (atomics, write, _exit). SA_RESTART keeps a model request or a
+    // what a signal handler may (atomics, kill, write, _exit). SA_RESTART keeps a model request or a
     // read in progress from failing half-way: the task stops at its next turn instead.
     unsafe {
         let mut action: libc::sigaction = std::mem::zeroed();

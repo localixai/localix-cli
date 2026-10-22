@@ -248,3 +248,49 @@ fn with_a_schema_text_twice_ends_without_data() {
     assert_eq!(run.data, Some(Err(NO_DATA.into())));
     assert_eq!(run.answer, "It is 93, really.");
 }
+
+#[test]
+fn a_note_goes_at_the_end_with_open_calls_closed_and_the_next_goal_follows() {
+    let chat = Scripted::new(vec![
+        says("A.\nRESULT: achieved"),
+        says("B.\nRESULT: achieved"),
+    ]);
+    let agent = agent(&chat, &[], None, &Silent);
+    let mut first = agent.run("First").conversation;
+    // A run that ended mid-turn leaves its call open.
+    first.push(calls("echo", json!({})).message());
+    let told = agent.tell(Some(first), "<note>changed</note>");
+    let messages = told.messages();
+    assert!(matches!(
+        &messages[messages.len() - 2],
+        Message::ToolResult { failed: true, .. }
+    ));
+    assert_eq!(
+        messages.last(),
+        Some(&Message::User("<note>changed</note>".into()))
+    );
+    let second = agent.follow_up(told, "Second");
+    assert_eq!(
+        users(&second),
+        ["Goal: First", "<note>changed</note>", "Goal: Second"]
+    );
+}
+
+#[test]
+fn a_note_before_any_goal_opens_with_the_context() {
+    let chat = Scripted::new(vec![says("A.\nRESULT: achieved")]);
+    let agent = Agent {
+        context: "Working directory: /work",
+        ..agent(&chat, &[], None, &Silent)
+    };
+    let told = agent.tell(None, "<note>changed</note>");
+    let run = agent.follow_up(told, "First");
+    assert_eq!(
+        users(&run),
+        [
+            "<context>\nWorking directory: /work\n</context>\n\n<note>changed</note>",
+            "Goal: First"
+        ]
+    );
+    assert!(matches!(run.conversation.messages()[0], Message::System(_)));
+}

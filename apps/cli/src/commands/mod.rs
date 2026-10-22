@@ -10,21 +10,21 @@ pub mod sessions;
 
 use crate::cli::{Cli, Command, ExecCommand};
 use crate::error::Failure;
-use run::Mode;
+use run::Kind;
 
 pub fn dispatch(cli: Cli) -> Result<i32, Failure> {
-    let mode = match cli.print {
-        true => Mode::Exec,
-        false => Mode::Session,
+    let kind = match cli.print {
+        true => Kind::Exec,
+        false => Kind::Session,
     };
     match cli.command {
-        None if cli.resume_last => sessions::resume(None, cli.prompt.as_deref(), cli.run, mode),
-        None => run::run(cli.prompt.as_deref(), cli.run, None, mode),
+        None if cli.resume_last => sessions::resume(None, cli.prompt.as_deref(), cli.run, kind),
+        None => run::run(cli.prompt.as_deref(), cli.run, None, kind),
         Some(Command::Exec(exec)) => match exec.command {
-            None => run::run(exec.prompt.as_deref(), exec.run, None, Mode::Exec),
-            Some(ExecCommand::Resume(args)) => resumed(args, Mode::Exec),
+            None => run::run(exec.prompt.as_deref(), exec.run, None, Kind::Exec),
+            Some(ExecCommand::Resume(args)) => resumed(args, Kind::Exec),
         },
-        Some(Command::Resume(args)) => resumed(args, Mode::Session),
+        Some(Command::Resume(args)) => resumed(args, Kind::Session),
         Some(Command::Sessions) => sessions::list(),
         Some(Command::Login(args)) => login::login(args),
         Some(Command::Logout) => login::logout(),
@@ -32,8 +32,8 @@ pub fn dispatch(cli: Cli) -> Result<i32, Failure> {
     }
 }
 
-fn resumed(args: crate::cli::ResumeArgs, mode: Mode) -> Result<i32, Failure> {
+fn resumed(args: crate::cli::ResumeArgs, kind: Kind) -> Result<i32, Failure> {
     let (id, prompt) = args.target().map_err(Failure::Usage)?;
     let (id, prompt) = (id.map(str::to_string), prompt.map(str::to_string));
-    sessions::resume(id.as_deref(), prompt.as_deref(), args.run, mode)
+    sessions::resume(id.as_deref(), prompt.as_deref(), args.run, kind)
 }

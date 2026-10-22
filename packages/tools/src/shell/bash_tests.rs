@@ -4,12 +4,23 @@ use super::*;
 use crate::testing::{Recorder, Scratch};
 
 fn bash(dir: &Scratch, gate: &dyn Gate, arguments: Value) -> Result<String, ToolError> {
+    in_session(&Sessions::default(), dir, gate, arguments)
+}
+
+/// A call with the sessions of earlier calls.
+fn in_session(
+    sessions: &Sessions,
+    dir: &Scratch,
+    gate: &dyn Gate,
+    arguments: Value,
+) -> Result<String, ToolError> {
     let workspace = Workspace::new(dir.path()).unwrap();
     let tool = BashTool {
         workspace: &workspace,
         gate,
         hidden: &[],
         stop: &|| false,
+        sessions,
     };
     tool.call(&arguments).map(|output| {
         assert_eq!(output.state, None);
@@ -208,6 +219,7 @@ fn the_description_names_the_shell_of_this_system() {
         gate: &Recorder::default(),
         hidden: &[],
         stop: &|| false,
+        sessions: &Sessions::default(),
     };
     assert!(tool.spec().description.contains(&format!("(`{SHELL}`)")));
 }
@@ -224,4 +236,40 @@ fn a_command_runs_in_the_root_on_windows() {
         .to_string();
     let report = bash(&dir, &Recorder::default(), json!({"command": "cd"})).unwrap();
     assert!(report.ends_with(&format!("### stdout\n{root}")), "{report}");
+}
+
+#[cfg(unix)]
+#[test]
+fn without_tty_there_is_still_no_terminal() {
+    if std::process::Command::new("python3")
+        .arg("-c")
+        .arg("")
+        .status()
+        .is_err()
+    {
+        return;
+    }
+    let dir = Scratch::new();
+    let command = "python3 -c 'import sys; print(sys.stdin.isatty(), sys.stdout.isatty())'";
+    let report = bash(&dir, &Recorder::default(), json!({"command": command})).unwrap();
+    assert!(report.ends_with("### stdout\nFalse False"), "{report}");
+}
+
+#[test]
+fn the_schema_offers_sessions_only_with_a_terminal() {
+    let workspace = Workspace::new(Scratch::new().path()).unwrap();
+    let tool = BashTool {
+        workspace: &workspace,
+        gate: &Recorder::default(),
+        hidden: &[],
+        stop: &|| false,
+        sessions: &Sessions::default(),
+    };
+    let spec = tool.spec();
+    let properties = &spec.parameters["properties"];
+    assert_eq!(properties.get("session").is_some(), cfg!(unix));
+    assert_eq!(properties.get("tty").is_some(), cfg!(unix));
+    assert_eq!(spec.parameters.get("required").is_none(), cfg!(unix));
+    assert_eq!(spec.description.contains("runs with `tty`"), cfg!(unix));
+    assert!(!spec.description.contains("{terminal}"));
 }

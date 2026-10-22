@@ -1,30 +1,7 @@
-use std::cell::RefCell;
-use std::collections::VecDeque;
+use contracts::gate::Open;
 
 use super::*;
-
-/// Answers from a script, and the questions it was asked.
-#[derive(Default)]
-struct Scripted {
-    answers: RefCell<VecDeque<&'static str>>,
-    asked: RefCell<Vec<String>>,
-}
-
-impl Scripted {
-    fn new(answers: &[&'static str]) -> Self {
-        Self {
-            answers: RefCell::new(answers.iter().copied().collect()),
-            asked: RefCell::default(),
-        }
-    }
-}
-
-impl Prompter for &Scripted {
-    fn ask(&self, question: &str) -> Option<String> {
-        self.asked.borrow_mut().push(question.to_string());
-        self.answers.borrow_mut().pop_front().map(str::to_string)
-    }
-}
+use crate::testing::Typed;
 
 fn bash(summary: &str) -> Effect<'_> {
     Effect {
@@ -35,7 +12,7 @@ fn bash(summary: &str) -> Effect<'_> {
 
 #[test]
 fn yes_allows_once_and_asks_again() {
-    let script = Scripted::new(&["y\n", "yes\n"]);
+    let script = Typed::new(&["y\n", "yes\n"]);
     let gate = TerminalGate::new(&script);
     assert_eq!(gate.check(bash("cargo test")), Verdict::Allow);
     assert_eq!(gate.check(bash("cargo build")), Verdict::Allow);
@@ -46,7 +23,7 @@ fn yes_allows_once_and_asks_again() {
 
 #[test]
 fn always_remembers_the_tool_for_the_run() {
-    let script = Scripted::new(&["a\n", "n\n"]);
+    let script = Typed::new(&["a\n", "n\n"]);
     let gate = TerminalGate::new(&script);
     assert_eq!(gate.check(bash("ls")), Verdict::Allow);
     assert_eq!(gate.check(bash("rm -rf target")), Verdict::Allow);
@@ -60,7 +37,7 @@ fn always_remembers_the_tool_for_the_run() {
 
 #[test]
 fn no_and_a_bare_enter_refuse_and_a_reason_reaches_the_model() {
-    let script = Scripted::new(&["\n", "n: use the make target instead\n", "No\n"]);
+    let script = Typed::new(&["\n", "n: use the make target instead\n", "No\n"]);
     let gate = TerminalGate::new(&script);
     let Verdict::Deny(plain) = gate.check(bash("cargo test")) else {
         panic!("allowed")
@@ -75,9 +52,9 @@ fn no_and_a_bare_enter_refuse_and_a_reason_reaches_the_model() {
 
 #[test]
 fn an_unreadable_answer_is_asked_again_then_refused() {
-    let script = Scripted::new(&["maybe\n", "y\n"]);
+    let script = Typed::new(&["maybe\n", "y\n"]);
     assert_eq!(TerminalGate::new(&script).check(bash("ls")), Verdict::Allow);
-    let stubborn = Scripted::new(&["what", "hm", "eh", "y"]);
+    let stubborn = Typed::new(&["what", "hm", "eh", "y"]);
     assert!(matches!(
         TerminalGate::new(&stubborn).check(bash("ls")),
         Verdict::Deny(_)
@@ -87,32 +64,11 @@ fn an_unreadable_answer_is_asked_again_then_refused() {
 
 #[test]
 fn a_closed_terminal_refuses() {
-    let script = Scripted::new(&[]);
+    let script = Typed::new(&[]);
     assert!(matches!(
         TerminalGate::new(&script).check(bash("ls")),
         Verdict::Deny(_)
     ));
-}
-
-#[test]
-fn without_a_terminal_the_model_is_told_to_ask_for_yes() {
-    let Verdict::Deny(why) = Denying.check(bash("ls")) else {
-        panic!("allowed")
-    };
-    assert!(why.contains("--yes"));
-}
-
-#[test]
-fn approvals_follow_the_flag_and_the_terminal() {
-    assert_eq!(Approvals::from(true, false), Approvals::Yes);
-    assert_eq!(Approvals::from(false, true), Approvals::Ask);
-    assert_eq!(Approvals::from(false, false), Approvals::Refuse);
-    assert_eq!(Approvals::Yes.gate().check(bash("ls")), Verdict::Allow);
-    assert!(matches!(
-        Approvals::Refuse.gate().check(bash("ls")),
-        Verdict::Deny(_)
-    ));
-    assert!(Approvals::Refuse.describe().contains("--yes"));
 }
 
 #[test]
@@ -131,7 +87,7 @@ fn approval_is_only_the_bare_word() {
         answer("no, use make"),
         Some(Answer::No(Some("use make".into())))
     );
-    let typed_ahead = Scripted::new(&["yes, and then update the docs\n", "n\n"]);
+    let typed_ahead = Typed::new(&["yes, and then update the docs\n", "n\n"]);
     assert!(matches!(
         TerminalGate::new(&typed_ahead).check(bash("rm -rf target")),
         Verdict::Deny(_)
@@ -140,7 +96,7 @@ fn approval_is_only_the_bare_word() {
 
 #[test]
 fn the_question_shows_control_characters_instead_of_obeying_them() {
-    let script = Scripted::new(&["n\n"]);
+    let script = Typed::new(&["n\n"]);
     let gate = TerminalGate::new(&script);
     gate.check(Effect {
         tool: "bash\u{1b}[2K",
@@ -179,4 +135,100 @@ fn a_stopped_task_gets_nothing_approved() {
         stopped: &is_stopped,
     };
     assert_eq!(gate.check(bash("ls")), Verdict::Deny(STOPPED.into()));
+}
+
+#[test]
+fn a_question_ctrl_c_ended_reads_as_the_stop() {
+    let stopped = std::cell::Cell::new(false);
+    let is_stopped = || stopped.get();
+    struct EndedByCtrlC<'a>(&'a std::cell::Cell<bool>);
+    impl Gate for EndedByCtrlC<'_> {
+        fn check(&self, _: Effect) -> Verdict {
+            self.0.set(true);
+            Verdict::Deny("no answer came from the terminal".into())
+        }
+    }
+    let gate = Stoppable {
+        inner: &EndedByCtrlC(&stopped),
+        stopped: &is_stopped,
+    };
+    assert_eq!(gate.check(bash("ls")), Verdict::Deny(STOPPED.into()));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_waiting_question_ends_when_the_task_is_stopped_and_reads_what_was_typed() {
+    use std::io::Write;
+    let (reader, mut writer) = std::io::pipe().unwrap();
+    let input = File::from(std::os::fd::OwnedFd::from(reader));
+    assert!(!typed(&input, &|| true), "stopped: no wait");
+    let polls = std::cell::Cell::new(0);
+    let stops_later = || {
+        polls.set(polls.get() + 1);
+        polls.get() > 2
+    };
+    assert!(!typed(&input, &stops_later), "nothing typed, then the stop");
+    writer.write_all(b"y\n").unwrap();
+    assert!(typed(&input, &|| false));
+}
+
+/// A stop at a real question, on `/dev/tty`, which macOS's `poll` cannot wait on. The test runs
+/// itself again in a child whose controlling terminal is a new pseudo-terminal, as a person's
+/// prompt is: there the stop must end the wait while nothing is typed.
+#[cfg(unix)]
+mod terminal {
+    use std::os::fd::{FromRawFd, OwnedFd};
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    use super::*;
+
+    const CHILD: &str = "LX_TEST_TERMINAL_CHILD";
+    const NAME: &str = "gate::tests::terminal::a_stop_ends_a_wait_on_the_controlling_terminal";
+
+    #[test]
+    fn a_stop_ends_a_wait_on_the_controlling_terminal() {
+        if std::env::var_os(CHILD).is_some() {
+            let (input, _) = Tty::open().expect("the child has no /dev/tty");
+            let begun = Instant::now();
+            let stop = || begun.elapsed() > Duration::from_millis(300);
+            assert!(
+                !typed(&input, &stop),
+                "nothing was typed, yet a line was read"
+            );
+            assert!(
+                begun.elapsed() < Duration::from_secs(2),
+                "the stop came late"
+            );
+            return;
+        }
+        let (mut master, mut slave) = (-1, -1);
+        let none = std::ptr::null_mut();
+        // SAFETY: openpty writes two descriptors; the name, settings and size may be null.
+        let opened =
+            unsafe { libc::openpty(&mut master, &mut slave, none, none.cast(), none.cast()) };
+        assert_eq!(opened, 0, "{}", std::io::Error::last_os_error());
+        // SAFETY: both are open descriptors that nothing else owns.
+        let (_master, slave) =
+            unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) };
+        let mut child = Command::new(std::env::current_exe().unwrap());
+        child
+            .args(["--exact", NAME, "--test-threads=1"])
+            .env(CHILD, "1")
+            .stdin(Stdio::from(slave));
+        // SAFETY: setsid and ioctl are async-signal-safe: the child leads a new session, and the
+        // terminal on its stdin becomes its controlling terminal, so /dev/tty opens it.
+        unsafe {
+            child.pre_exec(|| {
+                if libc::setsid() == -1 || libc::ioctl(0, libc::TIOCSCTTY as _, 0) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let ran = child.output().unwrap();
+        let said = String::from_utf8_lossy(&ran.stdout);
+        assert!(ran.status.success(), "{said}");
+    }
 }

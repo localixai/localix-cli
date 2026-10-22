@@ -1,8 +1,9 @@
 //! One command run to its end, its deadline, or until it is stopped. On unix the shell starts a
 //! session of its own: it has no controlling terminal, so a program that opens the terminal to
 //! prompt (a password, a passphrase) fails at once instead of stopping in the background until the
-//! deadline, and one signal to the session's process group ends everything it started. Its output
-//! is read on threads, so a command that fills one pipe while the other is read never stalls.
+//! deadline, and the session's processes, found by its id, are everything it started (see
+//! `sweep`). Its output is read on threads, so a command that fills one pipe while the other is
+//! read never stalls.
 
 use std::io::{self, Read};
 use std::path::Path;
@@ -34,7 +35,8 @@ pub struct Job<'a> {
     pub command: &'a str,
     pub dir: &'a Path,
     pub timeout: Duration,
-    /// Environment variables the command must not see: the app's own secrets.
+    /// Environment variables left out of the command's environment: the app's own secrets. A
+    /// command can still read them from its parent's environment (see `BashTool::hidden`).
     pub hidden: &'a [&'a str],
     /// Whether the person stopped the task: the command is killed as soon as it says so.
     pub stop: &'a dyn Fn() -> bool,
@@ -72,15 +74,9 @@ pub struct Finished {
 /// Run `job` in a shell, with no input.
 pub fn run(job: &Job) -> io::Result<Finished> {
     let mut shell = shell(job.command);
-    for name in job.hidden {
-        shell.env_remove(name);
-    }
+    quiet_env(&mut shell, job.hidden);
     let mut child = shell
         .current_dir(job.dir)
-        // Nothing waits for an answer or a pager: there is no one to type or page.
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_PAGER", "cat")
-        .env("PAGER", "cat")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -98,6 +94,18 @@ pub fn run(job: &Job) -> io::Result<Finished> {
         stderr: text(&stderr),
         open,
     })
+}
+
+/// The environment every command runs in: without `hidden`, and with nothing that waits for an
+/// answer or a pager, since there is no one to type or page.
+pub(super) fn quiet_env(shell: &mut Command, hidden: &[&str]) {
+    for name in hidden {
+        shell.env_remove(name);
+    }
+    shell
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_PAGER", "cat")
+        .env("PAGER", "cat");
 }
 
 /// Wait for `child` to exit, killing it at its deadline or when the person stops the task.
@@ -129,7 +137,7 @@ fn watch(child: &mut Child, job: &Job, started: Instant) -> io::Result<(Ending, 
 }
 
 #[cfg(unix)]
-fn shell(command: &str) -> Command {
+pub(super) fn shell(command: &str) -> Command {
     use std::os::unix::process::CommandExt;
     let mut shell = Command::new("sh");
     shell.arg("-c").arg(command);
@@ -153,18 +161,22 @@ fn shell(command: &str) -> Command {
     shell
 }
 
-/// Kill the command and everything it started; whether all of it is known to be gone.
+/// Kill the command and everything it started: its process group, then every other process of its
+/// session (the jobs a shell with job control put in groups of their own); whether all of it is
+/// known to be gone. `child` must not be reaped yet: its pid is the session's id until it is.
 #[cfg(unix)]
-fn kill(child: &mut Child) -> bool {
-    let group = -(child.id() as libc::pid_t);
+pub(super) fn kill(child: &mut Child) -> bool {
+    let leader = child.id() as libc::pid_t;
     // SAFETY: kill only sends a signal; it touches nothing in this process.
-    let signalled = unsafe { libc::kill(group, libc::SIGKILL) } == 0;
+    let signalled = unsafe { libc::kill(-leader, libc::SIGKILL) } == 0;
     // No process left in the group: everything it started is gone already.
     let gone = !signalled && io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
     if !signalled {
         let _ = child.kill();
     }
-    reaped(child) && (signalled || gone)
+    // Before the reap, while the leader's pid still names the session.
+    let swept = super::sweep::end(leader, KILL_WAIT);
+    reaped(child) && (signalled || gone) && swept
 }
 
 /// Kill the command and everything it started (the process tree); whether all of it is known to
@@ -236,7 +248,7 @@ fn text(output: &Mutex<Output>) -> String {
     output.lock().unwrap_or_else(PoisonError::into_inner).text()
 }
 
-fn ending(status: ExitStatus) -> Ending {
+pub(super) fn ending(status: ExitStatus) -> Ending {
     if let Some(code) = status.code() {
         return Ending::Exit(code);
     }

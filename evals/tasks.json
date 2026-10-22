@@ -31,6 +31,26 @@
   "check": "diff -r -x __pycache__ \"$FIXTURE\" ."
  },
  {
+  "id": "answer-prompts",
+  "kind": "code",
+  "fixture": "answer-prompts",
+  "goal": "Run python3 setup.py and answer its questions: the project name is orbit and the port is 8123. Then tell me what it wrote.",
+  "contains": ["8123"],
+  "check": "grep -qx 'name = orbit' config.ini && grep -qx 'port = 8123' config.ini && cmp -s setup.py \"$FIXTURE/setup.py\"",
+  "uses": [{"name": "bash", "arguments": {"tty": true}}, {"name": "bash", "has": ["session", "input"]}],
+  "avoids": [{"name": "edit", "like": {"path": "config\\.ini$"}}, {"name": "bash", "like": {"command": "(>>?\\s*\\S*config\\.ini|\\btee\\s+(-a\\s+)?\\S*config\\.ini|\\b(cp|mv)\\b[^;&|\\n]*config\\.ini|\\bsed\\s+-i[^;&|\\n]*config\\.ini|open\\([^)]*config\\.ini)"}}, {"name": "bash", "like": {"input": "(>>?\\s*\\S*config\\.ini|\\btee\\s+(-a\\s+)?\\S*config\\.ini|\\b(cp|mv)\\b[^;&|\\n]*config\\.ini|\\bsed\\s+-i[^;&|\\n]*config\\.ini|open\\([^)]*config\\.ini)"}}]
+ },
+ {
+  "id": "plan-csv",
+  "kind": "code",
+  "fixture": "plan-csv",
+  "args": ["--mode", "plan"],
+  "goal": "Add a --csv option to report.py that prints the same rows as CSV, with a header line, instead of the table, and a unit test for it.",
+  "contains": ["report.py", "--csv", "test_report.py"],
+  "matches": ["\\bitem\\W+qty\\W+price\\W+value\\b", "\\bassum", "(^|\\n)\\s*([-*]|\\d+[.)])\\s.*\\n\\s*([-*]|\\d+[.)])\\s"],
+  "check": "diff -r -x __pycache__ \"$FIXTURE\" ."
+ },
+ {
   "id": "login",
   "kind": "browser",
   "goal": "Open https://the-internet.herokuapp.com/login and log in with username \"tomsmith\" and password \"SuperSecretPassword!\". Tell me the message the page shows after logging in.",

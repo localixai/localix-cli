@@ -2,7 +2,7 @@
 //! turns. A reply without a tool call is the answer. Near the end of its turns, or after calls keep
 //! failing, the model is asked to answer with what it has.
 
-use contracts::chat::{Chat, Completion, Message, Request, ToolCall, Usage};
+use contracts::chat::{Chat, Completion, Message, Request, ToolCall};
 use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
@@ -10,6 +10,7 @@ use crate::answer;
 use crate::conversation::Conversation;
 use crate::observer::Observer;
 use crate::schema;
+pub use crate::spend::Spend;
 
 const SYSTEM: &str = include_str!("prompt.md");
 /// Failed calls in a row before the model is asked to answer.
@@ -53,30 +54,6 @@ pub enum Status {
     Error(String),
 }
 
-/// What the chat model spent in one run.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Spend {
-    pub model: String,
-    pub calls: u64,
-    pub cost: f64,
-    pub millis: u64,
-    pub input_tokens: u64,
-    pub cached_tokens: u64,
-    pub output_tokens: u64,
-}
-
-impl Spend {
-    fn add(&mut self, usage: &Usage) {
-        self.model.clone_from(&usage.model);
-        self.calls += 1;
-        self.cost += usage.cost;
-        self.millis += usage.millis;
-        self.input_tokens += usage.input_tokens;
-        self.cached_tokens += usage.cached_tokens;
-        self.output_tokens += usage.output_tokens;
-    }
-}
-
 pub struct Run {
     pub status: Status,
     pub answer: String,
@@ -101,19 +78,28 @@ struct Tally {
 impl Agent<'_> {
     /// Reach `goal` in a new conversation, which opens with the context.
     pub fn run(&self, goal: &str) -> Run {
-        let context = self.context.trim();
-        let opening = if context.is_empty() {
-            self.goal(goal)
-        } else {
-            format!("<context>\n{context}\n</context>\n\n{}", self.goal(goal))
-        };
-        self.reach(Conversation::new(SYSTEM), opening)
+        self.reach(self.tell(None, &self.goal(goal)))
     }
 
     /// Reach `goal` in `conversation`, after what was done there before. The context is not
     /// repeated: the conversation already opens with it.
     pub fn follow_up(&self, conversation: Conversation, goal: &str) -> Run {
-        self.reach(conversation, self.goal(goal))
+        self.reach(self.tell(Some(conversation), &self.goal(goal)))
+    }
+
+    /// Say `message` at the end of `conversation` (its open calls closed first), or open a new one
+    /// with it after the context: a goal, or something the app says between goals (a setting).
+    pub fn tell(&self, conversation: Option<Conversation>, message: &str) -> Conversation {
+        let message = match (&conversation, self.context.trim()) {
+            (None, context) if !context.is_empty() => {
+                format!("<context>\n{context}\n</context>\n\n{message}")
+            }
+            _ => message.to_string(),
+        };
+        let mut conversation = conversation.unwrap_or_else(|| Conversation::new(SYSTEM));
+        conversation.close_open_calls();
+        conversation.push(Message::User(message));
+        conversation
     }
 
     /// The goal as the model reads it, with what a schema asks of the end.
@@ -124,9 +110,7 @@ impl Agent<'_> {
         }
     }
 
-    fn reach(&self, mut conversation: Conversation, message: String) -> Run {
-        conversation.close_open_calls();
-        conversation.push(Message::User(message));
+    fn reach(&self, conversation: Conversation) -> Run {
         let mut specs: Vec<ToolSpec> = self.tools.iter().map(|tool| tool.spec()).collect();
         if let Some(schema) = self.schema {
             specs.push(schema::spec(schema));

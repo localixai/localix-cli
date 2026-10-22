@@ -81,6 +81,10 @@ fn an_unknown_flag_is_a_usage_error() {
     assert_eq!(out.status.code(), Some(3));
     assert!(text(&out.stderr).contains("--no-such-flag"));
     assert_eq!(home.run(&["resume"]).status.code(), Some(3));
+    // -y is --mode bypass, so it cannot be given with another mode.
+    let both = home.run(&["exec", "-y", "--mode", "plan", "x"]);
+    assert_eq!(both.status.code(), Some(3));
+    assert!(text(&both.stderr).contains("--mode"));
 }
 
 #[test]

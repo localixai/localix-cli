@@ -1,0 +1,45 @@
+//! The person port: a tool asks the person it works for a question, and whoever composes the tools
+//! answers (at a terminal, or nobody). A tool knows nothing of who answers.
+
+/// One option the person may pick.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Choice {
+    /// A few words.
+    pub label: String,
+    /// What choosing it means; empty for none.
+    pub description: String,
+}
+
+/// One question, with the options offered (none for an open question).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Question {
+    /// The key the answer comes back under.
+    pub id: String,
+    pub text: String,
+    pub choices: Vec<Choice>,
+}
+
+/// The person's answer to one question: an option, words of their own, both, or neither (skipped).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Answer {
+    /// The index of the option picked.
+    pub choice: Option<usize>,
+    /// What they wrote: beside the option, or instead of one.
+    pub note: Option<String>,
+}
+
+/// What came back from asking.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reply {
+    /// One answer per question, in order.
+    Answers(Vec<Answer>),
+    /// No answer can come, and why: nobody is there to give one.
+    Nobody(String),
+    /// The person stopped the task instead of answering.
+    Stopped,
+}
+
+pub trait Person {
+    /// Ask `questions`, in order, and wait for the answers.
+    fn ask(&self, questions: &[Question]) -> Reply;
+}

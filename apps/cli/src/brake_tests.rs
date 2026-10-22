@@ -52,6 +52,20 @@ fn past_its_time_a_task_stops_and_the_next_one_starts_fresh() {
 }
 
 #[test]
+fn time_spent_waiting_on_the_person_moves_the_deadline() {
+    let chat = Ready::default();
+    let open = || false;
+    let brake = Brake::new(&chat, &open, &open);
+    brake.arm(Duration::ZERO);
+    brake.extend(Duration::from_secs(60));
+    assert!(
+        brake.complete(request(&[])).is_ok(),
+        "the wait was given back"
+    );
+    assert_eq!(brake.halted(), None);
+}
+
+#[test]
 fn a_closed_output_stops_the_task() {
     let chat = Ready::default();
     let (closed, open) = (|| true, || false);

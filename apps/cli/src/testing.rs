@@ -1,16 +1,27 @@
 //! What the app's unit tests share: a fresh directory per test, a writer whose bytes the test
-//! reads back, and fakes of the models (no network).
+//! reads back, fakes of the models (no network), a person typing at the terminal, and a whole run
+//! composed around them.
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use contracts::chat::{Chat, ChatError, Completion, Request};
+use clap::Parser;
+use contracts::chat::{Chat, ChatError, Completion, Message, Request};
+use contracts::history::History;
 use contracts::model::{DecideError, Decider, Decision, Question};
 use serde_json::Value;
+use tools::workspace::Workspace;
+
+use crate::cli::Cli;
+use crate::compose::{Models, Rig, Setup, assemble};
+use crate::gate::Prompter;
+use crate::interrupt::Interrupt;
+use crate::mode::Mode;
+use crate::output::Output;
 
 /// A directory for one test, removed when it ends: tests run in parallel, so each gets its own.
 pub struct Scratch(PathBuf);
@@ -112,4 +123,91 @@ impl Decider for NoDecider {
             "no decision model in tests".into(),
         ))
     }
+}
+
+/// The terminal, with a person who types lines from a script, then nothing (a closed terminal);
+/// it remembers each question shown.
+#[derive(Default)]
+pub struct Typed {
+    lines: RefCell<VecDeque<&'static str>>,
+    pub asked: RefCell<Vec<String>>,
+}
+
+impl Typed {
+    pub fn new(lines: &[&'static str]) -> Self {
+        Self {
+            lines: RefCell::new(lines.iter().copied().collect()),
+            asked: RefCell::default(),
+        }
+    }
+}
+
+impl Prompter for &Typed {
+    fn ask(&self, question: &str) -> Option<String> {
+        self.asked.borrow_mut().push(question.to_string());
+        self.lines.borrow_mut().pop_front().map(str::to_string)
+    }
+}
+
+/// `n` answers that end a task well.
+pub fn answers(n: usize) -> Vec<Completion> {
+    (0..n)
+        .map(|_| Completion {
+            text: Some("Done.\nRESULT: achieved".into()),
+            ..Completion::default()
+        })
+        .collect()
+}
+
+/// Compose a run that starts in `mode` around a scripted model, in a fresh workspace, and run
+/// `work` with it. No terminal: nothing here may wait on a person.
+pub fn composed(
+    mode: Mode,
+    asks: bool,
+    replies: Vec<Completion>,
+    work: impl FnOnce(&mut Rig) -> i32,
+) {
+    let scratch = Scratch::new();
+    let history = session::Sessions {
+        dir: scratch.path().join("sessions"),
+    };
+    let session = history.start();
+    let setup = Setup {
+        options: Cli::try_parse_from(["lx"]).unwrap().run,
+        key: "test".into(),
+        workspace: Workspace::new(scratch.path()).unwrap(),
+        context: String::new(),
+        fresh: String::new(),
+        schema: None,
+        mode,
+        terminal: false,
+        asks,
+        history,
+        session,
+    };
+    let chat = ScriptedChat::new(replies);
+    let models = Models {
+        chat: &chat,
+        decider: &NoDecider,
+    };
+    let output = Output::with(
+        false,
+        false,
+        Box::new(Captured::default()),
+        Box::new(Captured::default()),
+    );
+    assemble(setup, models, &output, &Interrupt::new(), None, work);
+}
+
+/// The user messages of the rig's conversation: the goals and the notes before them.
+pub fn users(rig: &Rig) -> Vec<String> {
+    let conversation = rig.conversation.as_ref().unwrap();
+    conversation
+        .messages()
+        .iter()
+        .filter_map(|message| match message {
+            Message::User(text) => Some(text.clone()),
+            _ => None,
+        })
+        .collect()
 }

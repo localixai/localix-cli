@@ -1,85 +1,27 @@
-//! Who approves a command, a file change or a browser action: `-y` allows everything
-//! (`contracts::gate::Open`); at a terminal the person is asked; with no one to ask, it is refused
-//! with a reason the model passes on. The question goes to the terminal itself (`/dev/tty`), so it
-//! works while stdin is a pipe, stdout carries JSON and stderr goes to a file. What the question
-//! shows came from the model: its control characters are escaped, so it reads as what will run.
+//! How a command, a file change or a browser action is approved at the terminal, and nothing once
+//! the task is stopped. Which effects are asked at all is the mode's (`mode::ModeGate`). The
+//! question goes to the terminal itself (`/dev/tty`), so it works while stdin is a pipe, stdout
+//! carries JSON and stderr goes to a file. What the question shows came from the model: its
+//! control characters are escaped, so it reads as what will run.
 
 use std::collections::HashSet;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::sync::Mutex;
 
-use contracts::gate::{Effect, Gate, Open, Verdict};
+use contracts::gate::{Effect, Gate, Verdict};
 
+use crate::interrupt;
 use crate::printable::printable;
 
 /// Times an unreadable answer is asked again before it counts as no.
 const TRIES: usize = 3;
-
-/// How commands and edits are approved in this run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Approvals {
-    /// `-y`: allowed without asking.
-    Yes,
-    /// The person at the terminal answers each one.
-    Ask,
-    /// No one to ask: refused.
-    Refuse,
-}
-
-impl Approvals {
-    /// `-y` wins; otherwise the person is asked when a terminal is there to ask on. Only the
-    /// terminal itself counts, not where stdin or stderr go: a process with none (CI, cron,
-    /// `nohup`) cannot open it.
-    pub fn choose(yes: bool) -> Self {
-        Self::from(yes, Tty::open().is_some())
-    }
-
-    pub fn from(yes: bool, terminal: bool) -> Self {
-        match (yes, terminal) {
-            (true, _) => Self::Yes,
-            (false, true) => Self::Ask,
-            (false, false) => Self::Refuse,
-        }
-    }
-
-    /// The approvals as the agent's context states them.
-    pub fn describe(self) -> &'static str {
-        match self {
-            Self::Yes => "commands, file changes and browser actions run without asking (--yes)",
-            Self::Ask => {
-                "the person approves each command, file change and browser action at the \
-                 terminal; a refusal says why"
-            }
-            Self::Refuse => {
-                "commands, file changes and browser actions are refused: no one is at a terminal \
-                 to approve them, and the person must rerun with --yes to allow them; reading \
-                 files works"
-            }
-        }
-    }
-
-    /// The gate that answers for these approvals.
-    pub fn gate(self) -> Box<dyn Gate> {
-        match self {
-            Self::Yes => Box::new(Open),
-            Self::Ask => Box::new(TerminalGate::new(Tty)),
-            Self::Refuse => Box::new(Denying),
-        }
-    }
-}
-
-/// Refuses every effect, telling the model what the person must do to allow it.
-pub struct Denying;
-
-pub const NO_TERMINAL: &str = "no one is at a terminal to approve it; the person must rerun \
-lx with --yes (-y) to allow commands, file changes and browser actions";
-
-impl Gate for Denying {
-    fn check(&self, _: Effect) -> Verdict {
-        Verdict::Deny(NO_TERMINAL.into())
-    }
-}
+/// How often a waiting question checks whether the task was stopped.
+#[cfg(unix)]
+const POLL_MS: libc::c_int = 100;
+/// The same, as `select` takes it.
+#[cfg(unix)]
+const POLL_US: libc::suseconds_t = 100_000;
 
 /// Refuses everything once the person stopped the task, and asks `inner` until then: nothing
 /// more runs after Ctrl-C, not even what was approved while the question was open.
@@ -95,8 +37,10 @@ impl Gate for Stoppable<'_> {
         if (self.stopped)() {
             return Verdict::Deny(STOPPED.into());
         }
+        // Stopped while the question was open: a late yes does not count, and a question that
+        // Ctrl-C ended reads as the stop it was, not as a silent terminal.
         match self.inner.check(effect) {
-            Verdict::Allow if (self.stopped)() => Verdict::Deny(STOPPED.into()),
+            _ if (self.stopped)() => Verdict::Deny(STOPPED.into()),
             verdict => verdict,
         }
     }
@@ -109,9 +53,16 @@ pub trait Prompter {
 }
 
 /// The controlling terminal, opened for each question so nothing holds it between them.
+#[derive(Debug, Clone, Copy)]
 pub struct Tty;
 
 impl Tty {
+    /// Whether there is a terminal to ask on. Only the terminal itself counts, not where stdin or
+    /// stderr go: a process with none (CI, cron, `nohup`) cannot open it.
+    pub fn available() -> bool {
+        Self::open().is_some()
+    }
+
     #[cfg(unix)]
     fn open() -> Option<(File, File)> {
         let file = OpenOptions::new()
@@ -140,6 +91,9 @@ impl Prompter for Tty {
         discard_typed_ahead(&input);
         output.write_all(question.as_bytes()).ok()?;
         output.flush().ok()?;
+        if !typed(&input, &|| interrupt::PROCESS.stopped()) {
+            return None;
+        }
         let mut line = String::new();
         match BufReader::new(input).read_line(&mut line) {
             Ok(0) | Err(_) => None,
@@ -159,6 +113,96 @@ fn discard_typed_ahead(input: &File) {
 
 #[cfg(not(unix))]
 fn discard_typed_ahead(_: &File) {}
+
+/// Wait until a line can be read from `input`; false when the task was stopped first. The signal
+/// handler restarts a blocking read (`SA_RESTART`), so a read alone would keep the question open
+/// after Ctrl-C until Enter: waiting in short polls lets the stop end it at once. macOS's `poll`
+/// cannot wait on `/dev/tty` (it answers `POLLNVAL` at once), so there `select` waits instead.
+#[cfg(unix)]
+fn typed(input: &File, stopped: &dyn Fn() -> bool) -> bool {
+    use std::os::fd::AsRawFd;
+    let fd = input.as_raw_fd();
+    let mut polls = true;
+    loop {
+        if stopped() {
+            return false;
+        }
+        let ready = match polls {
+            true => poll_in(fd),
+            false => select_in(fd),
+        };
+        match ready {
+            Readiness::Ready => return true,
+            Readiness::Quiet => {}
+            Readiness::Unsupported => polls = false,
+        }
+    }
+}
+
+/// What one short wait for input found.
+#[cfg(unix)]
+#[derive(Debug, PartialEq, Eq)]
+enum Readiness {
+    /// Input, a hangup or an error: the read that follows says which.
+    Ready,
+    /// Nothing within the wait, or a signal ended it.
+    Quiet,
+    /// This wait cannot be used on the descriptor.
+    Unsupported,
+}
+
+#[cfg(unix)]
+fn poll_in(fd: libc::c_int) -> Readiness {
+    let mut wanted = libc::pollfd {
+        fd,
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    // SAFETY: one valid pollfd, for a descriptor that stays open during the call.
+    let ready = unsafe { libc::poll(&mut wanted, 1, POLL_MS) };
+    if ready > 0 && wanted.revents & libc::POLLNVAL != 0 {
+        return Readiness::Unsupported;
+    }
+    readiness(ready)
+}
+
+#[cfg(unix)]
+fn select_in(fd: libc::c_int) -> Readiness {
+    // A descriptor past what a set holds cannot be waited on: the read blocks, as on Windows.
+    if usize::try_from(fd).map_or(true, |fd| fd >= libc::FD_SETSIZE) {
+        return Readiness::Ready;
+    }
+    let mut timeout = libc::timeval {
+        tv_sec: 0,
+        tv_usec: POLL_US,
+    };
+    // SAFETY: the set is zeroed, then holds one descriptor below FD_SETSIZE; select reads and
+    // writes only it and the timeout, both of which outlive the call.
+    let ready = unsafe {
+        let mut wanted: libc::fd_set = std::mem::zeroed();
+        libc::FD_ZERO(&mut wanted);
+        libc::FD_SET(fd, &mut wanted);
+        let none = std::ptr::null_mut();
+        libc::select(fd + 1, &mut wanted, none, none, &mut timeout)
+    };
+    readiness(ready)
+}
+
+#[cfg(unix)]
+fn readiness(ready: libc::c_int) -> Readiness {
+    let interrupted =
+        ready < 0 && std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted;
+    match ready != 0 && !interrupted {
+        true => Readiness::Ready,
+        false => Readiness::Quiet,
+    }
+}
+
+/// On Windows the read blocks: Ctrl-C ends the process there anyway (see `interrupt`).
+#[cfg(not(unix))]
+fn typed(_: &File, _: &dyn Fn() -> bool) -> bool {
+    true
+}
 
 /// Asks the person for each effect; `a` allows the tool for the rest of the process.
 pub struct TerminalGate<P: Prompter> {

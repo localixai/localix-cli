@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 
 /// Bytes kept from the start, and as many from the end: both streams together stay below what the
 /// agent keeps of one result, so nothing is cut a second time.
-const HALF: usize = 5_000;
+pub(super) const HALF: usize = 5_000;
 
 #[derive(Debug, Default)]
 pub struct Output {

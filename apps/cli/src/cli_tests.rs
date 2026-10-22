@@ -159,6 +159,29 @@ fn print_and_continue_are_claudes_spellings() {
 }
 
 #[test]
+fn the_mode_is_a_flag_with_claudes_spelling_too_and_conflicts_with_yes() {
+    assert_eq!(
+        parse(&["--mode", "plan", "x"]).unwrap().run.mode,
+        Some(Mode::Plan)
+    );
+    let Some(Command::Exec(exec)) = parse(&["exec", "--permission-mode", "bypass", "x"])
+        .unwrap()
+        .command
+    else {
+        panic!("not exec")
+    };
+    assert_eq!(exec.run.mode, Some(Mode::Bypass));
+    assert_eq!(parse(&["x"]).unwrap().run.mode, None);
+    let conflict = parse(&["-y", "--mode", "plan", "x"]).unwrap_err();
+    assert_eq!(conflict.kind(), ErrorKind::ArgumentConflict);
+    assert!(parse(&["--mode", "nope", "x"]).is_err());
+    let help = Cli::command().render_long_help().to_string();
+    for mode in ["default", "plan", "bypass", "autonomous"] {
+        assert!(help.contains(mode), "--help does not list {mode}");
+    }
+}
+
+#[test]
 fn a_prompt_conflicts_with_a_subcommand() {
     assert!(parse(&["fix it", "sessions"]).is_err());
     assert!(parse(&["login", "--with-token", "status"]).is_err());

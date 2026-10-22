@@ -1,6 +1,6 @@
 [package]
 name = "tools"
-description = "The agent's tools: files read and edited, shell commands, a native browser window"
+description = "The agent's tools: files read and edited, shell commands, a native browser window, questions to the person"
 publish = false
 version.workspace = true
 edition.workspace = true
@@ -20,7 +20,8 @@ serde_json.workspace = true
 tao.workspace = true
 wry.workspace = true
 
-# A command's own session and the kill of its process group (setsid, kill).
+# A command's own session and the kill of its process group (setsid, kill), and a terminal of its
+# own for a session (openpty, TIOCSCTTY, poll, waitid).
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 

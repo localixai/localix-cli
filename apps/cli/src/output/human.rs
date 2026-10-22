@@ -14,13 +14,20 @@ const LINE: usize = 160;
 /// Lines of a result `-v` shows.
 const RESULT_LINES: usize = 4;
 
-/// A call as one line, by what it does: `▸ bash cargo test`, `▸ read src/lib.rs`, else
-/// `▸ browser url: … · goal: …` with only the arguments it was given.
+/// A call as one line, by what it does: `▸ bash cargo test`, `▸ bash python3 -q  (terminal)`,
+/// `▸ bash session 1 ← print(1) ⏎ [Enter]`, `▸ read src/lib.rs`, `▸ ask 2 questions` (the
+/// questions themselves are shown when they are asked), else `▸ browser url: … · goal: …` with
+/// only the arguments it was given.
 pub fn call(name: &str, args: &Value) -> String {
     let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or("");
     let shown = match name {
+        // Only a session the tool would take: `"session": null` runs the command, so it is shown.
+        "bash" if args.get("session").and_then(Value::as_u64).is_some() => session(args),
         "bash" => {
             let mut line = one_line(text("command"), LINE);
+            if args.get("tty") == Some(&Value::Bool(true)) {
+                line.push_str("  (terminal)");
+            }
             if !text("workdir").is_empty() {
                 line.push_str(&format!("  (in {})", text("workdir")));
             }
@@ -35,9 +42,36 @@ pub fn call(name: &str, args: &Value) -> String {
             format!("{} (every match)", text("path"))
         }
         "edit" => text("path").to_string(),
+        "ask" => match args
+            .get("questions")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+        {
+            Some(1) | None => "1 question".to_string(),
+            Some(n) => format!("{n} questions"),
+        },
         _ => arguments(args),
     };
     format!("▸ {} {}", printable(name), printable(&shown))
+}
+
+/// A call on a terminal session: what is typed into it, or that it is read or closed.
+fn session(args: &Value) -> String {
+    let id = args.get("session").map_or(String::new(), Value::to_string);
+    let input = args.get("input").and_then(Value::as_str).unwrap_or("");
+    let keys = args
+        .get("keys")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten();
+    let mut typed = vec![input.replace('\n', " \u{23ce} ")];
+    typed.extend(keys.map(|key| format!("[{}]", key.as_str().unwrap_or("?"))));
+    let typed = one_line(&typed.join(" "), LINE);
+    match args.get("close") == Some(&Value::Bool(true)) {
+        true => format!("session {id} close"),
+        false if typed.is_empty() => format!("session {id} (read)"),
+        false => format!("session {id} \u{2190} {typed}"),
+    }
 }
 
 /// Every argument that says something, as `key: value · key: value`.

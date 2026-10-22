@@ -1,5 +1,5 @@
 //! What the agent knows of where it runs before its first call: the working directory, the
-//! system, the date, how approvals work, and the project's own instructions (its AGENTS.md
+//! system, the date, the mode it works in, and the project's own instructions (its AGENTS.md
 //! files), found as Codex finds them: from the repository's root down to the working directory,
 //! so a deeper file comes later and wins.
 
@@ -24,8 +24,8 @@ const GOAL_LIMIT: usize = 500;
 pub struct Environment<'a> {
     /// The workspace root (canonical).
     pub root: &'a Path,
-    /// How commands and edits are approved, in one sentence.
-    pub approvals: &'a str,
+    /// The mode: what runs without asking, what is refused, whether questions are answered.
+    pub mode: &'a str,
     /// Whether the browser tool is offered.
     pub browser: bool,
     /// Unix seconds now.
@@ -55,13 +55,13 @@ fn describe(environment: &Environment) -> String {
     };
     format!(
         "<environment>\nWorking directory: {} (the workspace root: files change only inside it)\n\
-         System: {} {}\nDate: {} (UTC)\nApprovals: {}\nBrowser: {browser}\n\
+         System: {} {}\nDate: {} (UTC)\nMode: {}\nBrowser: {browser}\n\
          </environment>",
         environment.root.display(),
         std::env::consts::OS,
         std::env::consts::ARCH,
         date(environment.now),
-        environment.approvals,
+        environment.mode,
     )
 }
 

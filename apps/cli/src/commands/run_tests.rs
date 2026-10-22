@@ -6,8 +6,8 @@ use session::Sessions;
 use super::*;
 use crate::cli::Cli;
 use crate::compose::{Models, assemble};
-use crate::gate::NO_TERMINAL;
 use crate::interrupt::Interrupt;
+use crate::mode::NO_TERMINAL;
 use crate::output::Output;
 use crate::testing::{Captured, NoDecider, Scratch, ScriptedChat};
 
@@ -112,7 +112,7 @@ struct Done {
 /// Run one task through the whole composition, with a scripted model: one command, then an
 /// answer. Nothing but the models is faked.
 /// `unwritable`: `-o` names a file in a directory that does not exist.
-fn compose_one(approvals: Approvals, unwritable: bool, schema: Option<Value>) -> Done {
+fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
     let scratch = Scratch::new();
     let work = scratch.path().join("work");
     std::fs::create_dir_all(&work).unwrap();
@@ -133,7 +133,10 @@ fn compose_one(approvals: Approvals, unwritable: bool, schema: Option<Value>) ->
         context: String::new(),
         fresh: String::new(),
         schema,
-        approvals,
+        mode,
+        // No terminal: nothing here may wait on a person.
+        terminal: false,
+        asks: false,
         history,
         session,
     };
@@ -185,7 +188,7 @@ fn compose_one(approvals: Approvals, unwritable: bool, schema: Option<Value>) ->
 
 #[test]
 fn a_composed_task_reports_in_order_writes_its_answer_and_is_saved() {
-    let done = compose_one(Approvals::Yes, false, None);
+    let done = compose_one(Mode::Bypass, false, None);
     let types: Vec<&str> = done
         .events
         .iter()
@@ -214,7 +217,7 @@ fn a_composed_task_reports_in_order_writes_its_answer_and_is_saved() {
 
 #[test]
 fn with_no_one_to_approve_nothing_runs_and_the_model_is_told_why() {
-    let done = compose_one(Approvals::Refuse, false, None);
+    let done = compose_one(Mode::Default, false, None);
     let result = &done.events[3];
     assert_eq!(result["type"], "tool.result");
     assert_eq!(result["failed"], true);
@@ -224,7 +227,7 @@ fn with_no_one_to_approve_nothing_runs_and_the_model_is_told_why() {
 
 #[test]
 fn a_failed_answer_file_is_in_the_exit_code_the_report_gives() {
-    let done = compose_one(Approvals::Yes, true, None);
+    let done = compose_one(Mode::Bypass, true, None);
     let completed = done.events.last().unwrap();
     assert_eq!(done.code, exit::ENVIRONMENT);
     assert_eq!(completed["exit_code"], exit::ENVIRONMENT);
@@ -233,7 +236,7 @@ fn a_failed_answer_file_is_in_the_exit_code_the_report_gives() {
 
 #[test]
 fn with_a_schema_and_no_data_the_answer_file_holds_no_prose() {
-    let done = compose_one(Approvals::Yes, false, Some(json!({"type": "object"})));
+    let done = compose_one(Mode::Bypass, false, Some(json!({"type": "object"})));
     assert_eq!(
         done.last, "",
         "prose where data is expected would break the reader"

@@ -7,6 +7,8 @@ use clap::builder::RangedU64ValueParser;
 use clap::{ArgGroup, Args, Parser, Subcommand};
 use openrouter::{chat, system_one};
 
+use crate::mode::Mode;
+
 const USAGE: &str = "lx [OPTIONS] [PROMPT]\n       \
     lx exec [OPTIONS] [PROMPT | -]\n       \
     lx <COMMAND>";
@@ -15,21 +17,32 @@ const ABOUT: &str = "lx: Localix's ultrafast, lightweight coding agent for the t
 
 const LONG_ABOUT: &str = "lx: Localix's ultrafast, lightweight coding agent for the terminal.
 
-It works in a directory (the current one, or -C DIR) with four tools: read, edit, bash and a \
-browser whose clicks and typing are done by a fast decision model.
+It works in a directory (the current one, or -C DIR) with five tools: read, edit, bash (on \
+unix it can keep a program that asks, such as a REPL, open in a terminal session until the task \
+ends), a browser whose clicks and typing are done by a fast decision model, and ask, a question \
+to you (in a session only).
 
 With no command, lx opens a session at the terminal: PROMPT, when given, is its first message, \
 and each line you type goes on from the last. `lx exec` (or -p) runs one task without a session \
 and exits, with the answer alone on stdout: for scripts, CI and pipes.
 
-Commands, file changes and browser actions are asked for at the terminal (y, n, or a: always \
-for this tool); -y allows them without asking. Outside a terminal they are refused unless -y is \
-given. Ctrl-C stops the task (the command running is killed); a second Ctrl-C quits.";
+The mode (--mode) decides what runs without asking. In default, commands, file changes and \
+browser actions are asked for at the terminal (y, n, or a: always for this tool), and refused \
+outside one. plan investigates and answers with a plan: file changes are refused, and each \
+command (and each input to a terminal session) is asked. bypass (-y) allows everything. \
+autonomous also allows everything, and the agent asks you nothing (in exec, where ask is not \
+offered, it is the same as bypass). In a session, /mode switches it, /plan enters plan mode, \
+Shift+Tab then Enter toggles plan mode, and /status shows the mode.
+
+Ctrl-C stops the task (the command running and every terminal session are killed, and an open \
+question or approval ends); a second Ctrl-C quits.";
 
 const EXAMPLES: &str = "Examples:
   lx                                              a session at the terminal
   lx \"fix the failing test in src/parse.rs\"       a session that starts with this task
   lx -c                                           go on with the last session here
+  lx --mode plan \"how should we split src/parse.rs?\"
+                                                  a session that plans before it changes anything
   lx exec -y \"run the tests and fix what fails\"   one task, then exit
   git diff | lx -p \"review this change\"           stdin is added to the prompt
   lx exec - < task.md                             the prompt from stdin
@@ -187,11 +200,22 @@ pub struct RunOptions {
     )]
     pub cd: Option<PathBuf>,
 
-    /// Allow commands, file changes and browser actions without asking. Also accepted as
-    /// --yolo and --dangerously-skip-permissions.
+    /// Allow commands, file changes and browser actions without asking: --mode bypass. Also
+    /// accepted as --yolo and --dangerously-skip-permissions.
     #[arg(short = 'y', long, help_heading = "Approvals",
         aliases = ["yolo", "dangerously-skip-permissions"])]
     pub yes: bool,
+    /// What runs without asking, what is refused, and whether the agent may ask you questions.
+    /// Default: default. Also accepted as --permission-mode.
+    #[arg(
+        long,
+        value_enum,
+        value_name = "MODE",
+        help_heading = "Approvals",
+        alias = "permission-mode",
+        conflicts_with = "yes"
+    )]
+    pub mode: Option<Mode>,
 
     /// Print events as JSON lines on stdout: run.started, tool.call, tool.result, step, turn,
     /// run.completed. With `exec` or -p.

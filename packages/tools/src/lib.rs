@@ -7,12 +7,15 @@
 //!   change.
 //! - [`fs`]: `read` (a file's numbered lines, a directory's entries) and `edit` (exact replacement,
 //!   or a new file).
-//! - [`shell`]: `bash`: a command run in the workspace, its exit code and its output.
+//! - [`shell`]: `bash`: a command run in the workspace, its exit code and its output; on unix,
+//!   also a program that must ask, kept open in a terminal session between calls.
 //! - [`browser`]: a native browser window on the system WebView.
+//! - [`ask`]: questions to the person (`contracts::person::Person`), who answers in the app.
 
 use contracts::gate::{Effect, Gate, Verdict};
 use contracts::tool::ToolError;
 
+pub mod ask;
 pub mod browser;
 pub mod fs;
 pub mod shell;

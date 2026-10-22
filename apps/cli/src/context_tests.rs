@@ -6,7 +6,7 @@ use crate::testing::Scratch;
 fn environment(root: &Path) -> Environment<'_> {
     Environment {
         root,
-        approvals: "the person approves each command",
+        mode: "default: the person approves each command",
         browser: true,
         now: 1_792_627_200,
     }
@@ -86,7 +86,8 @@ fn the_environment_says_where_when_and_how() {
     assert!(text.starts_with("<environment>\n"));
     assert!(text.contains(&format!("Working directory: {}", scratch.path().display())));
     assert!(text.contains("Date: 2026-10-22 (UTC)"));
-    assert!(text.contains("Approvals: the person approves each command"));
+    assert!(text.contains("Mode: default: the person approves each command"));
+    assert!(!text.contains("Approvals:"));
     assert!(text.contains("Browser: available"));
     assert!(text.trim_end().ends_with("</environment>"));
 }

@@ -4,14 +4,17 @@
 Usage: OPENROUTER_API_KEY=... python3 evals/run.py [--only id,kind] [--repeat N] [--jobs N]
        [--bin path] [--record] [-- extra lx args]
 
-Each run is `lx --json --yes -C <dir> "<goal>"` in a fresh temporary directory (a copy of the
-task's fixture, or empty), outside any git repository so no AGENTS.md reaches the agent. A run
-passes when lx exits 0, the answer (and the data, with a schema) holds every `contains` string
-and `matches` pattern, and the task's `check` command exits 0 in that directory afterwards.
+Each run is `lx exec --json --yes -C <dir> [task args] "<goal>"` in a fresh temporary directory
+(a copy of the task's fixture, or empty), outside any git repository so no AGENTS.md reaches the
+agent. A task whose `args` set a mode (`--mode plan`) runs in it instead of `--yes`, with no
+terminal to ask on. A run passes when lx exits 0, the answer (and the data, with a schema) holds
+every `contains` string and `matches` pattern, every `uses` call was made and no `avoids` call
+was, and the task's `check` command exits 0 in that directory afterwards. The summary ends with
+totals per kind.
 
 Live: every task makes paid OpenRouter calls; browser tasks open real sites.
 """
-import argparse, json, os, re, shutil, subprocess, sys, tempfile, time
+import argparse, json, math, os, re, shutil, statistics, subprocess, sys, tempfile, time
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,6 +22,7 @@ FIXTURES = os.path.join(ROOT, "evals", "fixtures")
 TIMEOUT_S = 240  # lx's own --timeout for one task
 HANG_S = TIMEOUT_S + 60  # past this the process is killed: a run that never ends is a failure
 CHECK_S = 60
+MODE_FLAGS = ("--mode", "--permission-mode")
 
 
 def events(stdout):
@@ -59,7 +63,28 @@ def check(task, work):
     return f"check exited {proc.returncode}" + (": " + " | ".join(tail) if tail else "")
 
 
-def judge(task, code, done, work):
+def own_mode(args):
+    """Whether a task's `args` choose the mode: then it runs in that mode, not with --yes (lx
+    refuses both at once)."""
+    return any(a in MODE_FLAGS or a.startswith(tuple(f + "=" for f in MODE_FLAGS)) for a in args)
+
+
+def called(spec, calls):
+    """Whether one of `calls` (tool.call events) is to `spec["name"]` with every argument in
+    `spec["arguments"]`, a non-empty value for every name in `spec["has"]`, and a value matching
+    every pattern in `spec["like"]` (a Python regex): how a task requires the way it is solved, or
+    in `avoids`, a way it must not be."""
+    want, has, like = spec.get("arguments", {}), spec.get("has", []), spec.get("like", {})
+
+    def fits(args):
+        return (all(args.get(k) == v for k, v in want.items())
+                and all(args.get(k) not in (None, "", [], False) for k in has)
+                and all(isinstance(args.get(k), str) and re.search(p, args[k]) for k, p in like.items()))
+
+    return any(c.get("name") == spec["name"] and fits(c.get("arguments") or {}) for c in calls)
+
+
+def judge(task, code, done, work, calls=()):
     """Every reason the run failed; empty when it passed."""
     reasons = []
     if code != 0:
@@ -78,6 +103,12 @@ def judge(task, code, done, work):
     for pattern in task.get("matches", []):
         if not re.search(pattern, answer, re.IGNORECASE):
             reasons.append(f"answer does not match /{pattern}/")
+    for spec in task.get("uses", []):
+        if not called(spec, calls):
+            reasons.append(f"never called {spec['name']} as {json.dumps({k: v for k, v in spec.items() if k != 'name'})}")
+    for spec in task.get("avoids", []):
+        if called(spec, calls):
+            reasons.append(f"called {spec['name']} as it must not: {json.dumps({k: v for k, v in spec.items() if k != 'name'})}")
     failed_check = check(task, work)
     if failed_check:
         reasons.append(failed_check)
@@ -87,16 +118,21 @@ def judge(task, code, done, work):
 def run(job, binary, extra, out_dir):
     index, task = job
     work = workdir(task)
-    args = [binary, "exec", "--json", "--yes", "-C", work, "--timeout", str(TIMEOUT_S)]
+    own = task.get("args", [])
+    args = [binary, "exec", "--json"] + ([] if own_mode(own) else ["--yes"])
+    args += ["-C", work, "--timeout", str(TIMEOUT_S)]
     if task.get("schema"):
         args += ["--schema", json.dumps(task["schema"])]
-    args += extra + [task["goal"]]
+    args += own + extra + [task["goal"]]
     # Sessions go beside the results, not into the person's own ~/.lx/sessions.
     env = dict(os.environ, LX_SESSIONS=os.path.join(out_dir, "sessions"))
     started = time.time()
     try:
+        # A mode that asks (plan) would ask on the terminal run.py was started from: a session of
+        # its own has no terminal, so what it would ask is refused, as in CI. Runs with --yes stay
+        # in run.py's session, so a Ctrl-C of run.py still stops them.
         proc = subprocess.run(args, capture_output=True, text=True, env=env, timeout=HANG_S,
-                              stdin=subprocess.DEVNULL)
+                              stdin=subprocess.DEVNULL, start_new_session=own_mode(own))
         code, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired as hung:
         code = "hung"
@@ -111,13 +147,13 @@ def run(job, binary, extra, out_dir):
             f.write(stderr)
     seen = events(stdout)
     done = next((e for e in reversed(seen) if e.get("type") == "run.completed"), None)
-    reasons = judge(task, code, done, work)
+    calls = [e for e in seen if e.get("type") == "tool.call"]
+    reasons = judge(task, code, done, work, calls)
     if done is None and stderr.strip():
         reasons.append(stderr.strip().splitlines()[-1][:200])
     tools = {}
-    for event in seen:
-        if event.get("type") == "tool.call":
-            tools[event.get("name")] = tools.get(event.get("name"), 0) + 1
+    for event in calls:
+        tools[event.get("name")] = tools.get(event.get("name"), 0) + 1
     started_event = next((e for e in seen if e.get("type") == "run.started"), {})
     usage = (done or {}).get("usage") or {}
     agent, decision = usage.get("agent") or {}, usage.get("decision") or {}
@@ -131,10 +167,47 @@ def run(job, binary, extra, out_dir):
             "agent_s": round((agent.get("ms") or 0) / 1000, 1),
             "decision_s": round((decision.get("ms") or 0) / 1000, 1),
             "cost": round(usage.get("cost_usd") or 0, 4),
+            "input_tokens": (agent.get("input_tokens") or 0) + (decision.get("input_tokens") or 0),
+            "cached_tokens": agent.get("cached_tokens") or 0,
+            "output_tokens": (agent.get("output_tokens") or 0) + (decision.get("output_tokens") or 0),
             "answer": ((done or {}).get("answer") or "")[:160].replace("\n", " "),
             # What the run itself says it used: the flags, the environment and the defaults.
             "model": started_event.get("model"), "decision_model": started_event.get("decision_model"),
             "reasons": reasons, "trace": trace, "work": None if ok else work}
+
+
+def p90(values):
+    """The nearest-rank 90th percentile: a value some run really took."""
+    ordered = sorted(values)
+    return ordered[max(0, math.ceil(0.9 * len(ordered)) - 1)]
+
+
+def mean(values):
+    """The mean of the values a run reported; None when none did."""
+    known = [v for v in values if v is not None]
+    return statistics.mean(known) if known else None
+
+
+def totals(results):
+    """One line per kind, then all runs: pass rate, duration, turns, tool calls, cost, tokens."""
+    def line(label, runs):
+        walls = [r["wall"] for r in runs]
+        passed = sum(r["ok"] for r in runs)
+        cost = sum(r["cost"] for r in runs)
+        turns, tools = mean(r["turns"] for r in runs), mean(r["tool_calls"] for r in runs)
+        tokens = [sum(r.get(k) or 0 for r in runs) for k in ("input_tokens", "cached_tokens", "output_tokens")]
+        return (f"{label:<8} {passed:>3}/{len(runs):<3} {100 * passed / len(runs):>5.1f}%  "
+                f"median {statistics.median(walls):>6.1f}s  p90 {p90(walls):>6.1f}s  "
+                f"turns {'-' if turns is None else f'{turns:.1f}':>5}  "
+                f"tools {'-' if tools is None else f'{tools:.1f}':>5}  "
+                f"${cost:.4f} (${cost / len(runs):.4f}/run)  "
+                f"tokens in {tokens[0]:,} cached {tokens[1]:,} out {tokens[2]:,}")
+
+    kinds = sorted({r["kind"] for r in results})
+    lines = [line(kind, [r for r in results if r["kind"] == kind]) for kind in kinds]
+    if len(kinds) > 1:
+        lines.append(line("all", results))
+    return "\n".join(lines)
 
 
 def used(results, key):
@@ -182,10 +255,9 @@ def main():
         if r["work"]:
             print(f"     - left in {r['work']}")
     passed = sum(r["ok"] for r in results)
-    walls = sorted(r["wall"] for r in results)
-    median = walls[len(walls) // 2] if walls else 0
-    print(f"\n{passed}/{len(results)} passed, median {median}s, total ${sum(r['cost'] for r in results):.4f}"
-          f"\nresults in {out_dir}")
+    if results:
+        print("\n" + totals(results))
+    print(f"\n{passed}/{len(results)} passed\nresults in {out_dir}")
     with open(os.path.join(out_dir, "summary.json"), "w") as f:
         json.dump(results, f, indent=2)
     if opts.record:

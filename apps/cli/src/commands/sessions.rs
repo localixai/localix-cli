@@ -8,7 +8,7 @@ use contracts::history::{History, Session};
 use session::Sessions;
 
 use crate::cli::RunOptions;
-use crate::commands::run::{self, Mode};
+use crate::commands::run::{self, Kind};
 use crate::error::{self, Failure};
 use crate::exit;
 use crate::printable::printable;
@@ -82,12 +82,12 @@ fn home_relative(dir: &str) -> String {
 }
 
 /// `lx resume` and `lx exec resume`: the session `id` names, else the newest one that ran in
-/// this workspace (else the newest of all, said so), going on with `prompt` in `mode`.
+/// this workspace (else the newest of all, said so), going on with `prompt` as `kind`.
 pub fn resume(
     id: Option<&str>,
     prompt: Option<&str>,
     options: RunOptions,
-    mode: Mode,
+    kind: Kind,
 ) -> Result<i32, Failure> {
     let root = run::root(&options)?;
     let here = root.root().display().to_string();
@@ -112,7 +112,7 @@ pub fn resume(
             printable(&session.workspace)
         ));
     }
-    run::run(prompt, options, Some(session), mode)
+    run::run(prompt, options, Some(session), kind)
 }
 
 #[cfg(test)]

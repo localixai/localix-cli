@@ -3,11 +3,12 @@
 [![ci](https://github.com/rsaryev/localix-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/rsaryev/localix-cli/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/rsaryev/localix-cli?include_prereleases&sort=semver)](https://github.com/rsaryev/localix-cli/releases)
 
-`lx` is [Localix](https://localix.ai)'s ultrafast, lightweight coding agent for the terminal. Where the [Localix desktop app](https://github.com/rsaryev/localix) is a whole development environment, `lx` is one small command. It has four tools:
+`lx` is [Localix](https://localix.ai)'s ultrafast, lightweight coding agent for the terminal. Where the [Localix desktop app](https://github.com/rsaryev/localix) is a whole development environment, `lx` is one small command. It has five tools:
 
 - `read` and `edit` for files;
 - `bash` for commands;
-- a real browser. The agent says what to do on a page, and a cheap decision model does the clicking and typing.
+- a real browser. The agent says what to do on a page, and a cheap decision model does the clicking and typing;
+- `ask`, a question to you, in a session, when a decision is yours.
 
 It is one binary of about 1.6 MB, with synchronous code and no async runtime. There are no plugins, no MCP servers and no extra tools: a model with a shell and a browser needs little more.
 
@@ -60,6 +61,7 @@ lx "fix the failing test in src/parse.rs"                 # a session that start
 lx -c                                                     # go on with the newest session here
 lx exec "fix the failing test in src/parse.rs"            # one task, then exit (also: lx e, lx -p)
 lx exec -y "run the tests and fix what fails"             # allow commands and edits without asking
+lx --mode plan "how should we split src/parse.rs?"        # investigate and plan; change no file
 git diff | lx -p "review this change"                     # piped stdin is added to the prompt
 lx exec - < task.md                                       # the prompt from stdin
 lx exec -y "fix the lint" </dev/null                      # from a script whose stdin stays open
@@ -70,12 +72,13 @@ lx exec --schema '{"type":"object","properties":{"version":{"type":"string"}},"r
 lx exec resume --last "now update the README"             # one more task in the newest session
 ```
 
-In a session, each line you type is the next task, in the same conversation. A line ending in `\` goes on on the next. Slash commands: `/new` (also `/clear`) starts a new conversation and session, `/status` shows the models, the workspace, the approvals and the session, `/help`, and `/exit` (also `/quit`, or Ctrl-D). A session needs a terminal on stdin; without one, use `lx exec`.
+In a session, each line you type is the next task, in the same conversation. A line ending in `\` goes on on the next. Slash commands: `/mode [name]` (also `/permissions`) lists the [modes](#modes-and-approvals) or switches to one, `/plan [task]` enters plan mode (and runs the task in it), Shift+Tab then Enter toggles plan mode, `/new` (also `/clear`) starts a new conversation and session, `/status` shows the models, the workspace, the mode, the session and any terminal session still running, `/help`, and `/exit` (also `/quit`, or Ctrl-D). The prompt shows the mode when it is not `default` (`plan › `). A session needs a terminal on stdin; without one, use `lx exec`.
 
 | Option | Meaning |
 | --- | --- |
 | `-C, --cd DIR` | The workspace: paths resolve in it and files change only inside it. Default: the current directory. |
-| `-y, --yes` | Allow commands, file changes and browser actions without asking. Also `--yolo` and `--dangerously-skip-permissions`. |
+| `--mode MODE` | `default`, `plan`, `bypass` or `autonomous` (see [Modes and approvals](#modes-and-approvals)). Also `--permission-mode`. Default: `default`. |
+| `-y, --yes` | `--mode bypass`: allow commands, file changes and browser actions without asking. Also `--yolo` and `--dangerously-skip-permissions`. Giving it with `--mode` is a usage error. |
 | `-p, --print` | Run the prompt as one task and exit, as `exec` does. |
 | `-c, --continue` | Go on with the newest session of this directory, as `resume --last` does. |
 | `--json` | With `exec` or `-p`: one JSON event per line on stdout (see [`--json`](#--json)). |
@@ -86,7 +89,7 @@ In a session, each line you type is the next task, in the same conversation. A l
 | `--decision-model MODEL` | The browser's decision model. Env `LX_DECISION_MODEL`, default `~typesafe/jev-latest`. |
 | `--max-turns N` | Model turns for one task (50; 1 to 10000). |
 | `--max-steps N` | Actions for one browser task of the decision model (40; 1 to 10000). |
-| `--timeout SECONDS` | Seconds one task may take (1800; at most 86400). It stops at the first model turn past them. |
+| `--timeout SECONDS` | Seconds one task may take (1800; at most 86400). It stops at the first model turn past them. Time spent waiting on you (an approval, a question) does not count. |
 | `--show-browser` | Show the browser window. It is invisible by default, and opens only when the browser is first used. |
 
 Commands:
@@ -102,23 +105,28 @@ Every run is saved as a session in `~/.lx/sessions/<id>.json`; set `LX_SESSIONS`
 
 With `exec`, given a PROMPT, stdin that is not a terminal is read to its end and added to the prompt, and lx says so on stderr. A caller whose stdin stays open (a harness with a pipe, `ssh` without `-n`, a `while read` loop) should pass `</dev/null`.
 
-## Approvals
+## Modes and approvals
 
-`read` never asks. `edit`, `bash` and `browser` ask before they act, through one gate (`browser` when a call opens an address, hands over a goal, presses keys or runs a script; reading a page does not ask). The answer depends on how lx was started:
+`read` never asks. `edit`, `bash` and `browser` ask before they act, through one gate (`browser` when a call opens an address, hands over a goal, presses keys or runs a script; reading a page does not ask). The mode decides what the gate answers, and whether `ask` gets an answer:
 
-| Started | What happens |
+| Mode | What happens |
 | --- | --- |
-| At a terminal | Each effect is shown in full on one line (`bash: cargo test`, `bash: rm -rf build  (in ~/src, outside the workspace)`, `edit: edit src/lib.rs (+3 -1 lines)`); line breaks show as `⏎`, and control characters are escaped, so what you approve is what runs. Answer `y` to allow it, `n` or Enter to refuse it, `n <why>` to refuse it and tell the agent why, or `a` to allow that tool for the rest of the run. Only the bare word approves: `yes, and...` is asked again. What was typed before the question appeared is discarded. The question goes to the terminal itself, so this works while stdin is a pipe, stdout carries JSON and stderr goes to a file. |
-| With `-y` / `--yes` | Everything is allowed without asking. |
-| With no terminal and no `-y` | Commands, edits and browser actions are refused, and the agent is told the person must rerun with `--yes`. Reading still works. |
+| `default` | Each command, file change and browser action is asked at the terminal. With no terminal, they are refused, and the agent is told the person must rerun with `--yes` or `--mode bypass`. Reading still works. |
+| `plan` | The agent investigates and answers with a plan: a title, a summary, the changes file by file, the tests, its assumptions. File changes are refused without asking. Each command, each start of a terminal session and each text typed into one, and each browser action is asked, so it can look but you decide what runs; plan keeps its own `a` answers, apart from the default mode's, and `a` for `bash` covers its terminal sessions as it covers its commands. With no terminal, commands and browser actions are refused too, and the plan comes from reading files. |
+| `bypass` (`-y`) | Everything is allowed without asking. `ask` still reaches you. |
+| `autonomous` | Everything is allowed without asking, and nobody answers questions: `ask` fails at once and the agent goes on with its best assumption. In `exec`, where `ask` is not offered, it is the same as `bypass`. |
 
-Ctrl-C stops the task: the command running is killed with everything it started, nothing more is approved, and the task ends at its next model turn as `interrupted` (exit 130), with its `run.completed` event and its session saved. A second Ctrl-C quits at once. At the session's prompt, Ctrl-C quits. Closing the browser window stops the task the same way; in a session the window opens again on the next task.
+The mode is `--mode` (or `-y`), else `default`, for a session and for `exec` alike. In a session, `/mode <name>` switches it for the next question, `/plan` enters plan mode, and a line that is only Shift+Tab (then Enter) toggles plan mode on and off: the prompt line is read as typed lines, so Shift+Tab reaches lx only with Enter. The agent is told of a change before its next task, in a `<mode_change>` note. When a task in plan mode ends well, lx asks `Implement this plan?`: `y` goes back to the mode plan mode was entered from and runs `Implement the plan.`; `n` or Enter stays in plan mode; anything else is your next entry, so you can revise the plan by typing what to change.
+
+At a terminal, each effect is shown in full on one line (`bash: cargo test`, `bash: rm -rf build  (in ~/src, outside the workspace)`, `edit: edit src/lib.rs (+3 -1 lines)`); line breaks show as `⏎`, and control characters are escaped, so what you approve is what runs. A terminal session asks when it starts (`bash: python3 -q  (in a terminal)`) and before each text or key typed into it, showing exactly what will be typed (`bash: type into session 1 (`python3 -q`): print(1) ⏎ [Enter]`); reading its output and closing it do not ask. Answer `y` to allow it, `n` or Enter to refuse it, `n <why>` to refuse it and tell the agent why, or `a` to allow that tool for the rest of the run. Only the bare word approves: `yes, and...` is asked again. What was typed before the question appeared is discarded. The question goes to the terminal itself, so this works while stdin is a pipe, stdout carries JSON and stderr goes to a file.
+
+Ctrl-C stops the task: the command running is killed with everything it started, and so is every terminal session `bash` keeps, an open approval or question ends at once, nothing more is approved, and the task ends at its next model turn as `interrupted` (exit 130), with its `run.completed` event and its session saved. A second Ctrl-C quits at once, killing the terminal sessions first. At the session's prompt, Ctrl-C quits. Terminal sessions also end when the task does (its answer, `--timeout`), on `/new`, and when lx exits. Closing the browser window stops the task the same way; in a session the window opens again on the next task.
 
 A refusal goes back to the model as a failed call with its reason, and it is told not to work around it.
 
 ## Project instructions
 
-lx reads `AGENTS.md` files the way Codex does: from the git repository's root down to the workspace, root first. Each one covers its own directory tree, a deeper file wins over a shallower one, and the task you give wins over both. Each file is capped at 16 KiB and all of them together at 32 KiB, with a note when something was cut. They reach the agent in a context block with the environment: the workspace, the OS, the date, the approval policy, and whether a browser is available (the shell is named in the `bash` tool's description).
+lx reads `AGENTS.md` files the way Codex does: from the git repository's root down to the workspace, root first. Each one covers its own directory tree, a deeper file wins over a shallower one, and the task you give wins over both. Each file is capped at 16 KiB and all of them together at 32 KiB, with a note when something was cut. They reach the agent in a context block with the environment: the workspace, the OS, the date, the mode, and whether a browser is available (the shell is named in the `bash` tool's description).
 
 ## Tools
 
@@ -126,7 +134,8 @@ lx reads `AGENTS.md` files the way Codex does: from the git repository's root do
 | --- | --- |
 | `read` | A file's lines, numbered, up to 2000 lines and about 20 KB at a time (`offset`, `limit`), or a directory's entries. Long lines are cut, binary files and anything but regular files (a FIFO, a device) refused. It reads anywhere (a dependency's source, a system header) except lx's own key and sessions. |
 | `edit` | Exact replacement: `old_string` must occur once, unless `replace_all` is set. An empty `old_string` creates a file. Writes are atomic (a new temporary file, then a rename) and keep CRLF line endings and permissions; a read-only file is refused, and a file with other hard links is written in place. It asks the gate, refuses to write when the file changed while the question was open, and changes only files inside the workspace. |
-| `bash` | `sh -c` (`cmd /C` on Windows) in the workspace or a `workdir`, with stdin closed. On Unix it runs in its own session, with no terminal, so a program that prompts fails at once; git and pagers are told not to prompt or page. A timeout (120 s by default, at most 600 s) or Ctrl-C kills it with everything it started. Commands do not see `OPENROUTER_API_KEY`. Each stream keeps its first and last 5,000 bytes. A non-zero exit is a normal result. It asks the gate. |
+| `bash` | `sh -c` (`cmd /C` on Windows) in the workspace or a `workdir`, with stdin closed. On Unix it runs in its own session, with no terminal, so a program that prompts fails at once; git and pagers are told not to prompt or page. A timeout (120 s by default, at most 600 s) or Ctrl-C kills it with everything it started. `OPENROUTER_API_KEY` is left out of a command's environment; that is no barrier, since a command can still read lx's own environment (`ps -E`, `/proc/$PPID/environ`) and the saved key file. Each stream keeps its first and last 5,000 bytes. A non-zero exit is a normal result. It asks the gate. On Unix, a program that must ask (a REPL, an installer's questions, a login) runs with `tty` in a terminal of its own (120×40, `TERM=dumb`, `NO_COLOR=1`): the call returns once the output settles (`yield_ms`, 2 s by default) or `wait_for` text appears, with a session id while the program runs. Later calls type into it with `session`, `input` (at most 4096 bytes, and 1000 on one line: a terminal drops the rest of a longer line) and named `keys` (Enter, arrows, Ctrl-C, …), read its new output with `session` alone, or end it with `close`, which kills every process of its session, the jobs a shell put in groups of their own included (only a process that calls `setsid` itself escapes). Output is a transcript, not a screen: colours and cursor moves are dropped, and a progress bar keeps its last state. At most 4 sessions run at once, and every session ends with its task. |
+| `ask` | One to three questions to you, in a session only (not in `exec`). Each is shown with its options numbered: answer with a number, a number and a note (`2, keep it local`), or your own words; Enter skips it, and Ctrl-C stops the task. It asks no gate: it changes nothing. In `autonomous` mode it fails at once, so the agent decides on its own. |
 | `browser` | A native WebView window. The agent opens an http(s) address, or hands a short task with the exact values to type to the decision model, which clicks, types, selects and scrolls one step at a time. It can also press keys, run a script in the page, read the whole text, or change the page size. Each call returns what happened and the page as an outline. It asks the gate before anything a page sees. |
 
 ## Exit codes
@@ -162,15 +171,15 @@ The workspace is split into packages and one app. Every dependency points inward
 
 | Package | What it is | Depends on |
 | --- | --- | --- |
-| `packages/contracts` | Ports only: the chat model, the tools, the gate, the view the browser's hands drive, the decision model, the hands, the history | nothing |
+| `packages/contracts` | Ports only: the chat model, the tools, the gate, the person, the view the browser's hands drive, the decision model, the hands, the history | nothing |
 | `packages/agent` | The agent: the chat model's loop over tools, the conversation, `--schema`, the system prompt | `contracts` |
 | `packages/decision-loop` | The browser's hands: a short task carried out on a view, one decision-model request per step | `contracts` |
-| `packages/tools` | `read`, `edit`, `bash`, the workspace, and the browser (window, driver, page probe) | `contracts` |
+| `packages/tools` | `read`, `edit`, `bash`, `ask`, the workspace, and the browser (window, driver, page probe) | `contracts` |
 | `packages/openrouter` | The models' provider (chat and decision models) and signing in | `contracts` |
 | `packages/session` | Sessions as JSON files | `contracts` |
-| `apps/cli` | The `lx` binary: the command line, the approvals, the context, the output; it composes the packages | all of the above |
+| `apps/cli` | The `lx` binary: the command line, the modes and approvals, who answers `ask`, the context, the output; it composes the packages | all of the above |
 
-The agent knows its tools only by their specs, the hands know a view only through its protocol, and neither names a tool or a provider. A tool asks the gate before an effect, but only the app answers it.
+The agent knows its tools only by their specs, the hands know a view only through its protocol, and neither names a tool or a provider. A tool asks the gate before an effect, and the person a question, but only the app answers them.
 
 ## Trust boundaries
 
@@ -178,10 +187,11 @@ The agent knows its tools only by their specs, the hands know a view only throug
 - **The workspace limits `edit`, not `bash`.** `edit` changes only files inside the workspace, after following symlinks. `bash` is a real shell with your permissions, and there is no sandbox: the gate is what stands between the model and your machine. A `workdir` outside the workspace is named as such in the question.
 - **lx's own files are off limits** to `read` and `edit`, symlinks included: the saved key and the sessions directory.
 - **The browser's decision model only chooses** among the operations and controls a page offers, and types only the strings the agent gave it. Its output never becomes a selector, coordinates or code. Only http(s) pages load; downloads and other schemes are refused. A password field is typed into, but its value is never read back.
-- **Keys:** the key `lx login` saves lives in `~/.config/lx/credentials` (under `XDG_CONFIG_HOME` when set, `%APPDATA%` on Windows), mode 0600 on Unix, also when an older file was wider. `lx logout` removes it. `OPENROUTER_API_KEY` wins over it when set, and commands never see it.
+- **Keys:** the key `lx login` saves lives in `~/.config/lx/credentials` (under `XDG_CONFIG_HOME` when set, `%APPDATA%` on Windows), mode 0600 on Unix, also when an older file was wider. `lx logout` removes it. `OPENROUTER_API_KEY` wins over it when set. Commands start without the variable in their environment, but a command can still read the key from lx's environment or from the saved file: what keeps it from a command is approving each one (not `--yes`, `bypass` or `autonomous`).
 
 Known gaps:
 
+- Terminal sessions (`bash` with `tty`) have no screen: a full-screen program (an editor, `top`, a pager) shows only fragments of its text, so the agent is steered to batch modes. The window is fixed at 120×40. There are none on Windows: `tty` is not offered there. A session never outlives its task, so a long-lived server still runs as `cmd > log 2>&1 &`. `wait_for` can match the echo of the text typed; the report says so when the text was in the input.
 - On Windows, Ctrl-C ends lx and the commands it started at once (they share the console), with no `run.completed` event, and `login --with-token` shows the key as it is pasted.
 
 ## Metrics
@@ -199,7 +209,7 @@ Latest run, 2026-10-22 22:17 on Darwin 25.6.0 arm64: the agent on anthropic/clau
 | Release binary | 1.59 MB |
 <!-- metrics:end -->
 
-`python3 evals/run.py --record` runs the live evals, then appends a dated file to `benchmarks/runs/` and regenerates [benchmarks/HISTORY.md](benchmarks/HISTORY.md) and this block. The coding tasks write and run a script, fix a failing test, rename a function across files and answer questions about code, each on a small fixture. The browser tasks cover a login, forms, a TodoMVC app, delayed content, search, a quiz behind a consent banner and a Google Flights search. See [evals/README.md](evals/README.md).
+`python3 evals/run.py --record` runs the live evals, then appends a dated file to `benchmarks/runs/` and regenerates [benchmarks/HISTORY.md](benchmarks/HISTORY.md) and this block. The coding tasks write and run a script, fix a failing test, rename a function across files, answer questions about code, answer an installer's prompts in a terminal session and plan a feature in `--mode plan`, each on a small fixture. The browser tasks cover a login, forms, a TodoMVC app, delayed content, search, a quiz behind a consent banner and a Google Flights search. See [evals/README.md](evals/README.md).
 
 ## Contributing
 

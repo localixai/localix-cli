@@ -1,7 +1,8 @@
-//! A run, as a session at the terminal or one `exec` task: everything checked and read on the
-//! main thread first (the workspace, the schema, the key, the prompt), then the session is composed, with the browser's event loop on the main
-//! thread where a window can be shown. Each task is run, reported, and recorded in the session;
-//! Ctrl-C or closing the window stops the task (see `interrupt`), not the process.
+//! A run, as a session at the terminal or one `exec` task: all is checked and read on the main
+//! thread first (workspace, schema, key, prompt), then the session is composed, with the browser's
+//! event loop on the main thread where a window can be shown. Each task is run, reported, recorded
+//! and its terminal sessions closed; Ctrl-C or closing the window stops it (see `interrupt`), not
+//! the process.
 
 use std::io::IsTerminal;
 use std::path::Path;
@@ -22,9 +23,10 @@ use crate::compose::{APP, Rig, Setup, compose};
 use crate::context::{self, Environment};
 use crate::error::Failure;
 use crate::exit;
-use crate::gate::Approvals;
+use crate::gate::Tty;
 use crate::input::{self, Prompt};
 use crate::interrupt;
+use crate::mode::{self, Mode};
 use crate::output::{Start, Summary};
 
 /// The workspace `options` name (`-C`, else the current directory), with lx's own key and
@@ -34,10 +36,8 @@ pub fn root(options: &RunOptions) -> Result<Workspace, Failure> {
     let workspace = Workspace::new(root)
         .map_err(|error| Failure::Usage(format!("-C {}: {error}", root.display())))?;
     if !workspace.root().is_dir() {
-        return Err(Failure::Usage(format!(
-            "-C {}: not a directory",
-            root.display()
-        )));
+        let why = format!("-C {}: not a directory", root.display());
+        return Err(Failure::Usage(why));
     }
     let private = auth::credentials_path(APP).into_iter();
     Ok(workspace.denying(private.chain([sessions::store().dir])))
@@ -45,7 +45,7 @@ pub fn root(options: &RunOptions) -> Result<Workspace, Failure> {
 
 /// How a run takes its tasks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
+pub enum Kind {
     /// A session at the terminal: the prompt, when given, is its first message.
     Session,
     /// One task, then exit (`exec`, -p).
@@ -67,15 +67,15 @@ const SESSION_TERMINAL: &str = "a session needs a terminal on stdin: run one tas
 const ONE_TASK: &str = "--json, --schema and -o answer one task: run it with `lx exec` (or -p)";
 const EXEC_PROMPT: &str = "exec runs one task: give it as the prompt, or `-` to read it from stdin";
 
-/// The work `mode` asks of `prompt`; stdin is read only for one task (a session reads it line by
+/// The work `kind` asks of `prompt`; stdin is read only for one task (a session reads it line by
 /// line, once `session_allowed`).
-fn work(prompt: Option<&str>, mode: Mode) -> Result<Work, Failure> {
-    match mode {
-        Mode::Exec => match input::prompt(prompt)? {
+fn work(prompt: Option<&str>, kind: Kind) -> Result<Work, Failure> {
+    match kind {
+        Kind::Exec => match input::prompt(prompt)? {
             Prompt::One(task) => Ok(Work::One(task)),
             Prompt::Line => Err(Failure::Usage(EXEC_PROMPT.into())),
         },
-        Mode::Session => Ok(Work::Session(prompt.map(str::to_string))),
+        Kind::Session => Ok(Work::Session(prompt.map(str::to_string))),
     }
 }
 
@@ -94,25 +94,26 @@ pub fn session_allowed(
     Ok(())
 }
 
-/// Run `prompt` with `options` in `mode`, in `resumed` when a session goes on.
+/// Run `prompt` with `options` as `kind`, in `resumed` when a session goes on.
 pub fn run(
     prompt: Option<&str>,
     options: RunOptions,
     resumed: Option<Session>,
-    mode: Mode,
+    kind: Kind,
 ) -> Result<i32, Failure> {
     let workspace = root(&options)?;
     let schema = options.schema.as_deref().map(input::schema).transpose()?;
-    if mode == Mode::Session {
+    if kind == Kind::Session {
         session_allowed(prompt, &options, std::io::stdin().is_terminal())?;
     }
     let (key, _) = auth::key(APP).ok_or(Failure::SignedOut)?;
-    let work = work(prompt, mode)?;
-    let approvals = Approvals::choose(options.yes);
+    let work = work(prompt, kind)?;
+    let mode = Mode::choose(options.mode, options.yes);
+    let (terminal, asks) = (Tty::available(), kind == Kind::Session);
     let browser = tools::browser::has_display();
     let environment = Environment {
         root: workspace.root(),
-        approvals: approvals.describe(),
+        mode: &mode::describe(mode, terminal, asks),
         browser,
         now: session::now(),
     };
@@ -131,7 +132,9 @@ pub fn run(
         context,
         fresh,
         schema,
-        approvals,
+        mode,
+        terminal,
+        asks,
         history,
         session,
     };
@@ -145,9 +148,7 @@ pub fn run(
     if !browser {
         return Ok(work(None));
     }
-    tools::browser::host(headless, interrupt::window_closed, move |browser| {
-        work(Some(browser))
-    })
+    tools::browser::host(headless, interrupt::window_closed, move |b| work(Some(b)))
 }
 
 impl Rig<'_> {
@@ -165,11 +166,12 @@ impl Rig<'_> {
         });
         self.brake.arm(Duration::from_secs(self.options.timeout));
         self.interrupt.begin();
-        let run = match self.conversation.take() {
+        let run = match self.told_of_mode() {
             Some(before) => self.agent.follow_up(before, goal),
             None => self.agent.run(goal),
         };
         let halt = self.brake.halted();
+        self.sessions.close_all();
         self.interrupt.end();
         self.conversation = Some(run.conversation);
         let ended = Ended::of(&run.status, run.data.as_ref(), halt, self.options.timeout);

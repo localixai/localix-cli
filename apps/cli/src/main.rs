@@ -14,7 +14,9 @@ mod exit;
 mod gate;
 mod input;
 mod interrupt;
+mod mode;
 mod output;
+mod person;
 mod printable;
 #[cfg(test)]
 mod testing;

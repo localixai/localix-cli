@@ -24,7 +24,8 @@ pub trait Gate {
     fn check(&self, effect: Effect) -> Verdict;
 }
 
-/// A gate that allows everything: `--yes`, and tests.
+/// A gate that allows everything, for tests. The app answers its own gate in every mode, `--yes`
+/// included: nothing at run time goes through this one.
 pub struct Open;
 
 impl Gate for Open {

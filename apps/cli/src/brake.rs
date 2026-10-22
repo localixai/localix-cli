@@ -58,6 +58,14 @@ impl<'a> Brake<'a> {
         self.halt.set(None);
     }
 
+    /// Move the deadline `by` later: the time spent waiting on the person (an approval, a
+    /// question) is not the task's, as the time at the prompt line is not.
+    pub fn extend(&self, by: Duration) {
+        if let Some(at) = self.deadline.get() {
+            self.deadline.set(Some(at.checked_add(by).unwrap_or(at)));
+        }
+    }
+
     /// Why the last task was stopped, if it was: a stop that came after its last turn (the window
     /// closed during the final tool call) still counts.
     pub fn halted(&self) -> Option<Halt> {

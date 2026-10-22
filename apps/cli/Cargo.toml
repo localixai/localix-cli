@@ -1,6 +1,6 @@
 [package]
 name = "localix-cli"
-description = "lx, the Localix CLI: an ultrafast, lightweight coding agent for the terminal: read, edit, bash and a browser"
+description = "lx, the Localix CLI: an ultrafast, lightweight coding agent for the terminal: read, edit, bash, a browser and ask"
 homepage = "https://localix.ai"
 repository = "https://github.com/rsaryev/localix-cli"
 keywords = ["agent", "coding-agent", "cli", "llm", "browser"]

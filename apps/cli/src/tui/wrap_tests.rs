@@ -58,3 +58,9 @@ fn cut_ends_in_an_ellipsis() {
     assert_eq!(cut("abcdef", 4), "abc…");
     assert_eq!(cut("abc", 4), "abc");
 }
+
+#[test]
+fn code_breaks_anywhere_and_keeps_its_indentation() {
+    assert_eq!(hard("    let x = 1;", 8), ["    let ", "x = 1;"]);
+    assert_eq!(hard("", 8), [""]);
+}

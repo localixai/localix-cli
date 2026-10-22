@@ -5,3 +5,6 @@ evals/results/
 !AGENTS.md
 !.github/
 dist/
+*.pending-snap
+*.snap.new
+.claude/worktrees/

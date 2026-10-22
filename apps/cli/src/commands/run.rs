@@ -28,6 +28,7 @@ use crate::input::{self, Prompt};
 use crate::interrupt;
 use crate::mode::{self, Mode};
 use crate::output::{Start, Summary};
+use crate::tui;
 
 /// The workspace `options` name (`-C`, else the current directory), with llx's own key and
 /// sessions off limits to the tools: a prompt injection must not read them into the conversation.
@@ -137,12 +138,23 @@ pub fn run(
         asks,
         history,
         session,
+        ui: None,
     };
     let work = move |browser| {
-        compose(setup, browser, |rig| match work {
+        let mut setup = setup;
+        // A session takes the terminal for its interface; without one (no size to draw at), it
+        // runs on the plain prompt line.
+        let running = match &work {
+            Work::Session(_) => tui::start(repl::commands()).ok(),
+            Work::One(_) => None,
+        };
+        setup.ui = running.as_ref().map(|running| running.ui.clone());
+        let code = compose(setup, browser, |rig| match work {
             Work::One(task) => rig.task(&task),
             Work::Session(first) => repl::run(rig, first.as_deref()),
-        })
+        });
+        drop(running);
+        code
     };
     interrupt::install();
     if !browser {

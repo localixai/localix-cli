@@ -173,27 +173,43 @@ pub fn notice(mode: Mode, terminal: bool, asks: bool) -> String {
 /// The gate as the current mode answers it: bypass and autonomous allow, plan refuses file changes
 /// and asks for the rest, default asks. Plan keeps its own "always" answers, so an `a` given while
 /// working does not let a command through unasked while planning, nor the reverse.
-pub struct ModeGate<'a, P: Prompter> {
+pub struct ModeGate<'a> {
     mode: &'a Cell<Mode>,
-    /// `None`: no terminal to ask on.
-    asking: Option<TerminalGate<P>>,
-    planning: Option<TerminalGate<P>>,
+    /// `None`: nobody to ask.
+    asking: Option<Box<dyn Gate + 'a>>,
+    planning: Option<Box<dyn Gate + 'a>>,
     /// Told how long the person took to answer, so it does not count toward the time limit.
     waited: &'a dyn Fn(Duration),
 }
 
-impl<'a, P: Prompter + Clone> ModeGate<'a, P> {
-    pub fn new(mode: &'a Cell<Mode>, terminal: Option<P>, waited: &'a dyn Fn(Duration)) -> Self {
+impl<'a> ModeGate<'a> {
+    /// Asking on `terminal`, when there is one.
+    pub fn new<P: Prompter + Clone + 'a>(
+        mode: &'a Cell<Mode>,
+        terminal: Option<P>,
+        waited: &'a dyn Fn(Duration),
+    ) -> Self {
+        let gate = |prompter: P| Box::new(TerminalGate::new(prompter)) as Box<dyn Gate + 'a>;
+        Self::asking(mode, terminal.clone().map(gate), terminal.map(gate), waited)
+    }
+
+    /// Asking `asking` while working and `planning` in plan mode.
+    pub fn asking(
+        mode: &'a Cell<Mode>,
+        asking: Option<Box<dyn Gate + 'a>>,
+        planning: Option<Box<dyn Gate + 'a>>,
+        waited: &'a dyn Fn(Duration),
+    ) -> Self {
         Self {
             mode,
-            asking: terminal.clone().map(TerminalGate::new),
-            planning: terminal.map(TerminalGate::new),
+            asking,
+            planning,
             waited,
         }
     }
 }
 
-impl<P: Prompter> Gate for ModeGate<'_, P> {
+impl Gate for ModeGate<'_> {
     fn check(&self, effect: Effect) -> Verdict {
         let (terminal, none) = match self.mode.get() {
             Mode::Bypass | Mode::Autonomous => return Verdict::Allow,

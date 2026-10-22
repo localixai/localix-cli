@@ -65,6 +65,7 @@ pub fn ansi(line: &Line, colour: bool) -> String {
 }
 
 /// `line` without its styles.
+#[cfg(test)]
 pub fn plain(line: &Line) -> String {
     ansi(line, false)
 }

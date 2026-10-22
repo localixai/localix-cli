@@ -276,7 +276,7 @@ fn answer(line: &str) -> Option<Answer> {
     }
 }
 
-fn declined(why: Option<String>) -> String {
+pub fn declined(why: Option<String>) -> String {
     match why {
         Some(why) => format!("the person declined it and said: {why}"),
         None => "the person declined it; do not try the same thing another way".into(),

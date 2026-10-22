@@ -139,6 +139,7 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
         asks: false,
         history,
         session,
+        ui: None,
     };
     let call = ToolCall {
         id: "c1".into(),

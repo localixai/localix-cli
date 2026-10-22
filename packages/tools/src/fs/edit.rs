@@ -126,10 +126,14 @@ impl EditTool<'_> {
             )));
         }
         let lines = content.lines().count();
-        ask(self.gate, NAME, &format!("create {shown} ({lines} lines)"))?;
+        ask(
+            self.gate,
+            NAME,
+            &format!("create {shown} ({})", count(lines)),
+        )?;
         unchanged(path, shown, existing)?;
         write(path, shown, content)?;
-        Ok(format!("Created {shown} ({lines} lines)."))
+        Ok(format!("Created {shown} ({}).", count(lines)))
     }
 }
 
@@ -244,6 +248,14 @@ fn replace(content: &str, args: &Args, shown: &str) -> Result<Change, ToolError>
         added: added * count,
         removed: removed * count,
     })
+}
+
+/// `1 line`, `12 lines`.
+fn count(lines: usize) -> String {
+    match lines {
+        1 => "1 line".into(),
+        n => format!("{n} lines"),
+    }
 }
 
 #[cfg(test)]

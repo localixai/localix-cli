@@ -10,19 +10,24 @@ use std::io::{BufRead, Write};
 use crate::compose::Rig;
 use crate::exit;
 use crate::mode::{self, Mode};
+use crate::tui::event::Event;
 
-const HELP: &str = "Type a task and press Enter; each one goes on from the last. End a line \
-with \\ to go on on the next.
+const HELP: &str = "Type a task and press Enter; each one goes on from the last.
   /mode [name]      the modes, or switch to one (also /permissions)
   /plan [task]      plan mode: investigate and answer with a plan; with a task, run it
-  Shift+Tab, Enter  plan mode on or off
   /new              start a new conversation and session (also /clear)
   /status           the model, the workspace, the mode, the session and its terminals
   /help             this help
-  /exit             quit (also /quit, or Ctrl-D)\n";
+  /exit             quit (also /quit, or Ctrl-D)
+Keys
+  Shift+Enter       a new line (also Ctrl-J, or a line ending in \\)
+  Up, Down          earlier entries
+  Tab               complete a command
+  Shift+Tab         plan mode on or off
+  Esc               stop the task (a message typed meanwhile waits for it)
+  Ctrl-C            stop the task, clear the line, or twice to quit\n";
 
-/// What Shift+Tab types. The line is read in the terminal's cooked mode, so the key reaches llx only
-/// with Enter after it: a single-key toggle would need a line editor of its own.
+/// What Shift+Tab sends: on the plain prompt line it reaches llx with Enter after it.
 const SHIFT_TAB: &str = "\u{1b}[Z";
 
 /// The task that carries out a plan, in Codex's words.
@@ -70,17 +75,27 @@ enum Next {
 
 /// The prompt line, after `first` when it is given.
 pub fn run(rig: &mut Rig, first: Option<&str>) -> i32 {
+    if let Some(ui) = &rig.ui {
+        ui.send(Event::Mode(rig.mode.get().name().to_string()));
+        ui.send(Event::Header(vec![
+            env!("CARGO_PKG_VERSION").to_string(),
+            rig.options.models.model.clone(),
+            home_relative(&rig.workspace.root().display().to_string()),
+        ]));
+    }
     let mode = match rig.mode.get() {
         Mode::Default => String::new(),
         mode => format!(" · {}", mode.name()),
     };
-    rig.output.note(&format!(
-        "llx {} · {} · {}{mode}\n{}",
-        env!("CARGO_PKG_VERSION"),
-        rig.options.models.model,
-        rig.workspace.root().display(),
-        "Type a task; each one goes on from the last. /help, or Ctrl-D to quit.\n"
-    ));
+    if rig.ui.is_none() {
+        rig.output.note(&format!(
+            "llx {} · {} · {}{mode}\n{}",
+            env!("CARGO_PKG_VERSION"),
+            rig.options.models.model,
+            rig.workspace.root().display(),
+            "Type a task; each one goes on from the last. /help, or Ctrl-D to quit.\n"
+        ));
+    }
     let stdin = std::io::stdin();
     let mut input = stdin.lock();
     let shown = |text: &str| {
@@ -95,7 +110,7 @@ pub fn run(rig: &mut Rig, first: Option<&str>) -> i32 {
         let text = match std::mem::replace(&mut next, Next::Prompt) {
             Next::Quit => return exit::OK,
             Next::Entry(text) => text,
-            Next::Prompt => match read(&mut input, &shown, &prompt(rig.mode.get())) {
+            Next::Prompt => match ask_entry(rig, &mut input, &shown) {
                 Some(text) => text,
                 None => {
                     shown("\n");
@@ -168,11 +183,21 @@ fn attempt(rig: &mut Rig, task: &str, input: &mut dyn BufRead, shown: &dyn Fn(&s
     if code != exit::OK || rig.mode.get() != Mode::Plan {
         return Next::Prompt;
     }
-    let question = format!(
-        "\n  Implement this plan? [y]es, in {} mode  [n]o, stay in plan  (or type to revise it) > ",
-        rig.before_plan.name()
-    );
-    match handoff(read(input, shown, &question).as_deref()) {
+    let answer = match &rig.ui {
+        Some(ui) => {
+            let yes = format!("Yes, in {} mode", rig.before_plan.name());
+            let picked = ui.choose("Implement this plan?", &[&yes, "No, stay in plan mode"]);
+            Some(if picked == Some(0) { "y" } else { "n" }.to_string())
+        }
+        None => {
+            let question = format!(
+                "\n  Implement this plan? [y]es, in {} mode  [n]o, stay in plan  (or type to revise it) > ",
+                rig.before_plan.name()
+            );
+            read(input, shown, &question)
+        }
+    };
+    match handoff(answer.as_deref()) {
         Handoff::Stay => Next::Prompt,
         Handoff::Next(text) => Next::Entry(text),
         Handoff::Implement => {
@@ -186,6 +211,39 @@ fn attempt(rig: &mut Rig, task: &str, input: &mut dyn BufRead, shown: &dyn Fn(&s
                 false => Next::Prompt,
             }
         }
+    }
+}
+
+/// The next entry: from the interface, or read after the prompt.
+fn ask_entry(rig: &Rig, input: &mut dyn BufRead, shown: &dyn Fn(&str)) -> Option<String> {
+    match &rig.ui {
+        Some(ui) => ui.next_entry(),
+        None => read(input, shown, &prompt(rig.mode.get())),
+    }
+}
+
+/// What `/` offers in the interface: each command and what it does.
+pub fn commands() -> Vec<(String, String)> {
+    [
+        ("help", "the commands and keys"),
+        ("mode", "show the modes, or switch: /mode plan"),
+        ("plan", "plan mode: investigate and answer with a plan"),
+        ("new", "start a new conversation and session"),
+        ("status", "the model, the workspace, the mode, the session"),
+        ("exit", "quit"),
+    ]
+    .into_iter()
+    .map(|(name, what)| (name.to_string(), what.to_string()))
+    .collect()
+}
+
+/// `~/x` for a path under the home folder.
+fn home_relative(path: &str) -> String {
+    match std::env::var("HOME") {
+        Ok(home) if !home.is_empty() && path.starts_with(&home) => {
+            format!("~{}", &path[home.len()..])
+        }
+        _ => path.to_string(),
     }
 }
 

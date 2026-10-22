@@ -60,11 +60,19 @@ pub fn window_closed() {
     PROCESS.stop();
 }
 
+/// Quit now, as a second Ctrl-C does: the terminal sessions are killed first.
+pub fn quit_now() -> ! {
+    tools::shell::kill_all_now();
+    // SAFETY: _exit ends the process at once; the sessions, the only thing that must not be left
+    // behind, are killed.
+    unsafe { libc::_exit(crate::exit::INTERRUPTED) }
+}
+
 /// Handle SIGINT and SIGTERM for the rest of the process.
 #[cfg(unix)]
 pub fn install() {
     extern "C" fn on_signal(_: libc::c_int) {
-        const NOTE: &[u8] = b"\nlx: stopping the task (Ctrl-C again quits now)\n";
+        const NOTE: &[u8] = b"\nllx: stopping the task (Ctrl-C again quits now)\n";
         if PROCESS.stop() {
             // Only atomics and kill: _exit skips the destructors that would close the sessions.
             tools::shell::kill_all_now();

@@ -38,7 +38,7 @@ fn default_asks_at_the_terminal_and_refuses_without_one() {
     let gate = ModeGate::new(&mode, Some(&typed), &waited);
     assert_eq!(gate.check(effect("bash")), Verdict::Allow);
     assert_eq!(typed.asked.borrow().len(), 1);
-    let gate = ModeGate::<&Typed>::new(&mode, None, &waited);
+    let gate = ModeGate::new::<&Typed>(&mode, None, &waited);
     assert_eq!(denied(gate.check(effect("bash"))), NO_TERMINAL);
     assert!(NO_TERMINAL.contains("--yes (-y) or --mode bypass"));
 }
@@ -51,7 +51,7 @@ fn plan_refuses_edits_without_asking() {
     let gate = ModeGate::new(&mode, Some(&typed), &waited);
     assert_eq!(denied(gate.check(effect("edit"))), PLAN_REFUSAL);
     assert!(typed.asked.borrow().is_empty(), "the person was not asked");
-    let gate = ModeGate::<&Typed>::new(&mode, None, &waited);
+    let gate = ModeGate::new::<&Typed>(&mode, None, &waited);
     assert_eq!(denied(gate.check(effect("edit"))), PLAN_REFUSAL);
 }
 
@@ -59,7 +59,7 @@ fn plan_refuses_edits_without_asking() {
 fn plan_with_no_terminal_never_points_to_bypass() {
     let mode = Cell::new(Mode::Plan);
     let waited = |_: Duration| {};
-    let gate = ModeGate::<&Typed>::new(&mode, None, &waited);
+    let gate = ModeGate::new::<&Typed>(&mode, None, &waited);
     for tool in ["bash", "browser"] {
         let why = denied(gate.check(effect(tool)));
         assert_eq!(why, PLAN_NO_TERMINAL, "{tool}");

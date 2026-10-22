@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-The browser CLI of 0.1.0 is now `llx` (also installed as `llx`): an ultrafast, lightweight coding agent for the terminal. It has five tools: `read`, `edit`, `bash`, the browser, whose clicks and typing a decision model does, and `ask`, a question to the person in a session. It stays one synchronous binary of about 1.6 MB, with no async runtime and no plugins, MCP or skills.
+The browser CLI of 0.1.0 is now `llx` (also installed as `llx`): an ultrafast, lightweight coding agent for the terminal. It has five tools: `read`, `edit`, `bash`, the browser, whose clicks and typing a decision model does, and `ask`, a question to the person in a session. It stays one synchronous binary of about 2 MB, with no async runtime and no plugins, MCP or skills.
+
+### The terminal interface
+
+- **A session is drawn like Codex's.** Finished blocks go into the terminal's scrollback once; only the bottom is redrawn, in synchronized updates. Each call is a block: `• Ran cargo test`, the command wrapped under a `│`, and the start and end of its output under `└` (`… +41 lines` between), green when done and red when it failed. The answer is rendered markdown, and each task ends with `─ Worked for 48s · 6 turns · $0.0087 ───`. While a task runs: a spinner on the call, `Working (12s · esc to interrupt)`, the hands' latest actions under a browser call, and the messages queued meanwhile.
+- **The prompt `❯` is a line editor:** Enter sends, Shift+Enter (or Ctrl-J, or a trailing `\`) starts a new line, a paste keeps its lines, Up and Down walk earlier entries, Alt or Ctrl with the arrows move by word, and Ctrl-A, Ctrl-E, Ctrl-U, Ctrl-K and Ctrl-W edit as in a shell. `/` lists the commands, Tab completes one, Shift+Tab toggles plan mode without Enter.
+- **Approvals and questions are choices:** `1. Yes`, `2. Yes, and don't ask again`, `3. No, and tell llx what to do differently` (a line for why), with the arrows, a number or `y`/`a`/`n`; `ask` questions list their options and a last one to type your own answer. `Implement this plan?` is a choice too.
+- **Esc stops the task;** Ctrl-C stops it, clears the line, or quits when pressed twice at an empty prompt.
+- **`exec` prints the same blocks** on stderr (in colour at a terminal, without the live part), then the answer: rendered when stdout is a terminal, as the model wrote it in a pipe.
+- The release binary is about 2.0 MB.
 
 ### Breaking
 

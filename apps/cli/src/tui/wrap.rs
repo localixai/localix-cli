@@ -104,6 +104,20 @@ fn split(word: &str, columns: usize) -> (String, String) {
     (word.to_string(), String::new())
 }
 
+/// `text` in rows of at most `columns`, broken anywhere and keeping its spaces: for code, whose
+/// indentation and alignment mean something.
+pub fn hard(text: &str, columns: usize) -> Vec<String> {
+    let mut rows = vec![];
+    let mut rest = text.to_string();
+    while width(&rest) > columns {
+        let (head, tail) = split(&rest, columns.max(1));
+        rows.push(head);
+        rest = tail;
+    }
+    rows.push(rest);
+    rows
+}
+
 /// `text` cut to `columns`, ending in `…` when cut.
 pub fn cut(text: &str, columns: usize) -> String {
     if width(text) <= columns {

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Snake</title>
+<style>
+  body { margin: 0; background: #111; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; }
+  canvas { background: #000; border: 2px solid #3a3; margin-top: 12px; }
+  #score { font-size: 20px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="score">Счёт: 0</div>
+<canvas id="board" width="400" height="400"></canvas>
+<script>
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const size = 20;
+  const cells = canvas.width / size;
+  let snake, dir, nextDir, food, score, timer;
+
+  function reset() {
+    snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+    dir = { x: 1, y: 0 };
+    nextDir = dir;
+    score = 0;
+    placeFood();
+    document.getElementById('score').textContent = 'Счёт: 0';
+  }
+
+  function placeFood() {
+    do {
+      food = { x: Math.floor(Math.random() * cells), y: Math.floor(Math.random() * cells) };
+    } while (snake.some(s => s.x === food.x && s.y === food.y));
+  }
+
+  function step() {
+    dir = nextDir;
+    const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+    const hitWall = head.x < 0 || head.y < 0 || head.x >= cells || head.y >= cells;
+    const hitSelf = snake.some(s => s.x === head.x && s.y === head.y);
+    if (hitWall || hitSelf) {
+      clearInterval(timer);
+      setTimeout(() => alert('Игра окончена. Счёт: ' + score), 10);
+      return;
+    }
+    snake.unshift(head);
+    if (head.x === food.x && head.y === food.y) {
+      score++;
+      document.getElementById('score').textContent = 'Счёт: ' + score;
+      placeFood();
+    } else {
+      snake.pop();
+    }
+    draw();
+  }
+
+  function draw() {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#e33';
+    ctx.fillRect(food.x * size, food.y * size, size - 1, size - 1);
+    ctx.fillStyle = '#3c3';
+    snake.forEach(s => ctx.fillRect(s.x * size, s.y * size, size - 1, size - 1));
+  }
+
+  document.addEventListener('keydown', e => {
+    const map = {
+      ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 },
+      ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }
+    };
+    const d = map[e.key];
+    if (!d) return;
+    e.preventDefault();
+    // A move straight back into the body is ignored.
+    if (d.x === -dir.x && d.y === -dir.y) return;
+    nextDir = d;
+  });
+
+  reset();
+  draw();
+  timer = setInterval(step, 120);
+</script>
+</body>
+</html>

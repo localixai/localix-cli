@@ -184,6 +184,7 @@ pub fn composed(
         asks,
         history,
         session,
+        ui: None,
     };
     let chat = ScriptedChat::new(replies);
     let models = Models {

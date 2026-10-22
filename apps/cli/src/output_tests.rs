@@ -74,8 +74,8 @@ fn verbose_json_also_traces_on_stderr() {
     let (out, err) = (Captured::default(), Captured::default());
     let output = Output::with(true, true, Box::new(out.clone()), Box::new(err.clone()));
     run(&output);
-    assert!(err.text().contains("▸ bash cargo test"));
-    assert!(!out.text().contains("▸"));
+    assert!(err.text().contains("• Ran cargo test"));
+    assert!(!out.text().contains("• Ran"));
 }
 
 #[test]
@@ -85,12 +85,13 @@ fn a_person_reads_the_trace_on_stderr_and_the_answer_alone_on_stdout() {
     run(&output);
     assert_eq!(out.text(), "All tests pass.\n");
     let trace = err.text();
-    assert!(trace.contains("s ▸ bash cargo test\n"), "{trace}");
-    assert!(trace.contains("achieved in "));
-    assert!(
-        !trace.contains("exit 0 in 1.0s"),
-        "a success shows only with -v"
-    );
+    insta::assert_snapshot!(trace, @r"
+    • Ran cargo test
+      └ (no output)
+
+    ─ Worked for 0.0s · 0 turns · $0.0000 ──────────────────────────────────────────────────────────────
+      session  1-ab
+    ");
 }
 
 #[test]

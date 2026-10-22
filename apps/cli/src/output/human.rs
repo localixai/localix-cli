@@ -1,110 +1,9 @@
-//! The trace as a person reads it: one short line per call, what went wrong under it, and the
-//! closing lines with what the run spent. What the model or a tool wrote is shown with its control
-//! characters escaped, so it cannot redraw the terminal.
+//! The words of the trace that are not blocks of their own: a model turn for `-v`, what the run
+//! spent, and the answer split between stdout and stderr.
 
 use contracts::chat::Usage;
-use contracts::tool::{ToolError, ToolOutput};
-use serde_json::Value;
 
 use super::Summary;
-use crate::printable::printable;
-
-/// Characters of an argument or a result line in the trace.
-const LINE: usize = 160;
-/// Lines of a result `-v` shows.
-const RESULT_LINES: usize = 4;
-
-/// A call as one line, by what it does: `▸ bash cargo test`, `▸ bash python3 -q  (terminal)`,
-/// `▸ bash session 1 ← print(1) ⏎ [Enter]`, `▸ read src/lib.rs`, `▸ ask 2 questions` (the
-/// questions themselves are shown when they are asked), else `▸ browser url: … · goal: …` with
-/// only the arguments it was given.
-pub fn call(name: &str, args: &Value) -> String {
-    let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or("");
-    let shown = match name {
-        // Only a session the tool would take: `"session": null` runs the command, so it is shown.
-        "bash" if args.get("session").and_then(Value::as_u64).is_some() => session(args),
-        "bash" => {
-            let mut line = one_line(text("command"), LINE);
-            if args.get("tty") == Some(&Value::Bool(true)) {
-                line.push_str("  (terminal)");
-            }
-            if !text("workdir").is_empty() {
-                line.push_str(&format!("  (in {})", text("workdir")));
-            }
-            line
-        }
-        "read" => match args.get("offset").and_then(Value::as_u64) {
-            Some(offset) => format!("{} from line {offset}", text("path")),
-            None => text("path").to_string(),
-        },
-        "edit" if text("old_string").is_empty() => format!("{} (new)", text("path")),
-        "edit" if args.get("replace_all") == Some(&Value::Bool(true)) => {
-            format!("{} (every match)", text("path"))
-        }
-        "edit" => text("path").to_string(),
-        "ask" => match args
-            .get("questions")
-            .and_then(Value::as_array)
-            .map(Vec::len)
-        {
-            Some(1) | None => "1 question".to_string(),
-            Some(n) => format!("{n} questions"),
-        },
-        _ => arguments(args),
-    };
-    format!("▸ {} {}", printable(name), printable(&shown))
-}
-
-/// A call on a terminal session: what is typed into it, or that it is read or closed.
-fn session(args: &Value) -> String {
-    let id = args.get("session").map_or(String::new(), Value::to_string);
-    let input = args.get("input").and_then(Value::as_str).unwrap_or("");
-    let keys = args
-        .get("keys")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten();
-    let mut typed = vec![input.replace('\n', " \u{23ce} ")];
-    typed.extend(keys.map(|key| format!("[{}]", key.as_str().unwrap_or("?"))));
-    let typed = one_line(&typed.join(" "), LINE);
-    match args.get("close") == Some(&Value::Bool(true)) {
-        true => format!("session {id} close"),
-        false if typed.is_empty() => format!("session {id} (read)"),
-        false => format!("session {id} \u{2190} {typed}"),
-    }
-}
-
-/// Every argument that says something, as `key: value · key: value`.
-fn arguments(args: &Value) -> String {
-    let parts: Vec<String> = args
-        .as_object()
-        .into_iter()
-        .flatten()
-        .filter(|(_, value)| !matches!(value, Value::Null | Value::Bool(false)))
-        .filter(|(_, value)| value.as_str().is_none_or(|text| !text.is_empty()))
-        .filter(|(_, value)| value.as_array().is_none_or(|list| !list.is_empty()))
-        .map(|(key, value)| match value.as_str() {
-            Some(text) => format!("{key}: {}", one_line(text, LINE)),
-            None => format!("{key}: {}", one_line(&value.to_string(), LINE)),
-        })
-        .collect();
-    parts.join(" · ")
-}
-
-/// What a result adds to the trace: a failure always; with `-v`, the first lines of a success.
-pub fn result(outcome: &Result<ToolOutput, ToolError>, verbose: bool) -> Vec<String> {
-    match outcome {
-        Err(error) => vec![format!("✗ {}", one_line(&error.to_string(), LINE))],
-        Ok(output) if verbose => output
-            .report
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .take(RESULT_LINES)
-            .map(|line| format!("  {}", cut(&printable(line), LINE)))
-            .collect(),
-        Ok(_) => vec![],
-    }
-}
 
 /// One model turn, for `-v`.
 pub fn turn(usage: &Usage) -> String {
@@ -118,27 +17,18 @@ pub fn turn(usage: &Usage) -> String {
     )
 }
 
-/// The closing lines: how it ended, then each model's calls, tokens, money and time.
-pub fn summary(summary: &Summary) -> String {
+/// Under the closing rule: each model's calls, tokens, money and time, and the session.
+pub fn spend(summary: &Summary) -> String {
     let (agent, decision) = (summary.agent, summary.decision);
     let seconds = |ms: u64| ms as f64 / 1000.0;
-    let turns = match agent.calls {
-        1 => "1 turn".to_string(),
-        n => format!("{n} turns"),
-    };
-    let mut out = format!(
-        "{} in {:.1}s · {turns} · ${:.4}\n",
-        summary.status.replace('_', " "),
-        seconds(summary.millis),
-        agent.cost + decision.cost
-    );
+    let mut out = String::new();
     if agent.calls > 0 {
         let cached = match agent.cached_tokens {
             0 => String::new(),
             cached => format!(" ({} cached)", thousands(cached)),
         };
         out.push_str(&format!(
-            "  agent    {} · {} in{cached} · {} out · ${:.4} · {:.1}s\n",
+            "agent    {} · {} in{cached} · {} out · ${:.4} · {:.1}s\n",
             agent.model,
             thousands(agent.input_tokens),
             thousands(agent.output_tokens),
@@ -148,7 +38,7 @@ pub fn summary(summary: &Summary) -> String {
     }
     if decision.calls > 0 {
         out.push_str(&format!(
-            "  hands    {} · {} calls · {} in · {} out · ${:.4} · {:.1}s\n",
+            "hands    {} · {} calls · {} in · {} out · ${:.4} · {:.1}s\n",
             decision.model,
             decision.calls,
             thousands(decision.input_tokens),
@@ -158,10 +48,7 @@ pub fn summary(summary: &Summary) -> String {
         ));
     }
     if !summary.session.is_empty() {
-        out.push_str(&format!("  session  {}\n", summary.session));
-    }
-    if let Some(error) = summary.error {
-        out.push_str(&format!("llx: {error}\n"));
+        out.push_str(&format!("session  {}\n", summary.session));
     }
     out
 }
@@ -178,20 +65,6 @@ pub fn answer(summary: &Summary) -> (String, String) {
         Some(Ok(data)) => (data.to_string(), line(prose)),
         Some(Err(why)) => (String::new(), format!("{}llx: {why}\n", line(prose))),
         None => (prose.to_string(), String::new()),
-    }
-}
-
-/// `text` on one line, escaped, at most `limit` characters.
-fn one_line(text: &str, limit: usize) -> String {
-    let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    cut(&printable(&line), limit)
-}
-
-/// At most `limit` characters of `text`, with `…` when cut.
-fn cut(text: &str, limit: usize) -> String {
-    match text.char_indices().nth(limit) {
-        Some((at, _)) => format!("{}…", &text[..at]),
-        None => text.to_string(),
     }
 }
 

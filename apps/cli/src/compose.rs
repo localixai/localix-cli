@@ -11,8 +11,10 @@ use std::cell::Cell;
 use agent::agent::Agent;
 use agent::conversation::Conversation;
 use contracts::chat::Chat;
+use contracts::gate::Gate;
 use contracts::history::{History, Session};
 use contracts::model::Decider;
+use contracts::person::Person;
 use contracts::tool::Tool;
 use decision_loop::decision_loop::DecisionLoop;
 use decision_loop::meter::{Meter, MeteredDecider};
@@ -37,6 +39,8 @@ use crate::interrupt::{self, Interrupt};
 use crate::mode::{self, Mode, ModeGate};
 use crate::output::Output;
 use crate::person::TerminalPerson;
+use crate::tui::Ui;
+use crate::tui::asking::{UiGate, UiPerson};
 
 /// Who calls OpenRouter: its attribution, the sign-in page, the folder the key is saved in.
 pub const APP: App = App {
@@ -69,6 +73,8 @@ pub struct Setup {
     pub history: Sessions,
     /// The session the tasks are recorded in: new, or resumed.
     pub session: Session,
+    /// The interface a session at a terminal is shown in.
+    pub ui: Option<Ui>,
 }
 
 /// The two models a session thinks with.
@@ -109,6 +115,8 @@ pub struct Rig<'a> {
     pub told: Mode,
     /// The mode plan mode was entered from, which carrying out the plan goes back to.
     pub before_plan: Mode,
+    /// The interface the session is shown in, at a terminal.
+    pub ui: Option<Ui>,
 }
 
 impl Rig<'_> {
@@ -129,6 +137,9 @@ impl Rig<'_> {
             self.before_plan = now;
         }
         self.mode.set(mode);
+        if let Some(ui) = &self.ui {
+            ui.send(crate::tui::event::Event::Mode(mode.name().to_string()));
+        }
     }
 
     /// The conversation the next task goes on from, told first when the mode changed since the
@@ -162,7 +173,7 @@ pub fn compose(setup: Setup, browser: Option<Browser>, work: impl FnOnce(&mut Ri
         chat: &chat,
         decider: &system_one,
     };
-    let output = Output::new(setup.options.json, setup.options.verbose);
+    let output = Output::new(setup.options.json, setup.options.verbose).in_ui(setup.ui.clone());
     assemble(setup, models, &output, &interrupt::PROCESS, browser, work)
 }
 
@@ -187,6 +198,7 @@ pub fn assemble(
         asks,
         history,
         session,
+        ui,
         ..
     } = setup;
     let closed = || output.closed();
@@ -209,18 +221,34 @@ pub fn assemble(
     };
     let mode = Cell::new(started);
     let waited = |took| brake.extend(took);
-    let approver = ModeGate::new(&mode, terminal.then_some(Tty), &waited);
+    let approver = match &ui {
+        Some(ui) => {
+            let gate = || Some(Box::new(UiGate::new(ui.clone(), &stopped)) as Box<dyn Gate>);
+            ModeGate::asking(&mode, gate(), gate(), &waited)
+        }
+        None => ModeGate::new(&mode, terminal.then_some(Tty), &waited),
+    };
     let gate = Stoppable {
         inner: &approver,
         stopped: &stopped,
     };
-    let person = TerminalPerson {
-        prompter: Tty,
-        mode: &mode,
-        stopped: &stopped,
-        waited: &waited,
+    let person: Box<dyn Person> = match &ui {
+        Some(ui) => Box::new(UiPerson {
+            ui: ui.clone(),
+            mode: &mode,
+            stopped: &stopped,
+            waited: &waited,
+        }),
+        None => Box::new(TerminalPerson {
+            prompter: Tty,
+            mode: &mode,
+            stopped: &stopped,
+            waited: &waited,
+        }),
     };
-    let ask = AskTool { person: &person };
+    let ask = AskTool {
+        person: person.as_ref(),
+    };
     // Shown in a session, so the person watches what the agent does there; hidden when nobody
     // watches (exec) or nobody is to be asked (autonomous). A call can still choose either way.
     let shown = options.show_browser || (asks && started != Mode::Autonomous);
@@ -284,6 +312,7 @@ pub fn assemble(
             Mode::Plan => Mode::Default,
             other => other,
         },
+        ui,
     };
     work(&mut rig)
 }

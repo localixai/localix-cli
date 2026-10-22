@@ -1,6 +1,7 @@
-//! The prompt line: `lx` with no prompt, at a terminal. Each line is the next task, in the
-//! same conversation, workspace, browser window and session; a line ending in `\` goes on on the
-//! next. Ctrl-D or `/exit` quits. The time limit is per task, so waiting for the person to type
+//! The prompt line: `lx` at a terminal, after its first message when one was given. Each line is
+//! the next task, in the same conversation, workspace, browser window and session; a line ending
+//! in `\` goes on on the next. `/new` starts over, `/status` says where things stand, Ctrl-D or
+//! `/exit` quits. The time limit is per task, so waiting for the person to type
 //! never times out.
 
 use std::io::{BufRead, Write};
@@ -9,19 +10,26 @@ use crate::compose::Rig;
 use crate::exit;
 
 const HELP: &str = "Type a task and press Enter; each one goes on from the last. End a line \
-with \\ to go on on the next.\n  /help   this help\n  /exit   quit (or Ctrl-D)\n";
+with \\ to go on on the next.
+  /new      start a new conversation and session (also /clear)
+  /status   the model, the workspace, the approvals and the session
+  /help     this help
+  /exit     quit (also /quit, or Ctrl-D)\n";
 
 /// One entry at the prompt line.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Entry {
     Task(String),
+    New,
+    Status,
     Help,
     Exit,
     /// A `/command` that is not one.
     Unknown(String),
 }
 
-pub fn run(rig: &mut Rig) -> i32 {
+/// The prompt line, after `first` when it is given.
+pub fn run(rig: &mut Rig, first: Option<&str>) -> i32 {
     rig.output.note(&format!(
         "lx {} · {} · {}\n{}",
         env!("CARGO_PKG_VERSION"),
@@ -29,6 +37,12 @@ pub fn run(rig: &mut Rig) -> i32 {
         rig.workspace.root().display(),
         "Type a task; each one goes on from the last. /help, or Ctrl-D to quit.\n"
     ));
+    if let Some(task) = first {
+        rig.task(task);
+        if rig.output.closed() {
+            return exit::OK;
+        }
+    }
     let stdin = std::io::stdin();
     let mut input = stdin.lock();
     loop {
@@ -44,6 +58,14 @@ pub fn run(rig: &mut Rig) -> i32 {
             None => {}
             Some(Entry::Exit) => return exit::OK,
             Some(Entry::Help) => rig.output.note(HELP),
+            Some(Entry::New) => {
+                rig.start_over();
+                rig.output.note(&format!(
+                    "A new conversation, session {}.\n",
+                    rig.session.id
+                ));
+            }
+            Some(Entry::Status) => rig.output.note(&status(rig)),
             Some(Entry::Unknown(command)) => rig
                 .output
                 .note(&format!("unknown command /{command}: /help lists them\n")),
@@ -55,6 +77,19 @@ pub fn run(rig: &mut Rig) -> i32 {
             }
         }
     }
+}
+
+/// `/status`: what the next task runs with.
+fn status(rig: &Rig) -> String {
+    format!(
+        "model      {}\ndecision   {}\nworkspace  {}\napprovals  {}\nsession    {} ({} tasks)\n",
+        rig.options.models.model,
+        rig.options.models.decision_model,
+        rig.workspace.root().display(),
+        rig.approvals.describe(),
+        rig.session.id,
+        rig.session.turns.len(),
+    )
 }
 
 /// The next entry's text, joined over lines that end in `\`; `None` at the end of input, or when
@@ -103,6 +138,8 @@ pub fn entry(text: &str) -> Option<Entry> {
     };
     Some(match command.trim() {
         "exit" | "quit" => Entry::Exit,
+        "new" | "clear" => Entry::New,
+        "status" => Entry::Status,
         "help" | "?" => Entry::Help,
         other => Entry::Unknown(other.to_string()),
     })

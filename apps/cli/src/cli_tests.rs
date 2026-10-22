@@ -110,7 +110,7 @@ fn removed_and_unknown_flags_are_usage_errors() {
         "--dry-run",
         "--keep-open",
         "--headless",
-        "-c",
+        "--trace",
     ] {
         let error = parse(&[flag, "x"]).unwrap_err();
         assert!(error.use_stderr(), "{flag}");
@@ -121,6 +121,41 @@ fn removed_and_unknown_flags_are_usage_errors() {
     assert!(!zero.to_string().contains("18446744073709551615"));
     assert!(parse(&["--timeout", "86401", "x"]).is_err());
     assert!(parse(&["--timeout", "86400", "x"]).is_ok());
+}
+
+#[test]
+fn exec_runs_one_task_as_codex_exec_does() {
+    for name in ["exec", "e"] {
+        let Some(Command::Exec(exec)) = parse(&[name, "--json", "-y", "fix it"]).unwrap().command
+        else {
+            panic!("{name} is not exec")
+        };
+        assert_eq!(exec.prompt.as_deref(), Some("fix it"));
+        assert!(exec.run.json && exec.run.yes && exec.command.is_none());
+    }
+    let Some(Command::Exec(exec)) = parse(&["exec", "resume", "--last", "go on"])
+        .unwrap()
+        .command
+    else {
+        panic!("exec resume")
+    };
+    let Some(ExecCommand::Resume(resume)) = exec.command else {
+        panic!("not exec resume")
+    };
+    assert_eq!(resume.target(), Ok((None, Some("go on"))));
+}
+
+#[test]
+fn print_and_continue_are_claudes_spellings() {
+    let print = parse(&["-p", "review this"]).unwrap();
+    assert!(print.print && !print.resume_last);
+    assert_eq!(print.prompt.as_deref(), Some("review this"));
+    let resumed = parse(&["-c"]).unwrap();
+    assert!(resumed.resume_last && resumed.prompt.is_none());
+    assert!(parse(&["-c", "-p", "go on"]).unwrap().print);
+    for alias in ["--yolo", "--dangerously-skip-permissions"] {
+        assert!(parse(&[alias, "x"]).unwrap().run.yes, "{alias}");
+    }
 }
 
 #[test]

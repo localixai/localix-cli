@@ -87,7 +87,7 @@ def judge(task, code, done, work):
 def run(job, binary, extra, out_dir):
     index, task = job
     work = workdir(task)
-    args = [binary, "--json", "--yes", "-C", work, "--timeout", str(TIMEOUT_S)]
+    args = [binary, "exec", "--json", "--yes", "-C", work, "--timeout", str(TIMEOUT_S)]
     if task.get("schema"):
         args += ["--schema", json.dumps(task["schema"])]
     args += extra + [task["goal"]]

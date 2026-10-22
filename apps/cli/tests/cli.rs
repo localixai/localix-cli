@@ -137,9 +137,23 @@ fn a_key_from_stdin_is_saved_reported_and_forgotten() {
 #[test]
 fn a_run_without_a_key_stops_before_any_model() {
     let home = Home::new();
-    let out = home.run(&["fix the tests"]);
+    let out = home.run(&["exec", "fix the tests"]);
     assert_eq!(out.status.code(), Some(3));
     assert!(text(&out.stderr).contains("not signed in"));
+}
+
+#[test]
+fn a_session_without_a_terminal_points_to_exec() {
+    let home = Home::new();
+    for args in [&["fix the tests"][..], &[], &["--json", "x"]] {
+        let out = home
+            .lx(args)
+            .env("OPENROUTER_API_KEY", FAKE_KEY)
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(3), "{args:?}");
+        assert!(text(&out.stderr).contains("lx exec"), "{args:?}");
+    }
 }
 
 #[test]
@@ -152,14 +166,14 @@ fn bad_run_arguments_are_usage_errors() {
             .unwrap()
     };
     let missing = home.path().join("missing");
-    let out = with_key(&["-C", missing.to_str().unwrap(), "x"]);
+    let out = with_key(&["exec", "-C", missing.to_str().unwrap(), "x"]);
     assert_eq!(out.status.code(), Some(3));
     assert!(text(&out.stderr).contains("-C"));
-    let out = with_key(&["--schema", "[1]", "x"]);
+    let out = with_key(&["exec", "--schema", "[1]", "x"]);
     assert_eq!(out.status.code(), Some(3));
     assert!(text(&out.stderr).contains("--schema"));
     // No prompt, and stdin (closed here) gives none.
-    let out = with_key(&[]);
+    let out = with_key(&["exec"]);
     assert_eq!(out.status.code(), Some(3));
     assert!(text(&out.stderr).contains("no prompt"));
 }
@@ -237,7 +251,7 @@ fn a_saved_session_is_listed_and_resumed() {
     let rows = text(&list.stdout);
     assert!(rows.starts_with("1700000000-ab12  "), "{rows}");
     assert!(rows.contains("fix the parser"), "{rows}");
-    let resume = home.run(&["resume", "1700000000-ab12", "go on"]);
+    let resume = home.run(&["exec", "resume", "1700000000-ab12", "go on"]);
     assert_eq!(resume.status.code(), Some(3));
     assert!(text(&resume.stderr).contains("not signed in"));
 }

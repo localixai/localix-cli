@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs the lx binary from a GitHub release:
 #
-#   curl -fsSL https://raw.githubusercontent.com/rsaryev/localix-cli/master/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/rsaryev/localix-cli/main/scripts/install.sh | sh
 #
 # Environment:
 #   LX_VERSION      a release such as 0.2.0 (default: the latest)
@@ -46,7 +46,7 @@ detect_target() {
       esac
       ;;
     MINGW* | MSYS* | CYGWIN*)
-      fail "on Windows, run in PowerShell: irm https://raw.githubusercontent.com/$repo/master/scripts/install.ps1 | iex"
+      fail "on Windows, run in PowerShell: irm https://raw.githubusercontent.com/$repo/main/scripts/install.ps1 | iex"
       ;;
     *) fail "no build for $os $arch" ;;
   esac

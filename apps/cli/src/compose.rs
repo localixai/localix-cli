@@ -7,7 +7,7 @@
 use agent::agent::Agent;
 use agent::conversation::Conversation;
 use contracts::chat::Chat;
-use contracts::history::Session;
+use contracts::history::{History, Session};
 use contracts::model::Decider;
 use contracts::tool::Tool;
 use decision_loop::decision_loop::DecisionLoop;
@@ -49,6 +49,8 @@ pub struct Setup {
     pub workspace: Workspace,
     /// The agent's context block: the environment, the instructions, an earlier session.
     pub context: String,
+    /// The same with no earlier session: what `/new` starts over with.
+    pub fresh: String,
     pub schema: Option<Value>,
     pub approvals: Approvals,
     pub history: Sessions,
@@ -80,6 +82,19 @@ pub struct Rig<'a> {
     pub session: Session,
     /// The conversation so far: the next task goes on from it.
     pub conversation: Option<Conversation>,
+    pub approvals: Approvals,
+    /// The context with no earlier session, for `/new`.
+    pub fresh: &'a str,
+}
+
+impl Rig<'_> {
+    /// `/new`: a new conversation in a new session, with nothing of the earlier one.
+    pub fn start_over(&mut self) {
+        self.conversation = None;
+        self.agent.context = self.fresh;
+        self.session = self.history.start();
+        self.session.workspace = self.workspace.root().display().to_string();
+    }
 }
 
 /// Build the agent from `setup` on OpenRouter's models, with the browser when `browser` is given,
@@ -116,6 +131,7 @@ pub fn assemble(
         options,
         workspace,
         context,
+        fresh,
         schema,
         approvals,
         history,
@@ -188,6 +204,8 @@ pub fn assemble(
         history: &history,
         session,
         conversation: None,
+        approvals,
+        fresh: &fresh,
     };
     work(&mut rig)
 }

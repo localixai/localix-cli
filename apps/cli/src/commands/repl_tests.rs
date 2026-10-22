@@ -43,6 +43,9 @@ fn slash_commands_are_not_tasks() {
     assert_eq!(entry(" /exit "), Some(Entry::Exit));
     assert_eq!(entry("/quit"), Some(Entry::Exit));
     assert_eq!(entry("/help"), Some(Entry::Help));
+    assert_eq!(entry("/new"), Some(Entry::New));
+    assert_eq!(entry("/clear"), Some(Entry::New));
+    assert_eq!(entry("/status"), Some(Entry::Status));
     assert_eq!(entry("/undo"), Some(Entry::Unknown("undo".into())));
     assert_eq!(
         entry("add a test for /api/users"),

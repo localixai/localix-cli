@@ -13,7 +13,7 @@ The browser CLI of 0.1.0 is now `lx`, the Localix CLI: an ultrafast, lightweight
   - options: `--expect`, `--no-llm`, `--dry-run`, `--screenshot`, `--keep-open`, `--headless` / `--show`, `-c` / `--continue`, `--resume`, `--trace`, `--url`, `--viewport`.
 
   Passing a removed option is a usage error (exit 3). Their replacements:
-  - `--keep-open` becomes the prompt line: `lx` with no prompt, at a terminal.
+  - `--keep-open` becomes a session: `lx`, at a terminal.
   - `-c` and `--resume ID` become `lx resume --last` and `lx resume ID`.
   - `--trace` becomes `--json` or `-v`.
   - `--headless` becomes the default: the window is invisible unless `--show-browser`.
@@ -35,18 +35,20 @@ The browser CLI of 0.1.0 is now `lx`, the Localix CLI: an ultrafast, lightweight
   - `-y` / `--yes` allows everything.
   - With no terminal and no `-y`, effects are refused, and the model is told to have the person rerun with `--yes`.
 - **Context:** the agent starts with an environment block: the workspace, the OS, the date, the approval policy, and whether a browser is available (the shell is named in `bash`'s own description). After it come the project's `AGENTS.md` files, from the git root down to the workspace (16 KiB each, 32 KiB in all). A resumed session also gets its earlier tasks, each capped (a piped `<stdin>` block left out), and the directory they ran in.
-- **A command line like `codex exec`:**
-  - `lx "<task>"` runs one task.
-  - `lx - < task.md` reads the prompt from stdin, and piped stdin is added to a prompt as a `<stdin>` block; lx says on stderr when it reads stdin that may stay open (`</dev/null` skips it).
-  - `lx` alone opens a prompt line where each line continues the conversation (`/help`, `/exit`, Ctrl-D).
+- **A command line like Codex and Claude Code:**
+  - `lx` opens a session at the terminal, and `lx "<task>"` opens one that starts with that task. Each line typed goes on in the same conversation. Slash commands: `/new` (also `/clear`), `/status`, `/help`, `/exit` (also `/quit`, Ctrl-D).
+  - `lx exec "<task>"` (alias `lx e`, or `lx -p "<task>"` as in Claude Code) runs one task and exits. `lx exec - < task.md` reads the prompt from stdin, and piped stdin is added to a prompt as a `<stdin>` block; lx says on stderr when it reads stdin that may stay open (`</dev/null` skips it).
+  - `lx -c` goes on with the newest session of this directory, like `lx resume --last`; `lx exec resume [ID | --last] "<task>"` runs one more task in a saved session.
+  - `--json`, `--schema` and `-o` answer one task, so they need `exec` or `-p`. A session without a terminal on stdin is a usage error that points to `lx exec`.
+  - `-y` is also accepted as `--yolo` and `--dangerously-skip-permissions`.
   - `-o FILE` also writes the last answer to a file (the data with `--schema`; empty when none matched), before `run.completed`, so its `exit_code` is the process's even when the file cannot be written. `-v` shows results and per-turn usage.
   - With `--schema`, a model that answers in text twice ends the run as `not_achieved` (exit 1) with `data_error`, and nothing on stdout.
   - The trace goes to stderr and the answer alone to stdout.
 - **Commands:** `login --with-token` (at a terminal, the key is not echoed), `login status`, `resume [ID | --last] [PROMPT]`, and `doctor`, which now also checks the shell. Sessions record their workspace: `sessions` shows it, and `resume --last` takes the newest session of this workspace. A saved key file is narrowed to mode 0600 even when it existed before.
-- **The prompt line** reads a line that is not UTF-8 instead of quitting, and says why when its input fails.
+- **A session** reads a line that is not UTF-8 instead of quitting, and says why when its input fails.
 - **Stopping:**
   - `--timeout` stops a task between model turns (exit 2), never in the middle of a tool call.
-  - Ctrl-C (or SIGTERM) stops the task: the running command is killed with everything it started, nothing more is approved, the browser's hands stop, and the task ends as `interrupted` (exit 130) with its `run.completed` event and session. A second Ctrl-C quits at once. Closing the browser window stops the task the same way instead of killing the process; the prompt line goes on, and the window opens again when needed.
+  - Ctrl-C (or SIGTERM) stops the task: the running command is killed with everything it started, nothing more is approved, the browser's hands stop, and the task ends as `interrupted` (exit 130) with its `run.completed` event and session. A second Ctrl-C quits at once. Closing the browser window stops the task the same way instead of killing the process; the session goes on, and the window opens again when needed.
   - With `--json`, a closed stdout ends the run quietly at its next turn (exit 0).
   - Without a display (headless Linux), lx runs without the browser tool instead of failing.
 - **The agent:**

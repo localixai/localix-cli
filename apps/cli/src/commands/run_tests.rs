@@ -131,6 +131,7 @@ fn compose_one(approvals: Approvals, unwritable: bool, schema: Option<Value>) ->
         key: "test".into(),
         workspace: Workspace::new(&work).unwrap(),
         context: String::new(),
+        fresh: String::new(),
         schema,
         approvals,
         history,
@@ -238,4 +239,24 @@ fn with_a_schema_and_no_data_the_answer_file_holds_no_prose() {
         "prose where data is expected would break the reader"
     );
     assert_ne!(done.code, exit::OK);
+}
+
+#[test]
+fn a_session_needs_a_terminal_and_no_one_task_option() {
+    let options = |args: &[&str]| {
+        Cli::try_parse_from(std::iter::once("lx").chain(args.iter().copied()))
+            .unwrap()
+            .run
+    };
+    assert!(session_allowed(Some("fix it"), &options(&[]), true).is_ok());
+    assert!(session_allowed(None, &options(&[]), true).is_ok());
+    let usage = |result: Result<(), Failure>| match result {
+        Err(Failure::Usage(why)) => why,
+        other => panic!("not a usage error: {other:?}"),
+    };
+    assert!(usage(session_allowed(Some("x"), &options(&[]), false)).contains("lx exec"));
+    assert!(usage(session_allowed(Some("-"), &options(&[]), true)).contains("lx exec"));
+    for flag in [&["--json"][..], &["-o", "last.txt"], &["--schema", "{}"]] {
+        assert!(usage(session_allowed(None, &options(flag), true)).contains("exec"));
+    }
 }

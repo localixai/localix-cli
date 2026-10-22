@@ -12,7 +12,7 @@
 It is one binary of about 1.6 MB, with synchronous code and no async runtime. There are no plugins, no MCP servers and no extra tools: a model with a shell and a browser needs little more.
 
 ```text
-$ lx -y "the tests in tests/parse.rs fail: fix the parser, not the tests"
+$ lx exec -y "the tests in tests/parse.rs fail: fix the parser, not the tests"
    1.1s ▸ bash cargo test --test parse
    3.4s ▸ read src/parse.rs
    5.0s ▸ edit src/parse.rs
@@ -23,16 +23,16 @@ achieved in 9.0s · 5 turns · $0.0058
 parse_range treated an empty upper bound as 0; it now means "to the end". All 14 tests pass.
 ```
 
-The output above is an example: times, tokens and cost vary from run to run. The trace goes to stderr and the answer alone to stdout, so `lx "..." > answer.md` keeps only the answer.
+The output above is an example: times, tokens and cost vary from run to run. The trace goes to stderr and the answer alone to stdout, so `lx exec "..." > answer.md` keeps only the answer.
 
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rsaryev/localix-cli/master/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/rsaryev/localix-cli/main/scripts/install.sh | sh
 ```
 
 - **macOS and Linux x86_64:** the script downloads the latest release and checks it against `SHA256SUMS`, then installs `lx` into `~/.local/bin`. To install a given version, set `LX_VERSION=0.2.0`. To install elsewhere, set `LX_INSTALL_DIR`.
-- **Windows:** run `irm https://raw.githubusercontent.com/rsaryev/localix-cli/master/scripts/install.ps1 | iex`.
+- **Windows:** run `irm https://raw.githubusercontent.com/rsaryev/localix-cli/main/scripts/install.ps1 | iex`.
 - **From a clone:** run `cargo install --locked --path apps/cli` (the tested `Cargo.lock`). It needs Rust 1.88 or newer.
 
 lx uses the system's own WebView for the browser:
@@ -47,32 +47,40 @@ lx uses the system's own WebView for the browser:
 lx login        # sign in with OpenRouter in your browser; or export OPENROUTER_API_KEY=sk-or-...
 lx doctor       # checks the key, both models, the WebView and the shell
 cd your-project
-lx "explain how errors are handled in this crate"
+lx              # a session: type a task, each one goes on from the last
 ```
 
 ## Usage
 
+lx works the way Codex and Claude Code do: `lx` opens a session at the terminal, and `lx exec` (or `-p`) runs one task and exits.
+
 ```bash
-lx "fix the failing test in src/parse.rs"                 # one task, then exit
-lx -y "run the tests and fix what fails"                  # allow commands and edits without asking
-lx                                                        # the prompt line: each line is the next task
-git diff | lx "review this change"                        # piped stdin is added to the prompt
-lx - < task.md                                            # the prompt from stdin
-lx -y "fix the lint" </dev/null                           # from a script whose stdin stays open
-lx -C ../site "open http://localhost:3000 and check that sign-up works"
-lx --json -y "update the changelog" | jq -c 'select(.type == "tool.call")'
-lx --schema '{"type":"object","properties":{"version":{"type":"string"}},"required":["version"]}' \
-    "which version is this crate?"                            # the data alone on stdout
-lx resume --last "now update the README"                  # go on with the newest session
+lx                                                        # a session at the terminal
+lx "fix the failing test in src/parse.rs"                 # a session that starts with this task
+lx -c                                                     # go on with the newest session here
+lx exec "fix the failing test in src/parse.rs"            # one task, then exit (also: lx e, lx -p)
+lx exec -y "run the tests and fix what fails"             # allow commands and edits without asking
+git diff | lx -p "review this change"                     # piped stdin is added to the prompt
+lx exec - < task.md                                       # the prompt from stdin
+lx exec -y "fix the lint" </dev/null                      # from a script whose stdin stays open
+lx exec -C ../site "open http://localhost:3000 and check that sign-up works"
+lx exec --json -y "update the changelog" | jq -c 'select(.type == "tool.call")'
+lx exec --schema '{"type":"object","properties":{"version":{"type":"string"}},"required":["version"]}' \
+    "which version is this crate?"                        # the data alone on stdout
+lx exec resume --last "now update the README"             # one more task in the newest session
 ```
+
+In a session, each line you type is the next task, in the same conversation. A line ending in `\` goes on on the next. Slash commands: `/new` (also `/clear`) starts a new conversation and session, `/status` shows the models, the workspace, the approvals and the session, `/help`, and `/exit` (also `/quit`, or Ctrl-D). A session needs a terminal on stdin; without one, use `lx exec`.
 
 | Option | Meaning |
 | --- | --- |
 | `-C, --cd DIR` | The workspace: paths resolve in it and files change only inside it. Default: the current directory. |
-| `-y, --yes` | Allow commands, file changes and browser actions without asking. |
-| `--json` | One JSON event per line on stdout (see [`--json`](#--json)). |
-| `--schema SCHEMA` | End with data matching this JSON Schema (inline, or `@file`), printed alone on stdout. |
-| `-o, --output-last-message FILE` | Also write the final answer, or the data with `--schema`, to FILE. With `--schema` and no data that matched, the file is left empty. |
+| `-y, --yes` | Allow commands, file changes and browser actions without asking. Also `--yolo` and `--dangerously-skip-permissions`. |
+| `-p, --print` | Run the prompt as one task and exit, as `exec` does. |
+| `-c, --continue` | Go on with the newest session of this directory, as `resume --last` does. |
+| `--json` | With `exec` or `-p`: one JSON event per line on stdout (see [`--json`](#--json)). |
+| `--schema SCHEMA` | With `exec` or `-p`: end with data matching this JSON Schema (inline, or `@file`), printed alone on stdout. |
+| `-o, --output-last-message FILE` | With `exec` or `-p`: also write the final answer, or the data with `--schema`, to FILE. With `--schema` and no data that matched, the file is left empty. |
 | `-v, --verbose` | Show each tool result and model turn in the trace. With `--json`, the trace also goes to stderr. |
 | `-m, --model MODEL` | The agent's chat model, any OpenRouter model id. Env `LX_MODEL`, default `anthropic/claude-haiku-5.5`. |
 | `--decision-model MODEL` | The browser's decision model. Env `LX_DECISION_MODEL`, default `~typesafe/jev-latest`. |
@@ -86,12 +94,13 @@ Commands:
 - `login`: sign in with OpenRouter. `login --with-token` reads the key from stdin instead (at a terminal, with the echo off), and `login status` shows where the key comes from, masked.
 - `logout`: forget the saved key.
 - `sessions`: list the saved sessions, newest first, with the directory each ran in.
-- `resume [ID | --last] [PROMPT]`: continue a session. `--last` is the newest session that ran in this workspace (else the newest of all, with a note).
+- `exec [PROMPT | -]` (alias `e`): run one task without a session and exit, with the answer alone on stdout. `exec resume [ID | --last] [PROMPT]` runs one more task in a saved session.
+- `resume [ID | --last] [PROMPT]`: go on with a session at the terminal. `--last` is the newest session that ran in this workspace (else the newest of all, with a note).
 - `doctor`: check that everything a run needs is in place.
 
-Every run is saved as a session in `~/.lx/sessions/<id>.json`; set `LX_SESSIONS` to keep them elsewhere. A session records each task and how it ended, but not the conversation itself. `resume` therefore starts a new conversation that is told the earlier tasks, the directory they ran in, and where the browser was. In the prompt line, each task continues the same conversation.
+Every run is saved as a session in `~/.lx/sessions/<id>.json`; set `LX_SESSIONS` to keep them elsewhere. A session records each task and how it ended, but not the conversation itself. `resume` therefore starts a new conversation that is told the earlier tasks, the directory they ran in, and where the browser was. In a session, each task continues the same conversation.
 
-Given a PROMPT, stdin that is not a terminal is read to its end and added to the prompt, and lx says so on stderr. A caller whose stdin stays open (a harness with a pipe, `ssh` without `-n`, a `while read` loop) should pass `</dev/null`.
+With `exec`, given a PROMPT, stdin that is not a terminal is read to its end and added to the prompt, and lx says so on stderr. A caller whose stdin stays open (a harness with a pipe, `ssh` without `-n`, a `while read` loop) should pass `</dev/null`.
 
 ## Approvals
 
@@ -103,7 +112,7 @@ Given a PROMPT, stdin that is not a terminal is read to its end and added to the
 | With `-y` / `--yes` | Everything is allowed without asking. |
 | With no terminal and no `-y` | Commands, edits and browser actions are refused, and the agent is told the person must rerun with `--yes`. Reading still works. |
 
-Ctrl-C stops the task: the command running is killed with everything it started, nothing more is approved, and the task ends at its next model turn as `interrupted` (exit 130), with its `run.completed` event and its session saved. A second Ctrl-C quits at once. At the prompt line, Ctrl-C quits. Closing the browser window stops the task the same way; in the prompt line the window opens again on the next task.
+Ctrl-C stops the task: the command running is killed with everything it started, nothing more is approved, and the task ends at its next model turn as `interrupted` (exit 130), with its `run.completed` event and its session saved. A second Ctrl-C quits at once. At the session's prompt, Ctrl-C quits. Closing the browser window stops the task the same way; in a session the window opens again on the next task.
 
 A refusal goes back to the model as a failed call with its reason, and it is told not to work around it.
 

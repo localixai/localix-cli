@@ -2,13 +2,13 @@ name: ci
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
 # Third-party actions are pinned to a commit: a moved tag or branch cannot change what runs.
 #
-# A new push to a pull request supersedes its running checks; on master every commit keeps its own
+# A new push to a pull request supersedes its running checks; on main every commit keeps its own
 # run, so a red commit is never hidden by the one after it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -1,6 +1,6 @@
 # Installs the lx binary on Windows from a GitHub release:
 #
-#   irm https://raw.githubusercontent.com/rsaryev/localix-cli/master/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/rsaryev/localix-cli/main/scripts/install.ps1 | iex
 #
 # Environment:
 #   LX_VERSION      a release such as 0.2.0 (default: the latest)

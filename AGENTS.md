@@ -55,7 +55,7 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
 - `apps/cli`: the `lx` binary and the composition root.
   - `main.rs`: where the process exits (or the browser host, once its event loop owns the main thread, with the code the run returns).
   - `cli.rs`: the command line.
-  - `commands/`: `run.rs` (one task: checks, then the browser host, then the task), `repl.rs` (the prompt line), `login.rs`, `sessions.rs` (`sessions`, `resume`), `doctor.rs`.
+  - `commands/`: `run.rs` (a session or one `exec` task: checks, then the browser host, then the work), `repl.rs` (a session's prompt line and slash commands), `login.rs`, `sessions.rs` (`sessions`, `resume`), `doctor.rs`.
   - `compose.rs`: builds the models, then (`assemble`, testable with fake models) the hands, the gate and the tools, then the `Agent`.
   - `context.rs`: the environment block, the AGENTS.md files from the git root down, an earlier session.
   - `gate.rs`: who approves: `--yes`, the terminal, or nobody; nothing once the task is stopped.

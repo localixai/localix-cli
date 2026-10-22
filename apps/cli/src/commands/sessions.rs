@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use contracts::history::{History, Session};
 use session::Sessions;
 
-use crate::cli::ResumeArgs;
-use crate::commands::run;
+use crate::cli::RunOptions;
+use crate::commands::run::{self, Mode};
 use crate::error::{self, Failure};
 use crate::exit;
 use crate::printable::printable;
@@ -81,11 +81,15 @@ fn home_relative(dir: &str) -> String {
     }
 }
 
-/// `lx resume`: the session asked for, then its next task, or the prompt line. `--last` is
-/// the newest session that ran in this workspace (else the newest of all, said so).
-pub fn resume(args: ResumeArgs) -> Result<i32, Failure> {
-    let (id, prompt) = args.target().map_err(Failure::Usage)?;
-    let root = run::root(&args.run)?;
+/// `lx resume` and `lx exec resume`: the session `id` names, else the newest one that ran in
+/// this workspace (else the newest of all, said so), going on with `prompt` in `mode`.
+pub fn resume(
+    id: Option<&str>,
+    prompt: Option<&str>,
+    options: RunOptions,
+    mode: Mode,
+) -> Result<i32, Failure> {
+    let root = run::root(&options)?;
     let here = root.root().display().to_string();
     let store = store();
     let newest_here = match id {
@@ -108,8 +112,7 @@ pub fn resume(args: ResumeArgs) -> Result<i32, Failure> {
             printable(&session.workspace)
         ));
     }
-    let prompt = prompt.map(str::to_string);
-    run::run(prompt.as_deref(), args.run, Some(session))
+    run::run(prompt, options, Some(session), mode)
 }
 
 #[cfg(test)]

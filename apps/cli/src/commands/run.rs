@@ -1,8 +1,9 @@
-//! A run: everything checked and read on the main thread first (the workspace, the schema, the
-//! key, the prompt), then the session is composed, with the browser's event loop on the main
+//! A run, as a session at the terminal or one `exec` task: everything checked and read on the
+//! main thread first (the workspace, the schema, the key, the prompt), then the session is composed, with the browser's event loop on the main
 //! thread where a window can be shown. Each task is run, reported, and recorded in the session;
 //! Ctrl-C or closing the window stops the task (see `interrupt`), not the process.
 
+use std::io::IsTerminal;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -42,21 +43,71 @@ pub fn root(options: &RunOptions) -> Result<Workspace, Failure> {
     Ok(workspace.denying(private.chain([sessions::store().dir])))
 }
 
-/// Run `prompt` (or the prompt line) with `options`, in `resumed` when a session goes on.
+/// How a run takes its tasks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    /// A session at the terminal: the prompt, when given, is its first message.
+    Session,
+    /// One task, then exit (`exec`, -p).
+    Exec,
+}
+
+/// What a run does once composed.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Work {
+    /// One task, then exit.
+    One(String),
+    /// The prompt line, after a first message when there is one.
+    Session(Option<String>),
+}
+
+/// What a session needs that `exec` does not, as a usage error.
+const SESSION_TERMINAL: &str = "a session needs a terminal on stdin: run one task with \
+`lx exec \"<task>\"` (or -p)";
+const ONE_TASK: &str = "--json, --schema and -o answer one task: run it with `lx exec` (or -p)";
+const EXEC_PROMPT: &str = "exec runs one task: give it as the prompt, or `-` to read it from stdin";
+
+/// The work `mode` asks of `prompt`; stdin is read only for one task (a session reads it line by
+/// line, once `session_allowed`).
+fn work(prompt: Option<&str>, mode: Mode) -> Result<Work, Failure> {
+    match mode {
+        Mode::Exec => match input::prompt(prompt)? {
+            Prompt::One(task) => Ok(Work::One(task)),
+            Prompt::Line => Err(Failure::Usage(EXEC_PROMPT.into())),
+        },
+        Mode::Session => Ok(Work::Session(prompt.map(str::to_string))),
+    }
+}
+
+/// Whether a session can run: at a terminal, with no option that answers one task.
+pub fn session_allowed(
+    prompt: Option<&str>,
+    options: &RunOptions,
+    terminal: bool,
+) -> Result<(), Failure> {
+    if options.json || options.schema.is_some() || options.output_last_message.is_some() {
+        return Err(Failure::Usage(ONE_TASK.into()));
+    }
+    if !terminal || prompt == Some("-") {
+        return Err(Failure::Usage(SESSION_TERMINAL.into()));
+    }
+    Ok(())
+}
+
+/// Run `prompt` with `options` in `mode`, in `resumed` when a session goes on.
 pub fn run(
     prompt: Option<&str>,
     options: RunOptions,
     resumed: Option<Session>,
+    mode: Mode,
 ) -> Result<i32, Failure> {
     let workspace = root(&options)?;
     let schema = options.schema.as_deref().map(input::schema).transpose()?;
-    let (key, _) = auth::key(APP).ok_or(Failure::SignedOut)?;
-    let prompt = input::prompt(prompt)?;
-    if prompt == Prompt::Line && (options.json || schema.is_some()) {
-        return Err(Failure::Usage(
-            "--json and --schema answer one task: give it as the prompt".into(),
-        ));
+    if mode == Mode::Session {
+        session_allowed(prompt, &options, std::io::stdin().is_terminal())?;
     }
+    let (key, _) = auth::key(APP).ok_or(Failure::SignedOut)?;
+    let work = work(prompt, mode)?;
     let approvals = Approvals::choose(options.yes);
     let browser = tools::browser::has_display();
     let environment = Environment {
@@ -66,6 +117,7 @@ pub fn run(
         now: session::now(),
     };
     let context = context::gather(&environment, resumed.as_ref());
+    let fresh = context::gather(&environment, None);
     let history = sessions::store();
     let mut session = resumed.unwrap_or_else(|| history.start());
     if session.workspace.is_empty() {
@@ -77,15 +129,16 @@ pub fn run(
         key,
         workspace,
         context,
+        fresh,
         schema,
         approvals,
         history,
         session,
     };
     let work = move |browser| {
-        compose(setup, browser, |rig| match prompt {
-            Prompt::One(task) => rig.task(&task),
-            Prompt::Line => repl::run(rig),
+        compose(setup, browser, |rig| match work {
+            Work::One(task) => rig.task(&task),
+            Work::Session(first) => repl::run(rig, first.as_deref()),
         })
     };
     interrupt::install();

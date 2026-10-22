@@ -4,13 +4,13 @@ A release is a pushed tag `vX.Y.Z`; CI builds and publishes the rest.
 
 ## Steps
 
-1. On an up-to-date `master` with green CI, bump the workspace version in `Cargo.toml`
+1. On an up-to-date `main` with green CI, bump the workspace version in `Cargo.toml`
    (`[workspace.package] version = "X.Y.Z"`) and run `cargo check --workspace` so `Cargo.lock`
    follows.
 2. In `CHANGELOG.md`, rename `## Unreleased` to `## X.Y.Z` and start a new, empty
    `## Unreleased` above it. `scripts/release-notes.sh X.Y.Z` prints the section that becomes the
    release notes; it must not be empty.
-3. Commit (`Release X.Y.Z`) and push to `master`.
+3. Commit (`Release X.Y.Z`) and push to `main`.
 4. Tag and push the tag:
 
    ```bash

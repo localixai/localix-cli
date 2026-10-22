@@ -157,11 +157,23 @@ fn describe(name: &str, args: &Value) -> What {
         }
         "browser" => {
             let flag = |key: &str| args.get(key) == Some(&Value::Bool(true));
-            let mut parts: Vec<String> = [text("url"), text("goal")]
-                .into_iter()
-                .filter(|part| !part.is_empty())
-                .map(str::to_string)
-                .collect();
+            let mut parts: Vec<String> = vec![];
+            match args.get("tab") {
+                Some(Value::String(tab)) if tab.trim_matches('"') == "new" => {
+                    parts.push("a new tab".into())
+                }
+                Some(Value::Number(n)) => parts.push(format!("tab {n}")),
+                Some(Value::String(n)) if n.parse::<u64>().is_ok() => {
+                    parts.push(format!("tab {n}"))
+                }
+                _ => {}
+            }
+            parts.extend(
+                [text("url"), text("goal")]
+                    .into_iter()
+                    .filter(|part| !part.is_empty())
+                    .map(str::to_string),
+            );
             if !text("script").is_empty() {
                 parts.push("a script".into());
             }
@@ -170,6 +182,13 @@ fn describe(name: &str, args: &Value) -> What {
                     "" => "a screenshot".into(),
                     selector => format!("a screenshot of {selector}"),
                 });
+            }
+            if let Some(closed) = args.get("close_tab").filter(|v| !v.is_null()) {
+                let tab = format!("tab {}", closed.to_string().trim_matches('"'));
+                if parts.is_empty() {
+                    return what(("Closing", "Closed"), tab);
+                }
+                parts.push(format!("closing {tab}"));
             }
             match (parts.is_empty(), flag("close")) {
                 (true, true) => what(("Closing", "Closed"), "the browser".into()),

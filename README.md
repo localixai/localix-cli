@@ -133,7 +133,15 @@ A refusal goes back to the model as a failed call with its reason, and it is tol
 
 ## Project instructions
 
-llx reads `AGENTS.md` files the way Codex does: from the git repository's root down to the workspace, root first. Each one covers its own directory tree, a deeper file wins over a shallower one, and the task you give wins over both. Each file is capped at 16 KiB and all of them together at 32 KiB, with a note when something was cut. They reach the agent in a context block with the environment: the workspace, the OS, the date, the mode, and whether a browser is available (the shell is named in the `bash` tool's description).
+llx reads instruction files the way Codex and Claude Code do, so a repository written for either works as it is:
+
+- your own, for every project: `~/.llx/AGENTS.md`;
+- the project's: in each directory from the git repository's root down to the workspace, the first of `AGENTS.override.md`, `AGENTS.md` and `CLAUDE.md`, root first, so a deeper file wins over a shallower one;
+- a directory below the workspace: its file comes with the result of the first `read` or `edit` of a file there, and covers that directory's tree.
+
+A line that is only `@path` brings that file in (relative to the file, or `~/…`), three levels deep, each file once, as in CLAUDE.md. The task you give wins over every file. Each file is capped at 16 KiB and those read at the start at 32 KiB together, with a note when something was cut. They reach the agent in a context block with the environment: the workspace, the OS, the date, the mode, and whether a browser is available.
+
+The context is built so the prompt cache keeps working. It is a message of its own after the system prompt, the same for every task and session in a workspace on a day (the date has no time), and it is marked for the cache, so a new session reads it from there. Files are read once per session; a subdirectory's file is appended with a call's result; a mode change is a note appended later; old page states and screenshots are dropped together once past a budget, not one at a time. Nothing earlier in the conversation is rewritten turn by turn.
 
 ## Tools
 

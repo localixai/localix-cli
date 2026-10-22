@@ -4,6 +4,11 @@
 
 The browser CLI of 0.1.0 is now `llx` (also installed as `llx`): an ultrafast, lightweight coding agent for the terminal. It has five tools: `read`, `edit`, `bash`, the browser, whose clicks and typing a decision model does, and `ask`, a question to the person in a session. It stays one synchronous binary of about 2 MB, with no async runtime and no plugins, MCP or skills.
 
+### Instructions and the prompt cache
+
+- **CLAUDE.md and more, as Codex and Claude Code read them.** `~/.llx/AGENTS.md` for every project, then in each directory from the repository's root down the first of `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`; `@path` lines import files; a subdirectory's file arrives with the first `read` or `edit` there.
+- **The context is its own cached message** before the first goal, so a new session in the same workspace reads it from the prompt cache; old screenshots are dropped together past three, so the prefix is not rewritten at every one; pictures the person attached are never dropped.
+
 ### The terminal interface
 
 - **A session is drawn like Codex's.** Finished blocks go into the terminal's scrollback once; only the bottom is redrawn, in synchronized updates. Each call is a block: `• Ran cargo test`, the command wrapped under a `│`, and the start and end of its output under `└` (`… +41 lines` between), green when done and red when it failed. The answer is rendered markdown, and each task ends with `─ Worked for 48s · 6 turns · $0.0087 ───`. While a task runs: a spinner on the call, `Working (12s · esc to interrupt)`, the hands' latest actions under a browser call, and the messages queued meanwhile.

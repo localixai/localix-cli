@@ -64,7 +64,10 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
   - `choice.rs`: the provider, model and level a run uses (the options, else what `/login` saved in `settings.json`). `live.rs`: the models a session thinks with, switched by `/login` between tasks.
   - `picker.rs`: `Picker` (a title and items in, an index or a cancel out) and `Lines`; `Numbered` is the plain fallback.
   - `compose.rs`: builds the models, then (`assemble`, testable with fake models) the hands, the mode's gate, the person and the tools, then the `Agent`; `Rig` switches the mode and tells the agent of a change.
-  - `context.rs`: the environment block, the AGENTS.md files from the git root down, an earlier session.
+  - `context.rs`: the environment block, the instructions, an earlier session; one message, the same all day, cached.
+  - `instructions.rs`: `~/.llx/AGENTS.md`, then per directory `AGENTS.override.md`, `AGENTS.md` or `CLAUDE.md` with `@imports`; `Instructed` adds a subdirectory's file to the first `read`/`edit` there.
+  - `attach.rs`: pictures and files the person attaches (a dropped path, Ctrl+V, `--image`).
+  - `tui/`: the session's interface: history into the terminal's scrollback, a live area, the composer, choices.
   - `mode.rs`: the four modes (`default`, `plan`, `bypass`, `autonomous`), the context's `Mode:` text, the `<mode_change>` note, and `ModeGate`: what each mode allows, refuses or asks.
   - `gate.rs`: asking at the terminal (`Tty`, `TerminalGate`, a wait Ctrl-C ends); nothing once the task is stopped.
   - `person.rs`: `TerminalPerson`, who answers `ask` at the terminal (nobody in autonomous mode).

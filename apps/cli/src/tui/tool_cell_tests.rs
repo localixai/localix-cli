@@ -163,10 +163,16 @@ fn a_browser_call_says_what_it_takes() {
         shown("browser", json!({"script": "1 + 1"}), State::Running, 80),
         shown("browser", json!({"close": true}), State::Running, 80),
         shown("browser", json!({}), State::Running, 80),
+        shown("browser", json!({"tab": "new", "url": "https://go.dev"}), State::Running, 80),
+        shown("browser", json!({"tab": 2, "screenshot": true}), State::Running, 80),
+        shown("browser", json!({"close_tab": 2}), State::Running, 80),
     ].join("\n"), @r"
     • Browsing a screenshot of #board
     • Browsing a script
     • Closing the browser
     • Reading the page
+    • Browsing a new tab · https://go.dev
+    • Browsing tab 2 · a screenshot
+    • Closing tab 2
     ");
 }

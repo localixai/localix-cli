@@ -136,6 +136,7 @@ mod unix {
         Ok(ToolOutput {
             report,
             state: None,
+            image: None,
         })
     }
 

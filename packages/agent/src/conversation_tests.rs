@@ -7,6 +7,7 @@ fn output(report: &str, state: usize) -> ToolOutput {
     ToolOutput {
         report: report.into(),
         state: Some("x".repeat(state)),
+        image: None,
     }
 }
 
@@ -79,6 +80,7 @@ fn a_whole_tool_window_comes_through_unshortened() {
         ToolOutput {
             report: report.clone(),
             state: None,
+            image: None,
         },
     );
     assert_eq!(results(&conversation), [report]);
@@ -108,4 +110,48 @@ fn calls_left_unanswered_are_closed_before_the_conversation_goes_on() {
         })
         .collect();
     assert_eq!(answered, ["a", "b"]);
+}
+
+fn shot(n: u32) -> ToolOutput {
+    ToolOutput {
+        report: format!("shot {n}"),
+        state: None,
+        image: Some(Image {
+            media_type: "image/jpeg".into(),
+            data: format!("data{n}"),
+            width: n,
+            height: 1,
+        }),
+    }
+}
+
+#[test]
+fn a_picture_follows_its_result_and_only_the_newest_three_stay() {
+    let mut conversation = Conversation::new("rules");
+    for n in 1..=4 {
+        conversation.result(&n.to_string(), shot(n));
+    }
+    let messages = conversation.messages();
+    assert!(
+        matches!(&messages[1], Message::ToolResult { id, .. } if id == "1"),
+        "{messages:?}"
+    );
+    assert_eq!(
+        messages[2],
+        Message::User(IMAGE_OMITTED.into()),
+        "the oldest picture went"
+    );
+    let kept: Vec<&str> = messages
+        .iter()
+        .filter_map(|message| match message {
+            Message::Image { image, .. } => Some(image.data.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(kept, ["data2", "data3", "data4"]);
+    assert!(
+        matches!(&messages[8], Message::Image { caption, .. } if caption.contains("(4x1;")),
+        "{:?}",
+        messages[8]
+    );
 }

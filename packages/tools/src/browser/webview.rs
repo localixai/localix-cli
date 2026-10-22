@@ -10,7 +10,7 @@ use tao::event_loop::EventLoopProxy;
 
 use super::host::{Cmd, Loads, Shared, WINDOW_CLOSED};
 use super::script::script_forms;
-use super::{Action, BrowserError, BrowserResult, Driver, Observation, PageText};
+use super::{Action, BrowserError, BrowserResult, Clip, Driver, Observation, PageText, Shot};
 
 const CALL_TIMEOUT: Duration = Duration::from_secs(10);
 /// A script may await the page (a fetch, a timer); it gets this long.
@@ -33,6 +33,8 @@ const NAVIGATION_GRACE: Duration = Duration::from_millis(25);
 const NAVIGATION_START: Duration = Duration::from_millis(300);
 /// A settle that got no answer: its document most likely went away; a new load should follow.
 const SETTLE_LOST: Duration = Duration::from_secs(5);
+/// A long page may render off screen before WebKit draws its picture.
+const CAPTURE_TIMEOUT: Duration = Duration::from_secs(12);
 
 #[derive(Clone)]
 pub struct WebviewDriver {
@@ -353,5 +355,34 @@ impl Driver for WebviewDriver {
         let value = self.call_ready("read", json!({"offset": offset, "limit": limit}))?;
         serde_json::from_value(value)
             .map_err(|error| BrowserError::Unavailable(format!("unreadable text: {error}")))
+    }
+
+    fn screenshot(&self, selector: Option<&str>) -> BrowserResult<Shot> {
+        self.open_or_closed()?;
+        let clip = match selector {
+            Some(selector) => {
+                let at = self.call_ready("locate", json!({"selector": selector}))?;
+                let side = |key: &str| at.get(key).and_then(Value::as_f64).unwrap_or(0.0);
+                Some(Clip {
+                    x: side("x"),
+                    y: side("y"),
+                    width: side("width"),
+                    height: side("height"),
+                })
+            }
+            None => None,
+        };
+        let (reply, shot) = mpsc::channel();
+        self.proxy
+            .send_event(Cmd::Capture { clip, reply })
+            .map_err(|_| BrowserError::Unavailable("the browser window is gone".into()))?;
+        match shot.recv_timeout(CAPTURE_TIMEOUT) {
+            Ok(Ok(shot)) => Ok(shot),
+            Ok(Err(why)) => Err(BrowserError::Refused(format!("no screenshot: {why}"))),
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(BrowserError::Unavailable(
+                "the screenshot did not come in time".into(),
+            )),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(closed()),
+        }
     }
 }

@@ -39,6 +39,7 @@ fn run(output: &Output) {
     let done = Ok(ToolOutput {
         report: "exit 0 in 1.0s".into(),
         state: None,
+        image: None,
     });
     output.result(&call(), &done);
     output.turn(&Usage::default());

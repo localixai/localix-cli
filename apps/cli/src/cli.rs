@@ -19,8 +19,9 @@ const LONG_ABOUT: &str = "llx: an ultrafast, lightweight coding agent for the te
 
 It works in a directory (the current one, or -C DIR) with five tools: read, edit, bash (on \
 unix it can keep a program that asks, such as a REPL, open in a terminal session until the task \
-ends), a browser whose clicks and typing are done by a fast decision model, and ask, a question \
-to you (in a session only).
+ends), a browser whose clicks and typing are done by a fast decision model (the agent also reads \
+the page, runs scripts in it and sees it in screenshots), and ask, a question to you (in a \
+session only).
 
 With no command, llx opens a session at the terminal: PROMPT, when given, is its first message, \
 and each line you type goes on from the last. `llx exec` (or -p) runs one task without a session \
@@ -249,7 +250,8 @@ pub struct RunOptions {
     pub timeout: u64,
 
     /// Always show the browser window. By default it shows in a session (except in autonomous
-    /// mode) and stays hidden in exec; the agent can show or hide it per call.
+    /// mode) and stays hidden in exec; the agent can show, hide or close it per call. It is an
+    /// ordinary window, never on top of others, and never takes the keyboard.
     #[arg(long, help_heading = "Browser")]
     pub show_browser: bool,
 }

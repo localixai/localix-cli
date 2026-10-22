@@ -21,7 +21,14 @@ The browser CLI of 0.1.0 is now `llx` (also installed as `llx`): an ultrafast, l
 - **New defaults:** `--max-turns` is 50 (was 30) and `--timeout` is 1800 s (was 600). `--max-turns` and `--max-steps` take 1 to 10000, and `--timeout` at most 86400 s.
 - **Exit codes keep their meanings:** 0, 1, 2, 3 and 130. Exit 3 now also covers a usage error and a model error.
 
+### Changed
+
+- **A shown browser window is an ordinary window.** It no longer floats above every other app's windows: it comes to the front when it opens, without taking the keyboard, and goes behind other windows like any other. Only the invisible (headless) window still floats, and it covers nothing.
+
 ### Added
+
+- **The agent sees the page.** The `browser` tool takes `screenshot: true` (and `selector`, a CSS selector, to crop to one element): the WebView's own picture, canvas and WebGL included (a game board drawn on a canvas has no text to read), as a JPEG of at most 1280 pixels on its long side. It reaches the model as a user message with an image part right after the call's result, since a tool result carries text only; only the newest three pictures stay in the conversation, older ones are replaced by a line saying so. macOS only for now (WKWebView's snapshot); elsewhere the call says it is not supported. `contracts::tool::ToolOutput` has an `image`, and `contracts::chat::Message` an `Image`.
+- **The agent can close the browser window** with `close: true`, at the end of a call; the next call opens a fresh one. Unlike the person closing it, this does not stop the task.
 
 - **The browser shows itself in a session.** The window is visible by default in a session (hidden in `exec` and in autonomous mode), and the `browser` tool takes `show: true|false` per call; it never takes the keyboard. On macOS it stays out of the Dock either way.
 - **Coding tools:**

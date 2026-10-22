@@ -86,6 +86,7 @@ impl Tool for ReadTool<'_> {
         Ok(ToolOutput {
             report,
             state: None,
+            image: None,
         })
     }
 }

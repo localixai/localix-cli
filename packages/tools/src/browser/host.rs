@@ -15,6 +15,7 @@ use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWi
 use tao::window::WindowBuilder;
 use wry::{NewWindowResponse, PageLoadEvent, WebViewBuilder};
 
+use super::capture::{Clip, Shot, capture};
 use super::guard::{allowed, token};
 use super::platform::{conceal, keep_rendering, user_agent};
 use super::viewport::Viewport;
@@ -71,6 +72,11 @@ pub(super) enum Cmd {
     Close,
     /// Reframe the page (`viewport`): width, height.
     Resize(f64, f64),
+    /// A screenshot of the page, or of a part of it; the reply comes once WebKit has drawn it.
+    Capture {
+        clip: Option<Clip>,
+        reply: Sender<Result<Shot, String>>,
+    },
     Exit(i32),
 }
 
@@ -287,6 +293,7 @@ where
                 }
             }
             Cmd::Resize(width, height) => native.set_inner_size(LogicalSize::new(width, height)),
+            Cmd::Capture { clip, reply } => capture(webview, clip, reply),
             Cmd::Navigate(url) => {
                 let _ = webview.load_url(&url);
             }

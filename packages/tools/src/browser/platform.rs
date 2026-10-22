@@ -19,16 +19,16 @@ pub(super) fn conceal(builder: WindowBuilder) -> WindowBuilder {
 }
 
 /// WebKit stops animation frames and timers in a window it considers hidden, and a driven window
-/// usually sits behind the terminal that started it. So the window floats above other windows
-/// (without taking focus), and occlusion detection, a WKWebView switch, is off as well. A headless
-/// window is also fully transparent and passes clicks through: nothing covers it, nobody sees it.
+/// usually sits behind the terminal that started it. So occlusion detection, a WKWebView switch,
+/// is off. A shown window is an ordinary one: it comes to the front once, without taking focus,
+/// and goes behind other windows like any other. A headless window floats, in case the switch is
+/// missing, but it is fully transparent and passes clicks through: it covers nothing.
 #[cfg(target_os = "macos")]
 pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
     use objc2::runtime::Bool;
     use objc2::{msg_send, sel};
     use wry::WebViewExtMacOS;
 
-    const FLOATING_WINDOW_LEVEL: isize = 3;
     // NSWindowCollectionBehavior: open in the Space the person is in, even over a full-screen app,
     // so a new window never switches Spaces under them; a headless one also stays out of
     // window cycling and Mission Control.
@@ -47,20 +47,33 @@ pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
     }
     let window = webview.ns_window();
     unsafe {
-        // Shown or not, the window floats: a covered page stops rendering. It never takes focus.
+        // It never takes focus.
         let behavior = if headless {
             CAN_JOIN_ALL_SPACES | TRANSIENT | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY
         } else {
             MOVE_TO_ACTIVE_SPACE | FULL_SCREEN_AUXILIARY
         };
         let _: () = msg_send![&*window, setCollectionBehavior: behavior];
-        let _: () = msg_send![&*window, setLevel: FLOATING_WINDOW_LEVEL];
+        let _: () = msg_send![&*window, setLevel: level(headless)];
         let _: () = msg_send![&*window, orderFrontRegardless];
         if headless {
             let _: () = msg_send![&*window, setAlphaValue: 0.0f64];
             let _: () = msg_send![&*window, setIgnoresMouseEvents: Bool::YES];
             let _: () = msg_send![&*window, setHasShadow: Bool::NO];
         }
+    }
+}
+
+/// NSWindow levels: an ordinary window, and one above every ordinary window.
+pub(super) const NORMAL_WINDOW_LEVEL: isize = 0;
+pub(super) const FLOATING_WINDOW_LEVEL: isize = 3;
+
+/// The level a window opens at: only an invisible one floats.
+pub(super) fn level(headless: bool) -> isize {
+    if headless {
+        FLOATING_WINDOW_LEVEL
+    } else {
+        NORMAL_WINDOW_LEVEL
     }
 }
 
@@ -89,3 +102,7 @@ pub(super) fn user_agent() -> Option<String> {
 pub(super) fn user_agent() -> Option<String> {
     None
 }
+
+#[cfg(test)]
+#[path = "platform_tests.rs"]
+mod tests;

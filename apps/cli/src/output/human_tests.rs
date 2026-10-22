@@ -116,6 +116,7 @@ fn a_failure_always_shows_and_a_success_only_with_verbose() {
     let done = Ok(ToolOutput {
         report: "exit 0 in 0.1s\n\n### stdout\na\nb\nc\nd".into(),
         state: None,
+        image: None,
     });
     assert!(result(&done, false).is_empty());
     assert_eq!(
@@ -203,6 +204,7 @@ fn the_trace_shows_control_characters_instead_of_obeying_them() {
     let output = ToolOutput {
         report: "exit 0\r\u{1b}[1A".into(),
         state: None,
+        image: None,
     };
     assert_eq!(result(&Ok(output), true), ["  exit 0\\r\\u{1b}[1A"]);
 }

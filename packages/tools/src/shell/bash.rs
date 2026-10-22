@@ -128,6 +128,7 @@ impl Tool for BashTool<'_> {
         Ok(ToolOutput {
             report: report(&finished, place.as_deref()),
             state: None,
+            image: None,
         })
     }
 }

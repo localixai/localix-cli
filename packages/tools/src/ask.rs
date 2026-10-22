@@ -45,6 +45,7 @@ impl Tool for AskTool<'_> {
             Reply::Answers(answers) => Ok(ToolOutput {
                 report: report(&questions, &answers),
                 state: None,
+                image: None,
             }),
             Reply::Nobody(why) => Err(ToolError::Failed(why)),
             Reply::Stopped => Err(ToolError::Failed(STOPPED.into())),

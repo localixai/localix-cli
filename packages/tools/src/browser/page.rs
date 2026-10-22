@@ -52,11 +52,7 @@ impl Page {
             if *current == hidden {
                 return open.navigate(url);
             }
-            open.close();
-            let gone = std::time::Instant::now();
-            while open.is_open() && gone.elapsed() < Duration::from_secs(2) {
-                std::thread::sleep(Duration::from_millis(10));
-            }
+            closed(open);
         }
         *current = hidden;
         let opened = self.browser.open(Window {
@@ -69,6 +65,19 @@ impl Page {
         let _ = opened.wait_loaded(LOAD_TIMEOUT);
         *driver = Some(opened);
         Ok(())
+    }
+
+    /// Close the window, as the agent asks (not the person: the task goes on); the next call that
+    /// needs it opens it again. Returns whether one was open.
+    pub fn close(&self) -> bool {
+        let driver = self.driver.lock().unwrap();
+        match driver.as_ref().filter(|driver| driver.is_open()) {
+            Some(open) => {
+                closed(open);
+                true
+            }
+            None => false,
+        }
     }
 
     pub fn is_open(&self) -> bool {
@@ -118,6 +127,15 @@ impl Page {
         self.driver()?.resize(width, height)?;
         *self.size.lock().unwrap() = size.to_string();
         Ok(())
+    }
+}
+
+/// Close `open` and wait, briefly, until it is.
+fn closed(open: &WebviewDriver) {
+    open.close();
+    let gone = std::time::Instant::now();
+    while open.is_open() && gone.elapsed() < Duration::from_secs(2) {
+        std::thread::sleep(Duration::from_millis(10));
     }
 }
 

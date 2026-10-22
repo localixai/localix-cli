@@ -372,6 +372,54 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     let back = find(&page, "link", "Back").to_string();
     let stale = driver.act(&old, &Action::Click { reference: back });
     assert!(matches!(stale, Err(BrowserError::Stale(_))), "{stale:?}");
+
+    screenshots(driver, origin);
+
+    // The agent closes the window: it is closed, and the task goes on (closing it by hand would
+    // end this test with the window-closed exit code instead of "driver: ok").
+    driver.close();
+    let closing = std::time::Instant::now();
+    while driver.is_open() && closing.elapsed() < Duration::from_secs(2) {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(!driver.is_open(), "the window closed");
+    assert!(matches!(
+        driver.observe(),
+        Err(BrowserError::Unavailable(_))
+    ));
+}
+
+/// A screenshot is the WebView's own picture, as JPEG; a selector crops it to one element.
+fn screenshots(driver: &WebviewDriver, origin: &str) {
+    driver.navigate(&format!("{origin}/canvas.html")).unwrap();
+    let viewport = driver.observe().unwrap().viewport;
+    let page = driver.screenshot(None).unwrap();
+    assert_eq!(&page.jpeg[..3], [0xFF, 0xD8, 0xFF], "a JPEG");
+    let ratio = |w: u32, h: u32| f64::from(w) / f64::from(h);
+    assert!(
+        (ratio(page.width, page.height) - ratio(viewport.w, viewport.h)).abs() < 0.02
+            && page.width.max(page.height) <= 1280
+            && page.width >= viewport.w.min(1280) / 2,
+        "{}x{} for a {}x{} viewport",
+        page.width,
+        page.height,
+        viewport.w,
+        viewport.h
+    );
+    // Below the fold: scrolled into view, then cut out with its 8 px margin (216x116).
+    let board = driver.screenshot(Some("#board")).unwrap();
+    assert!(
+        (ratio(board.width, board.height) - 216.0 / 116.0).abs() < 0.05,
+        "{}x{}",
+        board.width,
+        board.height
+    );
+    assert!(board.width < page.width && board.jpeg.len() < page.jpeg.len());
+    let missing = driver.screenshot(Some("#nothing"));
+    assert!(
+        matches!(&missing, Err(BrowserError::Refused(m)) if m.contains("nothing on the page matches")),
+        "{missing:?}"
+    );
 }
 
 fn main() {

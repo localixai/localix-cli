@@ -120,5 +120,6 @@ pub fn ok(report: &str) -> Result<ToolOutput, ToolError> {
     Ok(ToolOutput {
         report: report.into(),
         state: Some("state".into()),
+        image: None,
     })
 }

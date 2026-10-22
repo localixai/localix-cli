@@ -17,6 +17,7 @@ fn database() -> Question {
                 description: String::new(),
             },
         ],
+        multiple: false,
     }
 }
 
@@ -25,6 +26,7 @@ fn open_question() -> Question {
         id: "deadline".into(),
         text: "When is it due?".into(),
         choices: vec![],
+        multiple: false,
     }
 }
 
@@ -66,23 +68,23 @@ fn options_are_numbered_and_control_characters_escaped() {
 #[test]
 fn a_line_is_a_choice_a_choice_and_a_note_or_the_persons_own_words() {
     let picked = |choice, note: Option<&str>| Answer {
-        choice: Some(choice),
+        choices: vec![choice],
         note: note.map(str::to_string),
     };
-    assert_eq!(answer("2\n", 2), picked(1, None));
+    assert_eq!(answer("2\n", 2, false), picked(1, None));
     assert_eq!(
-        answer("2, keep it local", 2),
+        answer("2, keep it local", 2, false),
         picked(1, Some("keep it local"))
     );
-    assert_eq!(answer("1: fine", 2), picked(0, Some("fine")));
+    assert_eq!(answer("1: fine", 2, false), picked(0, Some("fine")));
     let own = |text: &str| Answer {
-        choice: None,
+        choices: vec![],
         note: Some(text.into()),
     };
-    assert_eq!(answer("9", 2), own("9"));
-    assert_eq!(answer("Friday", 0), own("Friday"));
-    assert_eq!(answer("1", 0), own("1"));
-    assert_eq!(answer("  \n", 2), Answer::default());
+    assert_eq!(answer("9", 2, false), own("9"));
+    assert_eq!(answer("Friday", 0, false), own("Friday"));
+    assert_eq!(answer("1", 0, false), own("1"));
+    assert_eq!(answer("  \n", 2, false), Answer::default());
 }
 
 #[test]
@@ -93,7 +95,7 @@ fn each_question_is_asked_in_turn() {
     let Reply::Answers(answers) = reply else {
         panic!("{reply:?}")
     };
-    assert_eq!(answers[0].choice, Some(0));
+    assert_eq!(answers[0].choices, [0]);
     assert_eq!(answers[1].note.as_deref(), Some("Friday"));
     assert_eq!(typed.asked.borrow().len(), 2);
     assert!(typed.asked.borrow()[1].contains("(2 of 2)"));
@@ -155,4 +157,27 @@ fn the_time_the_person_takes_is_told() {
         Reply::Answers(vec![Answer::default()])
     );
     assert_eq!(told.get(), 1);
+}
+
+#[test]
+fn a_question_with_several_answers_takes_every_number_at_the_start() {
+    let features = Question {
+        multiple: true,
+        ..database()
+    };
+    assert!(shown(&features, 0, 1).contains("one or more numbers (1,3)"));
+    let picked = |choices: &[usize], note: Option<&str>| Answer {
+        choices: choices.to_vec(),
+        note: note.map(str::to_string),
+    };
+    assert_eq!(answer("1,2", 2, true), picked(&[0, 1], None));
+    assert_eq!(
+        answer("2 1 2 both, cheap first", 2, true),
+        picked(&[1, 0], Some("both, cheap first"))
+    );
+    assert_eq!(
+        answer("1 2", 2, false),
+        picked(&[0], Some("2")),
+        "one only, unless several"
+    );
 }

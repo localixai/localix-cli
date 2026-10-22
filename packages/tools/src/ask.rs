@@ -17,7 +17,8 @@ for the answers. Use it only when the answer changes what you do and nothing you
 tells you: a preference, a tradeoff between real options, a requirement that is unclear, a value \
 only they know. Look first, then ask; do not ask what you can find out, and do not ask the same \
 thing twice. Offer 2 to 4 options when the choices are clear, the recommended one first with \
-\" (Recommended)\" after its label; the person can always answer in their own words instead. \
+\" (Recommended)\" after its label; set `multiple` when several can be picked together (which \
+features, which pages). The person can always add a note or answer in their own words instead. \
 Never use it to ask for permission to run a command or change a file: those are approved as they \
 happen. If the person skips a question or nobody can answer, go on with your best assumption and \
 state it in your answer.";
@@ -76,10 +77,13 @@ fn parameters() -> Value {
             "options": {
                 "type": "array",
                 "maxItems": MAX_OPTIONS,
-                "description": "2 to 4 mutually exclusive choices, the recommended one first. \
-                    Leave out for an open question; the person can always type their own answer.",
+                "description": "2 to 4 choices, the recommended one first: mutually exclusive \
+                    unless `multiple`. Leave out for an open question; the person can always type \
+                    their own answer.",
                 "items": option,
             },
+            "multiple": {"type": "boolean",
+                "description": "true when the person may pick several options together."},
         },
     });
     json!({
@@ -155,13 +159,18 @@ fn question(item: &Value, number: usize) -> Result<Question, String> {
             options.len()
         ));
     }
-    let choices = options
+    let choices: Vec<Choice> = options
         .iter()
         .map(|option| choice(option, number))
         .collect::<Result<_, _>>()?;
+    // Read leniently: the names other agents' ask tools use for it work too.
+    let multiple = ["multiple", "multiSelect", "multi_select"]
+        .iter()
+        .any(|key| fields.get(*key).and_then(Value::as_bool) == Some(true));
     Ok(Question {
         id,
         text: text.to_string(),
+        multiple: multiple && !choices.is_empty(),
         choices,
     })
 }
@@ -190,7 +199,13 @@ fn report(questions: &[Question], answers: &[Answer]) -> String {
     let mut lines = vec!["The person answered:".to_string()];
     for (at, question) in questions.iter().enumerate() {
         let answer = answers.get(at).unwrap_or(&none);
-        let picked = answer.choice.and_then(|index| question.choices.get(index));
+        let labels: Vec<&str> = answer
+            .choices
+            .iter()
+            .filter_map(|index| question.choices.get(*index))
+            .map(|choice| choice.label.as_str())
+            .collect();
+        let picked = (!labels.is_empty()).then(|| labels.join(", "));
         let note = answer
             .note
             .as_deref()
@@ -198,8 +213,8 @@ fn report(questions: &[Question], answers: &[Answer]) -> String {
             .filter(|n| !n.is_empty());
         answered |= picked.is_some() || note.is_some();
         let said = match (picked, note) {
-            (Some(choice), None) => choice.label.clone(),
-            (Some(choice), Some(note)) => format!("{}; they added: {note}", choice.label),
+            (Some(picked), None) => picked,
+            (Some(picked), Some(note)) => format!("{picked}; they added: {note}"),
             (None, Some(note)) => format!("in their words: {note}"),
             (None, None) => "no answer; use your best assumption and state it".into(),
         };

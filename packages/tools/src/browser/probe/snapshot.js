@@ -66,6 +66,24 @@
   const SELECTOR = 'a[href],button,input,textarea,select,summary,[contenteditable="true"],' +
     ROLES.map((role) => `[role="${role}"]`).join(',')
 
+  // A control a page made from a plain element: a `<p class="level">` or a `<div>` whose click
+  // handler was added by script shows a pointer cursor; an `onclick` or a `tabindex` says so too.
+  // Only the outermost of a pointer group (its children inherit the cursor), and never one that
+  // holds a real control or another such control (a game's focusable frame around its levels):
+  // those are offered instead.
+  const PLAIN = /^(BODY|HTML|SVG|PATH|IFRAME|FRAME|CANVAS|VIDEO|SCRIPT|STYLE|LABEL|OPTION)$/i
+  const pointer = (e) => e.ownerDocument.defaultView.getComputedStyle(e).cursor === 'pointer'
+  const custom = (e) => {
+    if (PLAIN.test(e.tagName) || e.matches(SELECTOR) || e.closest('label')) return false
+    const marked = e.hasAttribute('onclick') || (e.hasAttribute('tabindex') && e.tabIndex >= 0)
+    if (!marked && !(pointer(e) && !(e.parentElement && pointer(e.parentElement)))) return false
+    if (e.querySelector(SELECTOR)) return false
+    const inner = [...e.querySelectorAll('[onclick],[tabindex]')].concat([...e.querySelectorAll('*')].slice(0, 2000))
+    return !inner.some((d) => d.hasAttribute('onclick') || (d.hasAttribute('tabindex') && d.tabIndex >= 0) ||
+      (pointer(d) && !pointer(d.parentElement)))
+  }
+  const isControl = (e) => e.matches(SELECTOR) || custom(e)
+
   const roleOf = (e) => {
     const explicit = e.getAttribute('role')
     if (ROLES.includes(explicit)) return explicit
@@ -74,7 +92,7 @@
     if (tag === 'A') return 'link'
     if (tag === 'SELECT') return 'combobox'
     if (tag === 'TEXTAREA' || e.isContentEditable) return 'textbox'
-    if (tag !== 'INPUT') return null
+    if (tag !== 'INPUT') return custom(e) ? 'button' : null
     if (e.type === 'checkbox' || e.type === 'radio') return e.type
     if (['button', 'submit', 'reset', 'image'].includes(e.type)) return 'button'
     if (e.type === 'search') return 'searchbox'
@@ -103,6 +121,13 @@
   // A nameless control (a row's checkbox, an icon button) is known by the text of its row.
   // Or, for a bare checkbox followed by its words (`<input type=checkbox> checkbox 1<br>`), by the
   // text right after it, else right before it.
+  // What a control is called: its own name, else the text of its row, or for a nameless control
+  // the page made (an icon in a <div>) the words of its id and class ("mute"): the text beside
+  // it is the page's content, not its name.
+  const labelOf = (e) => nameOf(e) || (e.matches(SELECTOR) ? contextOf(e) : hintOf(e))
+  const hintOf = (e) => `${e.id} ${typeof e.className === 'string' ? e.className : ''}`
+    .replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
+
   const contextOf = (e) => {
     const row = e.closest('li,tr,[role="row"],[role="listitem"],label,fieldset')
     if (row) return (row.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 80)
@@ -182,7 +207,8 @@
     const frames = subframes()
     // An overlay frame first: it is what the page is about now, and the element cap must not cut it.
     const docs = [...frames.filter((f) => f.overlay), { doc: document, frame: null }, ...frames.filter((f) => !f.overlay)]
-    for (const { doc, frame, ...at } of docs) for (const e of doc.querySelectorAll(SELECTOR)) {
+    for (const { doc, frame, ...at } of docs) for (const e of doc.body.querySelectorAll('*')) {
+      if (!isControl(e)) continue
       if (secret(e) || !visible(e)) continue
       const role = roleOf(e)
       const own = e.getBoundingClientRect()
@@ -192,7 +218,7 @@
       if (!role || !(inViewport(box) || justBelow(box))) continue
       if (role === 'gridcell' && e.querySelector('button,[role="button"]')) continue
       if (elements.length >= MAX_ELEMENTS) { omitted++; continue }
-      const element = { ref: refOf(e), role, name: dayOf(e, nameOf(e) || contextOf(e)) }
+      const element = { ref: refOf(e), role, name: dayOf(e, labelOf(e)) }
       const value = valueOf(e, role)
       if (value) element.value = value.slice(0, 200)
       const states = statesOf(e)

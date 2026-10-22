@@ -60,6 +60,8 @@ impl Choice {
 #[derive(Debug, PartialEq)]
 pub enum Picked {
     Option(usize),
+    /// The options checked, in order, where several may be.
+    Many(Vec<usize>),
     /// An option that types, with what was typed.
     Typed(usize, String),
     Cancelled,
@@ -76,6 +78,9 @@ pub struct Select {
     hidden: bool,
     /// Only a line to type, with no options shown.
     direct: bool,
+    /// Several options may be checked (Space), then sent together (Enter).
+    multiple: bool,
+    checked: Vec<bool>,
 }
 
 impl Select {
@@ -88,7 +93,15 @@ impl Select {
             escape: escape.into(),
             hidden: false,
             direct: false,
+            multiple: false,
+            checked: vec![],
         }
+    }
+
+    pub fn multiple(mut self, multiple: bool) -> Self {
+        self.multiple = multiple;
+        self.checked = vec![false; self.choices.len()];
+        self
     }
 
     /// The marker starts on `at`.
@@ -134,6 +147,15 @@ impl Select {
             }
             KeyCode::Up | KeyCode::Char('k') => self.at = self.at.saturating_sub(1),
             KeyCode::Down | KeyCode::Char('j') => self.at = (self.at + 1).min(last),
+            KeyCode::Char(' ') if self.multiple && !self.choices[self.at].types => {
+                self.checked[self.at] = !self.checked[self.at];
+            }
+            KeyCode::Enter if self.multiple && self.checked.contains(&true) => {
+                let picked = (0..self.checked.len())
+                    .filter(|at| self.checked[*at])
+                    .collect();
+                return Some(Picked::Many(picked));
+            }
             KeyCode::Enter => return self.pick(self.at),
             KeyCode::Char(c) => {
                 let numbered = c
@@ -193,8 +215,13 @@ impl Select {
             } else {
                 Default::default()
             };
+            let check = match (self.multiple, self.checked.get(at)) {
+                (true, Some(true)) => "[x] ",
+                (true, Some(false)) if !choice.types => "[ ] ",
+                _ => "",
+            };
             let mut line = Line::from(vec![
-                Span::styled(format!("{}. ", at + 1), label_style),
+                Span::styled(format!("{}. {check}", at + 1), label_style),
                 Span::styled(printable(&choice.label), label_style),
             ]);
             if !choice.detail.is_empty() {
@@ -225,6 +252,10 @@ impl Select {
         let hint = match self.typing {
             Some(_) if self.direct => format!("  enter to send · {}", self.escape),
             Some(_) => "  enter to send · esc to go back".to_string(),
+            None if self.multiple => format!(
+                "  ↑↓ to choose · space to check · enter to confirm · {}",
+                self.escape
+            ),
             None => format!("  ↑↓ to choose · enter to confirm · {}", self.escape),
         };
         out.push(Line::from(Span::styled(hint, style::dim())));

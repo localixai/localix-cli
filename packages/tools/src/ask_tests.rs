@@ -30,14 +30,14 @@ impl Person for Scripted {
 
 fn picked(choice: usize) -> Answer {
     Answer {
-        choice: Some(choice),
+        choices: vec![choice],
         note: None,
     }
 }
 
 fn said(note: &str) -> Answer {
     Answer {
-        choice: None,
+        choices: vec![],
         note: Some(note.into()),
     }
 }
@@ -115,7 +115,7 @@ fn the_report_says_each_answer_in_its_own_words() {
     let person = Scripted::answers(vec![
         picked(0),
         Answer {
-            choice: Some(1),
+            choices: vec![1],
             note: Some("keep it local".into()),
         },
         said("Friday"),
@@ -171,5 +171,28 @@ fn nobody_and_a_stop_are_failed_calls() {
     assert_eq!(
         failure(AskTool { person: &person }.call(&json!({"question": "x?"}))),
         STOPPED
+    );
+}
+
+#[test]
+fn several_options_can_be_picked_when_the_question_allows_it() {
+    let person = Scripted::answers(vec![Answer {
+        choices: vec![0, 2],
+        note: Some("dark mode later".into()),
+    }]);
+    let tool = AskTool { person: &person };
+    let question = json!({"questions": [{"id": "features", "question": "Which features?",
+        "options": ["Search", "Export", "Sharing"], "multiSelect": true}]});
+    let report = tool.call(&question).unwrap().report;
+    assert!(person.asked.borrow()[0].multiple);
+    assert_eq!(
+        report,
+        "The person answered:\n- features: Search, Sharing; they added: dark mode later"
+    );
+    let open = json!({"question": "Why?", "multiple": true});
+    tool.call(&open).unwrap();
+    assert!(
+        !person.asked.borrow()[1].multiple,
+        "an open question has nothing to pick"
     );
 }

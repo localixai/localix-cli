@@ -58,7 +58,7 @@ pub fn question(question: &Question, at: usize, of: usize) -> Select {
         .collect();
     let own = choices.len();
     choices.push(Choice::new("Something else: type it").types());
-    let select = Select::new(title, choices, "esc to skip");
+    let select = Select::new(title, choices, "esc to skip").multiple(question.multiple && own > 1);
     if own == 0 { select.typing(0) } else { select }
 }
 
@@ -108,14 +108,18 @@ pub fn answer(open: Open, picked: Picked) -> Option<String> {
         Open::Question(reply) => {
             let answer = match picked {
                 Picked::Option(at) => Some(Answer {
-                    choice: Some(at),
+                    choices: vec![at],
                     note: None,
                 }),
                 Picked::Typed(_, text) if !text.is_empty() => Some(Answer {
-                    choice: None,
+                    choices: vec![],
                     note: Some(text),
                 }),
                 Picked::Typed(..) => Some(Answer::default()),
+                Picked::Many(picked) => Some(Answer {
+                    choices: picked,
+                    note: None,
+                }),
                 Picked::Cancelled => None,
             };
             let _ = reply.send(answer);

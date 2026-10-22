@@ -50,9 +50,9 @@
     const walk = (e, depth) => {
       if (lines.length >= MAX_OUTLINE || chars >= MAX_OUTLINE_CHARS || SKIP.test(e.tagName) || !visible(e)) return
       const role = roleOf(e)
-      if (role && e.matches(SELECTOR) && !secret(e)) {
+      if (role && isControl(e) && !secret(e)) {
         if (!near(e)) return
-        const name = dayOf(e, nameOf(e) || contextOf(e))
+        const name = dayOf(e, labelOf(e))
         const value = valueOf(e, role)
         const states = statesOf(e)
         const label = [role, name && quoted(name), value && `= ${quoted(value)}`, states.length && `[${states.join(', ')}]`]

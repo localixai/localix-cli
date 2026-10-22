@@ -375,6 +375,37 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
 
     screenshots(driver, origin);
 
+    // Controls a page made from plain elements (a pointer cursor, an onclick) are offered and
+    // clicked like buttons; a pointer group once, and a wrapper around a link not at all.
+    driver.navigate(&format!("{origin}/levels.html")).unwrap();
+    let page = driver.observe().unwrap();
+    let names: Vec<(&str, &str)> = page
+        .elements
+        .iter()
+        .map(|e| (e.role.as_str(), e.name.as_str()))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            ("button", "Slug"),
+            ("button", "Worm"),
+            ("button", "Inline"),
+            ("button", "Card title"),
+            ("link", "More"),
+            ("button", "sound toggle"),
+        ]
+    );
+    let worm = find(&page, "button", "Worm").to_string();
+    assert!(
+        page.outline
+            .contains(&format!("button \"Worm\" [ref={worm}]"))
+            && page.outline.contains("text \"Plain words\""),
+        "{}",
+        page.outline
+    );
+    act(driver, &page, Action::Click { reference: worm });
+    assert_eq!(driver.observe().unwrap().title, "level:Worm");
+
     // The agent closes the window: it is closed, and the task goes on (closing it by hand would
     // end this test with the window-closed exit code instead of "driver: ok").
     driver.close();

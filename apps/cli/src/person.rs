@@ -42,7 +42,7 @@ impl<P: Prompter> Person for TerminalPerson<'_, P> {
                     false => Reply::Nobody(NO_ANSWER.into()),
                 };
             };
-            answers.push(answer(&line, question.choices.len()));
+            answers.push(answer(&line, question.choices.len(), question.multiple));
         }
         (self.waited)(asked.elapsed());
         match (self.stopped)() {
@@ -74,9 +74,12 @@ pub fn shown(question: &Question, at: usize, of: usize) -> String {
             printable(&choice.label)
         ));
     }
-    text.push_str(match question.choices.is_empty() {
-        true => "    Type your answer; Enter skips.\n",
-        false => "    Type a number, a number and a note, or your own answer; Enter skips.\n",
+    text.push_str(match (question.choices.is_empty(), question.multiple) {
+        (true, _) => "    Type your answer; Enter skips.\n",
+        (false, false) => "    Type a number, a number and a note, or your own answer; Enter skips.\n",
+        (false, true) => {
+            "    Type one or more numbers (1,3), with a note after them, or your own answer; Enter skips.\n"
+        }
     });
     text.push_str("  > ");
     text
@@ -84,28 +87,42 @@ pub fn shown(question: &Question, at: usize, of: usize) -> String {
 
 /// The person's line as an answer to a question with `options` options: a number alone picks one,
 /// a number and more text picks it with a note, anything else (a number out of range too) is their
-/// own words, and an empty line skips.
-pub fn answer(line: &str, options: usize) -> Answer {
+/// own words, and an empty line skips. With `multiple`, every number at the start picks one
+/// ("1, 3 and a note").
+pub fn answer(line: &str, options: usize, multiple: bool) -> Answer {
     let line = line.trim();
     if line.is_empty() {
         return Answer::default();
     }
-    let (word, rest) = line
-        .split_once(|c: char| c.is_whitespace() || c == ',' || c == ':')
-        .unwrap_or((line, ""));
-    let number = word.trim_end_matches(['.', ')']).parse::<usize>().ok();
-    match number.filter(|n| (1..=options).contains(n)) {
-        Some(n) => {
-            let note = rest.trim_matches(|c: char| c.is_whitespace() || c == ',' || c == ':');
-            Answer {
-                choice: Some(n - 1),
-                note: (!note.is_empty()).then(|| note.to_string()),
+    let separator = |c: char| c.is_whitespace() || c == ',' || c == ':';
+    let mut choices: Vec<usize> = vec![];
+    let mut rest = line;
+    loop {
+        let (word, after) = rest.split_once(separator).unwrap_or((rest, ""));
+        let number = word.trim_end_matches(['.', ')']).parse::<usize>().ok();
+        match number.filter(|n| (1..=options).contains(n)) {
+            Some(n) if choices.is_empty() || multiple => {
+                if !choices.contains(&(n - 1)) {
+                    choices.push(n - 1);
+                }
+                rest = after.trim_start_matches(separator);
             }
+            _ => break,
         }
-        None => Answer {
-            choice: None,
+        if rest.is_empty() {
+            break;
+        }
+    }
+    if choices.is_empty() {
+        return Answer {
+            choices,
             note: Some(line.to_string()),
-        },
+        };
+    }
+    let note = rest.trim_matches(separator);
+    Answer {
+        choices,
+        note: (!note.is_empty()).then(|| note.to_string()),
     }
 }
 

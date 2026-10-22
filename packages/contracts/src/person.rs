@@ -17,13 +17,15 @@ pub struct Question {
     pub id: String,
     pub text: String,
     pub choices: Vec<Choice>,
+    /// Whether several options may be picked together; otherwise one at most.
+    pub multiple: bool,
 }
 
-/// The person's answer to one question: an option, words of their own, both, or neither (skipped).
+/// The person's answer to one question: options, words of their own, both, or neither (skipped).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Answer {
-    /// The index of the option picked.
-    pub choice: Option<usize>,
+    /// The indexes of the options picked, in order: one at most unless the question is `multiple`.
+    pub choices: Vec<usize>,
     /// What they wrote: beside the option, or instead of one.
     pub note: Option<String>,
 }

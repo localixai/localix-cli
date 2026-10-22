@@ -122,3 +122,30 @@ fn a_line_alone_shows_no_list_and_esc_cancels() {
     ");
     assert_eq!(select.key(key(KeyCode::Esc)), Some(Picked::Cancelled));
 }
+
+#[test]
+fn several_options_are_checked_with_space_and_sent_with_enter() {
+    let choices = vec![
+        Choice::new("Tests"),
+        Choice::new("Docs"),
+        Choice::new("Lint"),
+        Choice::new("Other").types(),
+    ];
+    let mut select = Select::new(vec![], choices, "esc to skip").multiple(true);
+    select.key(key(KeyCode::Char(' ')));
+    select.key(key(KeyCode::Down));
+    select.key(key(KeyCode::Down));
+    select.key(key(KeyCode::Char(' ')));
+    insta::assert_snapshot!(shown(&select, 60), @r"
+      1. [x] Tests
+      2. [ ] Docs
+    ❯ 3. [x] Lint
+      4. Other
+
+      ↑↓ to choose · space to check · enter to confirm · esc to skip
+    ");
+    assert_eq!(
+        select.key(key(KeyCode::Enter)),
+        Some(Picked::Many(vec![0, 2]))
+    );
+}

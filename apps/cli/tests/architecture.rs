@@ -151,6 +151,26 @@ fn sources() -> Vec<PathBuf> {
     out
 }
 
+/// The repository is English only: no Cyrillic in any tracked text file, tests included.
+#[test]
+fn no_cyrillic_anywhere() {
+    let listed = std::process::Command::new("git")
+        .args(["ls-files", "-co", "--exclude-standard"])
+        .current_dir(root())
+        .output()
+        .unwrap();
+    let mut found = vec![];
+    for name in String::from_utf8_lossy(&listed.stdout).lines() {
+        let Ok(text) = std::fs::read_to_string(root().join(name)) else {
+            continue; // gone, or not text (fonts, images)
+        };
+        if text.chars().any(|c| ('\u{400}'..='\u{52f}').contains(&c)) {
+            found.push(name.to_string());
+        }
+    }
+    assert!(found.is_empty(), "Cyrillic in {found:?}");
+}
+
 /// Unit tests live beside the code they test, never inside it: `x.rs` ends with
 /// `#[cfg(test)] #[path = "x_tests.rs"] mod tests;` and the tests are in `x_tests.rs`.
 #[test]

@@ -1,0 +1,128 @@
+//! Styled lines wrapped to a width by display columns, at word boundaries, with a prefix for the
+//! first row and another for the rest (a hanging indent), so a long command or a paragraph never
+//! breaks mid-word and its continuation sits under its own start. A word wider than the row is
+//! split; nothing is ever wider than `width`.
+
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
+use unicode_width::UnicodeWidthChar;
+
+/// The columns `text` takes.
+pub fn width(text: &str) -> usize {
+    text.chars().map(|c| c.width().unwrap_or(0)).sum()
+}
+
+pub fn line_width(line: &Line) -> usize {
+    line.spans.iter().map(|span| width(&span.content)).sum()
+}
+
+/// `line` wrapped to `width` columns: rows start with `first`, then `rest`.
+pub fn wrap(
+    line: &Line<'static>,
+    width: usize,
+    first: &Line<'static>,
+    rest: &Line<'static>,
+) -> Vec<Line<'static>> {
+    let mut rows: Vec<Line<'static>> = vec![];
+    let mut row = first.clone();
+    let mut used = line_width(first);
+    let room = width.max(line_width(rest) + 1);
+    let mut pending_space: Option<Style> = None;
+    let mut fresh = true;
+    for (word, style, space_after) in words(line) {
+        let mut word = word;
+        loop {
+            let gap = usize::from(pending_space.is_some() && !fresh);
+            let w = self::width(&word);
+            if used + gap + w <= room {
+                if gap == 1 {
+                    row.spans
+                        .push(Span::styled(" ", pending_space.unwrap_or_default()));
+                }
+                row.spans.push(Span::styled(word.clone(), style));
+                used += gap + w;
+                fresh = false;
+                break;
+            }
+            if !fresh {
+                rows.push(std::mem::replace(&mut row, rest.clone()));
+                used = line_width(rest);
+                fresh = true;
+                continue;
+            }
+            let (head, tail) = split(&word, room.saturating_sub(used).max(1));
+            row.spans.push(Span::styled(head, style));
+            rows.push(std::mem::replace(&mut row, rest.clone()));
+            used = line_width(rest);
+            word = tail;
+            if word.is_empty() {
+                break;
+            }
+        }
+        pending_space = space_after.then_some(style);
+    }
+    if !fresh || rows.is_empty() {
+        rows.push(row);
+    }
+    rows
+}
+
+/// The words of `line` with their style and whether a space followed them.
+fn words(line: &Line) -> Vec<(String, Style, bool)> {
+    let mut out: Vec<(String, Style, bool)> = vec![];
+    for span in &line.spans {
+        let style = line.style.patch(span.style);
+        let mut word = String::new();
+        for c in span.content.chars() {
+            if c.is_whitespace() {
+                if !word.is_empty() {
+                    out.push((std::mem::take(&mut word), style, true));
+                } else if let Some(last) = out.last_mut() {
+                    last.2 = true;
+                }
+            } else {
+                word.push(c);
+            }
+        }
+        if !word.is_empty() {
+            // A word that runs into the next span ("`code`," or "a**b**") stays joined to it.
+            out.push((word, style, false));
+        }
+    }
+    out
+}
+
+fn split(word: &str, columns: usize) -> (String, String) {
+    let mut used = 0;
+    for (at, c) in word.char_indices() {
+        let w = c.width().unwrap_or(0);
+        if used + w > columns && at > 0 {
+            return (word[..at].to_string(), word[at..].to_string());
+        }
+        used += w;
+    }
+    (word.to_string(), String::new())
+}
+
+/// `text` cut to `columns`, ending in `…` when cut.
+pub fn cut(text: &str, columns: usize) -> String {
+    if width(text) <= columns {
+        return text.to_string();
+    }
+    let mut out = String::new();
+    let mut used = 0;
+    for c in text.chars() {
+        let w = c.width().unwrap_or(0);
+        if used + w + 1 > columns {
+            break;
+        }
+        out.push(c);
+        used += w;
+    }
+    out.push('…');
+    out
+}
+
+#[cfg(test)]
+#[path = "wrap_tests.rs"]
+mod tests;

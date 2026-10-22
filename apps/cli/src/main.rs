@@ -20,6 +20,7 @@ mod person;
 mod printable;
 #[cfg(test)]
 mod testing;
+mod tui;
 
 use clap::Parser;
 

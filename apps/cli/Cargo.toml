@@ -25,6 +25,15 @@ session.workspace = true
 tools.workspace = true
 clap.workspace = true
 serde_json.workspace = true
+crossterm.workspace = true
+pulldown-cmark.workspace = true
+ratatui.workspace = true
+textwrap.workspace = true
+unicode-width.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+vt100.workspace = true
 
 # Signals, the terminal's pending input and its echo: calls std has no wrapper for.
 [target.'cfg(unix)'.dependencies]

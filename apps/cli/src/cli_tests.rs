@@ -212,11 +212,8 @@ fn help_and_version_are_not_errors() {
 
 #[test]
 fn a_prompt_needs_no_quotes_and_commands_still_parse() {
-    let cli = parse(&["сделать", "лендинг", "для", "кафе", "-y"]).unwrap();
-    assert_eq!(
-        joined(&cli.prompt).as_deref(),
-        Some("сделать лендинг для кафе")
-    );
+    let cli = parse(&["make", "a", "landing", "page", "-y"]).unwrap();
+    assert_eq!(joined(&cli.prompt).as_deref(), Some("make a landing page"));
     assert!(cli.run.yes, "an option after the words is still an option");
     assert!(cli.command.is_none());
     let Some(Command::Exec(exec)) = parse(&["exec", "fix", "the", "tests"]).unwrap().command else {

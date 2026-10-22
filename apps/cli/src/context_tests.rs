@@ -1,6 +1,7 @@
 use contracts::history::Turn;
 
 use super::*;
+use crate::instructions::{FILE_LIMIT, TOTAL_LIMIT};
 use crate::testing::Scratch;
 
 fn environment(root: &Path) -> Environment<'_> {

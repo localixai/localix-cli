@@ -144,6 +144,14 @@ fn cached(mut messages: Vec<Value>) -> Vec<Value> {
     if let Some(system) = messages.first_mut().filter(|m| m["role"] == "system") {
         mark(system);
     }
+    // The message after the system prompt is the context (the environment, the instructions):
+    // the same for every task in a workspace, so a new session reads it from the cache too.
+    if messages.len() > 2
+        && messages[0]["role"] == "system"
+        && let Some(context) = messages.get_mut(1).filter(|m| m["role"] == "user")
+    {
+        mark(context);
+    }
     if messages.len() > 1
         && let Some(last) = messages.last_mut()
     {

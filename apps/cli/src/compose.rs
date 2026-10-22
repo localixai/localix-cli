@@ -6,7 +6,7 @@
 //! when the browser is first used. The terminal sessions `bash` keeps are made here too, so they
 //! are closed when `assemble` returns, before `main` exits (which would skip their `Drop`).
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use agent::agent::Agent;
 use agent::conversation::Conversation;
@@ -33,6 +33,7 @@ use crate::brake::{Brake, BrakedDecider};
 use crate::choice::Choice;
 use crate::cli::RunOptions;
 use crate::gate::{Stoppable, Tty};
+use crate::instructions::{self, Instructed};
 use crate::interrupt::{self, Interrupt};
 use crate::live::Live;
 use crate::mode::{self, Mode, ModeGate};
@@ -273,6 +274,20 @@ pub fn assemble(
         hidden: HIDDEN,
         stop: &stopped,
         sessions: &sessions,
+    };
+    // A subdirectory's own instructions come with the first call that touches a file there; the
+    // directories the context already covers are known.
+    let root = workspace.root().to_path_buf();
+    let seen = RefCell::new(instructions::chain(&root).into_iter().collect());
+    let read = Instructed {
+        inner: &read,
+        root: root.clone(),
+        seen: &seen,
+    };
+    let edit = Instructed {
+        inner: &edit,
+        root,
+        seen: &seen,
     };
     let mut tools: Vec<&dyn Tool> = vec![&read, &edit, &bash];
     if let Some(browser_tool) = &browser_tool {

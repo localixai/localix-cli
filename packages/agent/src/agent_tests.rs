@@ -218,7 +218,8 @@ fn a_new_conversation_opens_with_the_context_and_a_follow_up_does_not_repeat_it(
     assert_eq!(
         users(&second),
         [
-            "<context>\nWorking directory: /work\n</context>\n\nGoal: First",
+            "<context>\nWorking directory: /work\n</context>",
+            "Goal: First",
             "Goal: Second"
         ]
     );
@@ -288,7 +289,8 @@ fn a_note_before_any_goal_opens_with_the_context() {
     assert_eq!(
         users(&run),
         [
-            "<context>\nWorking directory: /work\n</context>\n\n<note>changed</note>",
+            "<context>\nWorking directory: /work\n</context>",
+            "<note>changed</note>",
             "Goal: First"
         ]
     );

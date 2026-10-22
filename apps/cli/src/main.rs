@@ -15,6 +15,7 @@ mod error;
 mod exit;
 mod gate;
 mod input;
+mod instructions;
 mod interrupt;
 mod live;
 mod mode;

@@ -29,7 +29,10 @@ fn a_conversation_goes_out_in_the_wire_format_with_cache_marks() {
         messages[0]["content"][0]["cache_control"]["type"],
         "ephemeral"
     );
-    assert_eq!(messages[1]["content"], "goal", "only the ends are marked");
+    assert_eq!(
+        messages[1]["content"][0]["cache_control"]["type"], "ephemeral",
+        "the context after the system prompt is marked"
+    );
     assert_eq!(
         messages[2]["tool_calls"][0]["function"]["arguments"],
         r#"{"url":"https://example.com"}"#

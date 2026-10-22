@@ -126,33 +126,55 @@ fn shot(n: u32) -> ToolOutput {
 }
 
 #[test]
-fn a_picture_follows_its_result_and_only_the_newest_three_stay() {
+fn past_three_pictures_the_older_ones_go_at_once_and_the_prefix_then_stays() {
     let mut conversation = Conversation::new("rules");
+    let kept = |conversation: &Conversation| -> Vec<String> {
+        conversation
+            .messages()
+            .iter()
+            .filter_map(|message| match message {
+                Message::Image { image, .. } => Some(image.data.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    for n in 1..=3 {
+        conversation.result(&n.to_string(), shot(n));
+    }
+    assert_eq!(kept(&conversation), ["data1", "data2", "data3"]);
+    conversation.result("4", shot(4));
+    assert_eq!(
+        kept(&conversation),
+        ["data4"],
+        "the older three went together"
+    );
+    assert_eq!(
+        conversation.messages()[2],
+        Message::User(IMAGE_OMITTED.into())
+    );
+    let before = conversation.messages().to_vec();
+    conversation.result("5", shot(5));
+    conversation.result("6", shot(6));
+    assert_eq!(
+        &conversation.messages()[..before.len()],
+        &before[..],
+        "nothing earlier changed"
+    );
+    assert!(
+        matches!(&conversation.messages()[8], Message::Image { caption, .. } if caption.contains("(4x1;"))
+    );
+}
+
+#[test]
+fn a_picture_the_person_attached_is_never_dropped() {
+    let mut conversation = Conversation::new("rules");
+    let image = shot(9).image.unwrap();
+    conversation.attach("mockup.png", image);
     for n in 1..=4 {
         conversation.result(&n.to_string(), shot(n));
     }
-    let messages = conversation.messages();
     assert!(
-        matches!(&messages[1], Message::ToolResult { id, .. } if id == "1"),
-        "{messages:?}"
-    );
-    assert_eq!(
-        messages[2],
-        Message::User(IMAGE_OMITTED.into()),
-        "the oldest picture went"
-    );
-    let kept: Vec<&str> = messages
-        .iter()
-        .filter_map(|message| match message {
-            Message::Image { image, .. } => Some(image.data.as_str()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(kept, ["data2", "data3", "data4"]);
-    assert!(
-        matches!(&messages[8], Message::Image { caption, .. } if caption.contains("(4x1;")),
-        "{:?}",
-        messages[8]
+        matches!(&conversation.messages()[1], Message::Image { caption, .. } if caption.contains("mockup.png"))
     );
 }
 

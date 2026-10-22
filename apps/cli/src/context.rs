@@ -1,18 +1,14 @@
 //! What the agent knows of where it runs before its first call: the working directory, the
-//! system, the date, the mode it works in, and the project's own instructions (its AGENTS.md
-//! files), found as Codex finds them: from the repository's root down to the working directory,
-//! so a deeper file comes later and wins.
+//! system, the date, the mode it works in, and the instructions it follows (see
+//! [`crate::instructions`]). It is the same for every task and session in a workspace on a day,
+//! so the prompt cache keeps it: nothing in it changes by the minute.
 
 use std::path::{Path, PathBuf};
 
 use contracts::history::Session;
 
-/// The project instruction file read in each directory.
-const INSTRUCTIONS: &str = "AGENTS.md";
-/// Bytes of one instruction file: a huge one must not crowd out the rest.
-const FILE_LIMIT: usize = 16 * 1024;
-/// Bytes of all instruction files together.
-const TOTAL_LIMIT: usize = 32 * 1024;
+use crate::instructions;
+
 /// Bytes of an earlier session's answers a resumed session is told.
 const PREVIOUS_LIMIT: usize = 8 * 1024;
 /// Bytes of one earlier answer.
@@ -65,45 +61,22 @@ fn describe(environment: &Environment) -> String {
     )
 }
 
-/// The AGENTS.md files from the repository root down to `root`, each in its own block, capped.
+/// The person's own instructions, then the project's from the repository root down to `root`,
+/// each in its own block, capped.
 pub fn instructions(root: &Path) -> String {
-    let mut left = TOTAL_LIMIT;
+    let home = std::env::var_os("HOME").map(PathBuf::from);
     let mut blocks = vec![];
-    for dir in chain(root) {
-        let path = dir.join(INSTRUCTIONS);
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        let text = text.trim();
-        if text.is_empty() || left == 0 {
-            continue;
-        }
-        let kept = cut(text, FILE_LIMIT.min(left));
-        left -= kept.len();
-        let more = match text.len() - kept.len() {
-            0 => String::new(),
-            cut => format!("\n[{cut} more bytes not shown: read the file for the rest]"),
-        };
+    if let Some(own) = instructions::personal(home.as_deref()) {
         blocks.push(format!(
-            "<project_instructions path=\"{}\">\n{kept}{more}\n</project_instructions>",
-            path.display()
+            "<personal_instructions path=\"{}\">\n{}\n</personal_instructions>",
+            own.path.display(),
+            own.text
         ));
     }
-    blocks.join("\n\n")
-}
-
-/// The directories whose instructions apply to `root`: from the repository's root (the nearest
-/// ancestor with `.git`) down to `root`; only `root` outside a repository.
-fn chain(root: &Path) -> Vec<PathBuf> {
-    let mut dirs = vec![];
-    for dir in root.ancestors() {
-        dirs.push(dir.to_path_buf());
-        if dir.join(".git").exists() {
-            dirs.reverse();
-            return dirs;
-        }
+    for found in instructions::project(root, instructions::TOTAL_LIMIT) {
+        blocks.push(instructions::block(&found, None));
     }
-    vec![root.to_path_buf()]
+    blocks.join("\n\n")
 }
 
 /// What an earlier session asked and how each task ended, newest kept when it is long, and where

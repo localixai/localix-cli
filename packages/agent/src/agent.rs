@@ -111,16 +111,20 @@ impl Agent<'_> {
 
     /// Say `message` at the end of `conversation` (its open calls closed first), or open a new one
     /// with it after the context: a goal, or something the app says between goals (a setting).
+    ///
+    /// The context is a message of its own, before the first goal: it is the same for every task
+    /// and session in a workspace, so the prompt cache keeps it, while each goal comes after it.
     pub fn tell(&self, conversation: Option<Conversation>, message: &str) -> Conversation {
-        let message = match (&conversation, self.context.trim()) {
-            (None, context) if !context.is_empty() => {
-                format!("<context>\n{context}\n</context>\n\n{message}")
+        let mut conversation = conversation.unwrap_or_else(|| {
+            let mut opened = Conversation::new(SYSTEM);
+            let context = self.context.trim();
+            if !context.is_empty() {
+                opened.push(Message::User(format!("<context>\n{context}\n</context>")));
             }
-            _ => message.to_string(),
-        };
-        let mut conversation = conversation.unwrap_or_else(|| Conversation::new(SYSTEM));
+            opened
+        });
         conversation.close_open_calls();
-        conversation.push(Message::User(message));
+        conversation.push(Message::User(message.to_string()));
         conversation
     }
 

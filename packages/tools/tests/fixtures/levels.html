@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Levels</title>
+  <style>
+    .level, .card { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <!-- As on playsnake.org: plain paragraphs whose clicks a script handles; only the cursor says so. -->
+  <p>Choose level:</p>
+  <p class="level">Slug</p>
+  <p class="level">Worm</p>
+  <!-- An inline handler, and a pointer group: offered once, by its outermost element. -->
+  <div onclick="document.title = 'inline'">Inline</div>
+  <div class="card"><span>Card</span> <b>title</b></div>
+  <!-- A pointer wrapper around a real link: the link is offered, not the wrapper. -->
+  <div class="card"><a href="#more">More</a></div>
+  <!-- An icon the page made a control: named by its class, not by the words beside it. -->
+  <div><div class="sound-toggle" style="cursor: pointer; width: 20px; height: 20px"></div>Plain words</div>
+  <script>
+    for (const level of document.querySelectorAll('.level')) {
+      level.addEventListener('click', () => { document.title = 'level:' + level.textContent })
+    }
+  </script>
+</body>
+</html>

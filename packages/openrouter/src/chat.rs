@@ -7,8 +7,6 @@ use serde_json::{Value, json};
 use crate::client::{ApiError, OpenRouter};
 
 pub const DEFAULT_MODEL: &str = "anthropic/claude-haiku-5.5";
-/// Enough for a short sub-goal with its values, or a final answer.
-const MAX_TOKENS: u32 = 1500;
 
 pub struct ChatModel<'a> {
     pub client: &'a OpenRouter,
@@ -20,7 +18,8 @@ impl Chat for ChatModel<'_> {
         let mut body = json!({
             "model": self.model,
             "messages": cached(request.conversation.iter().map(wire).collect()),
-            "max_tokens": MAX_TOKENS,
+            // No output limit: a whole file in one call is a long reply, and a cut one breaks the
+            // call's arguments. The model's own maximum applies, as in Codex.
             // Thinking costs seconds per turn; the agent reasons in its tool calls instead.
             "reasoning": {"enabled": false},
             "usage": {"include": true},
@@ -137,7 +136,9 @@ fn read_call(call: &Value) -> Option<ToolCall> {
     Some(ToolCall {
         id: call.get("id")?.as_str()?.to_string(),
         name: function.get("name")?.as_str()?.to_string(),
-        arguments: serde_json::from_str(raw).unwrap_or_else(|_| json!({})),
+        // Arguments that are not JSON stay as their text: the agent tells the model they were
+        // incomplete instead of running the tool with none.
+        arguments: serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.to_string())),
     })
 }
 

@@ -39,8 +39,11 @@ fn a_conversation_goes_out_in_the_wire_format_with_cache_marks() {
 }
 
 #[test]
-fn a_tool_call_with_unreadable_arguments_still_arrives() {
-    let call =
-        read_call(&json!({"id": "c2", "function": {"name": "browser", "arguments": "{oops"}}));
-    assert_eq!(call.map(|c| c.arguments), Some(json!({})));
+fn a_tool_call_with_unreadable_arguments_arrives_as_their_text() {
+    // A reply cut short leaves `{"path": "a.html", "new_string": "<h` behind: it must not
+    // become an empty call that fails as "missing field path".
+    let call = read_call(
+        &json!({"id": "c2", "function": {"name": "edit", "arguments": "{\"path\": \"a"}}),
+    );
+    assert_eq!(call.map(|c| c.arguments), Some(json!("{\"path\": \"a")));
 }

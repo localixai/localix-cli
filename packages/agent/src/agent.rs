@@ -220,7 +220,9 @@ impl Agent<'_> {
             .ok_or_else(|| ToolError::Failed(format!("there is no tool {}", call.name)))?;
         if !call.arguments.is_object() {
             return Err(ToolError::Failed(
-                "the arguments are not a JSON object: call the tool again with one".into(),
+                "the arguments are not a JSON object (a reply cut short leaves them incomplete): \
+                 call the tool again, and write a large file in parts"
+                    .into(),
             ));
         }
         tool.call(&call.arguments)

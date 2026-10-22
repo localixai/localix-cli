@@ -40,6 +40,25 @@ pub fn lines(name: &str, args: &Value, state: State, width: usize) -> Vec<Line<'
     out
 }
 
+/// A call the person said no to: not a failure, so not red; what they said is under it.
+pub fn declined(name: &str, args: &Value, said: &str, width: usize) -> Vec<Line<'static>> {
+    let mut out = head(name, args, &State::Running, width);
+    out[0].spans[0] = Span::styled("• ", style::waiting());
+    out[0].spans[1] = Span::styled("Skipped", style::bold());
+    let text = match said.trim() {
+        "" => "You said no".to_string(),
+        said => format!("You said no: {}", printable(said)),
+    };
+    let line = Line::from(Span::styled(text, style::waiting()));
+    out.extend(wrap(
+        &line,
+        width,
+        &Line::from(Span::styled("  └ ", style::dim())),
+        &Line::from("    "),
+    ));
+    out
+}
+
 /// The bullet and what the call does, wrapped under a rule.
 pub fn head(name: &str, args: &Value, state: &State, width: usize) -> Vec<Line<'static>> {
     let what = describe(name, args);

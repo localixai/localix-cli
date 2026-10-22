@@ -74,8 +74,9 @@ pub fn choice(title: &str, options: &[String]) -> Select {
     )
 }
 
-/// Sends what `picked` means to whoever asked.
-pub fn answer(open: Open, picked: Picked) {
+/// Sends what `picked` means to whoever asked. A refused approval returns what the person said
+/// (empty for nothing), for the call's block.
+pub fn answer(open: Open, picked: Picked) -> Option<String> {
     match open {
         Open::Approval(reply) => {
             let approval = match picked {
@@ -84,7 +85,12 @@ pub fn answer(open: Open, picked: Picked) {
                 Picked::Typed(_, why) if !why.is_empty() => Approval::No(Some(why)),
                 _ => Approval::No(None),
             };
+            let said = match &approval {
+                Approval::No(why) => Some(why.clone().unwrap_or_default()),
+                _ => None,
+            };
             let _ = reply.send(approval);
+            return said;
         }
         Open::Question(reply) => {
             let answer = match picked {
@@ -108,4 +114,5 @@ pub fn answer(open: Open, picked: Picked) {
             });
         }
     }
+    None
 }

@@ -16,7 +16,7 @@ impl App {
             let picked = select.key(key)?;
             let (_, open) = self.select.take()?;
             let stop = ctrl && key.code == KeyCode::Char('c');
-            questions::answer(open, picked);
+            self.declined = questions::answer(open, picked);
             return stop.then(|| self.stop());
         }
         if !(ctrl && key.code == KeyCode::Char('c')) {

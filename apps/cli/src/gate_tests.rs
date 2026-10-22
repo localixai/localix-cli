@@ -45,7 +45,11 @@ fn no_and_a_bare_enter_refuse_and_a_reason_reaches_the_model() {
     assert!(plain.contains("declined"));
     assert_eq!(
         gate.check(bash("cargo test")),
-        Verdict::Deny("the person declined it and said: use the make target instead".into())
+        Verdict::Deny(
+            "the person declined it and said: use the make target instead\nThis is the person's \
+             instruction to you: follow it before anything else."
+                .into()
+        )
     );
     assert!(matches!(gate.check(bash("x")), Verdict::Deny(_)));
 }

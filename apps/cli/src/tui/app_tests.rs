@@ -206,3 +206,46 @@ fn leaving_ends_every_wait() {
     app.leave();
     assert_eq!(entries.try_recv(), Ok(None));
 }
+
+#[test]
+fn a_call_the_person_refused_says_what_they_said_not_an_error() {
+    let now = Instant::now();
+    let mut app = app();
+    let args = json!({"command": "git log"});
+    app.event(
+        Event::Call {
+            name: "bash".into(),
+            args: args.clone(),
+        },
+        now,
+    );
+    let (reply, _answer) = channel();
+    app.event(
+        Event::Approve {
+            tool: "bash".into(),
+            summary: "git log".into(),
+            reply,
+        },
+        now,
+    );
+    app.event(key(KeyCode::Char('n')), now);
+    typed(&mut app, "not this repository", now);
+    app.event(key(KeyCode::Enter), now);
+    let outcome = Err(contracts::tool::ToolError::Failed(
+        "not allowed: the person declined it".into(),
+    ));
+    app.event(
+        Event::Result {
+            name: "bash".into(),
+            args,
+            outcome,
+        },
+        now,
+    );
+    let lines = app.take_history();
+    assert_eq!(lines[0].spans[0].style, style::waiting());
+    insta::assert_snapshot!(lines.iter().map(style::plain).collect::<Vec<_>>().join("\n"), @r"
+    • Skipped git log
+      └ You said no: not this repository
+    ");
+}

@@ -65,6 +65,8 @@ pub struct App {
     pub stopping: bool,
     /// The person left: the session's next wait ends with nothing.
     left: bool,
+    /// The person said no to the call running, and what they said.
+    pub(super) declined: Option<String>,
 }
 
 /// Rows of the hands' latest actions shown under their call.
@@ -91,6 +93,7 @@ impl App {
             quitting: None,
             stopping: false,
             left: false,
+            declined: None,
         }
     }
 
@@ -148,7 +151,11 @@ impl App {
             } => {
                 self.running = None;
                 self.steps.clear();
-                self.finished(tool_cell::lines(&name, &args, State::Done(&outcome), width));
+                let block = match (self.declined.take(), &outcome) {
+                    (Some(said), Err(_)) => tool_cell::declined(&name, &args, &said, width),
+                    _ => tool_cell::lines(&name, &args, State::Done(&outcome), width),
+                };
+                self.finished(block);
             }
             Event::Step(step) => {
                 self.steps.push(step);
@@ -203,7 +210,7 @@ impl App {
             }
             Event::Dismiss => {
                 if let Some((_, open)) = self.select.take() {
-                    questions::answer(open, Picked::Cancelled);
+                    self.declined = questions::answer(open, Picked::Cancelled);
                 }
             }
             Event::Key(key) => return self.key(key, now),
@@ -239,7 +246,7 @@ impl App {
             let _ = reply.send(None);
         }
         if let Some((_, open)) = self.select.take() {
-            questions::answer(open, Picked::Cancelled);
+            self.declined = questions::answer(open, Picked::Cancelled);
         }
     }
 }

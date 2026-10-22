@@ -278,7 +278,11 @@ fn answer(line: &str) -> Option<Answer> {
 
 pub fn declined(why: Option<String>) -> String {
     match why {
-        Some(why) => format!("the person declined it and said: {why}"),
+        // What they said is the person speaking now, not a tool's error: it comes first.
+        Some(why) => format!(
+            "the person declined it and said: {why}\nThis is the person's instruction to you: \
+             follow it before anything else."
+        ),
         None => "the person declined it; do not try the same thing another way".into(),
     }
 }

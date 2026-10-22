@@ -1,0 +1,252 @@
+[
+ {
+  "id": "wiki-search",
+  "url": "https://en.wikipedia.org/wiki/Main_Page",
+  "goal": "Using Wikipedia's search box, open the article about the Rust programming language and tell me who designed it.",
+  "answer_contains": [
+   "Graydon Hoare"
+  ],
+  "expect": [
+   "The page is the Wikipedia article about the Rust programming language"
+  ]
+ },
+ {
+  "id": "pizza-form",
+  "url": "https://httpbin.org/forms/post",
+  "goal": "Order a large pizza with bacon and extra cheese for customer Ada Lovelace, phone 555-0100, email ada@example.com, preferred delivery time 19:30, then submit the order.",
+  "expect": [
+   "The page shows submitted form data where custname is Ada Lovelace",
+   "The submitted data has size large and toppings bacon and cheese"
+  ]
+ },
+ {
+  "id": "login",
+  "url": "https://the-internet.herokuapp.com/login",
+  "goal": "Log in with username tomsmith and password SuperSecretPassword!",
+  "expect": [
+   "The page says You logged into a secure area"
+  ]
+ },
+ {
+  "id": "dropdown",
+  "url": "https://the-internet.herokuapp.com/dropdown",
+  "goal": "Select Option 2 in the dropdown.",
+  "expect": [
+   "Option 2 is the selected value of the dropdown"
+  ]
+ },
+ {
+  "id": "checkboxes",
+  "url": "https://the-internet.herokuapp.com/checkboxes",
+  "goal": "Make sure both checkboxes are checked.",
+  "expect": [
+   "Both checkboxes are checked"
+  ]
+ },
+ {
+  "id": "dynamic",
+  "url": "https://the-internet.herokuapp.com/dynamic_loading/1",
+  "goal": "Start the loading and tell me the text that appears when it finishes.",
+  "answer_contains": [
+   "Hello World"
+  ]
+ },
+ {
+  "id": "todomvc",
+  "url": "https://todomvc.com/examples/react/dist/",
+  "goal": "Add three todos: buy milk, walk the dog, write code. Then mark walk the dog as completed.",
+  "expect": [
+   "The todo list has buy milk, walk the dog and write code",
+   "walk the dog is marked completed and 2 items are left"
+  ]
+ },
+ {
+  "id": "hn-top",
+  "url": "https://news.ycombinator.com",
+  "goal": "Open the comments page of the top story and tell me the story's title.",
+  "expect": [
+   "The page is a Hacker News comments page for a story"
+  ]
+ },
+ {
+  "id": "search-rust",
+  "url": null,
+  "goal": "Find out which version is the current stable release of the Rust compiler.",
+  "answer_contains": [
+   "1."
+  ]
+ },
+ {
+  "id": "gh-stars",
+  "url": null,
+  "goal": "How many stars does the GitHub repository vercel-labs/agent-browser have?",
+  "answer_contains": [
+   "k"
+  ]
+ },
+ {
+  "id": "wiki-chain",
+  "url": "https://en.wikipedia.org/wiki/Tallinn",
+  "goal": "Tallinn is a capital city. Open the Wikipedia article of the country it is the capital of, and tell me that country's population as the article states it.",
+  "answer_contains": [
+   "1,3"
+  ],
+  "expect": [
+   "The page is the Wikipedia article about Estonia"
+  ]
+ },
+ {
+  "id": "ddg-type",
+  "url": "https://duckduckgo.com/",
+  "goal": "Search DuckDuckGo for the words: TypeSafe Jev decision model. Then open the first search result.",
+  "expect": [
+   "The current page is not a DuckDuckGo page"
+  ]
+ },
+ {
+  "id": "add-remove",
+  "url": "https://the-internet.herokuapp.com/add_remove_elements/",
+  "goal": "Add three elements, then delete one of them.",
+  "expect": [
+   "There are exactly two Delete buttons on the page"
+  ]
+ },
+ {
+  "id": "hn-three",
+  "url": "https://news.ycombinator.com",
+  "goal": "List the titles of the top 3 stories on Hacker News.",
+  "answer_contains": [
+   "1",
+   "2",
+   "3"
+  ]
+ },
+ {
+  "id": "flights-oneway",
+  "url": "https://www.google.com/travel/flights?hl=en",
+  "goal": "Find one-way flights from Zurich to London on 20 November 2026 for one adult in economy. Tell me the cheapest price and its airline.",
+  "expect": [
+   "The page shows flight results from Zurich to London"
+  ]
+ },
+ {
+  "id": "flights-month",
+  "url": null,
+  "goal": "нужно найти билеты с Ларнаки в Тбилиси в ноябре 2026, любой день, самые выгодные. Скажи дату и цену самого дешёвого.",
+  "answer_contains": [
+   "ноябр"
+  ]
+ },
+ {
+  "id": "flights-roundtrip",
+  "url": "https://www.google.com/travel/flights?hl=en",
+  "goal": "Search round-trip flights from New York to Paris, leaving 5 December 2026 and returning 12 December 2026, one adult, economy. Tell me the cheapest round-trip price.",
+  "expect": [
+   "The page shows round-trip flight results between New York and Paris"
+  ]
+ },
+ {
+  "id": "flights-ru",
+  "url": null,
+  "goal": "Найди самый дешёвый прямой рейс из Стамбула в Берлин на 15 января 2027 и скажи авиакомпанию и цену.",
+  "answer_contains": [
+   "€"
+  ]
+ },
+ {
+  "id": "flights-user",
+  "url": null,
+  "goal": "нужно найти билеты с ларнки в ьбилиси в ноябре любой день самые выгодные",
+  "answer_contains": [
+   "ноябр"
+  ]
+ },
+ {
+  "id": "game-2048",
+  "url": null,
+  "goal": "Открой любую онлайн-игру 2048 и набери 500 очков",
+  "expect": [
+   "The SCORE shown on the page is 500 or more"
+  ]
+ },
+ {
+  "id": "schema-flights",
+  "url": null,
+  "goal": "Cheapest days to fly Larnaca to Tbilisi in November 2026, one way",
+  "schema": {
+   "type": "object",
+   "required": [
+    "from",
+    "to",
+    "cheapest"
+   ],
+   "properties": {
+    "from": {
+     "type": "string"
+    },
+    "to": {
+     "type": "string"
+    },
+    "currency": {
+     "type": "string"
+    },
+    "cheapest": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "date",
+       "price"
+      ],
+      "properties": {
+       "date": {
+        "type": "string"
+       },
+       "price": {
+        "type": "number"
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ {
+  "id": "schema-hn",
+  "url": "https://news.ycombinator.com",
+  "goal": "The top 5 stories on Hacker News with their points",
+  "schema": {
+   "type": "object",
+   "required": [
+    "stories"
+   ],
+   "properties": {
+    "stories": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "rank",
+       "title",
+       "points"
+      ],
+      "properties": {
+       "rank": {
+        "type": "integer"
+       },
+       "title": {
+        "type": "string"
+       },
+       "points": {
+        "type": [
+         "integer",
+         "null"
+        ]
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+]

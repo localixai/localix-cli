@@ -1,0 +1,41 @@
+[package]
+name = "localix-surf"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Localix Surf: give it a goal, it drives a native browser window there and exits"
+license = "MIT"
+keywords = ["browser", "agent", "automation", "e2e", "webview"]
+categories = ["command-line-utilities", "development-tools::testing"]
+
+[[bin]]
+name = "lxsurf"
+path = "src/main.rs"
+
+[[test]]
+name = "driver"
+harness = false
+
+[dependencies]
+base64 = "0.23.1"
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
+getrandom = "0.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+tao = "0.37"
+ureq = { version = "3", default-features = false, features = ["json", "gzip", "native-tls"] }
+wry = "0.57"
+
+# Already in the tree through wry: messages to the WKWebView behind the window.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+
+# A small, self-contained binary: the browser engine is the system's own WebView, TLS is the OS's,
+# and the code is optimized for size ("z"): the time goes to the network and the models, not here.
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = "z"
+panic = "abort"
+strip = true

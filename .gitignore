@@ -1,0 +1,7 @@
+/target
+evals/results/
+.DS_Store
+# Tracked here although a global ignore may exclude them.
+!AGENTS.md
+!.github/
+dist/

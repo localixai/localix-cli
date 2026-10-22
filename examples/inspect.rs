@@ -1,0 +1,28 @@
+//! Opens a page, does what the planner would, and prints a script's result: a probe for building
+//! the snapshot. `cargo run --example inspect -- <url> <script>...` (each script runs in turn).
+use std::time::Duration;
+
+use localix_surf::browser::{self, Driver, Window};
+
+fn main() {
+    let mut args = std::env::args().skip(1);
+    let url = args.next().expect("url");
+    let scripts: Vec<String> = args.collect();
+    let window = Window {
+        url,
+        title: "inspect".into(),
+        headless: true,
+        viewport: browser::Viewport::DESKTOP,
+    };
+    browser::run(window, move |driver| {
+        let _ = driver.wait_loaded(Duration::from_secs(20));
+        for script in &scripts {
+            match driver.evaluate(script) {
+                Ok(result) => println!("{result}"),
+                Err(error) => println!("error: {error}"),
+            }
+            std::thread::sleep(Duration::from_millis(800));
+        }
+        0
+    })
+}

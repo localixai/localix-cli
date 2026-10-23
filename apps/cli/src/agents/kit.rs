@@ -12,7 +12,7 @@ use contracts::gate::Gate;
 use contracts::hands::Hands;
 use contracts::history::History;
 use contracts::tool::Tool;
-use tools::browser::{BrowserTool, Page};
+use tools::browser::Page;
 use tools::fs::{EditTool, ReadTool};
 use tools::shell::BashTool;
 use tools::window::{Kind, WindowTool, Windowed};
@@ -39,7 +39,7 @@ pub struct Kit<'a> {
     /// The window the person watches, where it shows.
     pub windowed: Option<&'a dyn Windowed>,
     /// One browser action at a time, the main session's and every agent's.
-    pub browser_lock: &'a Mutex<()>,
+    pub browser_lock: &'a crate::kinds::BrowserLocks,
     /// The context with no earlier session: an agent knows nothing of the parent's history.
     pub context: &'a str,
     pub max_turns: usize,
@@ -76,14 +76,14 @@ pub struct Tools<'a> {
     read: ReadTool<'a>,
     edit: EditTool<'a>,
     bash: BashTool<'a>,
-    browser: Option<(BrowserTool<'a>, &'a Page)>,
+    browser: Option<&'a Page>,
     hands: &'a dyn Hands,
     windowed: Option<&'a dyn Windowed>,
     sessions: &'a tools::shell::Sessions,
     stop: &'a (dyn Fn() -> bool + Sync),
     root: PathBuf,
     seen: &'a Mutex<HashSet<PathBuf>>,
-    lock: &'a Mutex<()>,
+    lock: &'a crate::kinds::BrowserLocks,
     workspace: &'a Workspace,
     checkpoints: &'a crate::checkpoints::Checkpoints,
 }
@@ -105,13 +105,7 @@ impl<'a> Tools<'a> {
                 stop: own.stop,
                 sessions: kit.sessions,
             },
-            browser: kit.browser.map(|page| {
-                let tool = BrowserTool {
-                    page,
-                    gate: own.gate,
-                };
-                (tool, page)
-            }),
+            browser: kit.browser,
             hands: kit.hands,
             windowed: kit.windowed,
             sessions: kit.sessions,
@@ -141,10 +135,10 @@ impl<'a> Tools<'a> {
             root: self.root.clone(),
             seen: self.seen,
         };
-        let browser = (self.browser.as_ref()).map(|(tool, page)| crate::kinds::Browser {
-            tool,
+        let browser = self.browser.map(|page| crate::kinds::Browser {
             page,
-            lock: self.lock,
+            gate: self.edit.gate,
+            locks: self.lock,
         });
         #[cfg(unix)]
         let terminal = crate::kinds::Terminal {

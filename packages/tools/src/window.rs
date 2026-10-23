@@ -103,6 +103,12 @@ pub struct WindowTool<'a> {
 }
 
 impl Tool for WindowTool<'_> {
+    /// A turn's window calls run at once: each kind keeps its own resources apart (a terminal
+    /// session is one call's at a time, a browser tab too).
+    fn parallel(&self) -> bool {
+        true
+    }
+
     fn spec(&self) -> ToolSpec {
         let guides: Vec<String> = (self.kinds.iter())
             .map(|kind| {
@@ -272,13 +278,27 @@ impl WindowTool<'_> {
             Some(tabs) => tabs.iter().collect(),
             None => vec![arguments],
         };
-        let (mut reports, mut states, mut image) = (vec![], vec![], None);
-        for spec in asked {
+        let mut kinds = vec![];
+        for spec in &asked {
             let kind = spec.get("kind").and_then(Value::as_str);
             let Some(kind) = self.kinds.iter().find(|k| Some(k.name()) == kind) else {
                 return Err(failed(&format!("`kind` is one of: {}", self.names())));
             };
-            match kind.open(spec) {
+            kinds.push(*kind);
+        }
+        // Every tab of the call opens at once; the reports keep the order they were asked in.
+        let opened: Vec<Result<Opened, ToolError>> = std::thread::scope(|scope| {
+            let opening: Vec<_> = (kinds.iter().zip(&asked))
+                .map(|(kind, spec)| scope.spawn(move || kind.open(spec)))
+                .collect();
+            let joined = opening.into_iter().map(|thread| thread.join());
+            joined
+                .map(|done| done.unwrap_or_else(|_| Err(failed("opening it failed"))))
+                .collect()
+        });
+        let (mut reports, mut states, mut image) = (vec![], vec![], None);
+        for (kind, opened) in kinds.into_iter().zip(opened) {
+            match opened {
                 Ok(opened) => {
                     let tab = format!("{}{}", kind.letter(), opened.id);
                     reports.push(format!("{tab} ({}): {}", kind.name(), opened.output.report));

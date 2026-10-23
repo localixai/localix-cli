@@ -446,3 +446,72 @@ fn a_goal_works_on_any_kind_of_tab_through_its_view() {
     );
     assert_eq!(hands.saw.lock().unwrap().len(), 1);
 }
+
+/// A kind whose tabs open only together: each open waits (2 s at most) for the other to start.
+struct Together(std::sync::atomic::AtomicUsize);
+
+impl Kind for Together {
+    fn name(&self) -> &'static str {
+        "slow"
+    }
+    fn letter(&self) -> char {
+        's'
+    }
+    fn guide(&self) -> &'static str {
+        ""
+    }
+    fn fields(&self) -> Vec<(&'static str, Value)> {
+        vec![]
+    }
+    fn open(&self, _: &Value) -> Result<Opened, ToolError> {
+        use std::sync::atomic::Ordering;
+        self.0.fetch_add(1, Ordering::SeqCst);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while self.0.load(Ordering::SeqCst) < 2 && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        match self.0.load(Ordering::SeqCst) >= 2 {
+            true => Ok(Opened {
+                id: 1,
+                output: "met".to_string().into(),
+            }),
+            false => Err(ToolError::Failed("opened alone".into())),
+        }
+    }
+    fn interact(&self, _: u32, _: &Value) -> Result<ToolOutput, ToolError> {
+        unreachable!()
+    }
+    fn snapshot(&self, _: u32) -> Result<ToolOutput, ToolError> {
+        unreachable!()
+    }
+    fn screenshot(&self, _: u32, _: &Value) -> Result<ToolOutput, ToolError> {
+        unreachable!()
+    }
+    fn close(&self, _: u32) -> Result<String, ToolError> {
+        unreachable!()
+    }
+    fn tabs(&self) -> Vec<(u32, String, String)> {
+        vec![]
+    }
+    fn view(&self, _: u32) -> Result<Box<dyn View + '_>, ToolError> {
+        unreachable!()
+    }
+}
+
+#[test]
+fn the_tabs_of_one_call_open_at_the_same_time_and_calls_may_run_together() {
+    let kind = Together(std::sync::atomic::AtomicUsize::new(0));
+    let tool = WindowTool {
+        kinds: vec![&kind],
+        window: None,
+        hands: None,
+        gate: &Open,
+    };
+    assert!(tool.parallel(), "a turn's window calls run at once");
+    let done = call(
+        &tool,
+        json!({"action": "open", "tabs": [{"kind": "slow"}, {"kind": "slow"}]}),
+    )
+    .unwrap();
+    assert_eq!(done.report, "s1 (slow): met\ns1 (slow): met");
+}

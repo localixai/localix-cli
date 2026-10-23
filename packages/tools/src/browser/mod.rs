@@ -33,6 +33,7 @@ pub use contracts::view::{
 pub use host::{Browser, Dressing, Listed, Tab, Window, host};
 pub use page::Page;
 pub use panel::Panel;
+pub use tabs::MAX_TABS;
 pub use tool::BrowserTool;
 pub use viewport::Viewport;
 pub use webview::WebviewDriver;

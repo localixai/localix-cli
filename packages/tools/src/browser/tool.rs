@@ -43,21 +43,10 @@ impl Tool for BrowserTool<'_> {
         if let Some(effects) = effects(url.as_deref(), &args)? {
             ask(self.gate, NAME, &effects)?;
         }
-        if args.only_closes() {
-            return Ok(self.close().into());
-        }
         let mut report = vec![];
-        let new_tab = args.new_tab() == Ok(true);
-        if let Some(id) = args.switch_to() {
-            self.page
-                .driver()
-                .and_then(|driver| driver.switch_tab(id))
-                .map_err(|error| ToolError::Failed(error.to_string()))?;
-            report.push(format!("Showing tab {id}."));
-        }
-        match new_tab && self.page.is_open() {
+        match args.new_tab && self.page.is_open() {
             true => self.open_tab(url, &mut report),
-            false => self.go(url, &args, &mut report),
+            false => self.go(url, &mut report),
         }
         if let Some(size) = given(&args.size) {
             match self.page.resize(size) {
@@ -96,10 +85,6 @@ impl Tool for BrowserTool<'_> {
         if let (Some(state), true) = (&mut state, args.read) {
             state.push_str(&self.read(args.offset));
         }
-        if args.close {
-            report.push(self.close());
-        }
-        report.extend(self.page.tabs_news());
         Ok(ToolOutput {
             report: report.join("\n\n"),
             state,
@@ -110,19 +95,13 @@ impl Tool for BrowserTool<'_> {
 
 impl BrowserTool<'_> {
     /// Open the window or load `url`; a page that loads slowly is used as it is.
-    fn go(&self, url: Option<String>, args: &Args, report: &mut Vec<String>) {
+    fn go(&self, url: Option<String>, report: &mut Vec<String>) {
         let url = match (url, self.page.is_open()) {
             (Some(url), _) => url,
             (None, false) => SEARCH_PAGE.to_string(),
-            // Only showing or hiding: the window opens again where it was.
-            (None, true) if args.reopens(self.page.hidden()) => match self.page.observe() {
-                Ok(view) => view.location,
-                Err(_) => return,
-            },
             (None, true) => return,
         };
-        let title = url.clone();
-        match self.page.open(&url, &title, args.show) {
+        match self.page.open(&url, &url, None) {
             Ok(()) => report.push(format!("Opened {url}.")),
             Err(error) => report.push(format!("Opening {url} did not finish cleanly ({error}).")),
         }
@@ -168,14 +147,6 @@ impl BrowserTool<'_> {
                 report.push(format!("No screenshot of {of}: {error}"));
                 None
             }
-        }
-    }
-
-    /// Close the window, and say so.
-    fn close(&self) -> String {
-        match self.page.close() {
-            true => "Closed the browser window; the next call opens a fresh one.".into(),
-            false => "The browser window was not open.".into(),
         }
     }
 

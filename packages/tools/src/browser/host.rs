@@ -61,8 +61,11 @@ pub(super) enum Cmd {
         failed: &'static str,
         /// In this panel's page instead, answered with the script's value (for checks).
         panel: Option<u32>,
+        /// In this browser tab instead of the one acted on.
+        tab: Option<u32>,
     },
-    Navigate(String),
+    /// Load an address: in this tab, else the one acted on.
+    Navigate(String, Option<u32>),
     /// Open a tab on `url` and show it. A page's own new window (`target=_blank`, `window.open`)
     /// comes here with no reply.
     NewTab {
@@ -87,6 +90,7 @@ pub(super) enum Cmd {
     Capture {
         clip: Option<Clip>,
         reply: Sender<Result<Shot, String>>,
+        tab: Option<u32>,
     },
     /// Open a panel as a tab: its id, title and page, and what it shares with its caller.
     Panel(panel::Opening),
@@ -378,6 +382,7 @@ impl Browser {
             script,
             failed: "",
             panel,
+            tab: None,
         });
         let reply = receiver.recv_timeout(std::time::Duration::from_secs(5));
         self.shared.pending.lock().unwrap().remove(&id);
@@ -598,11 +603,15 @@ fn on_browser(
     let tabs = open.web.as_mut().expect("the browser is open");
     match command {
         Cmd::Eval {
-            id, script, failed, ..
+            id,
+            script,
+            failed,
+            tab,
+            ..
         } => {
             let answer = shared.clone();
             let sent = tabs
-                .active()
+                .at(tab)
                 .evaluate_script_with_callback(&script, move |started| {
                     if started.trim() != "true" {
                         answer.answer(id, Err(failed.into()));
@@ -614,11 +623,14 @@ fn on_browser(
             return;
         }
         Cmd::Resize(width, height) => open.resize(width, height),
-        Cmd::Capture { clip, reply } => return capture(tabs.active(), clip, reply),
-        // What the agent does in the browser is shown: the window goes back to it.
-        Cmd::Navigate(url) => {
-            let _ = tabs.active().load_url(&url);
-            open.show(Shown::Web);
+        Cmd::Capture { clip, reply, tab } => return capture(tabs.at(tab), clip, reply),
+        // What the agent does in the browser is shown: the window goes back to it, unless it
+        // works in a tab of its own beside the one shown.
+        Cmd::Navigate(url, tab) => {
+            let _ = tabs.at(tab).load_url(&url);
+            if tab.is_none() {
+                open.show(Shown::Web);
+            }
         }
         Cmd::NewTab { url, reply } => {
             let added = tabs.add(&open.frame.native, &url, shared, proxy);

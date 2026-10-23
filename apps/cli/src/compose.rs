@@ -98,7 +98,7 @@ pub struct Shared {
     #[cfg(unix)]
     pub theme: Option<tools::shell::Theme>,
     /// One browser action at a time, every lane's and every agent's.
-    pub browser_lock: Mutex<()>,
+    pub browser_lock: crate::kinds::BrowserLocks,
     pub history: Sessions,
     /// The context with no earlier session: what a new lane starts with.
     pub fresh: String,
@@ -141,7 +141,7 @@ impl Setup {
             shown,
             #[cfg(unix)]
             theme: self.theme,
-            browser_lock: Mutex::new(()),
+            browser_lock: Default::default(),
             options: self.options,
             workspace: self.workspace,
             history: self.history,

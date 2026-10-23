@@ -17,7 +17,7 @@ use super::platform::keep_tab_rendering;
 use super::tab_view::{SHARED, build, builder, share};
 
 /// Tabs open at once: each is a WebView with its own web process.
-pub(super) const MAX_TABS: usize = 8;
+pub const MAX_TABS: usize = 8;
 pub(super) const BLANK: &str = "about:blank";
 
 /// One WebView: a tab while `open`, else blank and waiting to be reused. Its id is its place + 1.
@@ -59,6 +59,15 @@ impl Tabs {
     /// The tab shown and acted on.
     pub fn active(&self) -> &WebView {
         &self.slots[self.active as usize - 1].webview
+    }
+
+    /// Tab `id` while it is open, else the one acted on.
+    pub fn at(&self, id: Option<u32>) -> &WebView {
+        let open = id.and_then(|id| self.slots.get((id as usize).wrapping_sub(1)));
+        match open.filter(|slot| slot.open) {
+            Some(slot) => &slot.webview,
+            None => self.active(),
+        }
     }
 
     fn ids(&self) -> Vec<u32> {

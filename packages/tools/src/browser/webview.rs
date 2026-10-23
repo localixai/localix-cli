@@ -40,11 +40,32 @@ const CAPTURE_TIMEOUT: Duration = Duration::from_secs(12);
 pub struct WebviewDriver {
     proxy: EventLoopProxy<Cmd>,
     shared: Arc<Shared>,
+    /// The tab it acts in, whatever tab is shown; else the one acted on.
+    tab: Option<u32>,
 }
 
 impl WebviewDriver {
     pub(super) fn new(proxy: EventLoopProxy<Cmd>, shared: Arc<Shared>) -> Self {
-        Self { proxy, shared }
+        Self {
+            proxy,
+            shared,
+            tab: None,
+        }
+    }
+
+    /// The same window, acting in tab `id` whatever tab is shown or acted on: tabs pinned so
+    /// work at the same time.
+    pub fn on(&self, id: u32) -> Self {
+        Self {
+            tab: Some(id),
+            ..self.clone()
+        }
+    }
+
+    /// The tab its calls go to.
+    fn target(&self) -> u32 {
+        self.tab
+            .unwrap_or_else(|| self.shared.active.load(Ordering::SeqCst))
     }
 
     /// Whether the window is open: the person may have closed it.
@@ -75,6 +96,7 @@ impl WebviewDriver {
             script,
             failed,
             panel: None,
+            tab: self.tab,
         });
         if sent.is_err() {
             self.shared.pending.lock().unwrap().remove(&id);
@@ -120,15 +142,14 @@ impl WebviewDriver {
 
     /// The loads of the tab acted on.
     fn loads(&self) -> Loads {
-        let active = self.shared.active.load(Ordering::SeqCst);
-        active_loads(&self.shared.loads.lock().unwrap(), active)
+        active_loads(&self.shared.loads.lock().unwrap(), self.target())
     }
 
     /// Wait for a load newer than `before` to start, up to `grace`: in the tab acted on, which
     /// may be a tab the page just opened.
     fn load_started_since(&self, before: Loads, grace: Duration) -> bool {
         let guard = self.shared.loads.lock().unwrap();
-        let active = || self.shared.active.load(Ordering::SeqCst);
+        let active = || self.target();
         let (loads, _) = self
             .shared
             .loaded
@@ -139,10 +160,10 @@ impl WebviewDriver {
         active_loads(&loads, active()).started != before.started
     }
 
-    /// The tabs open now, and the id of the one acted on.
+    /// The tabs open now, and the id of the one acted on (this driver's own, when pinned).
     pub fn tabs(&self) -> (Vec<Tab>, u32) {
         let tabs = self.shared.tabs.lock().unwrap().clone();
-        (tabs, self.shared.active.load(Ordering::SeqCst))
+        (tabs, self.target())
     }
 
     /// Open `url` in a new tab, show it and act on it from now on; then wait for its document.
@@ -298,7 +319,7 @@ impl Driver for WebviewDriver {
     fn navigate(&self, url: &str) -> BrowserResult<()> {
         self.open_or_closed()?;
         let before = self.loads();
-        self.send(Cmd::Navigate(url.to_string()))?;
+        self.send(Cmd::Navigate(url.to_string(), self.tab))?;
         self.load_started_since(before, PROBE_READY);
         self.wait_loaded(LOAD_TIMEOUT)
     }
@@ -431,7 +452,11 @@ impl Driver for WebviewDriver {
             None => None,
         };
         let (reply, shot) = mpsc::channel();
-        self.send(Cmd::Capture { clip, reply })?;
+        self.send(Cmd::Capture {
+            clip,
+            reply,
+            tab: self.tab,
+        })?;
         match shot.recv_timeout(CAPTURE_TIMEOUT) {
             Ok(Ok(shot)) => Ok(shot),
             Ok(Err(why)) => Err(BrowserError::Refused(format!("no screenshot: {why}"))),

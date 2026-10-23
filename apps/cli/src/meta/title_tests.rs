@@ -70,7 +70,7 @@ fn an_answer_is_cleaned_to_one_short_line() {
     for (said, title) in [
         ("\"Fix the parser.\"", "Fix the parser"),
         ("  Add   tabs\tto the browser!  ", "Add tabs to the browser"),
-        ("«Починить тесты»", "Починить тесты"),
+        ("«Διόρθωση δοκιμών»", "Διόρθωση δοκιμών"),
         (
             "Title: Speed up the build\nbecause it is slow",
             "Speed up the build",
@@ -86,8 +86,8 @@ fn an_answer_is_cleaned_to_one_short_line() {
 
 #[test]
 fn a_long_task_is_cut_to_the_prompt_budget_on_a_character() {
-    let task = "я".repeat(2000);
+    let task = "λ".repeat(2000);
     let prompt = prompt(&task);
     assert!(prompt.len() <= PROMPT_BYTES, "{}", prompt.len());
-    assert!(prompt.ends_with('я'));
+    assert!(prompt.ends_with('λ'));
 }

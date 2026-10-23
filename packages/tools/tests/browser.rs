@@ -512,6 +512,27 @@ fn tabs(driver: &WebviewDriver, origin: &str) {
         drawn(driver)
     );
 
+    // A driver pinned to a tab acts there, whatever is shown: two tabs' scripts run at once.
+    let (one, two) = (driver.on(1), driver.on(2));
+    assert_eq!(one.observe().unwrap().title, "Tabs");
+    assert_eq!(two.observe().unwrap().title, "Book");
+    assert_eq!(driver.tabs().1, 1, "the tab shown stays");
+    let started = std::time::Instant::now();
+    let (a, b) = std::thread::scope(|scope| {
+        let a = scope.spawn(|| one.evaluate("await sleep(700); document.title"));
+        let b = scope.spawn(|| two.evaluate("await sleep(700); document.title"));
+        (a.join().unwrap(), b.join().unwrap())
+    });
+    assert_eq!(
+        (a.unwrap(), b.unwrap()),
+        ("Tabs".to_string(), "Book".to_string())
+    );
+    let took = started.elapsed();
+    assert!(
+        took < Duration::from_millis(1300),
+        "one after the other: {took:?}"
+    );
+
     // A link with target=_blank and window.open each open a tab, which is then acted on.
     let page = driver.observe().unwrap();
     act(

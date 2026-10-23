@@ -42,91 +42,26 @@ pub(super) struct Args {
     pub script: Option<String>,
     pub read: bool,
     pub offset: usize,
-    /// Show the window to the person (`true`) or keep it hidden (`false`); unset, the run's
-    /// default applies.
-    pub show: Option<bool>,
     pub screenshot: bool,
     /// Crops the screenshot to the first element it matches.
     pub selector: Option<String>,
-    pub close: bool,
-    /// `"new"`, or the id of the tab to switch to.
-    pub tab: Option<TabArg>,
+    /// Open `url` in a new tab instead of the one acted on.
+    pub new_tab: bool,
     pub close_tab: Option<u32>,
-}
-
-/// A word as the model meant it: a model sometimes writes `"\"new\""`.
-fn bare(word: &str) -> &str {
-    word.trim().trim_matches(['"', '\'']).trim()
-}
-
-/// The `tab` argument: a tab's id, or a word (only `new` is one).
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(untagged)]
-pub(super) enum TabArg {
-    Id(u32),
-    Word(String),
-}
-
-impl Args {
-    /// Whether the call opens a new tab; an error for a `tab` that is neither `new` nor an id.
-    pub(super) fn new_tab(&self) -> Result<bool, String> {
-        match &self.tab {
-            Some(TabArg::Word(word)) if bare(word).eq_ignore_ascii_case("new") => Ok(true),
-            Some(TabArg::Word(word)) => match bare(word).parse::<u32>() {
-                Ok(_) => Ok(false),
-                Err(_) => Err(format!(
-                    "`tab` is \"new\" or a tab's number, not \"{word}\""
-                )),
-            },
-            _ => Ok(false),
-        }
-    }
-
-    /// The tab to switch to first, if any.
-    pub(super) fn switch_to(&self) -> Option<u32> {
-        match &self.tab {
-            Some(TabArg::Id(id)) => Some(*id),
-            Some(TabArg::Word(word)) => bare(word).parse().ok(),
-            None => None,
-        }
-    }
-}
-
-impl Args {
-    /// Whether the call only closes the window: nothing to open it for.
-    pub(super) fn only_closes(&self) -> bool {
-        self.close
-            && given(&self.url).is_none()
-            && given(&self.size).is_none()
-            && given(&self.script).is_none()
-            && self.keys.is_empty()
-            && self.show.is_none()
-            && self.tab.is_none()
-            && self.close_tab.is_none()
-            && !(self.screenshot || self.read)
-    }
-
-    /// Whether `show` asks for the other visibility than the window's (`hidden`): only then is
-    /// it opened again, since reopening reloads the page and loses its state.
-    pub(super) fn reopens(&self, hidden: bool) -> bool {
-        self.show.is_some_and(|show| show == hidden)
-    }
 }
 
 pub(super) fn parameters() -> Value {
     json!({"type": "object", "properties": {
         "url": {"type": "string", "description": "An address to open first: a site, or a search page with the query in its address."},
         "size": {"type": "string", "enum": ["desktop", "tablet", "mobile"], "description": "Reframe the page first (layout only)."},
-        "show": {"type": "boolean", "description": "true shows the window so the person can watch (a page you built, a result to see); false keeps it hidden (a quick check). Leave it unset to follow the session's default."},
         "keys": {"type": "array", "items": {"type": "string"}, "description": "Keys to press, in order: [\"ArrowUp\", \"ArrowLeft\"], [\"Escape\"], [\"Ctrl+A\"]. Up to 500."},
         "key_delay_ms": {"type": "integer", "minimum": 0, "maximum": MAX_KEY_DELAY_MS, "description": "Pause between keys (default 60), for games that animate each move."},
         "script": {"type": "string", "description": "JavaScript run in the page after the keys: an expression, or statements whose last value is returned (await works)."},
         "read": {"type": "boolean", "description": "Also return the page's whole text."},
         "screenshot": {"type": "boolean", "description": "Also return a picture of the page as drawn (after the rest of the call)."},
         "selector": {"type": "string", "description": "With screenshot: crop it to the first element this CSS selector matches ('#board', 'canvas')."},
-        "tab": {"description": "\"new\" to open `url` in a new tab, or a tab's number to switch to it first.", "anyOf": [{"type": "string", "enum": ["new"]}, {"type": "integer", "minimum": 1}]},
+        "new_tab": {"type": "boolean"},
         "close_tab": {"type": "integer", "minimum": 1, "description": "Close this tab, last in the call."},
-        "close": {"type": "boolean", "description": "Close the window at the end of the call; the next call opens a fresh one."},
         "offset": {"type": "integer", "minimum": 0, "description": "Where to go on reading a long page."}
     }})
 }
@@ -154,7 +89,7 @@ pub(super) fn address(url: &str) -> Result<String, ToolError> {
 /// resizes (opening the search page with nothing else sends nothing). A wrong `tab` is refused
 /// here, before the person is asked about a call that cannot run.
 pub(super) fn effects(url: Option<&str>, args: &Args) -> Result<Option<String>, ToolError> {
-    let new_tab = args.new_tab().map_err(ToolError::Failed)?;
+    let new_tab = args.new_tab;
     let mut parts = vec![];
     if let Some(url) = url {
         match new_tab {

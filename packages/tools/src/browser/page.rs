@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use contracts::view::{Action, Observation, View, ViewError, ViewResult};
 
-use super::{Browser, Driver, Tab, Viewport, WebviewDriver, Window, toolbar};
+use super::{Browser, Driver, Viewport, WebviewDriver, Window, toolbar};
 
 /// How web pages behave where it is not obvious: forms, suggestions, date pickers, results.
 const CONVENTIONS: &str = "A form sends only once its required fields are filled and its Search, \
@@ -29,8 +29,6 @@ pub struct Page {
     /// The page size the toolbar shows (`desktop`, `tablet`, `mobile`).
     size: Mutex<String>,
     driver: Mutex<Option<WebviewDriver>>,
-    /// The tabs as the agent was last told of them: they are told again only once they change.
-    told: Mutex<String>,
 }
 
 impl Page {
@@ -41,7 +39,6 @@ impl Page {
             hidden: Mutex::new(headless),
             size: Mutex::new("desktop".into()),
             driver: Mutex::new(None),
-            told: Mutex::new(String::new()),
         }
     }
 
@@ -107,30 +104,16 @@ impl Page {
             .ok_or_else(|| ViewError::Unavailable("the browser window is not open".into()))
     }
 
-    /// The tabs, when they changed since the agent was last told: one line each, the shown one
-    /// marked. Nothing while a single tab was and is open.
-    pub fn tabs_news(&self) -> Option<String> {
-        let (tabs, active) = self.driver().map(|d| d.tabs()).unwrap_or_default();
-        // Told again when tabs open, close, move or the shown one changes, not when a title
-        // ticks.
-        let key = match tabs.len() {
-            0 | 1 => String::new(),
-            _ => tabs
-                .iter()
-                .map(|tab| format!("{} {}", tab.id, tab.url))
-                .chain([active.to_string()])
-                .collect::<Vec<_>>()
-                .join("\n"),
-        };
-        let mut told = self.told.lock().unwrap();
-        if *told == key {
-            return None;
+    /// The same window acting in tab `id`, whatever is shown: a page of its own to work in
+    /// beside the others.
+    pub fn pinned(&self, id: u32) -> Page {
+        Page {
+            browser: self.browser.clone(),
+            headless: self.headless,
+            hidden: Mutex::new(self.hidden()),
+            size: Mutex::new(self.size.lock().unwrap().clone()),
+            driver: Mutex::new(self.driver.lock().unwrap().as_ref().map(|d| d.on(id))),
         }
-        *told = key.clone();
-        Some(match key.is_empty() {
-            true => "### Tabs\nOne tab is open.".to_string(),
-            false => format!("### Tabs\n{}", listing(&tabs, active)),
-        })
     }
 
     /// A toolbar control: back, reload, or a page size.
@@ -167,17 +150,6 @@ fn closed(open: &WebviewDriver) {
     while open.is_open() && gone.elapsed() < Duration::from_secs(2) {
         std::thread::sleep(Duration::from_millis(10));
     }
-}
-
-/// The tabs, one line each: `2. Title — address (shown)`.
-fn listing(tabs: &[Tab], active: u32) -> String {
-    tabs.iter()
-        .map(|tab| {
-            let shown = if tab.id == active { " (shown)" } else { "" };
-            format!("{}. {} — {}{shown}", tab.id, tab.title, tab.url)
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 impl View for Page {

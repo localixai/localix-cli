@@ -13,21 +13,32 @@ use tools::window::{Kind, Opened};
 /// Where a browser tab opens when no address is given.
 const SEARCH_PAGE: &str = "https://duckduckgo.com/";
 
-/// Browser tabs: the page's tabs, `w1`, `w2`.
+/// The browser's locks: one for what changes its tabs (opening, closing), and one per tab, so
+/// work in one tab never waits on another's.
+#[derive(Default)]
+pub struct BrowserLocks {
+    tabs_change: Mutex<()>,
+    tabs: [Mutex<()>; tools::browser::MAX_TABS + 1],
+}
+
+impl BrowserLocks {
+    fn tab(&self, id: u32) -> std::sync::MutexGuard<'_, ()> {
+        let lock = self.tabs.get(id as usize).unwrap_or(&self.tabs[0]);
+        crate::output::lock(lock)
+    }
+}
+
+/// Browser tabs: the page's tabs, `w1`, `w2`, each worked in on its own, at once.
 pub struct Browser<'a> {
-    pub tool: &'a BrowserTool<'a>,
     pub page: &'a Page,
-    /// One browser action at a time, every lane's and every agent's.
-    pub lock: &'a Mutex<()>,
+    pub gate: &'a dyn contracts::gate::Gate,
+    pub locks: &'a BrowserLocks,
 }
 
 impl Browser<'_> {
-    /// `fields` of `args`, and the tab `id` acted on first.
-    fn on(&self, id: Option<u32>, args: &Value, fields: &[&str]) -> Value {
+    /// `fields` of `args`.
+    fn picked(args: &Value, fields: &[&str]) -> Value {
         let mut call = Map::new();
-        if let Some(id) = id {
-            call.insert("tab".into(), json!(id));
-        }
         for field in fields {
             if let Some(value) = args.get(*field) {
                 call.insert((*field).into(), value.clone());
@@ -36,9 +47,25 @@ impl Browser<'_> {
         Value::Object(call)
     }
 
-    fn call(&self, arguments: Value) -> Result<ToolOutput, ToolError> {
-        let _one = crate::output::lock(self.lock);
-        self.tool.call(&arguments)
+    /// `arguments` carried out in tab `id`, while no other call works in it.
+    fn in_tab(&self, id: u32, arguments: Value) -> Result<ToolOutput, ToolError> {
+        let _tab = self.locks.tab(id);
+        let page = self.page.pinned(id);
+        let tool = BrowserTool {
+            page: &page,
+            gate: self.gate,
+        };
+        tool.call(&arguments)
+    }
+
+    /// `arguments` that change the tabs (open one, close one), one such call at a time.
+    fn on_tabs(&self, arguments: Value) -> Result<ToolOutput, ToolError> {
+        let _change = crate::output::lock(&self.locks.tabs_change);
+        let tool = BrowserTool {
+            page: self.page,
+            gate: self.gate,
+        };
+        tool.call(&arguments)
     }
 
     fn active(&self) -> Option<u32> {
@@ -104,9 +131,9 @@ impl Kind for Browser<'_> {
             .unwrap_or(SEARCH_PAGE);
         let mut call = json!({"url": url});
         if self.page.is_open() {
-            call["tab"] = json!("new");
+            call["new_tab"] = json!(true);
         }
-        let output = self.call(call)?;
+        let output = self.on_tabs(call)?;
         let id = self
             .active()
             .ok_or_else(|| ToolError::Failed(output.report.clone()))?;
@@ -123,21 +150,23 @@ impl Kind for Browser<'_> {
             "offset",
             "size",
         ];
-        self.call(self.on(Some(id), args, &fields))
+        self.in_tab(id, Self::picked(args, &fields))
     }
 
     fn snapshot(&self, id: u32) -> Result<ToolOutput, ToolError> {
-        self.call(json!({"tab": id}))
+        self.in_tab(id, json!({}))
     }
 
     fn screenshot(&self, id: u32, args: &Value) -> Result<ToolOutput, ToolError> {
-        let mut call = self.on(Some(id), args, &["selector"]);
+        let mut call = Self::picked(args, &["selector"]);
         call["screenshot"] = json!(true);
-        self.call(call)
+        self.in_tab(id, call)
     }
 
     fn close(&self, id: u32) -> Result<String, ToolError> {
-        self.call(json!({"close_tab": id})).map(|done| done.report)
+        let _tab = self.locks.tab(id);
+        self.on_tabs(json!({"close_tab": id}))
+            .map(|done| done.report)
     }
 
     fn tabs(&self) -> Vec<(u32, String, String)> {
@@ -149,34 +178,31 @@ impl Kind for Browser<'_> {
     }
 
     fn view(&self, id: u32) -> Result<Box<dyn View + '_>, ToolError> {
-        let failed = |error: tools::browser::BrowserError| ToolError::Failed(error.to_string());
-        let driver = self
-            .page
+        self.page
             .driver()
             .map_err(|e| ToolError::Failed(e.to_string()))?;
-        driver.switch_tab(id).map_err(failed)?;
-        Ok(Box::new(Locked {
-            view: self.page,
-            _one: crate::output::lock(self.lock),
+        Ok(Box::new(Pinned {
+            page: self.page.pinned(id),
+            _tab: self.locks.tab(id),
         }))
     }
 }
 
-/// A view acted on alone: the browser's lock is held while the helper works.
-struct Locked<'a> {
-    view: &'a dyn View,
-    _one: std::sync::MutexGuard<'a, ()>,
+/// A tab's page, worked in alone while the helper acts on it.
+struct Pinned<'a> {
+    page: Page,
+    _tab: std::sync::MutexGuard<'a, ()>,
 }
 
-impl View for Locked<'_> {
+impl View for Pinned<'_> {
     fn conventions(&self) -> &str {
-        self.view.conventions()
+        self.page.conventions()
     }
     fn observe(&self) -> ViewResult<Observation> {
-        self.view.observe()
+        self.page.observe()
     }
     fn act(&self, epoch: &str, action: &Action) -> ViewResult<()> {
-        self.view.act(epoch, action)
+        self.page.act(epoch, action)
     }
 }
 

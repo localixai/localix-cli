@@ -70,7 +70,7 @@ pub(super) fn parameters() -> Value {
 
 /// `url` as the window loads it: http or https only (a file or an app is not the web). Without a
 /// scheme, https, but http for this machine: a dev server serves plain http.
-pub(super) fn address(url: &str) -> Result<String, ToolError> {
+pub fn address(url: &str) -> Result<String, ToolError> {
     let Some((scheme, _)) = url.split_once("://") else {
         let host = url.split(['/', '?', '#']).next().unwrap_or("");
         let name = host.rsplit_once(':').map_or(host, |(name, _)| name);

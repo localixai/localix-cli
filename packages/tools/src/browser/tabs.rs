@@ -88,6 +88,8 @@ impl Tabs {
             Some(at) => {
                 let slot = &mut self.slots[at];
                 slot.open = true;
+                // A tab used again starts its loads over: the last page's are not this one's.
+                shared.loads.lock().unwrap().remove(&(at as u32 + 1));
                 slot.webview
                     .load_url(url)
                     .map_err(|error| error.to_string())?;

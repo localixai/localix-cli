@@ -91,6 +91,11 @@ impl Browser<'_> {
     /// `arguments` that change the tabs (open one, close one), one such call at a time.
     fn on_tabs(&self, arguments: Value) -> Result<ToolOutput, ToolError> {
         let _change = crate::output::lock(&self.locks.tabs_change);
+        self.on_tabs_locked(arguments)
+    }
+
+    /// The same, with the tabs' lock held already.
+    fn on_tabs_locked(&self, arguments: Value) -> Result<ToolOutput, ToolError> {
         let tool = BrowserTool {
             page: self.page,
             gate: self.gate,
@@ -159,16 +164,48 @@ impl Kind for Browser<'_> {
             .get("url")
             .and_then(Value::as_str)
             .unwrap_or(SEARCH_PAGE);
-        let mut call = json!({"url": url});
-        if self.page.is_open() {
-            call["new_tab"] = json!(true);
-        }
-        let output = self.on_tabs(call)?;
-        let id = self
-            .active()
-            .ok_or_else(|| ToolError::Failed(output.report.clone()))?;
-        let output = self.read_whole(id, output);
-        Ok(Opened { id, output })
+        let url = tools::browser::address(url)?;
+        let added = {
+            // Only making the tab is one at a time: tabs opened together load together.
+            let _change = crate::output::lock(&self.locks.tabs_change);
+            match self.page.driver().ok().filter(|_| self.page.is_open()) {
+                Some(driver) => {
+                    let effect = format!("open {url} in a new tab");
+                    if let contracts::gate::Verdict::Deny(why) =
+                        self.gate.check(contracts::gate::Effect {
+                            tool: "browser",
+                            summary: &effect,
+                        })
+                    {
+                        return Err(ToolError::Failed(why));
+                    }
+                    let id = driver.add_tab(&url);
+                    Some(id.map_err(|error| ToolError::Failed(error.to_string()))?)
+                }
+                None => None,
+            }
+        };
+        let (id, output) = match added {
+            Some(id) => {
+                self.page.pinned(id).driver().map(|tab| tab.wait_new()).ok();
+                let read = self.in_tab(id, json!({}))?;
+                let report = format!("Opened {url}.");
+                (id, ToolOutput { report, ..read })
+            }
+            // The window's first tab: opened as the window is.
+            None => {
+                let _change = crate::output::lock(&self.locks.tabs_change);
+                let output = self.on_tabs_locked(json!({"url": url}))?;
+                let id = self
+                    .active()
+                    .ok_or_else(|| ToolError::Failed(output.report.clone()))?;
+                (id, output)
+            }
+        };
+        Ok(Opened {
+            id,
+            output: self.read_whole(id, output),
+        })
     }
 
     fn interact(&self, id: u32, args: &Value) -> Result<ToolOutput, ToolError> {

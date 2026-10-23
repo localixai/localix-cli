@@ -236,6 +236,15 @@ impl WindowTool<'_> {
         let hands = self.hands.ok_or_else(|| {
             failed("there is no helper here (no decision model): act with the tab's own fields")
         })?;
+        // The kind's own fields first (an address to load), so the goal acts on what they leave.
+        let own = kind
+            .fields()
+            .iter()
+            .any(|(name, _)| arguments.get(*name).is_some());
+        let first = match own {
+            true => Some(kind.interact(id, arguments)?),
+            false => None,
+        };
         let mut summary = format!("goal on {tab}: {}", goal.replace('\n', " \u{23ce} "));
         if !values.is_empty() {
             let quoted: Vec<String> = values.iter().map(|v| format!("\"{v}\"")).collect();
@@ -255,10 +264,14 @@ impl WindowTool<'_> {
         if let Outcome::Unreachable(why) = &done.outcome {
             return Err(ToolError::Fatal(why.clone()));
         }
-        let mut report = vec![format!("{tab}: {}", helper(&done, &values))];
-        // Then the kind's own fields, if any: what the tab says after, as an action leaves it
-        // (a page's changes, a terminal's new output).
-        let after = kind.interact(id, arguments)?;
+        let mut report = vec![];
+        if let Some(first) = first.filter(|first| !first.report.is_empty()) {
+            report.push(format!("{tab}: {}", first.report));
+        }
+        report.push(format!("{tab}: {}", helper(&done, &values)));
+        // What the tab says after, as an action leaves it (a page's changes, a terminal's new
+        // output).
+        let after = kind.interact(id, &json!({}))?;
         if !after.report.is_empty() {
             report.push(after.report);
         }

@@ -168,17 +168,27 @@ impl WebviewDriver {
 
     /// Open `url` in a new tab, show it and act on it from now on; then wait for its document.
     pub fn new_tab(&self, url: &str) -> BrowserResult<u32> {
+        let id = self.add_tab(url)?;
+        self.on(id).wait_new();
+        Ok(id)
+    }
+
+    /// Open `url` in a new tab, shown, and say its id at once: its document is waited for by a
+    /// driver pinned to it (`wait_new`), so several tabs load at the same time.
+    pub fn add_tab(&self, url: &str) -> BrowserResult<u32> {
         self.open_or_closed()?;
-        let before = self.loads();
         let (reply, opened) = mpsc::channel();
         self.send(Cmd::NewTab {
             url: url.to_string(),
             reply: Some(reply),
         })?;
-        let id = self.reply(opened)?;
-        self.load_started_since(before, PROBE_READY);
+        self.reply(opened)
+    }
+
+    /// Wait for the first document of a tab just opened.
+    pub fn wait_new(&self) {
+        self.load_started_since(Loads::default(), PROBE_READY);
         let _ = self.wait_loaded(LOAD_TIMEOUT);
-        Ok(id)
     }
 
     /// Show tab `id` and act on it from now on.

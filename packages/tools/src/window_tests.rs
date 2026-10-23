@@ -515,3 +515,30 @@ fn the_tabs_of_one_call_open_at_the_same_time_and_calls_may_run_together() {
     .unwrap();
     assert_eq!(done.report, "s1 (slow): met\ns1 (slow): met");
 }
+
+#[test]
+fn a_tabs_own_fields_come_before_its_goal_and_the_tab_is_read_after() {
+    let term = Fake::new("terminal", 't');
+    let (hands, gate) = (Helper::default(), Recorder::default());
+    let tool = WindowTool {
+        kinds: vec![&term],
+        window: None,
+        hands: Some(&hands),
+        gate: &gate,
+    };
+    call(
+        &tool,
+        json!({"action": "open", "kind": "terminal", "thing": "sh"}),
+    )
+    .unwrap();
+    call(
+        &tool,
+        json!({"action": "interact", "tab": "t1", "thing": "go there", "goal": "Act", "values": ["x"]}),
+    )
+    .unwrap();
+    // The address first (the goal acts on the page it loads), then the goal, then a read.
+    assert_eq!(
+        *term.done.lock().unwrap(),
+        ["open \"sh\"", "interact 1 \"go there\"", "interact 1 null"]
+    );
+}

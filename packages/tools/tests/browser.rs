@@ -533,6 +533,22 @@ fn tabs(driver: &WebviewDriver, origin: &str) {
         "one after the other: {took:?}"
     );
 
+    // Tabs opened at the same time get ids and pages of their own.
+    let (form, second) = std::thread::scope(|scope| {
+        let form = scope.spawn(|| driver.add_tab(&format!("{origin}/form.html")).unwrap());
+        let second = scope.spawn(|| driver.add_tab(&format!("{origin}/second.html")).unwrap());
+        (form.join().unwrap(), second.join().unwrap())
+    });
+    assert_ne!(form, second);
+    for (id, title) in [(form, "Book"), (second, "Second")] {
+        let tab = driver.on(id);
+        tab.wait_new();
+        assert_eq!(tab.observe().unwrap().title, title, "tab {id}");
+    }
+    assert!(driver.close_tab(form.max(second)).unwrap());
+    assert!(driver.close_tab(form.min(second)).unwrap());
+    driver.switch_tab(1).unwrap();
+
     // A link with target=_blank and window.open each open a tab, which is then acted on.
     let page = driver.observe().unwrap();
     act(

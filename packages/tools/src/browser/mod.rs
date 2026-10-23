@@ -25,7 +25,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-pub use args::GUIDE;
+pub use args::{GUIDE, address};
 pub use capture::{Clip, Shot};
 pub use contracts::view::{
     Action, Element, SelectOption, ViewError as BrowserError, ViewResult as BrowserResult,

@@ -427,8 +427,8 @@ fn a_goal_works_on_any_kind_of_tab_through_its_view() {
     );
     assert_eq!(
         done.state.as_deref(),
-        Some("snapshot of 1"),
-        "the snapshot after"
+        Some("snapshot of 1 after"),
+        "as the tab says after an action"
     );
     // Refused, nothing is handed over.
     let refused = WindowTool {

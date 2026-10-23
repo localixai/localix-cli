@@ -22,7 +22,8 @@ picture of a tab, for what its text cannot say. `close` ends a tab (`tab`) or se
 Where the person watches the window: `list` names every tab, which is shown and which the browser \
 acts on; `show` puts a tab in front of them and returns its snapshot (it changes nothing in it); \
 `resize` sizes the whole window (`width`, `height`). Without a window, `list` names the tabs open. \
-A tab's snapshot is its newest state: read it before acting again.
+A tab's snapshot is its newest state: read it before acting again. Calls in one turn run at \
+once, each tab on its own: when several tabs each need a step, make those calls together.
 - `goal` (with `interact`, any kind of tab) hands one short goal to a fast helper that sees only \
 the goal and the tab, and acts in it (clicks and types on a page, types and presses keys in a \
 terminal): one screen's worth of progress, ending with how to tell it is done, as something the \
@@ -255,14 +256,9 @@ impl WindowTool<'_> {
             return Err(ToolError::Fatal(why.clone()));
         }
         let mut report = vec![format!("{tab}: {}", helper(&done, &values))];
-        let own = kind
-            .fields()
-            .iter()
-            .any(|(name, _)| arguments.get(*name).is_some());
-        let after = match own {
-            true => kind.interact(id, arguments)?,
-            false => kind.snapshot(id)?,
-        };
+        // Then the kind's own fields, if any: what the tab says after, as an action leaves it
+        // (a page's changes, a terminal's new output).
+        let after = kind.interact(id, arguments)?;
         if !after.report.is_empty() {
             report.push(after.report);
         }

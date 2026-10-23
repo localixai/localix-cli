@@ -45,7 +45,7 @@ every new file already goes where its target crate will be.
 | Layer | Crates | Knows |
 |---|---|---|
 | Vocabulary | `contracts` (ports, no logic), `queue`, `providers/kit` | no workspace crate |
-| Wire | `protocol` (target) | no workspace crate: serde only |
+| Wire | `protocol` | no workspace crate: serde only |
 | Core | `agent`, `decision-loop` | `contracts` |
 | Adapters | `tools`, `session` | `contracts` |
 | Adapters | `providers/{models,openai,openrouter}` | `contracts`, `kit` |
@@ -67,7 +67,7 @@ every new file already goes where its target crate will be.
   page, URL, OpenRouter, OpenAI, model name). The agent learns a tool's world from
   `ToolSpec::description`, the hands from `View::conventions`, the run's place from the app's
   context.
-- **L6** (_checked_ with the crate): `protocol` depends on no workspace crate. Its types are wire
+- **L6** _checked_: `protocol` depends on no workspace crate. Its types are wire
   DTOs; domain types never derive its serde shapes, and it never re-exports one.
 - **L7** (_checked_ with the crate): the interface depends only on `client` and `protocol`: never
   on the agent, tools, providers, the session store or the server. What it needs to show, the

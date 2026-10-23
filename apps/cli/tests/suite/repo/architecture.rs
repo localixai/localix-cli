@@ -1,4 +1,4 @@
-//! The layering rules (AGENTS.md, L1-L5), checked on the manifests and sources of the workspace.
+//! The layering rules (ARCHITECTURE.md, L1-L8), checked on the manifests and sources of the workspace.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -76,7 +76,10 @@ fn l3_tools_providers_and_stores_know_only_the_contracts() {
     for ((group, name), uses) in &packages {
         if group == "packages" && PRIMITIVES.contains(&name.as_str()) {
             assert!(uses.is_empty(), "{name} depends on {uses:?}");
-        } else if group == "packages" && name != "contracts" && !CORES.contains(&name.as_str()) {
+        } else if group == "packages"
+            && !matches!(name.as_str(), "contracts" | WIRE)
+            && !CORES.contains(&name.as_str())
+        {
             assert_eq!(uses, &["contracts"], "{name} depends on {uses:?}");
         }
     }
@@ -94,6 +97,30 @@ fn l3_tools_providers_and_stores_know_only_the_contracts() {
             _ => assert_eq!(uses, &["contracts", KIT], "{name} depends on {uses:?}"),
         }
     }
+}
+
+/// What the interface and the server say to each other.
+const WIRE: &str = "protocol";
+
+/// L6: the wire is a leaf: no workspace package, nothing but serde to say it with.
+#[test]
+fn l6_the_protocol_is_a_leaf() {
+    let packages = packages();
+    let uses = &packages[&("packages".into(), WIRE.into())];
+    assert!(uses.is_empty(), "the protocol depends on {uses:?}");
+    let manifest = std::fs::read_to_string(root().join("packages/protocol/Cargo.toml")).unwrap();
+    let mut section = "";
+    let mut external = vec![];
+    for line in manifest.lines() {
+        if line.starts_with('[') {
+            section = line;
+        } else if section == "[dependencies]"
+            && let Some((name, _)) = line.split_once('=')
+        {
+            external.push(name.trim().to_string());
+        }
+    }
+    assert_eq!(external, ["serde", "serde_json"], "the protocol uses {external:?}");
 }
 
 #[test]

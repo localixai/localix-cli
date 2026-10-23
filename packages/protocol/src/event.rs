@@ -1,0 +1,150 @@
+//! What the server tells the interface happened, each in a session (a lane or an agent) or in
+//! the server as a whole. Events are data the interface shows; none waits for an answer.
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data", rename_all = "snake_case")]
+pub enum Event {
+    /// The session's first row: the version and what it runs with.
+    Header(Vec<String>),
+    /// A quiet line; its rows are kept as they are.
+    Note(String),
+    Error(String),
+    /// The mode changed: its name, `default` included.
+    Mode(String),
+    /// A task began, as the transcript shows it (`≋ ticks · tick 1` for a monitor's lines).
+    TaskStarted(String),
+    /// A call began: `call` is its id, the same on its result.
+    Call {
+        call: String,
+        name: String,
+        label: Label,
+    },
+    Result {
+        call: String,
+        name: String,
+        label: Label,
+        outcome: Outcome,
+    },
+    /// One action of the hands, under the call that runs them. Live only: never replayed (W6).
+    Step(String),
+    /// The model's answer.
+    Answer(String),
+    TaskEnded {
+        status: String,
+        millis: u64,
+        turns: u64,
+        cost: f64,
+    },
+    /// A resumed session's tasks so far, oldest first.
+    Earlier(Vec<Turn>),
+    /// What is known of the session changed.
+    Updated(Update),
+    /// A session of the interface began.
+    LaneStarted {
+        id: String,
+        name: String,
+    },
+    /// This directory's saved sessions, newest first.
+    Saved(Vec<Saved>),
+    /// Show the session: it was opened, or asked for and open already.
+    Show(String),
+    /// The session started an agent.
+    Started {
+        id: String,
+        name: String,
+    },
+    /// The agent was closed: it stays in the tree, dimmed.
+    Closed,
+    /// Tokens a model turn of an agent used.
+    Spent(u64),
+    /// The lane's conversation went back or began again: its agents are gone.
+    AgentsCleared,
+    /// Words put in the composer for the person to change and send (a rewound task).
+    Prefill(String),
+    /// The share of the model's context window left, in percent, after a task.
+    Context(u8),
+    /// The session's jobs, all of them, whenever they change.
+    Jobs(Vec<JobRow>),
+    /// What the person sent that waits in the lane: for the task running, then for after it;
+    /// `ready` when the lane waits for its next entry.
+    Queue {
+        ready: bool,
+        steered: Vec<String>,
+        queued: Vec<String>,
+    },
+    /// The task running read what the person said to it: shown now as theirs.
+    Steered(Vec<String>),
+    /// The interface's work is over: the terminal is given back.
+    Quit,
+}
+
+/// What a call does, in a few words, as the server that knows the tool says it: the verb while
+/// it runs and once done, and its subject (`Running`/`Ran` `cargo test`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Label {
+    pub doing: String,
+    pub done: String,
+    pub subject: String,
+}
+
+/// How a call ended, as the interface shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Outcome {
+    Done {
+        report: String,
+    },
+    /// The model is told why; `declined` when the person refused the call.
+    Failed {
+        why: String,
+        declined: bool,
+    },
+    /// The run ends on it.
+    Fatal {
+        why: String,
+    },
+}
+
+/// A task of a session as the transcript shows it again.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Turn {
+    /// What was asked, as shown.
+    pub goal: String,
+    pub answer: String,
+    pub status: String,
+}
+
+/// A change to a session's facts; a field left `None` stays as it is.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Update {
+    pub title: Option<String>,
+}
+
+/// A saved session, as the list shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Saved {
+    pub id: String,
+    /// Its title, else its first task.
+    pub title: String,
+    /// When it ran and how many tasks it has (`2 h ago · 4 tasks`).
+    pub meta: String,
+}
+
+/// A job as the list under the composer shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobRow {
+    pub id: String,
+    pub name: String,
+    /// Its command, or its cron and prompt.
+    pub detail: String,
+    /// A monitor's deadline, milliseconds since the epoch.
+    pub until_at: Option<u64>,
+    /// A schedule's next run, as a clock shows it (`14:05`).
+    pub next: Option<String>,
+    /// Batches a monitor gave.
+    pub events: usize,
+    /// The session whose job it is.
+    pub lane: String,
+}

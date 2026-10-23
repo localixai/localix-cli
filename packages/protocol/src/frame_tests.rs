@@ -1,0 +1,180 @@
+use serde_json::json;
+
+use super::*;
+use crate::{
+    Adjustment, Answer, Approval, Input, JobRow, Label, Outcome, Question, Saved, Target, Turn,
+};
+
+fn through_json<T: Serialize + for<'de> Deserialize<'de>>(frame: &T) -> T {
+    let line = serde_json::to_string(frame).unwrap();
+    assert!(!line.contains('\n'), "a frame is one line: {line}");
+    serde_json::from_str(&line).unwrap()
+}
+
+fn event(event: Event) -> ToClient {
+    ToClient::Event {
+        session: Some("s1".into()),
+        event,
+    }
+}
+
+#[test]
+fn every_frame_to_the_interface_comes_back_the_same_through_json() {
+    let frames = [
+        event(Event::Header(vec!["llx 0.1".into(), "gpt".into()])),
+        event(Event::TaskStarted("hi".into())),
+        event(Event::Call {
+            call: "c1".into(),
+            name: "bash".into(),
+            label: Label {
+                doing: "Running".into(),
+                done: "Ran".into(),
+                subject: "ls".into(),
+            },
+        }),
+        event(Event::Result {
+            call: "c1".into(),
+            name: "edit".into(),
+            label: Label::default(),
+            outcome: Outcome::Failed {
+                why: "no".into(),
+                declined: true,
+            },
+        }),
+        event(Event::TaskEnded {
+            status: "achieved".into(),
+            millis: 1200,
+            turns: 2,
+            cost: 0.01,
+        }),
+        event(Event::Earlier(vec![Turn {
+            goal: "a".into(),
+            answer: "b".into(),
+            status: "achieved".into(),
+        }])),
+        event(Event::Updated(crate::Update {
+            title: Some("Fix".into()),
+        })),
+        event(Event::Saved(vec![Saved {
+            id: "x".into(),
+            title: "t".into(),
+            meta: "2 h ago".into(),
+        }])),
+        event(Event::Jobs(vec![JobRow {
+            id: "j1".into(),
+            name: "ticks".into(),
+            detail: "date".into(),
+            until_at: Some(1_700_000_000_000),
+            next: Some("14:05".into()),
+            events: 3,
+            lane: "s1".into(),
+        }])),
+        event(Event::Queue {
+            ready: false,
+            steered: vec!["faster".into()],
+            queued: vec![],
+        }),
+        ToClient::Event {
+            session: None,
+            event: Event::Quit,
+        },
+        ToClient::Ask {
+            id: 7,
+            session: "s1".into(),
+            asked: Asked::Question {
+                question: Question {
+                    id: "colour".into(),
+                    text: "Which?".into(),
+                    choices: vec![],
+                    multiple: false,
+                },
+                at: 0,
+                of: 1,
+            },
+        },
+        ToClient::Ask {
+            id: 8,
+            session: "s1".into(),
+            asked: Asked::ChooseAdjustable {
+                title: "Model".into(),
+                options: vec![("a".into(), "b".into())],
+                marked: Some(0),
+                adjustments: vec![Adjustment {
+                    values: vec!["low".into()],
+                    at: 0,
+                }],
+            },
+        },
+        ToClient::Resolved { id: 7 },
+        ToClient::Done {
+            id: 1,
+            done: Done::Initialized {
+                version: crate::VERSION,
+                max_lanes: 8,
+            },
+        },
+    ];
+    for frame in &frames {
+        assert_eq!(&through_json(frame), frame);
+    }
+}
+
+#[test]
+fn every_frame_to_the_server_comes_back_the_same_through_json() {
+    let frames = [
+        ToServer::Call {
+            id: 1,
+            command: Command::Input(Input {
+                session: "s1".into(),
+                text: "go".into(),
+                images: vec!["/tmp/a.png".into()],
+                later: true,
+            }),
+        },
+        ToServer::Call {
+            id: 2,
+            command: Command::Open {
+                target: Target::Saved("x".into()),
+            },
+        },
+        ToServer::Reply {
+            id: 7,
+            reply: Reply::Approval(Approval::No(Some("not there".into()))),
+        },
+        ToServer::Reply {
+            id: 8,
+            reply: Reply::Question(Some(Answer {
+                choices: vec![1],
+                note: None,
+            })),
+        },
+        ToServer::Reply {
+            id: 9,
+            reply: Reply::Adjusted(Some((0, 2))),
+        },
+    ];
+    for frame in &frames {
+        assert_eq!(&through_json(frame), frame);
+    }
+}
+
+#[test]
+fn a_frame_names_its_method_and_carries_its_params() {
+    let frame = ToServer::Call {
+        id: 3,
+        command: Command::Halt { id: "s2".into() },
+    };
+    assert_eq!(
+        serde_json::to_value(&frame).unwrap(),
+        json!({"method": "command/call", "params": {"id": 3, "command": {"type": "halt", "id": "s2"}}})
+    );
+}
+
+#[test]
+fn what_a_reader_does_not_know_it_ignores() {
+    let line = r#"{"method":"person/resolved","params":{"id":4,"by":"another terminal"}}"#;
+    assert_eq!(
+        serde_json::from_str::<ToClient>(line).unwrap(),
+        ToClient::Resolved { id: 4 }
+    );
+}

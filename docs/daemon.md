@@ -88,8 +88,10 @@ process environment): commands run in the environment of the client that opened 
     3. Stay
   ```
 
-  Moving to the background detaches: the sessions go on in the daemon, and the next `llx` in
-  that directory shows them. A terminal closed without asking detaches the same way.
+  Only moving to the background keeps them: the sessions go on in the daemon (their tasks,
+  monitors and schedules), and the next `llx` in that directory shows them. A terminal closed
+  without that choice stops its sessions' work, as "Exit and stop tasks" does; the daemon itself
+  lives on.
 - The daemon never exits by itself: schedules and monitors must outlive every terminal. It ends
   with `llx serve stop`, or with the machine.
 - `llx serve status|stop`; `--no-daemon` runs everything in process, as today; `exec` always does.

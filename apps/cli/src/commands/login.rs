@@ -1,25 +1,22 @@
-//! `/login` in a session, as a few steps, each a pick: the provider (with how it is signed in
-//! to), signing in when it is not (OAuth in the browser, or a pasted key: see `signin`), one of
-//! its models, and a reasoning level that model takes. A model switch starts at that model's
-//! default level, and only its own levels are offered. The choice is put in at once and saved as
-//! the default for later sessions.
+//! `/login` in a session, as a few steps, each a pick: the provider (every one of the catalog,
+//! searched by typing, with how it is signed in to), signing in when it is not (OAuth in the
+//! browser, or a pasted key: see `signin`), one of its models, and a reasoning level that model
+//! takes (see `model`). The choice is put in at once and saved as the default for later sessions.
 
-use std::io::BufRead;
-
-use contracts::catalog::Selection;
-
-use crate::choice::{self, Choice};
+use crate::choice::Choice;
+use crate::commands::model::{models, now};
 use crate::commands::signin;
 use crate::compose::Rig;
-use crate::picker::{Item, Numbered, Terminal};
-use crate::providers::{self, Method, Provider};
+use crate::picker::{Item, Terminal};
+use crate::providers::{Method, Provider};
+use crate::tui::Ui;
 use crate::tui::asking::UiTerminal;
 use crate::tui::event::Event;
 
 /// What the steps ask of the world beyond the terminal: where each provider's sign-in comes
 /// from, and signing in (what was saved, in words).
 pub struct World<'a> {
-    pub signed_in: &'a dyn Fn(Provider) -> Option<String>,
+    pub signed_in: &'a dyn Fn(&Provider) -> Option<String>,
     pub sign_in: &'a SignIn<'a>,
     pub say: &'a dyn Fn(&str),
 }
@@ -33,33 +30,51 @@ pub fn choose(
     terminal: &mut dyn Terminal,
     world: &World,
 ) -> Result<Option<Choice>, String> {
-    let items: Vec<Item> = Provider::ALL
+    let mut offered = offered(Provider::all(), &current.provider, world.signed_in);
+    let items: Vec<Item> = offered
         .iter()
-        .map(|&provider| {
-            let detail = (world.signed_in)(provider)
-                .map_or("not signed in".into(), |from| format!("signed in: {from}"));
-            Item::new(provider.name(), detail, provider == current.provider)
+        .map(|provider| {
+            let id = provider.id();
+            let (mark, detail) = match ((world.signed_in)(provider), provider.hint()) {
+                (Some(from), _) => (" ✓", format!("{id} · signed in: {from}")),
+                (None, Some(hint)) => ("", format!("{id} · not signed in · {hint}")),
+                (None, None) => ("", format!("{id} · not signed in")),
+            };
+            let label = format!("{}{mark}", provider.name());
+            Item::new(label, detail, *provider == current.provider)
         })
         .collect();
     let Some(at) = terminal.pick("Provider", &items) else {
         return Ok(None);
     };
-    let provider = Provider::ALL[at];
-    if !signed_in(provider, terminal, world)? {
+    let provider = offered.swap_remove(at);
+    if !signed_in(&provider, terminal, world)? {
         return Ok(None);
     }
-    let Some(model) = model(provider, current, terminal) else {
-        return Ok(None);
-    };
-    Ok(reasoning(model, terminal).map(|selection| Choice {
-        provider,
-        selection,
-    }))
+    let title = format!("Model ({})", provider.name());
+    Ok(models(current, terminal, &[provider], &title))
+}
+
+/// Every provider of the catalog, in the order a person looks for one: the popular (in their
+/// order), then the current one and those signed in to, then the rest, each by name.
+fn offered(
+    mut all: Vec<Provider>,
+    current: &Provider,
+    signed_in: &dyn Fn(&Provider) -> Option<String>,
+) -> Vec<Provider> {
+    all.sort_by_cached_key(
+        |p| match models::POPULAR.iter().position(|id| *id == p.id()) {
+            Some(at) => (0, at, String::new()),
+            None if p == current || signed_in(p).is_some() => (1, 0, p.name().to_lowercase()),
+            None => (2, 0, p.name().to_lowercase()),
+        },
+    );
+    all
 }
 
 /// Keep the sign-in there is, or sign in; `false` when the person cancelled.
 fn signed_in(
-    provider: Provider,
+    provider: &Provider,
     terminal: &mut dyn Terminal,
     world: &World,
 ) -> Result<bool, String> {
@@ -90,7 +105,7 @@ fn signed_in(
             methods[at]
         }
     };
-    let said = (world.sign_in)(provider, method, terminal)?;
+    let said = (world.sign_in)(provider.clone(), method, terminal)?;
     (world.say)(&format!("{said}\n"));
     Ok(true)
 }
@@ -102,63 +117,10 @@ fn describe(method: Method) -> &'static str {
     }
 }
 
-/// One of the provider's models: the current one marked, else the provider's default.
-fn model(provider: Provider, current: &Choice, terminal: &mut dyn Terminal) -> Option<Selection> {
-    let mut models = provider.models();
-    let same = current.provider == provider;
-    if same && !models.iter().any(|model| model.id == current.model()) {
-        models.insert(0, current.selection.model().clone());
-    }
-    let marked = if same {
-        current.model()
-    } else {
-        provider.default_model()
-    };
-    let items: Vec<Item> = models
-        .iter()
-        .map(|model| {
-            let levels = choice::levels(&Selection::new(model.clone()));
-            let detail = format!("{}  reasoning: {levels}", model.id);
-            Item::new(&model.name, detail, model.id == marked)
-        })
-        .collect();
-    let at = terminal.pick(&format!("Model ({})", provider.name()), &items)?;
-    let model = models.swap_remove(at);
-    // The same model keeps its level; another one starts at its own default.
-    Some(match same && model.id == current.model() {
-        true => current.selection.clone(),
-        false => Selection::new(model),
-    })
-}
-
-/// A level the model takes; asked only when it takes more than one.
-fn reasoning(selection: Selection, terminal: &mut dyn Terminal) -> Option<Selection> {
-    let offered = selection.model().offered().to_vec();
-    if offered.len() == 1 {
-        return Some(selection);
-    }
-    let default = selection.model().default;
-    let items: Vec<Item> = offered
-        .iter()
-        .map(|&effort| {
-            let note = if effort == default { " (default)" } else { "" };
-            let detail = format!("{}{note}", effort.describe());
-            Item::new(effort.name(), detail, effort == selection.effort())
-        })
-        .collect();
-    let at = terminal.pick(&format!("Reasoning ({})", selection.model().name), &items)?;
-    selection.with_effort(offered[at])
-}
-
-/// `/login` at the prompt line: the steps, then the choice put in and saved.
-pub fn run(rig: &mut Rig, input: &mut dyn BufRead, shown: &dyn Fn(&str)) {
-    match rig.ui.clone() {
-        Some(ui) => {
-            let say = |text: &str| ui.send(Event::Note(text.to_string()));
-            steps(rig, &mut UiTerminal { ui: ui.clone() }, &say);
-        }
-        None => steps(rig, &mut Numbered { input, shown }, shown),
-    }
+/// `/login`: the steps, then the choice put in and saved.
+pub fn run(rig: &mut Rig, ui: &Ui) {
+    let say = |text: &str| ui.send(Event::Note(text.to_string()));
+    steps(rig, &mut UiTerminal { ui: ui.clone() }, &say);
 }
 
 fn steps(rig: &mut Rig, terminal: &mut dyn Terminal, shown: &dyn Fn(&str)) {
@@ -171,31 +133,10 @@ fn steps(rig: &mut Rig, terminal: &mut dyn Terminal, shown: &dyn Fn(&str)) {
         say: shown,
     };
     match choose(&rig.choice, terminal, &world) {
-        Ok(Some(choice)) => rig.output.note(&adopt(rig, choice)),
+        Ok(Some(choice)) => rig.output.note(&now(rig, choice)),
         Ok(None) => rig.output.note("Nothing changed.\n"),
         Err(why) => rig.output.note(&format!("Not signed in: {why}\n")),
     }
-}
-
-/// Think with `choice` from the next task on, and save it as the default.
-fn adopt(rig: &mut Rig, choice: Choice) -> String {
-    let Some(chat) = choice.provider.chat(&choice.selection) else {
-        return format!(
-            "Not signed in to {}: nothing changed.\n",
-            choice.provider.name()
-        );
-    };
-    if let Some(live) = rig.live {
-        live.chat.set(chat);
-        live.decider
-            .set(providers::decider(&rig.options.models.decision_model));
-    }
-    let saved = match choice::save(&choice) {
-        Ok(path) => format!("saved as the default in {}", path.display()),
-        Err(error) => format!("not saved: {error}"),
-    };
-    rig.choice = choice;
-    format!("Now {} ({saved}).\n", rig.choice.label())
 }
 
 /// How the session stands with its provider, for `/status`.

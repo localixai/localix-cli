@@ -76,11 +76,11 @@ pub struct BashTool<'a> {
     /// Environment variables left out of a command's environment: the app's own secrets. Only
     /// left out, not hidden: a command can still read them from the app's own environment (`ps
     /// -E`, `/proc/$PPID/environ`) or wherever the app keeps them, so approving a command is
-    /// what keeps them from it.
-    pub hidden: &'a [&'a str],
+    /// what keeps them from it. Read at each command: the app's secrets can change meanwhile.
+    pub hidden: &'a (dyn Fn() -> Vec<String> + Sync),
     /// Whether the person stopped the task: a running command is killed when it says so, and a
-    /// stop during a session's wait kills every session.
-    pub stop: &'a dyn Fn() -> bool,
+    /// stop during a session's wait kills that session.
+    pub stop: &'a (dyn Fn() -> bool + Sync),
     /// The terminal sessions that stay open between calls, until the task ends.
     pub sessions: &'a Sessions,
 }
@@ -94,6 +94,12 @@ impl Tool for BashTool<'_> {
                 .replace("{terminal}", TERMINAL),
             parameters: parameters(),
         }
+    }
+
+    /// Commands of one turn run at once: a model writes several together
+    /// only when none needs another's result (searches, listings, checks).
+    fn parallel(&self) -> bool {
+        true
     }
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
@@ -116,20 +122,18 @@ impl Tool for BashTool<'_> {
             .timeout_ms
             .unwrap_or(DEFAULT_TIMEOUT_MS)
             .clamp(1, MAX_TIMEOUT_MS);
+        let names = (self.hidden)();
+        let hidden: Vec<&str> = names.iter().map(String::as_str).collect();
         let job = Job {
             command,
             dir: &dir,
             timeout: Duration::from_millis(timeout),
-            hidden: self.hidden,
+            hidden: &hidden,
             stop: self.stop,
         };
         let finished = process::run(&job)
             .map_err(|error| ToolError::Failed(format!("the shell could not start: {error}")))?;
-        Ok(ToolOutput {
-            report: report(&finished, place.as_deref()),
-            state: None,
-            image: None,
-        })
+        Ok(report(&finished, place.as_deref()).into())
     }
 }
 
@@ -157,12 +161,17 @@ impl BashTool<'_> {
     }
 
     /// `dir` as the gate and the report show it: relative inside the workspace, else absolute and
-    /// said to be outside.
+    /// said to be outside, once symlinks are followed (a `docs -> ~` link leads outside).
     fn place(&self, dir: &std::path::Path) -> String {
         let shown = self.workspace.shown(dir);
-        match dir.starts_with(self.workspace.root()) {
+        let real = crate::workspace::real(dir);
+        match real.starts_with(self.workspace.root()) {
             true => shown,
-            false => format!("{shown}, outside the workspace"),
+            false if real == dir => format!("{shown}, outside the workspace"),
+            false => format!(
+                "{shown}, which leads to {}, outside the workspace",
+                real.display()
+            ),
         }
     }
 }

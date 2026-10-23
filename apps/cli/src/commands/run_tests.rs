@@ -48,14 +48,40 @@ fn data_that_does_not_match_fails_the_run() {
 }
 
 #[test]
-fn the_time_limit_is_exhaustion_whatever_the_model_said() {
+fn a_halt_decides_the_status_and_exit_code() {
+    // Whatever the model said, the halt decides.
     let model_unreachable = Status::Error("the time limit ran out".into());
-    let ended = Ended::of(&model_unreachable, None, Some(Halt::TimedOut), 90);
-    assert_eq!(ended.status, "exhausted");
-    assert_eq!(ended.code, exit::EXHAUSTED);
-    assert!(ended.error.unwrap().contains("90 s"));
-    let closed = Ended::of(&model_unreachable, None, Some(Halt::Closed), 90);
-    assert_eq!(closed.code, exit::OK);
+    let stopped = Status::Error("the person stopped the task".into());
+    for (status, halt, ended, code, error) in [
+        (
+            &model_unreachable,
+            Halt::TimedOut,
+            "exhausted",
+            exit::EXHAUSTED,
+            Some("90 s"),
+        ),
+        (
+            &model_unreachable,
+            Halt::Closed,
+            "interrupted",
+            exit::OK,
+            None,
+        ),
+        (
+            &stopped,
+            Halt::Interrupted,
+            "interrupted",
+            exit::INTERRUPTED,
+            None,
+        ),
+    ] {
+        let got = Ended::of(status, None, Some(halt), 90);
+        assert_eq!((got.status, got.code), (ended, code), "{halt:?}");
+        match error {
+            Some(part) => assert!(got.error.unwrap().contains(part), "{halt:?}"),
+            None => assert_eq!(got.error, None, "{halt:?}"),
+        }
+    }
 }
 
 #[test]
@@ -89,20 +115,6 @@ fn a_task_counts_only_what_it_spent() {
     assert!((spent.cost - 0.75).abs() < 1e-9);
 }
 
-#[test]
-fn an_interrupted_task_ends_with_130() {
-    let ended = Ended::of(
-        &Status::Error("the person stopped the task".into()),
-        None,
-        Some(Halt::Interrupted),
-        60,
-    );
-    assert_eq!(
-        (ended.status, ended.code),
-        ("interrupted", exit::INTERRUPTED)
-    );
-}
-
 /// What one composed task did: its events, the `-o` file, the session saved.
 struct Done {
     code: i32,
@@ -131,7 +143,7 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
     let session = history.start();
     let setup = Setup {
         options,
-        choice: crate::choice::Choice::new(crate::providers::Provider::OpenRouter, "test/model"),
+        choice: crate::choice::Choice::new(crate::providers::Provider::openrouter(), "test/model"),
         workspace: Workspace::new(&work).unwrap(),
         context: String::new(),
         fresh: String::new(),
@@ -173,7 +185,8 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
     );
     let interrupt = Interrupt::new();
     let mut saved = None;
-    let code = assemble(setup, models, &output, &interrupt, None, |rig| {
+    let (shared, seat) = setup.split(None);
+    let code = assemble(&shared, seat, models, &output, &interrupt, |rig| {
         let code = rig.task("make a file");
         saved = Some(rig.history.load(Some(&rig.session.id)).unwrap());
         code

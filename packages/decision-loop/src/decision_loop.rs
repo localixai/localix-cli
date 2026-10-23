@@ -18,7 +18,7 @@ const MAX_STALLS: usize = 2;
 
 pub struct DecisionLoop<'a> {
     pub decider: &'a dyn Decider,
-    pub on_step: &'a dyn Fn(&GoalStep),
+    pub on_step: &'a (dyn Fn(&GoalStep) + Sync),
     /// Actions for one task.
     pub max_actions: usize,
 }

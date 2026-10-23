@@ -25,10 +25,10 @@ mod sweep;
 
 pub use bash::BashTool;
 #[cfg(not(unix))]
-pub use none::{Sessions, kill_all_now};
+pub use none::{Sessions, kill_all_now, running_anywhere};
 pub use process::{Ending, SHELL};
 #[cfg(unix)]
-pub use running::kill_all_now;
+pub use running::{kill_all_now, running_anywhere};
 #[cfg(unix)]
 pub use session::{MAX_SESSIONS, Sessions, Turn, Until, Wait};
 
@@ -51,4 +51,8 @@ mod none {
     }
 
     pub fn kill_all_now() {}
+
+    pub fn running_anywhere() -> usize {
+        0
+    }
 }

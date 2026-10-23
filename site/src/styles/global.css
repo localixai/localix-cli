@@ -1,0 +1,119 @@
+/* The page's ground: eza.rocks's structure (a heavy headline, stacked terminal cards), on black
+   and kept clean: no offset shadows, no color for decoration; green and red only where they mean
+   ok and wrong. The fonts live in public/fonts, so their URLs (and the preloads) stay as they were. */
+
+@font-face {
+  font-family: 'Display';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 1000;
+  src: url('/fonts/dm-sans.woff2') format('woff2-variations');
+}
+@font-face {
+  font-family: 'Text';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/inter.woff2') format('woff2-variations');
+}
+@font-face {
+  font-family: 'Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url('/fonts/jetbrains-mono.woff2') format('woff2-variations');
+}
+
+:root {
+  color-scheme: dark;
+  --black: #050505;
+  --card: #0c0c0c;
+  --raised: #121212;
+  --white: #f4f4f2;
+  --soft: #a9a9a6;
+  --muted: #6f6f6c;
+  --faint: #3c3c3a;
+  --line: #1d1d1c;
+  --line-strong: #2a2a28;
+  --ok: oklch(0.8 0.14 150);
+  --bad: oklch(0.7 0.16 25);
+  --ask: oklch(0.86 0.1 85);
+  --radius: 12px;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --display: 'Display', ui-sans-serif, system-ui, sans-serif;
+  --text: 'Text', ui-sans-serif, system-ui, sans-serif;
+  --mono: 'Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --gutter: clamp(1rem, 4vw, 2.5rem);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  background: var(--black);
+  scroll-behavior: smooth;
+  scroll-padding-top: 1rem;
+  -webkit-text-size-adjust: 100%;
+}
+/* The footer stays at the bottom of the window however short the page is. */
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  background: var(--black);
+  color: var(--white);
+  font: 400 1rem/1.6 var(--text);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+/* React's mount point takes no box, so the header, main and footer stay the body's flex items. */
+#root {
+  display: contents;
+}
+::selection {
+  background: var(--white);
+  color: var(--black);
+}
+:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+img {
+  display: block;
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+code,
+pre,
+.screen,
+.entry {
+  font-family: var(--mono);
+  font-variant-ligatures: none;
+  font-feature-settings: 'calt' 0, 'liga' 0;
+}
+.wrap {
+  width: min(76rem, 100% - 2 * var(--gutter));
+  margin-inline: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+}

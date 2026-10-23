@@ -1,5 +1,5 @@
-//! What a run is asked: the prompt from the command line and stdin, as `codex exec` reads them,
-//! and the `--schema` its answer must match.
+//! What a run is asked: the prompt from the command line and stdin, and the `--schema` its
+//! answer must match.
 
 use std::io::{IsTerminal, Read};
 
@@ -11,7 +11,7 @@ use crate::error::{self, Failure};
 /// no model accepts. The agent can read a file whole with its tools instead.
 const STDIN_LIMIT: usize = 256 * 1024;
 
-/// The task to run, or the prompt line when there is none and a person is at the terminal.
+/// The task to run, or none given (stdin a terminal, not read).
 #[derive(Debug, PartialEq, Eq)]
 pub enum Prompt {
     One(String),
@@ -19,7 +19,7 @@ pub enum Prompt {
 }
 
 /// The prompt from `arg` and stdin: `-` is stdin itself; a prompt with piped stdin gets it as a
-/// `<stdin>` block; no prompt reads stdin, unless it is a terminal, which opens the prompt line.
+/// `<stdin>` block; no prompt reads stdin, unless it is a terminal, which gives none.
 pub fn prompt(arg: Option<&str>) -> Result<Prompt, Failure> {
     let stdin = Stdin::now();
     let piped = match (arg, stdin) {
@@ -80,7 +80,7 @@ fn ends() -> bool {
 
 /// What to tell the person before stdin is read to its end, where that could wait unseen: a
 /// prompt given with stdin left open (a harness's pipe, `ssh` without `-n`, a `while read` loop),
-/// or `-` at a terminal. Codex says the same.
+/// or `-` at a terminal.
 pub fn waiting(arg: Option<&str>, stdin: Stdin) -> Option<&'static str> {
     match (arg, stdin) {
         (Some("-"), Stdin::Terminal) => {
@@ -104,7 +104,7 @@ pub fn assemble(arg: Option<&str>, stdin: Option<&str>) -> Result<Prompt, Failur
         (Some("-") | None, Some(text)) => text.to_string(),
         (Some("-") | None, None) => {
             return Err(Failure::Usage(
-                "no prompt: llx \"<task>\", or pipe one in (stdin was empty)".into(),
+                "no prompt: llx exec \"<task>\", or pipe one in (stdin was empty)".into(),
             ));
         }
         (Some(prompt), Some(text)) => format!("{}\n\n<stdin>\n{text}\n</stdin>", prompt.trim()),

@@ -42,18 +42,14 @@ impl Tool for BrowserTool<'_> {
         let args: Args = serde_json::from_value(arguments.clone())
             .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
         let url = given(&args.url).map(address).transpose()?;
-        if let Some(effects) = effects(url.as_deref(), &args) {
+        if let Some(effects) = effects(url.as_deref(), &args)? {
             ask(self.gate, NAME, &effects)?;
         }
         if args.only_closes() {
-            return Ok(ToolOutput {
-                report: self.close(),
-                state: None,
-                image: None,
-            });
+            return Ok(self.close().into());
         }
         let mut report = vec![];
-        let new_tab = args.new_tab().map_err(ToolError::Failed)?;
+        let new_tab = args.new_tab() == Ok(true);
         if let Some(id) = args.switch_to() {
             self.page
                 .switch_tab(id)
@@ -131,7 +127,7 @@ impl BrowserTool<'_> {
             (Some(url), _) => url,
             (None, false) => SEARCH_PAGE.to_string(),
             // Only showing or hiding: the window opens again where it was.
-            (None, true) if args.show.is_some() => match self.page.observe() {
+            (None, true) if args.reopens(self.page.hidden()) => match self.page.observe() {
                 Ok(view) => view.location,
                 Err(_) => return,
             },

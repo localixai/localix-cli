@@ -4,45 +4,109 @@
 //! reaches them), and so is every terminal session `bash` keeps; the gate approves nothing more,
 //! and the task ends at its next model turn as `interrupted` (exit 130), with its `run.completed`
 //! event and its session saved. A second signal, or one while no task runs (at the prompt line),
-//! quits at once, killing the terminal sessions first.
+//! quits at once, killing the terminal sessions first. A signal or the window stops every
+//! session's task; the interface's keys stop one session's, by its id.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
-/// Whether a task runs, and whether the person stopped it.
-pub struct Interrupt {
-    busy: AtomicBool,
-    stopped: AtomicBool,
+use crate::output::lock;
+
+/// What the signal handler and the browser window stop: every task running, in every session.
+/// Only atomics, so a signal handler may use it.
+pub struct Process {
+    /// Raised by each stop: a task that began before it is stopped.
+    generation: AtomicU64,
+    /// How many tasks run.
+    busy: AtomicUsize,
+    /// Stopped while tasks ran: the next stop quits, until none runs.
+    pending: AtomicBool,
 }
 
-/// The process's own: what its signal handler and the browser window set.
-pub static PROCESS: Interrupt = Interrupt::new();
+/// The process's own: what its signal handler and the browser window stop.
+pub static PROCESS: Process = Process::new();
 
-impl Interrupt {
+impl Process {
     pub const fn new() -> Self {
         Self {
-            busy: AtomicBool::new(false),
-            stopped: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
+            busy: AtomicUsize::new(0),
+            pending: AtomicBool::new(false),
         }
     }
 
-    /// A task starts: nothing has stopped it yet.
+    /// Stop every task running. Returns whether to quit instead: none runs, or they were
+    /// stopped already.
+    pub fn stop(&self) -> bool {
+        if self.busy.load(Ordering::SeqCst) == 0 {
+            return true;
+        }
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        self.pending.swap(true, Ordering::SeqCst)
+    }
+
+    /// Whether the tasks running were stopped.
+    pub fn stopping(&self) -> bool {
+        self.pending.load(Ordering::SeqCst)
+    }
+}
+
+impl Default for Process {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// One session's task: whether it runs, and whether it was stopped, by itself or by the process.
+pub struct Interrupt {
+    process: &'static Process,
+    busy: AtomicBool,
+    stopped: AtomicBool,
+    /// The process's generation when the task began.
+    began: AtomicU64,
+}
+
+impl Interrupt {
+    /// A session's, stopped by the process's signals too.
+    pub fn new() -> Self {
+        Self::of(&PROCESS)
+    }
+
+    pub fn of(process: &'static Process) -> Self {
+        Self {
+            process,
+            busy: AtomicBool::new(false),
+            stopped: AtomicBool::new(false),
+            began: AtomicU64::new(process.generation.load(Ordering::SeqCst)),
+        }
+    }
+
+    /// A task starts: nothing has stopped it yet, not even a stop of the process before it.
     pub fn begin(&self) {
         self.stopped.store(false, Ordering::SeqCst);
-        self.busy.store(true, Ordering::SeqCst);
+        let now = self.process.generation.load(Ordering::SeqCst);
+        self.began.store(now, Ordering::SeqCst);
+        if !self.busy.swap(true, Ordering::SeqCst) {
+            self.process.busy.fetch_add(1, Ordering::SeqCst);
+        }
     }
 
     /// The task ended.
     pub fn end(&self) {
-        self.busy.store(false, Ordering::SeqCst);
+        if self.busy.swap(false, Ordering::SeqCst)
+            && self.process.busy.fetch_sub(1, Ordering::SeqCst) == 1
+        {
+            self.process.pending.store(false, Ordering::SeqCst);
+        }
     }
 
-    /// Whether the person stopped the task.
+    /// Whether the task was stopped: by the person, or by a stop of the process since it began.
     pub fn stopped(&self) -> bool {
         self.stopped.load(Ordering::SeqCst)
+            || self.began.load(Ordering::SeqCst) != self.process.generation.load(Ordering::SeqCst)
     }
 
-    /// Stop the task. Returns whether it should quit instead: no task runs, or it was stopped
-    /// already. Only atomics, so a signal handler may call it.
+    /// Stop the task. Returns whether to quit instead: no task runs, or it was stopped already.
     pub fn stop(&self) -> bool {
         !self.busy.load(Ordering::SeqCst) || self.stopped.swap(true, Ordering::SeqCst)
     }
@@ -54,8 +118,57 @@ impl Default for Interrupt {
     }
 }
 
-/// The browser window was closed: the task stops as on Ctrl-C, and the process never quits for it
-/// (at the prompt line, the window opens again on the next task).
+type Stop = Arc<dyn Fn() -> bool + Send + Sync>;
+
+/// The sessions', agents' and jobs' stops by id, for the person's keys in the interface, each
+/// with the number its [`Known`] removes it by. Never used by the signal handler.
+static STOPS: Mutex<Vec<(String, u64, Stop)>> = Mutex::new(Vec::new());
+static NEXT: AtomicU64 = AtomicU64::new(0);
+
+/// A stop known by its id until this is dropped, when what it stops has ended: a stale id then
+/// stops nothing.
+#[must_use = "the stop is forgotten when this is dropped"]
+pub struct Known(u64);
+
+impl Drop for Known {
+    fn drop(&mut self) {
+        lock(&STOPS).retain(|(_, number, _)| *number != self.0);
+    }
+}
+
+/// Know `stop` as the stop of session `id`: it returns whether to quit instead.
+pub fn register(id: &str, stop: impl Fn() -> bool + Send + Sync + 'static) -> Known {
+    let number = NEXT.fetch_add(1, Ordering::SeqCst);
+    lock(&STOPS).push((id.to_string(), number, Arc::new(stop)));
+    Known(number)
+}
+
+/// Know `flag` as the stop of agent or job `id`: a stop never quits for it.
+pub fn register_flag(id: &str, flag: Arc<AtomicBool>) -> Known {
+    register(id, move || {
+        flag.store(true, Ordering::SeqCst);
+        false
+    })
+}
+
+/// What job `id` of lane `lane` is known by: each lane's jobs are numbered from one.
+pub fn job_key(lane: &str, id: &str) -> String {
+    format!("{lane}/{id}")
+}
+
+/// Stop session `id`'s task: whether to quit instead (it was stopped already); an unknown one
+/// is left alone.
+pub fn stop(id: &str) -> bool {
+    let found = lock(&STOPS)
+        .iter()
+        .rev()
+        .find(|(known, _, _)| known == id)
+        .map(|(_, _, stop)| Arc::clone(stop));
+    found.is_some_and(|stop| stop())
+}
+
+/// The browser window was closed: the tasks stop as on Ctrl-C, and the process never quits for
+/// it (at the prompt line, the window opens again on the next task).
 pub fn window_closed() {
     PROCESS.stop();
 }

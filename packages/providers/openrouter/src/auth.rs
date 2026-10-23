@@ -19,23 +19,6 @@ pub fn credentials_path(app: App) -> Option<PathBuf> {
     store::path(app, "credentials")
 }
 
-/// Where the key comes from.
-pub enum KeySource {
-    Env,
-    Saved(PathBuf),
-}
-
-pub fn key(app: App) -> Option<(String, KeySource)> {
-    if let Some(key) = std::env::var(KEY_VARIABLE)
-        .ok()
-        .filter(|key| !key.trim().is_empty())
-    {
-        return Some((key.trim().to_string(), KeySource::Env));
-    }
-    let path = credentials_path(app)?;
-    store::read(&path).map(|key| (key, KeySource::Saved(path)))
-}
-
 /// `text` as a key, trimmed; `None` when it cannot be one (empty, or with spaces inside).
 pub fn as_key(text: &str) -> Option<&str> {
     let key = text.trim();

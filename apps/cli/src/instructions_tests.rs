@@ -1,5 +1,5 @@
-use std::cell::RefCell;
 use std::collections::HashSet;
+use std::sync::Mutex;
 
 use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::{Value, json};
@@ -89,7 +89,7 @@ fn a_subdirectorys_rules_come_once_with_the_first_file_touched_there() {
     write(&root.join("AGENTS.md"), "root rules");
     write(&root.join("crates/net/AGENTS.md"), "net rules");
     write(&root.join("crates/net/src/lib.rs"), "");
-    let seen = RefCell::new(HashSet::from([root.clone()]));
+    let seen = Mutex::new(HashSet::from([root.clone()]));
     let tool = Instructed {
         inner: &Echo,
         root: root.clone(),

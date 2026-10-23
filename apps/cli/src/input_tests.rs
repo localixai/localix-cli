@@ -6,40 +6,33 @@ fn one(text: &str) -> Result<Prompt, Failure> {
 }
 
 #[test]
-fn a_prompt_alone_is_the_task() {
-    assert_eq!(assemble(Some("  fix it "), None), one("fix it"));
-    assert!(assemble(Some("   "), None).is_err());
-}
-
-#[test]
-fn piped_stdin_is_added_to_a_prompt() {
-    assert_eq!(
-        assemble(Some("review this"), Some("diff --git a b\n")),
-        one("review this\n\n<stdin>\ndiff --git a b\n</stdin>")
-    );
-    assert_eq!(
-        assemble(Some("review this"), Some("  \n")),
-        one("review this")
-    );
-}
-
-#[test]
-fn a_dash_or_no_prompt_reads_the_task_from_stdin() {
-    assert_eq!(assemble(Some("-"), Some("the task\n")), one("the task"));
-    assert_eq!(assemble(None, Some("the task")), one("the task"));
-    assert!(matches!(
-        assemble(Some("-"), Some("")),
-        Err(Failure::Usage(_))
-    ));
-    assert!(matches!(
-        assemble(None, Some(" \n")),
-        Err(Failure::Usage(_))
-    ));
-}
-
-#[test]
-fn no_prompt_at_a_terminal_is_the_prompt_line() {
-    assert_eq!(assemble(None, None), Ok(Prompt::Line));
+fn assemble_builds_the_task_from_prompt_and_stdin() {
+    let usage = || Err(Failure::Usage(String::new()));
+    for (prompt, stdin, task) in [
+        // A prompt alone is the task.
+        (Some("  fix it "), None, one("fix it")),
+        (Some("   "), None, usage()),
+        // Piped stdin is added to a prompt.
+        (
+            Some("review this"),
+            Some("diff --git a b\n"),
+            one("review this\n\n<stdin>\ndiff --git a b\n</stdin>"),
+        ),
+        (Some("review this"), Some("  \n"), one("review this")),
+        // A dash or no prompt reads the task from stdin.
+        (Some("-"), Some("the task\n"), one("the task")),
+        (None, Some("the task"), one("the task")),
+        (Some("-"), Some(""), usage()),
+        (None, Some(" \n"), usage()),
+        // No prompt at a terminal: none (exec refuses it, a session opens without one).
+        (None, None, Ok(Prompt::Line)),
+    ] {
+        let built = assemble(prompt, stdin);
+        match (&built, &task) {
+            (Err(Failure::Usage(_)), Err(Failure::Usage(_))) => {}
+            _ => assert_eq!(built, task, "{prompt:?} {stdin:?}"),
+        }
+    }
 }
 
 #[test]

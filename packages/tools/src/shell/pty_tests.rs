@@ -40,8 +40,12 @@ fn a_program_that_reads_nothing_stalls_the_typing() {
     // The poll's wait is whole milliseconds, so the typing may give up a little before its time.
     let early = WRITE_WAIT - Duration::from_millis(50);
     assert!(took >= early, "gave up after {took:?}");
-    // Not a second wait for the key: it is not pressed once the input stalled.
-    assert!(took < WRITE_WAIT * 3 / 2, "{took:?}");
+    // Not a second wait for the key: it is not pressed once the input stalled. A second wait
+    // would take at least as long as the first did.
+    assert!(
+        took < WRITE_WAIT * 2 - Duration::from_millis(100),
+        "{took:?}"
+    );
 }
 
 #[test]

@@ -20,7 +20,7 @@ pub enum Verdict {
     Deny(String),
 }
 
-pub trait Gate {
+pub trait Gate: Send + Sync {
     fn check(&self, effect: Effect) -> Verdict;
 }
 

@@ -13,12 +13,14 @@
 //! - [`gate`]: a tool asks before an effect (a command, a file change); the app answers.
 //! - [`person`]: a tool asks the person a question; the app answers, or says nobody can.
 //! - [`history`]: the session-history port. A store package implements [`history::History`].
+//! - [`inbox`]: what reaches a run between its turns (the person's words, background work done).
 
 pub mod catalog;
 pub mod chat;
 pub mod gate;
 pub mod hands;
 pub mod history;
+pub mod inbox;
 pub mod model;
 pub mod person;
 pub mod tool;

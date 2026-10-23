@@ -4,13 +4,17 @@
 //! filters the tools (the list stays the same, and so does the prompt cache). A change in a
 //! session reaches the model as a `<mode_change>` note.
 
-use std::cell::Cell;
+use std::collections::HashSet;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 use clap::ValueEnum;
 use contracts::gate::{Effect, Gate, Verdict};
 
-use crate::gate::{Prompter, TerminalGate};
+use crate::gate::{Asker, Prompter, TerminalGate, declined};
+use crate::output::lock;
+use crate::tui::event::Approval;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
@@ -57,6 +61,29 @@ impl Mode {
     }
 }
 
+/// The mode now, read by the gate and the person on whichever thread asks (an agent's, a call's
+/// running beside others) and set between tasks.
+#[derive(Debug)]
+pub struct ModeCell(AtomicU8);
+
+impl ModeCell {
+    pub fn new(mode: Mode) -> Self {
+        Self(AtomicU8::new(Self::index(mode)))
+    }
+
+    pub fn get(&self) -> Mode {
+        Mode::ALL[self.0.load(Ordering::SeqCst) as usize]
+    }
+
+    pub fn set(&self, mode: Mode) {
+        self.0.store(Self::index(mode), Ordering::SeqCst);
+    }
+
+    fn index(mode: Mode) -> u8 {
+        Mode::ALL.iter().position(|&m| m == mode).unwrap_or(0) as u8
+    }
+}
+
 /// `/mode`: each mode with what it does, the current one marked.
 pub fn list(current: Mode) -> String {
     let line = |mode: Mode| {
@@ -85,6 +112,9 @@ llx with --yes (-y) or --mode bypass to allow commands, file changes and browser
 pub const PLAN_NO_TERMINAL: &str = "no one is at a terminal to approve it, and plan mode runs \
 nothing unapproved: plan from reading files, and say in the plan which commands to run, or that \
 the person can run llx at a terminal to approve each one";
+
+/// Why an effect is refused when the terminal gave no answer.
+const NO_ANSWER: &str = "no answer came from the terminal";
 
 /// Why a question gets no answer in autonomous mode.
 pub const AUTONOMOUS: &str = "nobody answers questions in autonomous mode: decide on your best \
@@ -174,36 +204,36 @@ pub fn notice(mode: Mode, terminal: bool, asks: bool) -> String {
 /// and asks for the rest, default asks. Plan keeps its own "always" answers, so an `a` given while
 /// working does not let a command through unasked while planning, nor the reverse.
 pub struct ModeGate<'a> {
-    mode: &'a Cell<Mode>,
+    mode: &'a ModeCell,
     /// `None`: nobody to ask.
-    asking: Option<Box<dyn Gate + 'a>>,
-    planning: Option<Box<dyn Gate + 'a>>,
+    asker: Option<Box<dyn Asker + 'a>>,
+    /// The tools the person said not to ask about again: while working, and while planning.
+    always: [Mutex<HashSet<String>>; 2],
     /// Told how long the person took to answer, so it does not count toward the time limit.
-    waited: &'a dyn Fn(Duration),
+    waited: &'a (dyn Fn(Duration) + Sync),
 }
 
 impl<'a> ModeGate<'a> {
     /// Asking on `terminal`, when there is one.
-    pub fn new<P: Prompter + Clone + 'a>(
-        mode: &'a Cell<Mode>,
+    pub fn new<P: Prompter + 'a>(
+        mode: &'a ModeCell,
         terminal: Option<P>,
-        waited: &'a dyn Fn(Duration),
+        waited: &'a (dyn Fn(Duration) + Sync),
     ) -> Self {
-        let gate = |prompter: P| Box::new(TerminalGate::new(prompter)) as Box<dyn Gate + 'a>;
-        Self::asking(mode, terminal.clone().map(gate), terminal.map(gate), waited)
+        let asker = terminal.map(|p| Box::new(TerminalGate(p)) as Box<dyn Asker + 'a>);
+        Self::asking(mode, asker, waited)
     }
 
-    /// Asking `asking` while working and `planning` in plan mode.
+    /// Asking `asker`, when there is one.
     pub fn asking(
-        mode: &'a Cell<Mode>,
-        asking: Option<Box<dyn Gate + 'a>>,
-        planning: Option<Box<dyn Gate + 'a>>,
-        waited: &'a dyn Fn(Duration),
+        mode: &'a ModeCell,
+        asker: Option<Box<dyn Asker + 'a>>,
+        waited: &'a (dyn Fn(Duration) + Sync),
     ) -> Self {
         Self {
             mode,
-            asking,
-            planning,
+            asker,
+            always: Default::default(),
             waited,
         }
     }
@@ -211,19 +241,31 @@ impl<'a> ModeGate<'a> {
 
 impl Gate for ModeGate<'_> {
     fn check(&self, effect: Effect) -> Verdict {
-        let (terminal, none) = match self.mode.get() {
+        let (always, none) = match self.mode.get() {
             Mode::Bypass | Mode::Autonomous => return Verdict::Allow,
             Mode::Plan if effect.tool == EDIT => return Verdict::Deny(PLAN_REFUSAL.into()),
-            Mode::Plan => (&self.planning, PLAN_NO_TERMINAL),
-            Mode::Default => (&self.asking, NO_TERMINAL),
+            Mode::Plan => (&self.always[1], PLAN_NO_TERMINAL),
+            Mode::Default => (&self.always[0], NO_TERMINAL),
         };
-        let Some(terminal) = terminal else {
+        let Some(asker) = &self.asker else {
             return Verdict::Deny(none.into());
         };
+        if lock(always).contains(effect.tool) {
+            return Verdict::Allow;
+        }
         let asked = Instant::now();
-        let verdict = terminal.check(effect);
+        let _asking = crate::gate::one_question();
+        let approval = asker.approve(&effect);
         (self.waited)(asked.elapsed());
-        verdict
+        match approval {
+            Some(Approval::Yes) => Verdict::Allow,
+            Some(Approval::Always) => {
+                lock(always).insert(effect.tool.to_string());
+                Verdict::Allow
+            }
+            Some(Approval::No(why)) => Verdict::Deny(declined(why)),
+            None => Verdict::Deny(NO_ANSWER.into()),
+        }
     }
 }
 

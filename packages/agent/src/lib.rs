@@ -9,7 +9,9 @@
 
 pub mod agent;
 pub mod answer;
+mod calls;
 pub mod conversation;
+pub mod history;
 pub mod observer;
 pub mod schema;
 mod spend;

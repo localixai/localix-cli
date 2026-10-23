@@ -103,11 +103,7 @@ impl Tool for EditTool<'_> {
             write(&path, &shown, &change.content)?;
             change.report(&shown)
         };
-        Ok(ToolOutput {
-            report,
-            state: None,
-            image: None,
-        })
+        Ok(report.into())
     }
 }
 
@@ -219,6 +215,12 @@ fn replace(content: &str, args: &Args, shown: &str) -> Result<Change, ToolError>
         if has_line_numbers(&old) {
             message.push_str(
                 ": it seems to include the line numbers of a read; copy only what follows each tab",
+            );
+        } else if !windows && old.contains('\n') && text.contains("\r\n") {
+            // read drops each line's `\r`, so a span across one cannot be copied from it.
+            message.push_str(
+                ": the file mixes \\r\\n and \\n line endings, which read does not show; edit \
+                 one line at a time",
             );
         }
         return Err(ToolError::Failed(message));

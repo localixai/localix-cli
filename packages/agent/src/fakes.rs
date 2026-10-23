@@ -1,7 +1,7 @@
 //! Fakes of the ports the agent speaks to, for its tests: a scripted chat model, a scripted
 //! tool and an observer that writes events down. No network, no real tool.
 
-use std::cell::RefCell;
+use std::sync::Mutex;
 
 use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
 use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
@@ -11,26 +11,26 @@ use crate::observer::Observer;
 
 /// A chat model that replies from a script, and remembers what each request allowed.
 pub struct Scripted {
-    replies: RefCell<Vec<Completion>>,
+    replies: Mutex<Vec<Completion>>,
     /// Whether each request let the model call tools.
-    pub may_call: RefCell<Vec<bool>>,
+    pub may_call: Mutex<Vec<bool>>,
     /// The last user message of each request.
-    pub last_user: RefCell<Vec<String>>,
+    pub last_user: Mutex<Vec<String>>,
 }
 
 impl Scripted {
     pub fn new(replies: Vec<Completion>) -> Self {
         Self {
-            replies: RefCell::new(replies.into_iter().rev().collect()),
-            may_call: RefCell::new(vec![]),
-            last_user: RefCell::new(vec![]),
+            replies: Mutex::new(replies.into_iter().rev().collect()),
+            may_call: Mutex::new(vec![]),
+            last_user: Mutex::new(vec![]),
         }
     }
 }
 
 impl Chat for Scripted {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
-        self.may_call.borrow_mut().push(request.may_call);
+        self.may_call.lock().unwrap().push(request.may_call);
         let user = request
             .conversation
             .iter()
@@ -39,9 +39,13 @@ impl Chat for Scripted {
                 Message::User(text) => Some(text.clone()),
                 _ => None,
             });
-        self.last_user.borrow_mut().push(user.unwrap_or_default());
+        self.last_user
+            .lock()
+            .unwrap()
+            .push(user.unwrap_or_default());
         self.replies
-            .borrow_mut()
+            .lock()
+            .unwrap()
             .pop()
             .ok_or_else(|| ChatError::Unavailable("the script ran out".into()))
     }
@@ -49,17 +53,17 @@ impl Chat for Scripted {
 
 /// An observer that writes each event down as one line.
 #[derive(Default)]
-pub struct Recorder(RefCell<Vec<String>>);
+pub struct Recorder(Mutex<Vec<String>>);
 
 impl Recorder {
     pub fn events(&self) -> Vec<String> {
-        self.0.borrow().clone()
+        self.0.lock().unwrap().clone()
     }
 }
 
 impl Observer for Recorder {
     fn call(&self, call: &ToolCall) {
-        self.0.borrow_mut().push(format!("call {}", call.name));
+        self.0.lock().unwrap().push(format!("call {}", call.name));
     }
     fn result(&self, call: &ToolCall, outcome: &Result<ToolOutput, ToolError>) {
         let line = match outcome {
@@ -67,11 +71,15 @@ impl Observer for Recorder {
             Err(ToolError::Failed(why)) => format!("failed {}: {why}", call.name),
             Err(ToolError::Fatal(why)) => format!("fatal {}: {why}", call.name),
         };
-        self.0.borrow_mut().push(line);
+        self.0.lock().unwrap().push(line);
+    }
+    fn said(&self, text: &str) {
+        self.0.lock().unwrap().push(format!("said {text}"));
     }
     fn turn(&self, usage: &Usage) {
         self.0
-            .borrow_mut()
+            .lock()
+            .unwrap()
             .push(format!("turn {}", usage.output_tokens));
     }
 }
@@ -95,11 +103,11 @@ pub fn calls(name: &str, arguments: Value) -> Completion {
 }
 
 /// A tool that answers each call from a script.
-pub struct Echo(RefCell<Vec<Result<ToolOutput, ToolError>>>);
+pub struct Echo(Mutex<Vec<Result<ToolOutput, ToolError>>>);
 
 impl Echo {
     pub fn new(outcomes: Vec<Result<ToolOutput, ToolError>>) -> Self {
-        Self(RefCell::new(outcomes.into_iter().rev().collect()))
+        Self(Mutex::new(outcomes.into_iter().rev().collect()))
     }
 }
 
@@ -112,7 +120,7 @@ impl Tool for Echo {
         }
     }
     fn call(&self, _: &Value) -> Result<ToolOutput, ToolError> {
-        self.0.borrow_mut().pop().expect("an unexpected call")
+        self.0.lock().unwrap().pop().expect("an unexpected call")
     }
 }
 

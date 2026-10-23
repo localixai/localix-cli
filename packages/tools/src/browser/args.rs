@@ -133,6 +133,12 @@ impl Args {
             && self.close_tab.is_none()
             && !(self.screenshot || self.read)
     }
+
+    /// Whether `show` asks for the other visibility than the window's (`hidden`): only then is
+    /// it opened again, since reopening reloads the page and loses its state.
+    pub(super) fn reopens(&self, hidden: bool) -> bool {
+        self.show.is_some_and(|show| show == hidden)
+    }
 }
 
 pub(super) fn parameters() -> Value {
@@ -155,10 +161,16 @@ pub(super) fn parameters() -> Value {
     }})
 }
 
-/// `url` as the window loads it: http or https only (a file or an app is not the web).
+/// `url` as the window loads it: http or https only (a file or an app is not the web). Without a
+/// scheme, https, but http for this machine: a dev server serves plain http.
 pub(super) fn address(url: &str) -> Result<String, ToolError> {
     let Some((scheme, _)) = url.split_once("://") else {
-        return Ok(format!("https://{url}"));
+        let host = url.split(['/', '?', '#']).next().unwrap_or("");
+        let name = host.rsplit_once(':').map_or(host, |(name, _)| name);
+        let local = ["localhost", "0.0.0.0"].contains(&name)
+            || name.starts_with("127.")
+            || host.starts_with("[::1]");
+        return Ok(format!("{}://{url}", if local { "http" } else { "https" }));
     };
     if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") {
         return Ok(url.to_string());
@@ -169,13 +181,15 @@ pub(super) fn address(url: &str) -> Result<String, ToolError> {
 }
 
 /// What the call does that a page sees, in full, for the gate; `None` when it only reads or
-/// resizes (opening the search page with nothing else sends nothing).
-pub(super) fn effects(url: Option<&str>, args: &Args) -> Option<String> {
+/// resizes (opening the search page with nothing else sends nothing). A wrong `tab` is refused
+/// here, before the person is asked about a call that cannot run.
+pub(super) fn effects(url: Option<&str>, args: &Args) -> Result<Option<String>, ToolError> {
+    let new_tab = args.new_tab().map_err(ToolError::Failed)?;
     let mut parts = vec![];
     if let Some(url) = url {
-        match args.new_tab() {
-            Ok(true) => parts.push(format!("open {url} in a new tab")),
-            _ => parts.push(format!("open {url}")),
+        match new_tab {
+            true => parts.push(format!("open {url} in a new tab")),
+            false => parts.push(format!("open {url}")),
         }
     }
     if let Some(goal) = given(&args.goal) {
@@ -192,7 +206,7 @@ pub(super) fn effects(url: Option<&str>, args: &Args) -> Option<String> {
     if let Some(script) = given(&args.script) {
         parts.push(format!("script: {}", one_line(script)));
     }
-    (!parts.is_empty()).then(|| parts.join(", then "))
+    Ok((!parts.is_empty()).then(|| parts.join(", then ")))
 }
 
 /// `text` on one line, its line breaks shown as a return sign and nothing left out.

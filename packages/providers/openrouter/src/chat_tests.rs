@@ -90,3 +90,70 @@ fn off_turns_thinking_off_and_a_level_is_asked_by_name() {
     assert_eq!(reasoning(Effort::Off), json!({"enabled": false}));
     assert_eq!(reasoning(Effort::XHigh), json!({"effort": "xhigh"}));
 }
+
+fn selection(efforts: Vec<Effort>, effort: Effort) -> Selection {
+    let model = contracts::catalog::ModelEntry {
+        id: "lab/model".into(),
+        name: "Model".into(),
+        default: efforts.first().copied().unwrap_or(Effort::Off),
+        efforts,
+        context: 100_000,
+    };
+    Selection::new(model).with_effort(effort).unwrap()
+}
+
+fn request_body(openrouter: bool, selection: &Selection, may_call: bool) -> Value {
+    let conversation = [
+        Message::System("rules".into()),
+        Message::User("context".into()),
+        Message::User("goal".into()),
+    ];
+    let tools = [ToolSpec {
+        name: "read".into(),
+        description: "Read.".into(),
+        parameters: json!({"type": "object"}),
+    }];
+    let request = Request {
+        conversation: &conversation,
+        tools: &tools,
+        may_call,
+    };
+    body(openrouter, selection, &request)
+}
+
+#[test]
+fn openrouter_is_sent_its_reasoning_object_the_usage_report_and_cache_marks() {
+    let levels = vec![Effort::Off, Effort::Low, Effort::High];
+    let sent = request_body(true, &selection(levels.clone(), Effort::High), true);
+    assert_eq!(sent["reasoning"], json!({"effort": "high"}));
+    assert_eq!(sent["usage"], json!({"include": true}));
+    assert_eq!(
+        sent["messages"][0]["content"][0]["cache_control"]["type"],
+        "ephemeral"
+    );
+    assert!(sent.get("reasoning_effort").is_none());
+    assert_eq!(sent["tool_choice"], "auto");
+    assert_eq!(sent["parallel_tool_calls"], true);
+    let off = request_body(true, &selection(levels, Effort::Off), false);
+    assert_eq!(off["reasoning"], json!({"enabled": false}));
+    assert_eq!(off["tool_choice"], "none", "the wrap-up turn calls nothing");
+}
+
+#[test]
+fn a_model_with_no_levels_is_sent_no_reasoning_field_on_openrouter_either() {
+    let sent = request_body(true, &selection(vec![], Effort::Off), true);
+    assert!(sent.get("reasoning").is_none(), "{sent}");
+    let generic = request_body(false, &selection(vec![], Effort::Off), true);
+    assert!(generic.get("reasoning_effort").is_none());
+}
+
+#[test]
+fn another_host_is_sent_reasoning_effort_by_name_and_no_openrouter_fields() {
+    let levels = vec![Effort::Off, Effort::Low, Effort::High];
+    let sent = request_body(false, &selection(levels.clone(), Effort::Low), true);
+    assert_eq!(sent["reasoning_effort"], "low");
+    assert!(sent.get("reasoning").is_none() && sent.get("usage").is_none());
+    assert_eq!(sent["messages"][0]["content"], "rules", "no cache marks");
+    let off = request_body(false, &selection(levels, Effort::Off), true);
+    assert_eq!(off["reasoning_effort"], "none");
+}

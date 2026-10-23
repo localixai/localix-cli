@@ -19,6 +19,11 @@ use crate::printable::printable;
 
 /// What the person typed.
 pub fn user(text: &str, width: usize) -> Vec<Line<'static>> {
+    // `/init` sends a long instruction; the person typed the command.
+    let text = match text == crate::commands::extras::INIT {
+        true => "/init",
+        false => text,
+    };
     let first = Line::from(Span::styled("❯ ", style::bold()));
     let rest = Line::from("  ");
     text.trim()
@@ -61,13 +66,12 @@ pub fn end(end: &End, width: usize) -> Vec<Line<'static>> {
     let verb = match end.status {
         "interrupted" => "Stopped after",
         "error" => "Failed after",
-        "exhausted" => "Ran out of turns after",
+        // A limit of turns or of time: the error line under it says which.
+        "exhausted" => "Ran out after",
+        "not_achieved" => "Not achieved after",
         _ => "Worked for",
     };
-    let turns = match end.turns {
-        1 => "1 turn".to_string(),
-        n => format!("{n} turns"),
-    };
+    let turns = count(end.turns, "turn");
     let text = format!(
         "─ {verb} {} · {turns} · ${:.4} ",
         duration(end.millis),
@@ -97,13 +101,29 @@ pub fn note(text: &str, width: usize) -> Vec<Line<'static>> {
     let mut out = vec![];
     for row in text.trim_matches('\n').lines() {
         let row = printable(row.trim_end());
-        let line = Line::from(Span::styled(row.clone(), style::dim()));
         match super::wrap::width(&row) + 2 <= width {
             true => out.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(row, style::dim()),
             ])),
-            false => out.extend(wrap(&line, width, &Line::from("  "), &Line::from("    "))),
+            false => {
+                // A table's row (a label, two spaces or more, then its text) wraps under its
+                // second column, so the columns stay; any other row hangs by two.
+                let lead = row.len() - row.trim_start().len();
+                let label = row[lead..]
+                    .find("  ")
+                    .map(|at| row.len() - row[lead + at..].trim_start().len())
+                    .filter(|&end| super::wrap::width(&row[..end]) * 2 < width)
+                    .unwrap_or(0);
+                let (label, body) = row.split_at(label);
+                let under = match label.is_empty() {
+                    true => "    ".to_string(),
+                    false => " ".repeat(2 + super::wrap::width(label)),
+                };
+                let first = Line::from(Span::styled(format!("  {label}"), style::dim()));
+                let body = Line::from(Span::styled(body.to_string(), style::dim()));
+                out.extend(wrap(&body, width, &first, &Line::from(under)));
+            }
         }
     }
     out
@@ -142,9 +162,23 @@ fn cut_start(text: &str, columns: usize) -> String {
 
 /// `48s`, `1m 05s`, `1h 02m`.
 pub fn duration(millis: u64) -> String {
-    let seconds = millis / 1000;
+    match millis {
+        0..10_000 => format!("{:.1}s", millis as f64 / 1000.0),
+        _ => clock(millis / 1000),
+    }
+}
+
+/// `n` of `noun`: `1 turn`, `3 turns`.
+pub fn count(n: u64, noun: &str) -> String {
+    match n {
+        1 => format!("1 {noun}"),
+        n => format!("{n} {noun}s"),
+    }
+}
+
+/// Whole `seconds` as they count up: `12s`, `3m 08s`, `1h 02m`.
+pub fn clock(seconds: u64) -> String {
     match seconds {
-        0..60 if millis < 10_000 => format!("{:.1}s", millis as f64 / 1000.0),
         0..60 => format!("{seconds}s"),
         60..3600 => format!("{}m {:02}s", seconds / 60, seconds % 60),
         _ => format!("{}h {:02}m", seconds / 3600, seconds / 60 % 60),

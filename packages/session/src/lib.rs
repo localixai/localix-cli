@@ -56,10 +56,12 @@ impl History for Sessions {
     fn load(&self, id: Option<&str>) -> Result<Session, String> {
         let id = match id {
             Some(id) => id.to_string(),
+            // An agent's session goes on only through its parent.
             None => self
                 .list()
-                .first()
-                .map(|session| session.id.clone())
+                .into_iter()
+                .find(|session| !session.is_agent())
+                .map(|session| session.id)
                 .ok_or("no saved sessions")?,
         };
         let text = std::fs::read_to_string(self.dir.join(format!("{id}.json")))

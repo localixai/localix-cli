@@ -234,18 +234,8 @@ fn the_model_chooses_how_long_to_wait() {
     ]
     .into();
     let pick = ask.read(&answers).unwrap();
+    assert_eq!(pick.operation, Operation::Wait);
     assert_eq!(pick.value.as_deref(), Some("10"));
-    let step = GoalStep {
-        operation: pick.operation,
-        reference: None,
-        element: None,
-        value: pick.value,
-        probability: 1.0,
-        changed: Some(true),
-        failed: None,
-        new_view: false,
-    };
-    assert_eq!(step.trace_line(), "WAIT 10s · 100%");
 }
 
 #[test]

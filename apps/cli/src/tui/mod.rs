@@ -8,20 +8,33 @@
 //! reports what happens, and asks (its next entry, an approval, a question) by sending where the
 //! answer goes and waiting there.
 
+pub mod agents;
 pub mod app;
 pub mod asking;
 pub mod cells;
 pub mod composer;
 pub mod event;
 pub mod keys;
+mod list;
 pub mod live;
 pub mod markdown;
 pub mod mention;
+mod opening;
 pub mod questions;
+pub mod queue;
+mod quitting;
 pub mod screen;
+mod search;
 pub mod select;
+mod sessions;
+pub mod steer;
 pub mod style;
+#[cfg(test)]
+pub mod test_support;
 pub mod tool_cell;
+pub mod tree;
+mod ui;
+pub mod views;
 pub mod wrap;
 
 use std::io::{self, Write};
@@ -29,12 +42,12 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use contracts::person::{Answer, Question};
 use crossterm::event::{Event as Terminal, KeyEventKind};
 
 use self::app::{Action, App};
-use self::event::{Approval, Event, Typed};
+use self::event::Event;
 use self::screen::Screen;
+pub use self::ui::Ui;
 use crate::interrupt;
 
 /// Bracketed paste on, and keys reported so Shift+Enter differs from Enter where the terminal can.
@@ -42,18 +55,12 @@ const ENTER: &str = "\x1b[?2004h\x1b[>1u";
 const LEAVE: &str = "\x1b[<1u\x1b[?2004l\x1b[?25h";
 /// How often the live area is redrawn while something runs (the spinner's frame).
 const FRAME: Duration = Duration::from_millis(80);
-/// How often a waiting question checks whether the task was stopped.
-const POLL: Duration = Duration::from_millis(100);
-
-/// The session's side of the interface: cheap to clone, one per thing that reports or asks.
-#[derive(Clone)]
-pub struct Ui {
-    events: Sender<Event>,
-}
 
 /// The interface running; dropping it gives the terminal back.
 pub struct Running {
     pub ui: Ui,
+    /// What the person asks of the desk (a new lane), for whoever runs the lanes.
+    pub requests: Option<Receiver<crate::desk::Request>>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -62,8 +69,11 @@ pub fn start(commands: Vec<(String, String)>, root: &std::path::Path) -> io::Res
     let (width, height) = crossterm::terminal::size()?;
     crossterm::terminal::enable_raw_mode()?;
     let mut out = io::stdout();
-    out.write_all(ENTER.as_bytes())?;
-    out.flush()?;
+    // Nowhere to draw (stdout's reader gone): the terminal goes back as it was.
+    if let Err(error) = out.write_all(ENTER.as_bytes()).and_then(|()| out.flush()) {
+        restore();
+        return Err(error);
+    }
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         restore();
@@ -74,16 +84,19 @@ pub fn start(commands: Vec<(String, String)>, root: &std::path::Path) -> io::Res
     std::thread::spawn(move || read_keys(&keys));
     let mut app = App::new(width as usize, height as usize, commands);
     app.files = mention::Files::new(Some(root.to_path_buf()));
-    let thread = std::thread::spawn(move || draw(app, &inbox));
+    app.shells = tools::shell::running_anywhere;
+    let (asks, requests) = channel();
+    let thread = std::thread::spawn(move || draw(app, &inbox, &asks));
     Ok(Running {
-        ui: Ui { events },
+        ui: Ui::new(events),
+        requests: Some(requests),
         thread: Some(thread),
     })
 }
 
 impl Drop for Running {
     fn drop(&mut self) {
-        let _ = self.ui.events.send(Event::Quit);
+        self.ui.send(Event::Quit);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
@@ -92,14 +105,27 @@ impl Drop for Running {
 }
 
 /// The terminal as it was: cooked, the cursor shown, nothing more reported.
-fn restore() {
+pub fn restore() {
     let _ = crossterm::terminal::disable_raw_mode();
     let mut out = io::stdout();
     let _ = out.write_all(LEAVE.as_bytes()).and_then(|()| out.flush());
 }
 
+/// The editor has the terminal: the keys are its, not the interface's.
+static PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn read_keys(events: &Sender<Event>) {
+    use std::sync::atomic::Ordering;
     loop {
+        if PAUSED.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(50));
+            continue;
+        }
+        match crossterm::event::poll(Duration::from_millis(50)) {
+            Ok(true) if !PAUSED.load(Ordering::SeqCst) => {}
+            Ok(_) => continue,
+            Err(_) => return,
+        }
         let event = match crossterm::event::read() {
             Ok(Terminal::Key(key)) if key.kind != KeyEventKind::Release => Event::Key(key),
             Ok(Terminal::Paste(text)) => Event::Paste(text),
@@ -114,12 +140,12 @@ fn read_keys(events: &Sender<Event>) {
 }
 
 /// The interface's thread: take what comes, then draw, until the session is over.
-fn draw(mut app: App, inbox: &Receiver<Event>) {
+fn draw(mut app: App, inbox: &Receiver<Event>, requests: &Sender<crate::desk::Request>) {
     let mut screen = Screen::new(io::stdout(), style::colour_stdout());
     let mut over = false;
     let mut shown = None;
     while !over {
-        let moving = app.busy.is_some() || app.running.is_some();
+        let moving = app.moving();
         let first = match inbox.recv_timeout(if moving {
             FRAME
         } else {
@@ -140,7 +166,13 @@ fn draw(mut app: App, inbox: &Receiver<Event>) {
             }
             let quit = matches!(event, Event::Quit);
             match app.event(event, Instant::now()) {
-                Some(Action::Stop) => stop(&mut screen, &mut app),
+                Some(Action::Stop(id)) => stop(&mut screen, &mut app, &id),
+                Some(Action::Editor) => {
+                    let _ = screen.clear();
+                    let text = editor(&app.composer.text());
+                    app.composer.set(text.trim_end_matches('\n'));
+                    shown = None;
+                }
                 Some(Action::Clipboard) => {
                     match crate::attach::clipboard(&crate::attach::pasted_dir()) {
                         Ok(path) => app.composer.attach(path),
@@ -149,15 +181,32 @@ fn draw(mut app: App, inbox: &Receiver<Event>) {
                         }
                     }
                 }
+                Some(Action::Open(target)) => {
+                    let _ = requests.send(crate::desk::Request::Open(target));
+                }
+                Some(Action::Sessions) => {
+                    let _ = requests.send(crate::desk::Request::List);
+                }
+                // Every lane is stopped, its prompt given nothing; the desk waits for them.
+                Some(Action::QuitNow) => {
+                    app.leave();
+                    let _ = requests.send(crate::desk::Request::Quit);
+                }
+                Some(Action::Halt(id)) => {
+                    interrupt::stop(&id);
+                }
                 Some(Action::Quit) if quit => over = true,
                 Some(Action::Quit) => app.leave(),
                 None => {}
             }
         }
-        if typed >= 4 && app.select.is_none() {
+        if typed >= 4 && app.questions.is_empty() {
             app.adopt_paths();
         }
         let now = Instant::now();
+        if app.take_replay() {
+            let _ = screen.reset();
+        }
         let history = app.take_history();
         let drawn = match over {
             true => (vec![], None),
@@ -173,117 +222,44 @@ fn draw(mut app: App, inbox: &Receiver<Event>) {
     let _ = screen.clear();
 }
 
+/// The composer's `text` written in `$VISUAL` or `$EDITOR` (else `vi`), the terminal handed over
+/// meanwhile; the text as saved, or as it was when the editor could not run.
+fn editor(text: &str) -> String {
+    let path = std::env::temp_dir().join(format!("llx-prompt-{}.md", std::process::id()));
+    if std::fs::write(&path, text).is_err() {
+        return text.to_string();
+    }
+    PAUSED.store(true, std::sync::atomic::Ordering::SeqCst);
+    // The reader may be between a poll and its read: give it the time to see the pause.
+    std::thread::sleep(Duration::from_millis(60));
+    restore();
+    let command = std::env::var("VISUAL")
+        .or_else(|_| std::env::var("EDITOR"))
+        .unwrap_or_else(|_| "vi".into());
+    let ran = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("{command} \"$0\""))
+        .arg(&path)
+        .status();
+    let _ = crossterm::terminal::enable_raw_mode();
+    let mut out = io::stdout();
+    let _ = out.write_all(ENTER.as_bytes()).and_then(|()| out.flush());
+    PAUSED.store(false, std::sync::atomic::Ordering::SeqCst);
+    let edited = ran
+        .ok()
+        .filter(|status| status.success())
+        .and_then(|_| std::fs::read_to_string(&path).ok());
+    let _ = std::fs::remove_file(&path);
+    edited.unwrap_or_else(|| text.to_string())
+}
+
 /// Stop the task; asked a second time, quit at once, as Ctrl-C twice does outside the interface.
-fn stop(screen: &mut Screen<io::Stdout>, app: &mut App) {
-    if interrupt::PROCESS.stop() {
+fn stop(screen: &mut Screen<io::Stdout>, app: &mut App, id: &str) {
+    if interrupt::stop(id) {
         let history = app.take_history();
         let _ = screen.frame(&history, &[], None, app.height, app.width);
         let _ = screen.clear();
         restore();
         interrupt::quit_now();
-    }
-}
-
-impl Ui {
-    pub fn send(&self, event: Event) {
-        let _ = self.events.send(event);
-    }
-
-    /// The person's next entry; `None` when they leave.
-    pub fn next_entry(&self) -> Option<Typed> {
-        let (reply, answer) = channel();
-        self.send(Event::Ready(reply));
-        answer.recv().ok().flatten()
-    }
-
-    /// Whether an effect may happen; a stopped task closes the question with a no.
-    pub fn approve(&self, tool: &str, summary: &str, stopped: &dyn Fn() -> bool) -> Approval {
-        let (reply, answer) = channel();
-        self.send(Event::Approve {
-            tool: tool.into(),
-            summary: summary.into(),
-            reply,
-        });
-        self.wait(&answer, stopped).unwrap_or(Approval::No(None))
-    }
-
-    /// One of the model's questions; `None` when it was skipped or the task stopped.
-    pub fn ask(
-        &self,
-        question: &Question,
-        at: usize,
-        of: usize,
-        stopped: &dyn Fn() -> bool,
-    ) -> Option<Answer> {
-        let (reply, answer) = channel();
-        self.send(Event::Ask {
-            question: question.clone(),
-            at,
-            of,
-            reply,
-        });
-        self.wait(&answer, stopped).flatten()
-    }
-
-    /// One of `options`, or `None`.
-    pub fn choose(&self, title: &str, options: &[&str]) -> Option<usize> {
-        let options: Vec<(String, String)> = options
-            .iter()
-            .map(|o| (o.to_string(), String::new()))
-            .collect();
-        self.pick(title, options, None)
-    }
-
-    /// One of `options` (a label and a note each), starting on `marked`; `None` when cancelled.
-    pub fn pick(
-        &self,
-        title: &str,
-        options: Vec<(String, String)>,
-        marked: Option<usize>,
-    ) -> Option<usize> {
-        let (reply, answer) = channel();
-        self.send(Event::Choose {
-            title: title.into(),
-            options,
-            marked,
-            reply,
-        });
-        answer.recv().ok().flatten()
-    }
-
-    /// A line the person types after `prompt`, shown as dots when `hidden`; `None` when cancelled.
-    pub fn line(&self, prompt: &str, hidden: bool) -> Option<String> {
-        let (reply, answer) = channel();
-        self.send(Event::Line {
-            prompt: prompt.into(),
-            hidden,
-            reply,
-        });
-        answer.recv().ok().flatten()
-    }
-
-    /// A line as [`Ui::line`], closed unanswered once `done` says so.
-    pub fn line_until(&self, prompt: &str, done: &dyn Fn() -> bool) -> Option<String> {
-        let (reply, answer) = channel();
-        self.send(Event::Line {
-            prompt: prompt.into(),
-            hidden: false,
-            reply,
-        });
-        self.wait(&answer, done).flatten()
-    }
-
-    fn wait<T>(&self, answer: &Receiver<T>, stopped: &dyn Fn() -> bool) -> Option<T> {
-        loop {
-            match answer.recv_timeout(POLL) {
-                Ok(value) => return Some(value),
-                Err(RecvTimeoutError::Disconnected) => return None,
-                Err(RecvTimeoutError::Timeout) if stopped() => {
-                    self.send(Event::Dismiss);
-                    return None;
-                }
-                Err(RecvTimeoutError::Timeout) => {}
-            }
-        }
     }
 }

@@ -24,7 +24,7 @@ fn in_session(
     let tool = BashTool {
         workspace: &workspace,
         gate,
-        hidden: &[],
+        hidden: &Vec::new,
         stop: &|| false,
         sessions,
     };
@@ -118,7 +118,11 @@ fn session_arguments_are_checked_before_the_gate() {
         };
         assert_eq!(message, expected, "{arguments}");
     }
-    assert!(gate.asked.borrow().is_empty(), "{:?}", gate.asked.borrow());
+    assert!(
+        gate.asked.lock().unwrap().is_empty(),
+        "{:?}",
+        gate.asked.lock().unwrap()
+    );
 }
 
 #[cfg(not(unix))]
@@ -137,7 +141,7 @@ fn starting_and_typing_ask_but_reading_and_closing_do_not() {
     let session = id(&started);
     call(json!({"session": session, "input": "print(1)\n", "keys": ["Enter", "Ctrl-D"]}));
     assert_eq!(
-        *gate.asked.borrow(),
+        *gate.asked.lock().unwrap(),
         [
             "bash: cat  (in a terminal, in sub)".to_string(),
             format!(
@@ -148,7 +152,7 @@ fn starting_and_typing_ask_but_reading_and_closing_do_not() {
     let other = id(&call(
         json!({"command": "sleep 30", "tty": true, "yield_ms": 100}),
     ));
-    gate.asked.borrow_mut().clear();
+    gate.asked.lock().unwrap().clear();
     let read = call(json!({"session": other, "yield_ms": 100}));
     // The time is the clock's: a busy machine wakes the wait late, so only its form is checked.
     let waited = read
@@ -161,7 +165,11 @@ fn starting_and_typing_ask_but_reading_and_closing_do_not() {
         closed.contains("it and everything it started were killed"),
         "{closed}"
     );
-    assert!(gate.asked.borrow().is_empty(), "{:?}", gate.asked.borrow());
+    assert!(
+        gate.asked.lock().unwrap().is_empty(),
+        "{:?}",
+        gate.asked.lock().unwrap()
+    );
 }
 
 #[cfg(unix)]
@@ -172,13 +180,13 @@ fn a_fifth_session_is_refused_before_the_gate() {
     for _ in 0..crate::shell::MAX_SESSIONS {
         in_session(&sessions, &dir, &gate, start.clone()).unwrap();
     }
-    gate.asked.borrow_mut().clear();
+    gate.asked.lock().unwrap().clear();
     let refused = failed(in_session(&sessions, &dir, &gate, start));
     assert!(
         refused.ends_with(": close one first (session, close: true)"),
         "{refused}"
     );
-    assert!(gate.asked.borrow().is_empty());
+    assert!(gate.asked.lock().unwrap().is_empty());
 }
 
 /// What was typed is looked for where it outlives the call: in the file `cat` copies it to, not in

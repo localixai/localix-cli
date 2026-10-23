@@ -111,7 +111,7 @@ fn normal(path: &Path) -> PathBuf {
 
 /// `path` with its deepest existing ancestor canonicalized: symlinks on the way are followed, and
 /// the names that do not exist yet (a file to create) are kept as they are.
-fn real(path: &Path) -> PathBuf {
+pub(crate) fn real(path: &Path) -> PathBuf {
     let mut existing = path.to_path_buf();
     let mut missing = vec![];
     loop {

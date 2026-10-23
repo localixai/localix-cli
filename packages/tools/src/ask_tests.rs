@@ -1,18 +1,18 @@
-use std::cell::RefCell;
+use std::sync::Mutex;
 
 use super::*;
 
 /// A person who answers from a script, and remembers what was asked.
 struct Scripted {
     reply: Reply,
-    asked: RefCell<Vec<Question>>,
+    asked: Mutex<Vec<Question>>,
 }
 
 impl Scripted {
     fn new(reply: Reply) -> Self {
         Self {
             reply,
-            asked: RefCell::default(),
+            asked: Mutex::default(),
         }
     }
 
@@ -23,7 +23,7 @@ impl Scripted {
 
 impl Person for Scripted {
     fn ask(&self, questions: &[Question]) -> Reply {
-        self.asked.borrow_mut().extend_from_slice(questions);
+        self.asked.lock().unwrap().extend_from_slice(questions);
         self.reply.clone()
     }
 }
@@ -50,19 +50,6 @@ fn failure(outcome: Result<ToolOutput, ToolError>) -> String {
 }
 
 #[test]
-fn the_spec_is_ask_with_a_list_of_questions() {
-    let person = Scripted::answers(vec![]);
-    let spec = AskTool { person: &person }.spec();
-    assert_eq!(spec.name, "ask");
-    assert!(spec.description.contains("(Recommended)"));
-    let questions = &spec.parameters["properties"]["questions"];
-    assert_eq!(spec.parameters["required"], json!(["questions"]));
-    assert_eq!(questions["maxItems"], 3);
-    assert_eq!(questions["items"]["properties"]["options"]["maxItems"], 4);
-    assert_eq!(questions["items"]["required"], json!(["id", "question"]));
-}
-
-#[test]
 fn a_question_at_the_top_level_with_string_options_is_still_asked() {
     let person = Scripted::answers(vec![picked(1)]);
     let tool = AskTool { person: &person };
@@ -70,7 +57,7 @@ fn a_question_at_the_top_level_with_string_options_is_still_asked() {
         .call(&json!({"question": "Which database?", "options": ["Postgres", "SQLite"]}))
         .unwrap()
         .report;
-    let asked = person.asked.borrow();
+    let asked = person.asked.lock().unwrap();
     assert_eq!(asked.len(), 1);
     assert_eq!(asked[0].id, "q1");
     assert_eq!(asked[0].text, "Which database?");
@@ -87,7 +74,7 @@ fn ids_default_by_position_and_options_keep_their_descriptions() {
             {"label": "Postgres (Recommended)", "description": "already in the stack"}]},
         {"question": "When?"},
     ]}));
-    let asked = person.asked.borrow();
+    let asked = person.asked.lock().unwrap();
     assert_eq!(asked[0].id, "db");
     assert_eq!(asked[0].choices[0].description, "already in the stack");
     assert_eq!(asked[1].id, "q2");
@@ -107,7 +94,7 @@ fn too_many_or_empty_questions_fail_without_asking() {
     assert!(failure(tool.call(&label)).contains("empty label"));
     assert!(failure(tool.call(&json!({"questions": []}))).contains("at least one"));
     assert!(failure(tool.call(&json!({}))).contains("questions"));
-    assert!(person.asked.borrow().is_empty(), "nothing was asked");
+    assert!(person.asked.lock().unwrap().is_empty(), "nothing was asked");
 }
 
 #[test]
@@ -184,7 +171,7 @@ fn several_options_can_be_picked_when_the_question_allows_it() {
     let question = json!({"questions": [{"id": "features", "question": "Which features?",
         "options": ["Search", "Export", "Sharing"], "multiSelect": true}]});
     let report = tool.call(&question).unwrap().report;
-    assert!(person.asked.borrow()[0].multiple);
+    assert!(person.asked.lock().unwrap()[0].multiple);
     assert_eq!(
         report,
         "The person answered:\n- features: Search, Sharing; they added: dark mode later"
@@ -192,7 +179,7 @@ fn several_options_can_be_picked_when_the_question_allows_it() {
     let open = json!({"question": "Why?", "multiple": true});
     tool.call(&open).unwrap();
     assert!(
-        !person.asked.borrow()[1].multiple,
+        !person.asked.lock().unwrap()[1].multiple,
         "an open question has nothing to pick"
     );
 }

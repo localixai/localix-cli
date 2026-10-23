@@ -46,7 +46,7 @@ pub enum Until {
     Settled,
     Deadline,
     Exited(Ending),
-    /// The person stopped the task: every session was killed.
+    /// The call was stopped: its session was killed.
     Stopped,
     /// Closed by the call; `killed` once everything it started is known to be gone.
     Closed {
@@ -79,19 +79,14 @@ struct Registry {
     /// The last id given: ids are never given twice.
     next: u32,
     live: Vec<Session>,
+    /// Sessions a call holds (starting, or waited on): they count, and are not lent twice.
+    busy: Vec<u32>,
 }
 
 impl Sessions {
     /// Room for one more session, or why there is none: checked before the person is asked.
     pub fn room(&self) -> Result<(), String> {
-        let registry = self.registry();
-        match registry.live.len() < MAX_SESSIONS {
-            true => Ok(()),
-            false => Err(format!(
-                "{MAX_SESSIONS} sessions are running: {}: close one first (session, close: true)",
-                list(&registry.live)
-            )),
-        }
+        room(&self.registry())
     }
 
     /// The command of the running session `id` as reports name it, or why there is none.
@@ -99,7 +94,7 @@ impl Sessions {
         let registry = self.registry();
         match registry.live.iter().find(|session| session.id == id) {
             Some(session) => Ok(session.command.clone()),
-            None => Err(not_running(id, &registry.live)),
+            None => Err(not_running(id, &registry)),
         }
     }
 
@@ -116,15 +111,20 @@ impl Sessions {
         dir: &Path,
         hidden: &[&str],
         wait: Wait,
-        stop: &dyn Fn() -> bool,
+        stop: &(dyn Fn() -> bool + Sync),
     ) -> Result<Turn, String> {
-        self.room()?;
-        let pty = pty::spawn(command, dir, hidden, wait.needle)
-            .map_err(|error| format!("the shell could not start: {error}"))?;
-        let mut registry = self.registry();
-        registry.next += 1;
-        let id = registry.next;
-        drop(registry);
+        let id = {
+            let mut registry = self.registry();
+            room(&registry)?;
+            registry.next += 1;
+            let id = registry.next;
+            registry.busy.push(id);
+            id
+        };
+        let pty = pty::spawn(command, dir, hidden, wait.needle).map_err(|error| {
+            self.release(id);
+            format!("the shell could not start: {error}")
+        })?;
         let session = Session::new(id, shown(command), pty);
         Ok(self.go_on(session, wait, stop, None))
     }
@@ -136,7 +136,7 @@ impl Sessions {
         input: &[u8],
         keys: &[String],
         wait: Wait,
-        stop: &dyn Fn() -> bool,
+        stop: &(dyn Fn() -> bool + Sync),
     ) -> Result<Turn, String> {
         let session = self.take(id)?;
         let typing = !input.is_empty() || !keys.is_empty();
@@ -152,6 +152,7 @@ impl Sessions {
     pub fn close(&self, id: u32) -> Result<Turn, String> {
         let mut session = self.take(id)?;
         let killed = session.end();
+        self.release(id);
         Ok(session.turn(Until::Closed { killed }, Duration::ZERO, None))
     }
 
@@ -170,33 +171,40 @@ impl Sessions {
         &self,
         mut session: Session,
         wait: Wait,
-        stop: &dyn Fn() -> bool,
+        stop: &(dyn Fn() -> bool + Sync),
         stalled: Option<(usize, usize)>,
     ) -> Turn {
         let begun = std::time::Instant::now();
         let until = session.wait(wait, stop);
         let turn = session.turn(until, begun.elapsed(), stalled);
         match until {
-            Until::Stopped => {
-                drop(session);
-                self.close_all();
-            }
-            Until::Exited(_) | Until::Closed { .. } => {}
+            // A stop is this call's (an agent's, or the task's, whose end closes the rest).
+            Until::Stopped | Until::Exited(_) | Until::Closed { .. } => drop(session),
             _ => {
                 let mut registry = self.registry();
+                registry.busy.retain(|&busy| busy != turn.id);
                 registry.live.push(session);
                 registry.live.sort_by_key(|session| session.id);
+                return turn;
             }
         }
+        self.release(turn.id);
         turn
     }
 
     fn take(&self, id: u32) -> Result<Session, String> {
         let mut registry = self.registry();
         match registry.live.iter().position(|session| session.id == id) {
-            Some(at) => Ok(registry.live.remove(at)),
-            None => Err(not_running(id, &registry.live)),
+            Some(at) => {
+                registry.busy.push(id);
+                Ok(registry.live.remove(at))
+            }
+            None => Err(not_running(id, &registry)),
         }
+    }
+
+    fn release(&self, id: u32) {
+        self.registry().busy.retain(|&busy| busy != id);
     }
 
     fn registry(&self) -> MutexGuard<'_, Registry> {
@@ -210,11 +218,26 @@ impl Drop for Sessions {
     }
 }
 
-fn not_running(id: u32, live: &[Session]) -> String {
-    format!(
-        "session {id} is not running: it ended, or was closed. Running: {}",
-        list(live)
-    )
+fn room(registry: &Registry) -> Result<(), String> {
+    match registry.live.len() + registry.busy.len() < MAX_SESSIONS {
+        true => Ok(()),
+        false => Err(format!(
+            "{MAX_SESSIONS} sessions are running: {}: close one first (session, close: true)",
+            list(&registry.live)
+        )),
+    }
+}
+
+fn not_running(id: u32, registry: &Registry) -> String {
+    match registry.busy.contains(&id) {
+        true => {
+            format!("session {id} is busy in another call: read it again after that call returns")
+        }
+        false => format!(
+            "session {id} is not running: it ended, or was closed. Running: {}",
+            list(&registry.live)
+        ),
+    }
 }
 
 fn list(live: &[Session]) -> String {

@@ -99,6 +99,6 @@ pub struct Request<'a> {
     pub may_call: bool,
 }
 
-pub trait Chat {
+pub trait Chat: Send + Sync {
     fn complete(&self, request: Request) -> Result<Completion, ChatError>;
 }

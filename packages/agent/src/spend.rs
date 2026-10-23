@@ -24,4 +24,21 @@ impl Spend {
         self.cached_tokens += usage.cached_tokens;
         self.output_tokens += usage.output_tokens;
     }
+
+    /// Add what another run spent (an agent this one started): its turns and tokens count here.
+    pub fn absorb(&mut self, other: &Spend) {
+        if self.model.is_empty() {
+            self.model.clone_from(&other.model);
+        }
+        self.calls += other.calls;
+        self.cost += other.cost;
+        self.millis += other.millis;
+        self.input_tokens += other.input_tokens;
+        self.cached_tokens += other.cached_tokens;
+        self.output_tokens += other.output_tokens;
+    }
 }
+
+#[cfg(test)]
+#[path = "spend_tests.rs"]
+mod tests;

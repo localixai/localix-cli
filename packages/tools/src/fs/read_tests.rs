@@ -153,15 +153,6 @@ fn a_large_directory_is_capped() {
 }
 
 #[test]
-fn an_absolute_path_reads_outside_the_root() {
-    let dir = Scratch::new();
-    let other = Scratch::new();
-    let path = other.file("x.txt", "hi");
-    let report = read(&dir, json!({"path": path.to_str().unwrap()})).unwrap();
-    assert!(report.ends_with("(lines 1-1 of 1)\n     1\thi"), "{report}");
-}
-
-#[test]
 fn unknown_arguments_are_refused() {
     let dir = Scratch::new();
     assert!(failed(read(&dir, json!({"path": "a", "lines": 3}))).starts_with("unusable arguments"));

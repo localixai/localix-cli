@@ -103,3 +103,45 @@ fn a_closed_stdout_is_noticed_and_never_panics() {
     run(&output);
     assert!(output.closed());
 }
+
+#[test]
+fn what_the_model_says_beside_its_calls_is_in_the_trace_and_not_in_the_events() {
+    let (out, err) = (Captured::default(), Captured::default());
+    let output = Output::with(false, false, Box::new(out.clone()), Box::new(err.clone()));
+    output.said("I will check the lockfile first.");
+    output.call(&call());
+    assert!(
+        err.text().contains("I will check the lockfile first."),
+        "{}",
+        err.text()
+    );
+    assert_eq!(out.text(), "", "stdout gets the answer alone");
+    let (out, err) = (Captured::default(), Captured::default());
+    let output = Output::with(true, false, Box::new(out.clone()), Box::new(err.clone()));
+    output.said("I will check the lockfile first.");
+    assert_eq!(
+        (out.text(), err.text()),
+        (String::new(), String::new()),
+        "no event without a schema change"
+    );
+}
+
+#[test]
+fn a_turn_tells_the_interface_its_tokens() {
+    let (ui, events) = crate::tui::test_support::fake_ui();
+    let output = Output::new(false, false).in_ui(Some(ui.for_lane("lane")));
+    let usage = contracts::chat::Usage {
+        input_tokens: 1000,
+        output_tokens: 200,
+        ..Default::default()
+    };
+    agent::observer::Observer::turn(&output, &usage);
+    let spent = events.try_iter().find_map(|event| match event {
+        Event::In(lane, inner) => match *inner {
+            Event::Spent(tokens) => Some((lane, tokens)),
+            _ => None,
+        },
+        _ => None,
+    });
+    assert_eq!(spent, Some(("lane".to_string(), 1200)));
+}

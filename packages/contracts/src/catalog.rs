@@ -77,6 +77,8 @@ pub struct ModelEntry {
     pub efforts: Vec<Effort>,
     /// The level it runs at when none was chosen.
     pub default: Effort,
+    /// Its context window in tokens; 0 when it is not known.
+    pub context: u64,
 }
 
 impl ModelEntry {

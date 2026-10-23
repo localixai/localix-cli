@@ -60,6 +60,41 @@ fn new_lines_come_from_shift_enter_ctrl_j_a_backslash_and_a_paste() {
 }
 
 #[test]
+fn clipboard_text_uses_marks_and_restores_only_marks_still_present() {
+    let mut composer = Composer::default();
+    composer.paste_marked("\u{0000}");
+    assert!(composer.is_empty(), "empty clipboard text adds no mark");
+    typed(&mut composer, "fix");
+    composer.paste_marked("one\r\ntwo");
+    composer.paste_marked("three");
+    assert_eq!(composer.text(), "fix [Paste] [Paste #2] ");
+    composer.key(key(KeyCode::Backspace));
+    for _ in 0..10 {
+        composer.key(key(KeyCode::Backspace));
+    }
+    assert_eq!(composer.text(), "fix [Paste] ");
+    let sent = match composer.key(key(KeyCode::Enter)) {
+        Edit::Sent(text) => text,
+        other => panic!("expected sent text: {other:?}"),
+    };
+    assert_eq!(composer.take_attached(&sent).0, "fix one\ntwo ");
+    composer.key(key(KeyCode::Up));
+    assert_eq!(composer.text(), "fix one\ntwo ");
+}
+
+#[test]
+fn pasted_mark_text_is_not_expanded_again() {
+    let mut composer = Composer::default();
+    composer.paste_marked("literal [Paste #2]");
+    composer.paste_marked("other");
+    let sent = match composer.key(key(KeyCode::Enter)) {
+        Edit::Sent(text) => text,
+        other => panic!("expected sent text: {other:?}"),
+    };
+    assert_eq!(composer.take_attached(&sent).0, "literal [Paste #2] other ");
+}
+
+#[test]
 fn the_cursor_moves_by_character_word_and_line() {
     let mut composer = Composer::default();
     typed(&mut composer, "run cargo test");
@@ -128,4 +163,26 @@ fn wide_characters_keep_their_columns() {
     let mut composer = Composer::default();
     typed(&mut composer, "\u{65e5}\u{672c}\u{8a9e}");
     assert_eq!(shown(&composer, 20).1, (0, 8));
+}
+
+#[test]
+fn ctrl_r_finds_earlier_entries_with_the_words_typed() {
+    let mut composer = Composer::default();
+    for entry in [
+        "run the tests",
+        "fix the parser",
+        "run the linter",
+        "write docs",
+    ] {
+        composer.set(entry);
+        composer.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    }
+    composer.set("run");
+    let ctrl_r = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL);
+    composer.key(ctrl_r);
+    assert_eq!(composer.text(), "run the linter");
+    composer.key(ctrl_r);
+    assert_eq!(composer.text(), "run the tests");
+    composer.key(ctrl_r);
+    assert_eq!(composer.text(), "run the tests", "no earlier one: it stays");
 }

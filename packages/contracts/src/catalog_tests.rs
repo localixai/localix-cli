@@ -2,6 +2,7 @@ use super::*;
 
 fn entry(efforts: &[Effort], default: Effort) -> ModelEntry {
     ModelEntry {
+        context: 0,
         id: "m".into(),
         name: "M".into(),
         efforts: efforts.to_vec(),
@@ -10,15 +11,30 @@ fn entry(efforts: &[Effort], default: Effort) -> ModelEntry {
 }
 
 #[test]
-fn a_selection_starts_at_the_models_default() {
-    let model = entry(&[Effort::Low, Effort::Medium, Effort::High], Effort::Medium);
-    assert_eq!(Selection::new(model).effort(), Effort::Medium);
-}
-
-#[test]
-fn a_default_the_model_does_not_offer_becomes_its_lowest_level() {
-    let model = entry(&[Effort::Low, Effort::High], Effort::Ultra);
-    assert_eq!(Selection::new(model).effort(), Effort::Low);
+fn a_selection_starts_at_an_offered_level() {
+    use Effort::*;
+    // The levels a model takes, its default, the level a selection starts at, what it
+    // offers, and a level it refuses.
+    type Case = (&'static [Effort], Effort, Effort, &'static [Effort], Effort);
+    let cases: [Case; 3] = [
+        (
+            &[Low, Medium, High],
+            Medium,
+            Medium,
+            &[Low, Medium, High],
+            Max,
+        ),
+        // A default the model does not offer becomes its lowest level.
+        (&[Low, High], Ultra, Low, &[Low, High], Ultra),
+        // A model with no levels runs with none.
+        (&[], High, Off, &[Off], Low),
+    ];
+    for (efforts, default, starts, offered, refused) in cases {
+        let selection = Selection::new(entry(efforts, default));
+        assert_eq!(selection.effort(), starts, "{efforts:?}");
+        assert_eq!(selection.model().offered(), offered, "{efforts:?}");
+        assert!(selection.with_effort(refused).is_none(), "{efforts:?}");
+    }
 }
 
 #[test]
@@ -30,14 +46,6 @@ fn only_an_offered_level_can_be_chosen() {
     );
     assert_eq!(selection.with_effort(Effort::Max), None);
     assert_eq!(selection.with_effort(Effort::Off), None);
-}
-
-#[test]
-fn a_model_with_no_levels_runs_with_none() {
-    let selection = Selection::new(entry(&[], Effort::High));
-    assert_eq!(selection.effort(), Effort::Off);
-    assert_eq!(selection.model().offered(), [Effort::Off]);
-    assert!(selection.with_effort(Effort::Low).is_none());
 }
 
 #[test]

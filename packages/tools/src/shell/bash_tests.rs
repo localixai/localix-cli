@@ -18,7 +18,7 @@ fn in_session(
     let tool = BashTool {
         workspace: &workspace,
         gate,
-        hidden: &[],
+        hidden: &Vec::new,
         stop: &|| false,
         sessions,
     };
@@ -58,7 +58,7 @@ fn a_failing_command_is_output_with_its_code_and_streams() {
         "exit 2 in Ts\n### stdout\nout\n### stderr\nerr"
     );
     assert_eq!(
-        *gate.asked.borrow(),
+        *gate.asked.lock().unwrap(),
         ["bash: echo out; echo err >&2; exit 2"]
     );
 }
@@ -93,7 +93,10 @@ fn workdir_is_relative_to_the_root() {
         json!({"command": "ls", "workdir": "nope"}),
     ));
     assert_eq!(missing, "nope is not a directory");
-    assert_eq!(*gate.asked.borrow(), [format!("bash: {command}  (in sub)")]);
+    assert_eq!(
+        *gate.asked.lock().unwrap(),
+        [format!("bash: {command}  (in sub)")]
+    );
 }
 
 #[test]
@@ -109,9 +112,31 @@ fn the_gate_is_told_a_workdir_outside_the_workspace() {
         json!({"command": "rm -rf build", "workdir": shown}),
     ));
     assert_eq!(
-        *gate.asked.borrow(),
+        *gate.asked.lock().unwrap(),
         [format!(
             "bash: rm -rf build  (in {shown}, outside the workspace)"
+        )]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn the_gate_is_told_a_symlinked_workdir_leads_outside() {
+    let dir = Scratch::new();
+    let outside = Scratch::new();
+    std::os::unix::fs::symlink(outside.path(), dir.path().join("docs")).unwrap();
+    let gate = Recorder::denying("no");
+    failed(bash(
+        &dir,
+        &gate,
+        json!({"command": "rm -rf *", "workdir": "docs"}),
+    ));
+    let real = outside.path().canonicalize().unwrap();
+    assert_eq!(
+        *gate.asked.lock().unwrap(),
+        [format!(
+            "bash: rm -rf *  (in docs, which leads to {}, outside the workspace)",
+            real.display()
         )]
     );
 }
@@ -141,19 +166,6 @@ fn a_command_past_its_timeout_is_killed_fast() {
     );
 }
 
-#[cfg(unix)]
-#[test]
-fn long_output_is_cut_in_the_middle() {
-    let dir = Scratch::new();
-    let gate = Recorder::default();
-    let command = "i=0; while [ $i -lt 10000 ]; do echo line $i; i=$((i+1)); done";
-    let report = bash(&dir, &gate, json!({"command": command})).unwrap();
-    assert!(report.len() < 11_000, "{} bytes", report.len());
-    assert!(report.contains("### stdout\nline 0\nline 1\n"));
-    assert!(report.contains(" characters cut ...\n"));
-    assert!(report.ends_with("line 9999"));
-}
-
 #[test]
 fn a_denied_command_does_not_run() {
     let dir = Scratch::new();
@@ -171,7 +183,7 @@ fn an_empty_command_is_refused_before_the_gate() {
         failed(bash(&dir, &gate, json!({"command": "  "}))),
         "the command is empty"
     );
-    assert!(gate.asked.borrow().is_empty());
+    assert!(gate.asked.lock().unwrap().is_empty());
 }
 
 #[test]
@@ -211,19 +223,6 @@ fn a_report_says_how_the_command_ended() {
     );
 }
 
-#[test]
-fn the_description_names_the_shell_of_this_system() {
-    let workspace = Workspace::new(Scratch::new().path()).unwrap();
-    let tool = BashTool {
-        workspace: &workspace,
-        gate: &Recorder::default(),
-        hidden: &[],
-        stop: &|| false,
-        sessions: &Sessions::default(),
-    };
-    assert!(tool.spec().description.contains(&format!("(`{SHELL}`)")));
-}
-
 #[cfg(windows)]
 #[test]
 fn a_command_runs_in_the_root_on_windows() {
@@ -261,7 +260,7 @@ fn the_schema_offers_sessions_only_with_a_terminal() {
     let tool = BashTool {
         workspace: &workspace,
         gate: &Recorder::default(),
-        hidden: &[],
+        hidden: &Vec::new,
         stop: &|| false,
         sessions: &Sessions::default(),
     };

@@ -126,6 +126,8 @@ impl Served {
                 return;
             }
             let Ok(stream) = stream else { continue };
+            // One connection at a time: one that says nothing must not hold up the redirect.
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
             let mut line = String::new();
             if BufReader::new(&stream).read_line(&mut line).is_err() {
                 continue;

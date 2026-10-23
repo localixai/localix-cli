@@ -4,23 +4,26 @@
 //! once that owns the main thread (its event loop never returns): there, with the code the run
 //! returns. Nothing else exits.
 
+mod agents;
 mod attach;
 mod brake;
+mod checkpoints;
 mod choice;
 mod cli;
 mod commands;
 mod compose;
 mod context;
+mod desk;
 mod error;
 mod exit;
 mod gate;
 mod input;
 mod instructions;
 mod interrupt;
+mod jobs;
 mod live;
 mod mode;
 mod output;
-mod person;
 mod picker;
 mod printable;
 mod providers;

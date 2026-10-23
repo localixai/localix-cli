@@ -5,10 +5,8 @@ use std::path::PathBuf;
 
 use clap::builder::RangedU64ValueParser;
 use clap::{ArgGroup, Args, Parser, Subcommand};
-use openrouter::system_one;
 
 use crate::mode::Mode;
-use crate::providers::Provider;
 
 const USAGE: &str = "llx [OPTIONS] [PROMPT]\n       \
     llx exec [OPTIONS] [PROMPT | -]\n       \
@@ -18,11 +16,13 @@ const ABOUT: &str = "llx: an ultrafast, lightweight coding agent for the termina
 
 const LONG_ABOUT: &str = "llx: an ultrafast, lightweight coding agent for the terminal.
 
-It works in a directory (the current one, or -C DIR) with five tools: read, edit, bash (on \
+It works in a directory (the current one, or -C DIR) with seven tools: read, edit, bash (on \
 unix it can keep a program that asks, such as a REPL, open in a terminal session until the task \
 ends), a browser whose clicks and typing are done by a fast decision model (the agent also reads \
-the page, runs scripts in it, sees it in screenshots and keeps several tabs), and ask, a question to you (in a \
-session only).
+the page, runs scripts in it, sees it in screenshots and keeps several tabs), ask, a question to you (in a \
+session only), agents: other agents it starts in parallel, each a session of its own (in a \
+session, a list under the prompt shows them: down arrow, then enter to see one), and jobs: \
+monitors (a background command whose lines come back) and schedules (a prompt at a time).
 
 With no command, llx opens a session at the terminal: PROMPT, when given, is its first message, \
 and each line you type goes on from the last. `llx exec` (or -p) runs one task without a session \
@@ -35,15 +35,23 @@ tool's decision model runs on OpenRouter, so it needs an OpenRouter key whicheve
 agent thinks with.
 
 The mode (--mode) decides what runs without asking. In default, commands, file changes and \
-browser actions are asked for at the terminal (y, n, or a: always for this tool), and refused \
-outside one. plan investigates and answers with a plan: file changes are refused, and each \
+browser actions are asked for at the terminal (1 yes, 2 always for this tool, 3 no; outside a \
+session y, a or n), and refused without one. plan investigates and answers with a plan: file changes are refused, and each \
 command (and each input to a terminal session) is asked. bypass (-y) allows everything. \
 autonomous also allows everything, and the agent asks you nothing (in exec, where ask is not \
 offered, it is the same as bypass). In a session, /mode switches it, /plan enters plan mode, \
-Shift+Tab then Enter toggles plan mode, and /status shows the mode.
+Shift+Tab then Enter toggles plan mode, and /status shows the mode. Tab completes a slash command \
+(with a space for commands taking an argument); Enter executes the typed command. Pasted text \
+is shown as [Paste] until sent; pasted file paths become file or image marks.
 
-Ctrl-C stops the task (the command running and every terminal session are killed, and an open \
-question or approval ends); a second Ctrl-C quits.";
+Sessions run side by side: /new opens another and shows it while the one before goes on in the \
+background. The Left arrow on an empty prompt lists the sessions in this project (those open, a \
+new one, then the saved ones): Enter opens one, x stops its task, Esc closes the list. A question \
+from a session not shown names it. Quitting while a session works or a shell or monitor runs \
+asks first: Quit anyway stops them all.
+
+Ctrl-C stops the task of the session shown (the command running and every terminal session are \
+killed, and an open question or approval ends); a second Ctrl-C quits.";
 
 const EXAMPLES: &str = "Examples:
   llx                                              a session at the terminal
@@ -57,14 +65,15 @@ const EXAMPLES: &str = "Examples:
   llx exec --json -y \"update the changelog\" | jq -c 'select(.type == \"tool.call\")'
   llx exec --schema '{\"type\":\"object\",\"properties\":{\"version\":{\"type\":\"string\"}}}' \\
       \"which version is this crate?\"
-  llx exec resume --last \"now update the README\"
+  llx exec resume --last now update the README
 
 Exit codes: 0 achieved, 1 not achieved, 2 out of turns or time, 3 environment or usage,
 130 interrupted.
 
 Environment: OPENROUTER_API_KEY (else the key /login saved), LLX_PROVIDER, LLX_MODEL,
-LLX_REASONING, LLX_DECISION_MODEL, LLX_SESSIONS (where sessions are kept, default
-~/.lx/sessions). Sign-ins and the /login choice are kept in ~/.config/llx/ (0600).";
+LLX_REASONING, LLX_DECISION_MODEL, LLX_MODELS_REFRESH (0: no background catalog refresh),
+LLX_SESSIONS (where sessions are kept, default
+~/.llx/sessions). Sign-ins and the /login choice are kept in ~/.config/llx/ (0600).";
 
 #[derive(Parser, Debug)]
 #[command(
@@ -142,24 +151,23 @@ pub struct ResumeArgs {
     /// Continue the newest session; the first argument is then the prompt.
     #[arg(long)]
     pub last: bool,
-    /// The next message; with `exec resume`, the task.
-    #[arg(value_name = "PROMPT")]
-    pub prompt: Option<String>,
+    /// The next message; with `exec resume`, the task. Quotes are optional.
+    #[arg(value_name = "PROMPT", num_args = 1..)]
+    pub prompt: Vec<String>,
     #[command(flatten)]
     pub run: RunOptions,
 }
 
 impl ResumeArgs {
-    /// The session asked for (`None`: the newest) and the prompt. With `--last` the first
-    /// argument is the prompt, as `codex resume --last` reads it.
-    pub fn target(&self) -> Result<(Option<&str>, Option<&str>), String> {
-        match (self.last, self.id.as_deref(), self.prompt.as_deref()) {
-            (true, Some(_), Some(_)) => {
-                Err("with --last, give only the prompt: llx resume --last \"<task>\"".into())
+    /// The session asked for (`None`: the newest) and the prompt. With `--last` every argument
+    /// is a word of the prompt.
+    pub fn target(&self) -> (Option<&str>, Option<String>) {
+        match (self.last, &self.id) {
+            (true, Some(first)) => {
+                let words = [std::slice::from_ref(first), &self.prompt].concat();
+                (None, joined(&words))
             }
-            (true, first, None) => Ok((None, first)),
-            (true, None, prompt) => Ok((None, prompt)),
-            (false, id, prompt) => Ok((id, prompt)),
+            (_, id) => (id.as_deref(), joined(&self.prompt)),
         }
     }
 }
@@ -169,10 +177,11 @@ impl ResumeArgs {
 #[derive(Args, Debug, Clone)]
 #[command(next_help_heading = "Model")]
 pub struct ModelOptions {
-    /// Where the agent's chat model comes from: openai (a ChatGPT sign-in) or openrouter (a key).
-    /// Default: the one /login saved, else the one signed in to.
-    #[arg(long, value_enum, value_name = "PROVIDER", env = "LLX_PROVIDER")]
-    pub provider: Option<Provider>,
+    /// Where the agent's chat model comes from: a provider of the model catalog (models.dev), by
+    /// id: openai (a ChatGPT sign-in or a key), openrouter, anthropic, deepseek, xai… Default:
+    /// the one /login saved, else the one signed in to.
+    #[arg(long, value_name = "PROVIDER", env = "LLX_PROVIDER")]
+    pub provider: Option<String>,
     /// The agent's chat model, a model id of the provider's (any OpenRouter id works). Default:
     /// the one /login saved, else the provider's default.
     #[arg(short = 'm', long, value_name = "MODEL", env = "LLX_MODEL")]
@@ -182,7 +191,7 @@ pub struct ModelOptions {
     #[arg(long, value_name = "LEVEL", env = "LLX_REASONING")]
     pub reasoning: Option<String>,
     /// The decision model that clicks and types in the browser.
-    #[arg(long, value_name = "MODEL", env = "LLX_DECISION_MODEL", default_value = system_one::DEFAULT_MODEL)]
+    #[arg(long, value_name = "MODEL", env = "LLX_DECISION_MODEL", default_value = crate::providers::DECISION_DEFAULT)]
     pub decision_model: String,
 }
 
@@ -205,7 +214,8 @@ pub struct RunOptions {
 
     /// Pictures (PNG, JPEG, GIF, WebP) attached to the first task, as the person's own: a
     /// mockup, a screenshot of a bug. Repeat it, or separate them with commas. In a session,
-    /// drag a picture in, paste its path, or press Ctrl+V for the clipboard's.
+    /// drag a picture in, paste its path, or press Ctrl+V for the clipboard's. A file that is
+    /// missing or not a picture is a usage error, before any model is called.
     #[arg(
         short = 'i',
         long = "image",
@@ -256,7 +266,8 @@ pub struct RunOptions {
     #[arg(long, value_name = "N", default_value_t = 40, help_heading = "Limits",
         value_parser = RangedU64ValueParser::<usize>::new().range(1..=10_000))]
     pub max_steps: usize,
-    /// Seconds one task may take, up to a day; it stops at the first model turn past them.
+    /// Seconds one task may take, up to a day; it stops at the first model turn past them, or
+    /// while it waits on its monitors or agents.
     #[arg(long, value_name = "SECONDS", default_value_t = 1800, help_heading = "Limits",
         value_parser = RangedU64ValueParser::<u64>::new().range(1..=86_400))]
     pub timeout: u64,

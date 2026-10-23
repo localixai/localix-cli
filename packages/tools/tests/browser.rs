@@ -592,7 +592,24 @@ fn screenshots(driver: &WebviewDriver, origin: &str) {
     );
 }
 
+/// One test, `driver`, as the standard harness lists and runs tests, so a test runner that asks
+/// for the list (`--list --format terse`) and then runs each by name finds it.
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|arg| arg == "--list") {
+        if !args.iter().any(|arg| arg == "--ignored") {
+            println!("driver: test");
+        }
+        return;
+    }
+    let filters: Vec<&String> = args.iter().filter(|arg| !arg.starts_with('-')).collect();
+    if !filters.is_empty()
+        && !filters
+            .iter()
+            .any(|filter| "driver".contains(filter.as_str()))
+    {
+        return;
+    }
     let origin = serve();
     let window = Window {
         url: format!("{origin}/form.html"),

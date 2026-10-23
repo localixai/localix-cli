@@ -1,15 +1,16 @@
 //! What a run shows as it goes and how it ends. For a person: a trace on stderr (`▸ tool args`,
 //! the browser hands' steps indented under their call) and the answer alone on stdout, so a pipe
-//! gets the answer and nothing else. With `--json`: one JSON event per line on stdout, as
-//! `codex exec --json` prints them ([`json`]). A closed stdout is noticed when something is
+//! gets the answer and nothing else. With `--json`: one JSON event per line on stdout
+//! ([`json`]). A closed stdout is noticed when something is
 //! written to it, never with a panic: with `--json` that is every event, so the run stops at its
 //! next turn; otherwise only the answer is written, at the end, and the process then ends quietly.
 
-mod human;
+pub mod human;
 mod json;
 
-use std::cell::{Cell, RefCell};
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Mutex, MutexGuard};
 use std::time::Instant;
 
 use agent::agent::Spend as AgentSpend;
@@ -77,18 +78,18 @@ pub struct Output {
     /// The trace on stderr.
     trace: bool,
     verbose: bool,
-    out: RefCell<Box<dyn Write>>,
-    err: RefCell<Box<dyn Write>>,
-    started: Cell<Instant>,
-    closed: Cell<bool>,
+    out: Mutex<Box<dyn Write + Send>>,
+    err: Mutex<Box<dyn Write + Send>>,
+    started: Mutex<Instant>,
+    closed: AtomicBool,
     /// In a session at a terminal: the interface shows the run instead of the trace.
     ui: Option<Ui>,
     /// The trace's colour and width, and how many blocks it printed.
     colour: bool,
     width: usize,
-    blocks: Cell<usize>,
+    blocks: AtomicUsize,
     /// The hands' actions under the call running, printed with it.
-    steps: RefCell<Vec<String>>,
+    steps: Mutex<Vec<String>>,
     /// stdout is a terminal: the answer is rendered there.
     answer_terminal: bool,
 }
@@ -105,20 +106,25 @@ impl Output {
     }
 
     /// Output on given writers: `out` for the answer or the events, `err` for the trace.
-    pub fn with(json: bool, verbose: bool, out: Box<dyn Write>, err: Box<dyn Write>) -> Self {
+    pub fn with(
+        json: bool,
+        verbose: bool,
+        out: Box<dyn Write + Send>,
+        err: Box<dyn Write + Send>,
+    ) -> Self {
         Self {
             json,
             trace: !json || verbose,
             verbose,
-            out: RefCell::new(out),
-            err: RefCell::new(err),
-            started: Cell::new(Instant::now()),
-            closed: Cell::new(false),
+            out: Mutex::new(out),
+            err: Mutex::new(err),
+            started: Mutex::new(Instant::now()),
+            closed: AtomicBool::new(false),
             ui: None,
             colour: false,
             width: TRACE_WIDTH,
-            blocks: Cell::new(0),
-            steps: RefCell::new(vec![]),
+            blocks: AtomicUsize::new(0),
+            steps: Mutex::new(vec![]),
             answer_terminal: false,
         }
     }
@@ -131,12 +137,12 @@ impl Output {
 
     /// Whether the reader of stdout has gone.
     pub fn closed(&self) -> bool {
-        self.closed.get()
+        self.closed.load(Ordering::SeqCst)
     }
 
     /// A task starts: the trace's clock restarts.
     pub fn started(&self, start: &Start) {
-        self.started.set(Instant::now());
+        *lock(&self.started) = Instant::now();
         if let Some(ui) = &self.ui {
             ui.send(Event::TaskStarted(start.goal.to_string()));
             return;
@@ -155,7 +161,23 @@ impl Output {
             self.event(json::step(step, self.millis()));
         }
         if self.trace {
-            self.steps.borrow_mut().push(step.trace_line());
+            lock(&self.steps).push(step.trace_line());
+        }
+    }
+
+    /// The interface the run is shown in, at a terminal.
+    pub fn ui(&self) -> Option<&Ui> {
+        self.ui.as_ref()
+    }
+
+    /// One line under the call running (what an agent it started does): in the interface under
+    /// the call, in the trace once the call is done; `--json` has the agent's turns instead.
+    pub fn substep(&self, line: String) {
+        if let Some(ui) = &self.ui {
+            return ui.send(Event::Step(line));
+        }
+        if self.trace {
+            lock(&self.steps).push(line);
         }
     }
 
@@ -215,17 +237,17 @@ impl Output {
         if let Some(ui) = &self.ui {
             return ui.send(Event::Note(text.to_string()));
         }
-        let mut err = self.err.borrow_mut();
+        let mut err = lock(&self.err);
         let _ = err.write_all(text.as_bytes()).and_then(|()| err.flush());
     }
 
     fn millis(&self) -> u64 {
-        self.started.get().elapsed().as_millis() as u64
+        lock(&self.started).elapsed().as_millis() as u64
     }
 
     /// Rows on stderr, after a blank row when blocks came before.
     fn block(&self, lines: &[Line]) {
-        if self.blocks.replace(self.blocks.get() + 1) > 0 {
+        if self.blocks.fetch_add(1, Ordering::SeqCst) > 0 {
             self.note("\n");
         }
         self.lines(lines);
@@ -245,18 +267,23 @@ impl Output {
 
     /// Write to stdout; once its reader is gone, nothing more is written.
     fn print(&self, text: &str) {
-        if self.closed.get() {
+        if self.closed.load(Ordering::SeqCst) {
             return;
         }
-        let mut out = self.out.borrow_mut();
+        let mut out = lock(&self.out);
         if out
             .write_all(text.as_bytes())
             .and_then(|()| out.flush())
             .is_err()
         {
-            self.closed.set(true);
+            self.closed.store(true, Ordering::SeqCst);
         }
     }
+}
+
+/// `mutex` locked: a thread that panicked holding it left a value that is still whole.
+pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poison| poison.into_inner())
 }
 
 impl Observer for Output {
@@ -272,7 +299,7 @@ impl Observer for Output {
         }
         if self.trace {
             // Printed whole once the call is done: a terminal's rows cannot be redrawn here.
-            self.steps.borrow_mut().clear();
+            lock(&self.steps).clear();
         }
     }
 
@@ -295,7 +322,8 @@ impl Observer for Output {
                 &done,
                 self.width,
             ));
-            for step in self.steps.borrow_mut().drain(..) {
+            let steps: Vec<String> = lock(&self.steps).drain(..).collect();
+            for step in steps {
                 let step = wrap::cut(&format!("  · {step}"), self.width);
                 self.lines(&[Line::from(Span::styled(step, style::dim()))]);
             }
@@ -303,7 +331,32 @@ impl Observer for Output {
         }
     }
 
+    // `--json` has no event for it: the events are a contract, changed only with the schema.
+    fn said(&self, text: &str) {
+        if let Some(ui) = &self.ui {
+            return ui.send(Event::Answer(text.to_string()));
+        }
+        if self.trace {
+            self.block(&cells::agent(text, self.width));
+        }
+    }
+
+    fn fitted(&self, report: &agent::history::Report) {
+        let said: Vec<String> = report
+            .iter()
+            .map(|(stage, count)| format!("{count} {stage}"))
+            .collect();
+        self.note(&format!(
+            "✻ The context neared the model's limit; elided to save it: {}\n",
+            said.join(", ")
+        ));
+    }
+
     fn turn(&self, usage: &Usage) {
+        // A lane's tokens: its agents' turns come here too.
+        if let Some(ui) = &self.ui {
+            ui.send(Event::Spent(usage.input_tokens + usage.output_tokens));
+        }
         if self.json {
             self.event(json::turn(usage, self.millis()));
         }

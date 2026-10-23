@@ -129,11 +129,20 @@ fn a_background_job_of_an_interactive_shell_dies_with_its_session() {
     assert!(gone(pid), "the job outlived its session");
 }
 
-#[cfg(target_vendor = "apple")]
+/// How many processes the host runs is not the test's to fix, so the table's size is not checked
+/// against it; the listing is: this process and a child it just started are both in it.
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 #[test]
-fn every_process_of_this_system_fits_the_table() {
-    let mut count = 0;
-    each_pid(|_| count += 1);
-    assert!(count > 1, "no process listed");
-    assert!(count < MOST, "{count} processes: the table is too small");
+fn the_listing_holds_this_process_and_its_child() {
+    let (mut shell, _) = spawn("echo $$; read line");
+    let child = shell.id() as libc::pid_t;
+    let mut listed = vec![];
+    each_pid(|pid| listed.push(pid));
+    shell.stdin.as_mut().unwrap().write_all(b"\n").unwrap();
+    shell.wait().unwrap();
+    assert!(
+        listed.contains(&(std::process::id() as libc::pid_t)),
+        "this process"
+    );
+    assert!(listed.contains(&child), "its child");
 }

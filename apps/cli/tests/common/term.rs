@@ -1,0 +1,242 @@
+//! The real `llx` binary in a pseudo-terminal, its screen read as a person sees it (`vt100`): a
+//! test types, presses keys and waits for what the screen shows, as one uses llx. Everything it
+//! touches is its own: a home, a config, sessions, a workspace, and the scripted model in place of
+//! the network.
+
+use std::fs::File;
+use std::io::{Read, Write};
+use std::os::fd::{FromRawFd, OwnedFd};
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use super::model::Model;
+
+pub const COLS: u16 = 110;
+pub const ROWS: u16 = 40;
+
+/// Keys as a terminal sends them (only those the flows press).
+pub mod key {
+    pub const ENTER: &str = "\r";
+    pub const ESC: &str = "\x1b";
+    pub const DOWN: &str = "\x1b[B";
+    pub const LEFT: &str = "\x1b[D";
+    pub const CTRL_C: &str = "\x03";
+    pub const CTRL_D: &str = "\x04";
+}
+
+/// A session of `llx` at a terminal.
+pub struct Term {
+    child: Child,
+    input: File,
+    screen: Arc<Mutex<vt100::Parser>>,
+    home: PathBuf,
+    workspace: PathBuf,
+}
+
+impl Term {
+    /// `llx` with `args`, in a fresh home and workspace, thinking with `model`.
+    pub fn start(model: &Model, args: &[&str]) -> Self {
+        let home = std::env::temp_dir().join(format!(
+            "llx-term-{}-{:?}",
+            std::process::id(),
+            Instant::now()
+        ));
+        let workspace = home.join("work");
+        std::fs::create_dir_all(&workspace).unwrap();
+        let (master, slave) = pty();
+        let size = libc::winsize {
+            ws_row: ROWS,
+            ws_col: COLS,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        // SAFETY: TIOCSWINSZ reads `size`, which outlives the call; the descriptor is ours.
+        unsafe {
+            libc::ioctl(
+                std::os::fd::AsRawFd::as_raw_fd(&master),
+                libc::TIOCSWINSZ,
+                &size,
+            )
+        };
+        let file = |fd: &OwnedFd| Stdio::from(fd.try_clone().unwrap());
+        let mut command = Command::new(env!("CARGO_BIN_EXE_llx"));
+        // The child leads a session of its own with the pseudo-terminal as its terminal, so
+        // `/dev/tty` is this one and never the terminal the tests run in.
+        // SAFETY: setsid and the ioctl are async-signal-safe and touch only the child.
+        unsafe {
+            std::os::unix::process::CommandExt::pre_exec(&mut command, || {
+                libc::setsid();
+                libc::ioctl(0, libc::TIOCSCTTY as _, 0);
+                Ok(())
+            });
+        }
+        super::home::isolate(&mut command, &home);
+        let child = command
+            .args(args)
+            .current_dir(&workspace)
+            .env("TERM", "xterm-256color")
+            .env("OPENROUTER_API_KEY", "sk-or-test-key-0123456789")
+            .env("OPENROUTER_BASE_URL", &model.base)
+            .env("LLX_PROVIDER", "openrouter")
+            .env("LLX_MODEL", "anthropic/claude-haiku-5.5")
+            .stdin(file(&slave))
+            .stdout(file(&slave))
+            .stderr(file(&slave))
+            .spawn()
+            .unwrap();
+        drop(slave);
+        let screen = Arc::new(Mutex::new(vt100::Parser::new(ROWS, COLS, 0)));
+        let reading = screen.clone();
+        let mut output = File::from(master.try_clone().unwrap());
+        std::thread::spawn(move || {
+            let mut buffer = [0u8; 65536];
+            while let Ok(n) = output.read(&mut buffer) {
+                if n == 0 {
+                    break;
+                }
+                reading.lock().unwrap().process(&buffer[..n]);
+            }
+        });
+        let term = Self {
+            child,
+            input: File::from(master),
+            screen,
+            home,
+            workspace,
+        };
+        term.wait_for("❯", Duration::from_secs(10));
+        term
+    }
+
+    /// What the screen shows now, row by row.
+    pub fn screen(&self) -> String {
+        self.screen.lock().unwrap().screen().contents()
+    }
+
+    /// The row the cursor is on: the composer's while the prompt waits, never a row of the
+    /// history above it.
+    pub fn cursor_row(&self) -> String {
+        let parser = self.screen.lock().unwrap();
+        let (row, _) = parser.screen().cursor_position();
+        let row = parser.screen().rows(0, COLS).nth(row as usize);
+        row.unwrap_or_default().trim_end().to_string()
+    }
+
+    /// Wait until the cursor's row reads `row`; the screen, or a panic that prints it.
+    pub fn wait_for_cursor_row(&self, row: &str, timeout: Duration) -> String {
+        let end = Instant::now() + timeout;
+        loop {
+            let (at, screen) = (self.cursor_row(), self.screen());
+            if at == row {
+                return screen;
+            }
+            if Instant::now() > end {
+                panic!("the cursor's row never read {row:?} (it reads {at:?}):\n{screen}");
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Press keys, or type text, as a terminal sends them, then wait 60 ms: keys sent back to
+    /// back can arrive in one read and parse as one key (two Escs as Alt+Esc).
+    pub fn press(&mut self, keys: &str) -> &mut Self {
+        self.input.write_all(keys.as_bytes()).unwrap();
+        self.input.flush().unwrap();
+        std::thread::sleep(Duration::from_millis(60));
+        self
+    }
+
+    /// Type `text` a character at a time, as a person does.
+    pub fn type_text(&mut self, text: &str) -> &mut Self {
+        for c in text.chars() {
+            self.input.write_all(c.to_string().as_bytes()).unwrap();
+            std::thread::sleep(Duration::from_millis(4));
+        }
+        std::thread::sleep(Duration::from_millis(60));
+        self
+    }
+
+    /// Wait until the screen shows `needle`; the screen, or a panic that prints it.
+    pub fn wait_for(&self, needle: &str, timeout: Duration) -> String {
+        self.wait_for_any(&[needle], timeout).1
+    }
+
+    /// Wait until the screen shows one of `needles`; the first one shown and the screen, or a
+    /// panic that prints it.
+    pub fn wait_for_any<'a>(&self, needles: &[&'a str], timeout: Duration) -> (&'a str, String) {
+        let end = Instant::now() + timeout;
+        loop {
+            let screen = self.screen();
+            if let Some(found) = needles.iter().find(|needle| screen.contains(**needle)) {
+                return (found, screen);
+            }
+            if Instant::now() > end {
+                panic!("the screen never showed any of {needles:?}:\n{screen}");
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Wait up to `timeout` for llx to exit; its exit code, `None` if it did not.
+    pub fn exited(&mut self, timeout: Duration) -> Option<i32> {
+        let end = Instant::now() + timeout;
+        while Instant::now() < end {
+            if let Ok(Some(status)) = self.child.try_wait() {
+                return Some(status.code().unwrap_or(-1));
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        None
+    }
+
+    /// A file of the workspace the session runs in.
+    pub fn file(&self, name: &str) -> PathBuf {
+        self.workspace.join(name)
+    }
+}
+
+impl Drop for Term {
+    /// The session is ended as a person ends it, so that it exits on its own (an instrumented
+    /// binary writes its coverage then); one that does not within 3 s is killed.
+    fn drop(&mut self) {
+        // Ctrl-C stops a task or clears the prompt; Ctrl-D on an empty prompt then quits.
+        let _ = self.input.write_all(b"\x03");
+        let end = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < end {
+            if let Ok(Some(_)) = self.child.try_wait() {
+                break;
+            }
+            let _ = self.input.write_all(b"\x04");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.home);
+    }
+}
+
+/// A pseudo-terminal: its master, then its slave.
+pub fn pty() -> (OwnedFd, OwnedFd) {
+    let (mut master, mut slave) = (0, 0);
+    // SAFETY: openpty fills both descriptors, which become ours.
+    let opened = unsafe {
+        libc::openpty(
+            &mut master,
+            &mut slave,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    assert_eq!(opened, 0, "openpty");
+    // Close-on-exec, so no child spawned meanwhile keeps the master open (its slave would then
+    // never read the end); the child's own stdin is a copy, which keeps it open.
+    for fd in [master, slave] {
+        // SAFETY: fcntl sets a flag on a descriptor just opened.
+        unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) };
+    }
+    // SAFETY: the descriptors were just opened and are owned by nobody else.
+    unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) }
+}

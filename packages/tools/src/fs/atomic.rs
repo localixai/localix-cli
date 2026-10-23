@@ -45,7 +45,7 @@ pub fn write(path: &Path, content: &[u8]) -> io::Result<()> {
             .open(path)?
             .write_all(content);
     }
-    let (temporary, mut file) = create(path)?;
+    let (temporary, mut file) = create(|| temporary(path))?;
     let written = (|| {
         file.write_all(content)?;
         drop(file);
@@ -72,13 +72,14 @@ fn linked(_: &fs::Metadata) -> bool {
     false
 }
 
-/// A new temporary file beside `path`. Each name is created, never opened as found: a file or a
-/// symlink already there (planted by a checkout, left by a command) is skipped, so the write can
-/// never land on whatever it points to.
-fn create(path: &Path) -> io::Result<(PathBuf, File)> {
+/// A new temporary file at the first free name `next` gives. Each name is created, never opened
+/// as found: a file or a symlink already there (planted by a checkout, left by a command) is
+/// skipped, so the write can never land on whatever it points to. The names are passed in so a
+/// test knows them: the counter behind [`temporary`] is shared by every write in the process.
+fn create(mut next: impl FnMut() -> PathBuf) -> io::Result<(PathBuf, File)> {
     let mut last = None;
     for _ in 0..TRIES {
-        let temporary = temporary(path);
+        let temporary = next();
         match OpenOptions::new()
             .write(true)
             .create_new(true)

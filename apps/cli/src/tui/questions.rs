@@ -10,7 +10,8 @@ use super::select::{Choice, Picked, Select};
 use super::style;
 use crate::printable::printable;
 
-pub fn approval(tool: &str, summary: &str) -> Select {
+/// `label` names the session asking when it is not the one shown.
+pub fn approval(tool: &str, summary: &str, label: Option<&str>) -> Select {
     let title = match tool {
         "bash" => "Run this command?".to_string(),
         "edit" => "Change this file?".to_string(),
@@ -18,39 +19,31 @@ pub fn approval(tool: &str, summary: &str) -> Select {
         tool => format!("Allow {}?", printable(tool)),
     };
     let tool = printable(tool);
+    let mut title = vec![heading(&title, "")];
+    title.extend(label.map(asker));
+    title.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled(printable(summary), style::code()),
+    ]));
     Select::new(
+        title,
         vec![
-            Line::from(vec![
-                Span::styled("• ", style::waiting()),
-                Span::styled(title, style::bold()),
-            ]),
-            Line::from(vec![
-                Span::raw("  "),
-                Span::styled(printable(summary), style::code()),
-            ]),
-        ],
-        vec![
-            Choice::new("Yes").key('y'),
-            Choice::new(&format!("Yes, and don't ask again for {tool}")).key('a'),
-            Choice::new("No, and tell llx what to do differently")
-                .key('n')
-                .types(),
+            Choice::new("Yes"),
+            Choice::new(&format!("Yes, and don't ask again for {tool}")),
+            Choice::new("No, and tell llx what to do differently").types(),
         ],
         "esc to say no",
     )
 }
 
 /// The `at`th of `of` questions: its options, then the person's own words.
-pub fn question(question: &Question, at: usize, of: usize) -> Select {
+pub fn question(question: &Question, at: usize, of: usize, label: Option<&str>) -> Select {
     let count = match of {
         1 => String::new(),
         of => format!("  {} of {of}", at + 1),
     };
-    let title = vec![Line::from(vec![
-        Span::styled("• ", style::waiting()),
-        Span::styled(printable(&question.text), style::bold()),
-        Span::styled(count, style::dim()),
-    ])];
+    let mut title = vec![heading(&printable(&question.text), &count)];
+    title.extend(label.map(asker));
     let mut choices: Vec<Choice> = question
         .choices
         .iter()
@@ -63,10 +56,7 @@ pub fn question(question: &Question, at: usize, of: usize) -> Select {
 }
 
 pub fn choice(title: &str, options: &[(String, String)], marked: Option<usize>) -> Select {
-    let title = vec![Line::from(vec![
-        Span::styled("• ", style::waiting()),
-        Span::styled(printable(title), style::bold()),
-    ])];
+    let title = vec![heading(&printable(title), "")];
     let choices = options
         .iter()
         .map(|(label, detail)| Choice::new(label).detail(detail))
@@ -76,15 +66,28 @@ pub fn choice(title: &str, options: &[(String, String)], marked: Option<usize>) 
 
 /// A line to type, its characters hidden for a secret.
 pub fn line(prompt: &str, hidden: bool) -> Select {
-    let title = vec![Line::from(vec![
-        Span::styled("• ", style::waiting()),
-        Span::styled(
-            printable(prompt.trim().trim_end_matches(['>', ':']).trim()),
-            style::bold(),
-        ),
-    ])];
+    let prompt = printable(prompt.trim().trim_end_matches(['>', ':']).trim());
+    let title = vec![heading(&prompt, "")];
     let select = Select::new(title, vec![Choice::new("Type it").types()], "esc to cancel");
     select.hidden(hidden).typing(0)
+}
+
+/// `session <name> (in the background)`: who asks, when it is not the session shown.
+fn asker(name: &str) -> Line<'static> {
+    Line::from(vec![
+        Span::styled("  session ", style::dim()),
+        Span::styled(printable(name), style::bold()),
+        Span::styled(" (in the background)", style::dim()),
+    ])
+}
+
+/// A question's first line: `• title`, and `after` dimmed.
+fn heading(title: &str, after: &str) -> Line<'static> {
+    Line::from(vec![
+        Span::styled("• ", style::waiting()),
+        Span::styled(title.to_string(), style::bold()),
+        Span::styled(after.to_string(), style::dim()),
+    ])
 }
 
 /// Sends what `picked` means to whoever asked. A refused approval returns what the person said
@@ -130,6 +133,7 @@ pub fn answer(open: Open, picked: Picked) -> Option<String> {
                 _ => None,
             });
         }
+        Open::Quit => {}
         Open::Choice(reply) => {
             let _ = reply.send(match picked {
                 Picked::Option(at) => Some(at),
@@ -139,3 +143,7 @@ pub fn answer(open: Open, picked: Picked) -> Option<String> {
     }
     None
 }
+
+#[cfg(test)]
+#[path = "questions_tests.rs"]
+mod tests;

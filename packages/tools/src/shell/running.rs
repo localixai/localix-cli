@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use super::process::{self, Ending};
 use super::pty::Pty;
-use super::session::{MAX_SESSIONS, Turn, Until, Wait};
+use super::session::{Turn, Until, Wait};
 use super::sweep;
 
 /// How long the output must stay quiet for the program to be taken as waiting.
@@ -18,8 +18,10 @@ const POLL: Duration = Duration::from_millis(50);
 /// How long the end of the output is waited for once the program exited, or was killed: a
 /// process it started may still hold the terminal.
 const DRAIN: Duration = Duration::from_millis(100);
+/// Slots for every registry's sessions: `MAX_SESSIONS` each, for the sessions of the interface.
+const KILL_SLOTS: usize = 32;
 /// The sessions' ids, for [`kill_all_now`]: a signal handler may read only atomics.
-static GROUPS: [AtomicI32; MAX_SESSIONS] = [const { AtomicI32::new(0) }; MAX_SESSIONS];
+static GROUPS: [AtomicI32; KILL_SLOTS] = [const { AtomicI32::new(0) }; KILL_SLOTS];
 
 pub struct Session {
     pub id: u32,
@@ -44,7 +46,7 @@ impl Session {
         }
     }
 
-    pub fn wait(&mut self, wait: Wait, stop: &dyn Fn() -> bool) -> Until {
+    pub fn wait(&mut self, wait: Wait, stop: &(dyn Fn() -> bool + Sync)) -> Until {
         let deadline = Instant::now() + wait.limit();
         let shared = Arc::clone(&self.pty.shared);
         let mut stream = shared.lock();
@@ -150,6 +152,14 @@ pub fn kill_all_now() {
             sweep::kill_members(group);
         }
     }
+}
+
+/// How many sessions are running, in every registry of the process.
+pub fn running_anywhere() -> usize {
+    GROUPS
+        .iter()
+        .filter(|slot| slot.load(Ordering::SeqCst) != 0)
+        .count()
 }
 
 /// Mirror `group` in a free slot of [`GROUPS`]; with none free, only the normal ending kills it.

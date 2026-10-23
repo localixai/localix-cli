@@ -1,6 +1,9 @@
 //! A choice put to the person: a title, numbered options, and an option that opens a line to type
-//! on. Up and Down (or k and j) move, a number or an option's own key picks at once, Enter picks
-//! the marked one, and Esc cancels (or, while typing, goes back to the options).
+//! on. Up and Down (or k and j) move, a number picks at once, Enter picks the marked one, and Esc
+//! cancels (or, while typing, goes back to the options). No letter picks: words typed ahead as a
+//! choice opens must not answer it. A list longer than its window is searchable instead: letters
+//! go to a query that filters it (`search`), PageUp, PageDown, Home and End move too, and no
+//! number picks.
 //!
 //! ```text
 //! Run this command?
@@ -17,16 +20,18 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::text::{Line, Span};
 
 use super::composer::{Composer, Edit};
+use super::search::{self, Search, Searched};
 use super::style;
 use super::wrap::wrap;
 use crate::printable::printable;
+
+/// Options shown at once; a longer list scrolls with the marked one.
+const WINDOW: usize = 12;
 
 pub struct Choice {
     pub label: String,
     /// Said after the label, dim.
     pub detail: String,
-    /// A key that picks it at once (`y`).
-    pub key: Option<char>,
     /// Picking it opens a line to type on.
     pub types: bool,
 }
@@ -36,14 +41,8 @@ impl Choice {
         Self {
             label: label.into(),
             detail: String::new(),
-            key: None,
             types: false,
         }
-    }
-
-    pub fn key(mut self, key: char) -> Self {
-        self.key = Some(key);
-        self
     }
 
     pub fn detail(mut self, detail: &str) -> Self {
@@ -81,11 +80,15 @@ pub struct Select {
     /// Several options may be checked (Space), then sent together (Enter).
     multiple: bool,
     checked: Vec<bool>,
+    /// Letters filter the list: a long one.
+    search: Option<Search>,
 }
 
 impl Select {
     pub fn new(title: Vec<Line<'static>>, choices: Vec<Choice>, escape: &str) -> Self {
+        let choices_len = choices.len();
         Self {
+            search: None,
             title,
             choices,
             at: 0,
@@ -95,6 +98,25 @@ impl Select {
             direct: false,
             multiple: false,
             checked: vec![],
+        }
+        .searchable(choices_len > WINDOW)
+    }
+
+    /// Letters filter the list, and no number picks.
+    pub fn searchable(mut self, on: bool) -> Self {
+        let rows = self
+            .choices
+            .iter()
+            .map(|c| search::keys(&c.label, &c.detail));
+        self.search = on.then(|| Search::new(rows.collect(), &self.title));
+        self
+    }
+
+    /// The options listed, as positions in the whole list: those that match, best first.
+    fn rows(&self) -> Vec<usize> {
+        match &self.search {
+            Some(search) => search.shown.clone(),
+            None => (0..self.choices.len()).collect(),
         }
     }
 
@@ -113,6 +135,13 @@ impl Select {
     pub fn hidden(mut self, hidden: bool) -> Self {
         self.hidden = hidden;
         self
+    }
+
+    /// The title without its line `at` (who asked, once that is plain).
+    pub fn drop_title_line(&mut self, at: usize) {
+        if at < self.title.len() {
+            self.title.remove(at);
+        }
     }
 
     /// Opens the line of the option at `at` at once: a question with nothing to pick from.
@@ -139,14 +168,34 @@ impl Select {
                 },
             };
         }
+        let toggles = self.multiple && key.code == KeyCode::Char(' ');
+        if let Some(search) = self.search.as_mut().filter(|_| !toggles) {
+            match search.key(key) {
+                Searched::Changed => {
+                    if let Some(first) = search.shown.first().filter(|_| !search.is_empty()) {
+                        self.at = *first;
+                    }
+                    return None;
+                }
+                Searched::Cancel => return Some(Picked::Cancelled),
+                Searched::Ignored => {}
+            }
+        }
         let last = self.choices.len().saturating_sub(1);
+        let code = match key.code {
+            KeyCode::Char('k') => KeyCode::Up,
+            KeyCode::Char('j') => KeyCode::Down,
+            code => code,
+        };
+        if let Some(to) = search::moved(&self.rows(), self.at, code, WINDOW) {
+            self.at = to;
+            return None;
+        }
         match key.code {
             KeyCode::Esc => return Some(Picked::Cancelled),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return Some(Picked::Cancelled);
             }
-            KeyCode::Up | KeyCode::Char('k') => self.at = self.at.saturating_sub(1),
-            KeyCode::Down | KeyCode::Char('j') => self.at = (self.at + 1).min(last),
             KeyCode::Char(' ') if self.multiple && !self.choices[self.at].types => {
                 self.checked[self.at] = !self.checked[self.at];
             }
@@ -156,15 +205,15 @@ impl Select {
                     .collect();
                 return Some(Picked::Many(picked));
             }
+            KeyCode::Enter if self.rows().is_empty() => {}
             KeyCode::Enter => return self.pick(self.at),
             KeyCode::Char(c) => {
                 let numbered = c
                     .to_digit(10)
                     .map(|n| n as usize)
                     .filter(|n| (1..=last + 1).contains(n));
-                let keyed = self.choices.iter().position(|choice| choice.key == Some(c));
-                if let Some(at) = numbered.map(|n| n - 1).or(keyed) {
-                    return self.pick(at);
+                if let Some(n) = numbered {
+                    return self.pick(n - 1);
                 }
             }
             _ => {}
@@ -172,10 +221,13 @@ impl Select {
         None
     }
 
-    /// Text pasted while typing goes on the line; elsewhere it is ignored.
+    /// Text pasted while typing goes on the line, else on the query; elsewhere it is ignored.
     pub fn paste(&mut self, text: &str) {
         if let Some(composer) = &mut self.typing {
             composer.paste(text);
+        } else if let Some(search) = &mut self.search {
+            search.paste(text);
+            self.at = search.shown.first().copied().unwrap_or(self.at);
         }
     }
 
@@ -198,12 +250,27 @@ impl Select {
         if !out.is_empty() {
             out.push(Line::default());
         }
-        let listed = if self.direct {
-            &self.choices[..0]
-        } else {
-            &self.choices[..]
+        let listed = if self.direct { vec![] } else { self.rows() };
+        if let Some(search) = self.search.as_ref().filter(|_| !self.direct) {
+            out.extend(search.render());
+        }
+        // A long list shows a window around the marked option, and how many are past it.
+        let now = listed.iter().position(|at| *at == self.at).unwrap_or(0);
+        let start = now
+            .saturating_sub(WINDOW / 2)
+            .min(listed.len().saturating_sub(WINDOW));
+        let end = (start + WINDOW).min(listed.len());
+        let more = |count: usize, arrow: &str| {
+            Line::from(Span::styled(
+                format!("  {arrow} {count} more"),
+                style::dim(),
+            ))
         };
-        for (at, choice) in listed.iter().enumerate() {
+        if start > 0 {
+            out.push(more(start, "↑"));
+        }
+        for &at in &listed[start..end] {
+            let choice = &self.choices[at];
             let marked = at == self.at;
             let mark = if marked {
                 Span::styled("❯ ", style::bold())
@@ -220,8 +287,12 @@ impl Select {
                 (true, Some(false)) if !choice.types => "[ ] ",
                 _ => "",
             };
+            let number = match self.search {
+                Some(_) => String::new(),
+                None => format!("{}. ", at + 1),
+            };
             let mut line = Line::from(vec![
-                Span::styled(format!("{}. {check}", at + 1), label_style),
+                Span::styled(format!("{number}{check}"), label_style),
                 Span::styled(printable(&choice.label), label_style),
             ]);
             if !choice.detail.is_empty() {
@@ -230,13 +301,15 @@ impl Select {
                     style::dim(),
                 ));
             }
-            let number = at.to_string().len() + 3;
             out.extend(wrap(
                 &line,
                 width,
                 &Line::from(mark),
-                &Line::from(" ".repeat(number + 1)),
+                &Line::from(" ".repeat(number.len() + 2)),
             ));
+        }
+        if end < listed.len() {
+            out.push(more(listed.len() - end, "↓"));
         }
         let mut cursor = None;
         if let Some(composer) = &self.typing {
@@ -252,11 +325,19 @@ impl Select {
         let hint = match self.typing {
             Some(_) if self.direct => format!("  enter to send · {}", self.escape),
             Some(_) => "  enter to send · esc to go back".to_string(),
-            None if self.multiple => format!(
-                "  ↑↓ to choose · space to check · enter to confirm · {}",
-                self.escape
-            ),
-            None => format!("  ↑↓ to choose · enter to confirm · {}", self.escape),
+            None => {
+                let (search, escape) = match &self.search {
+                    Some(search) if !search.is_empty() => ("type to search · ", "esc to clear"),
+                    Some(_) => ("type to search · ", self.escape.as_str()),
+                    None => ("", self.escape.as_str()),
+                };
+                let check = if self.multiple {
+                    "space to check · "
+                } else {
+                    ""
+                };
+                format!("  {search}↑↓ to choose · {check}enter to confirm · {escape}")
+            }
         };
         out.push(Line::from(Span::styled(hint, style::dim())));
         (out, cursor)

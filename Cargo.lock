@@ -1752,6 +1752,7 @@ dependencies = [
  "decision-loop",
  "insta",
  "libc",
+ "models",
  "openai",
  "openrouter",
  "provider-kit",
@@ -1857,6 +1858,17 @@ dependencies = [
  "log",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "models"
+version = "0.1.0"
+dependencies = [
+ "contracts",
+ "provider-kit",
+ "serde",
+ "serde_json",
+ "toml",
 ]
 
 [[package]]

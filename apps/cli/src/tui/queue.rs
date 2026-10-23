@@ -1,0 +1,205 @@
+//! The questions the lanes put to the person, one open at a time: the others wait their turn in
+//! the order they came. A lane that is not shown is named on its approvals and questions, and
+//! they ignore keys for a moment as they come up (what was typed for the composer must not answer
+//! them); its own choices (carry out the plan? `/login`'s steps) wait until it is shown.
+
+use std::time::{Duration, Instant};
+
+use super::app::{Action, App, Open};
+use super::questions;
+use super::select::{Picked, Select};
+
+/// How long a question ignores keys as it comes up.
+const SETTLE: Duration = Duration::from_millis(300);
+
+/// A question open or waiting its turn, and the lane that asked it.
+pub struct Asked {
+    pub select: Select,
+    pub open: Open,
+    /// The lane that asked: Ctrl-C stops it, and its `Dismiss` closes the question.
+    pub asker: String,
+    /// Its second title line names the asker, which was not shown when it asked.
+    labelled: bool,
+}
+
+impl Asked {
+    /// A question of the interface's own, asked by no lane.
+    pub fn new(select: Select, open: Open) -> Self {
+        Self {
+            select,
+            open,
+            asker: String::new(),
+            labelled: false,
+        }
+    }
+}
+
+impl App {
+    /// The lane of the session at `at`: itself, or the agent's parent.
+    pub(super) fn lane_at(&self, at: usize) -> usize {
+        let view = &self.views.sessions[at];
+        match &view.parent {
+            Some(parent) => self.views.find(parent).unwrap_or(at),
+            None => at,
+        }
+    }
+
+    /// Whether the session at `at` waits for the person: a question of its own is open or
+    /// waiting its turn, or a choice of its own is held until it is shown.
+    pub fn waits_for_person(&self, at: usize) -> bool {
+        let view = &self.views.sessions[at];
+        let held = view.lane.as_ref().is_some_and(|lane| !lane.held.is_empty());
+        held || self.questions.iter().any(|asked| asked.asker == view.id)
+    }
+
+    /// The name lane `lane` is shown by on its questions while it is not shown; `None` when it is.
+    pub(super) fn label(&self, lane: usize) -> Option<String> {
+        (lane != self.views.home()).then(|| self.views.sessions[lane].name.clone())
+    }
+
+    /// A question from the lane at `lane`: it waits behind those already asked. `settles` when it
+    /// ignores keys at first even from the lane shown (an approval).
+    pub(super) fn ask(
+        &mut self,
+        lane: usize,
+        select: Select,
+        open: Open,
+        settles: bool,
+        now: Instant,
+    ) {
+        let settles = settles || lane != self.views.home();
+        let asker = self.views.sessions[lane].id.clone();
+        let asked = Asked {
+            select,
+            open,
+            asker,
+            labelled: lane != self.views.home(),
+        };
+        self.questions.push_back(asked);
+        if self.questions.len() == 1 {
+            self.settling = settles.then(|| now + SETTLE);
+        }
+    }
+
+    /// A choice of the lane's own: asked now when it is shown, else held until it is.
+    pub(super) fn ask_own(&mut self, lane: usize, select: Select, open: Open, now: Instant) {
+        // The person left: nobody would answer it (held, it would never even be shown).
+        if self.left {
+            questions::answer(open, Picked::Cancelled);
+            return;
+        }
+        if lane == self.views.home() {
+            return self.ask(lane, select, open, false, now);
+        }
+        if let Some(state) = self.views.sessions[lane].lane.as_deref_mut() {
+            state.held.push((select, open));
+        }
+    }
+
+    /// The lane shown now asks what it held back, and its questions no longer name it.
+    pub(super) fn release_held(&mut self) {
+        let now = Instant::now();
+        let home = self.views.home();
+        let id = &self.views.sessions[home].id;
+        for asked in self
+            .questions
+            .iter_mut()
+            .filter(|q| q.labelled && q.asker == *id)
+        {
+            asked.select.drop_title_line(1);
+            asked.labelled = false;
+        }
+        let Some(state) = self.views.sessions[home].lane.as_deref_mut() else {
+            return;
+        };
+        for (select, open) in std::mem::take(&mut state.held) {
+            self.ask(home, select, open, false, now);
+        }
+    }
+
+    /// The question open takes `picked`: its answer goes to the lane that asked, and the next
+    /// question comes up, ignoring keys for a moment (they were typed for this one).
+    pub(super) fn answer_open(&mut self, picked: Picked, now: Instant) -> Option<String> {
+        let asked = self.questions.pop_front()?;
+        self.answered(&asked.asker, asked.open, picked);
+        self.settling = (!self.questions.is_empty()).then(|| now + SETTLE);
+        Some(asked.asker)
+    }
+
+    /// `open` is answered with `picked`; what the person said refusing an approval waits for
+    /// the call refused, in the asker's lane.
+    fn answered(&mut self, asker: &str, open: Open, picked: Picked) {
+        let said = questions::answer(open, picked);
+        let lane = self.views.find(asker).map(|at| self.lane_at(at));
+        if let Some(state) = lane.and_then(|at| self.views.sessions[at].lane.as_deref_mut())
+            && said.is_some()
+        {
+            state.declined = said;
+        }
+    }
+
+    /// The lane at `lane` no longer waits for its question (its task was stopped): the first it
+    /// asked closes unanswered, else the first it held.
+    pub(super) fn dismiss(&mut self, lane: usize, now: Instant) {
+        let asker = self.views.sessions[lane].id.clone();
+        if let Some(found) = self.questions.iter().position(|q| q.asker == asker) {
+            if found == 0 {
+                self.answer_open(Picked::Cancelled, now);
+            } else if let Some(asked) = self.questions.remove(found) {
+                self.answered(&asked.asker, asked.open, Picked::Cancelled);
+            }
+            return;
+        }
+        if let Some(state) = self.views.sessions[lane].lane.as_deref_mut()
+            && !state.held.is_empty()
+        {
+            let (_, open) = state.held.remove(0);
+            questions::answer(open, Picked::Cancelled);
+        }
+    }
+
+    /// A key while a question is open: Ctrl-C says no and stops the lane that asked.
+    pub(super) fn question_key(
+        &mut self,
+        key: crossterm::event::KeyEvent,
+        now: Instant,
+    ) -> Option<Action> {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        let stop = key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c');
+        if !stop && self.settling.is_some_and(|until| now < until) {
+            return None;
+        }
+        let front = self.questions.front_mut()?;
+        let picked = front.select.key(key)?;
+        if matches!(front.open, Open::Quit) {
+            return self.quit_answered(&picked, now);
+        }
+        let asker = self.answer_open(picked, now)?;
+        // A lane with no task is not stopped: that would quit llx, every lane's work with it.
+        let at = self
+            .views
+            .find(&asker)
+            .filter(|&at| stop && self.views.sessions[at].busy.is_some())?;
+        if let Some(state) = self.views.sessions[at].lane.as_deref_mut() {
+            state.stopping = true;
+        }
+        Some(Action::Stop(asker))
+    }
+
+    /// Every question, open, waiting or held, closes unanswered: the person is leaving.
+    pub(super) fn close_questions(&mut self) {
+        for asked in std::mem::take(&mut self.questions) {
+            questions::answer(asked.open, Picked::Cancelled);
+        }
+        for view in &mut self.views.sessions {
+            for (_, open) in view
+                .lane
+                .as_deref_mut()
+                .map(|l| std::mem::take(&mut l.held))
+                .unwrap_or_default()
+            {
+                questions::answer(open, Picked::Cancelled);
+            }
+        }
+    }
+}

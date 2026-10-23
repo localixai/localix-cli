@@ -17,11 +17,12 @@ use std::time::Instant;
 use ratatui::text::{Line, Span};
 
 use super::app::App;
-use super::cells::duration;
+use super::cells::clock;
 use super::keys::Offer;
 use super::screen::Cursor;
 use super::style;
 use super::tool_cell::{self, State};
+use super::tree;
 use super::wrap::cut;
 use crate::printable::printable;
 
@@ -40,27 +41,43 @@ pub fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
         )
     };
     let mut out: Vec<Line<'static>> = vec![];
-    // While a question is open it says what the call would do; the call shows again after.
-    if let Some((name, args, started)) = app.running.as_ref().filter(|_| app.select.is_none()) {
+    let (running, busy) = app.shown_work();
+    // While a question is open it says what the call would do; the calls show again after.
+    let running = if app.questions.is_empty() {
+        running
+    } else {
+        &[]
+    };
+    for (at, (name, args, started)) in running.iter().enumerate() {
         let mut rows = tool_cell::lines(name, args, State::Running, width);
         if let Some(first) = rows.first_mut() {
             first.spans[0] = spinner(*started);
             first.spans.insert(1, Span::raw(" "));
         }
         out.extend(rows);
-        for step in &app.steps {
+        // The hands' steps belong to the main session's last call.
+        let last = at + 1 == running.len();
+        let steps = match (&app.shown().lane, last) {
+            (Some(lane), true) => &lane.steps[..],
+            _ => &[],
+        };
+        for step in steps {
             let step = cut(&printable(step), width.saturating_sub(4));
             out.push(Line::from(Span::styled(
                 format!("  └ {step}"),
                 style::dim(),
             )));
         }
+    }
+    if !running.is_empty() {
         out.push(Line::default());
     }
-    if let Some(started) = app.busy.filter(|_| app.select.is_none()) {
-        let took = duration(now.duration_since(started).as_millis() as u64);
-        let state = if app.stopping {
+    if let Some(started) = busy.filter(|_| app.questions.is_empty()) {
+        let took = clock(now.duration_since(started).as_secs());
+        let state = if app.lane().stopping {
             "stopping"
+        } else if app.shown().parent.is_some() {
+            "ctrl-c to interrupt"
         } else {
             "esc to interrupt"
         };
@@ -68,55 +85,88 @@ pub fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
             spinner(started),
             Span::raw(" "),
             Span::styled("Working", style::bold()),
-            Span::styled(
-                format!(" ({} · {state})", whole_seconds(&took)),
-                style::dim(),
-            ),
+            Span::styled(format!(" ({took} · {state})"), style::dim()),
         ]));
     }
-    for entry in &app.queued {
-        let entry = cut(
-            &printable(&entry.text.replace('\n', " ")),
-            width.saturating_sub(4),
-        );
-        out.push(Line::from(Span::styled(
-            format!("  ↳ {entry}"),
-            style::dim(),
-        )));
+    // Sent to the task, waiting for its next step; then what waits for the task to end, as the
+    // transcript will show it (the background's by where it came from, `≋ ticker · …`).
+    let lane = app.lane();
+    let waiting = lane
+        .steered
+        .iter()
+        .map(|entry| format!("↳ {}", waiting(&entry.text)))
+        .chain(
+            lane.queued
+                .iter()
+                .map(|e| format!("⏎ {}", waiting(&e.text))),
+        )
+        .chain(lane.background.iter().map(|entry| waiting(&entry.text)));
+    for entry in waiting {
+        let entry = cut(&printable(&entry.replace('\n', " ")), width - 2);
+        out.push(Line::from(Span::styled(format!("  {entry}"), style::dim())));
     }
     if !out.is_empty() && out.last() != Some(&Line::default()) {
         out.push(Line::default());
     }
-    if let Some((select, _)) = &app.select {
-        let (rows, cursor) = select.render(width);
+    if let Some(asked) = app.questions.front() {
+        let (rows, cursor) = asked.select.render(width);
         let top = out.len();
         out.extend(rows);
+        let more = app.questions.len() - 1;
+        if more > 0 {
+            let s = if more == 1 { "" } else { "s" };
+            let waiting = format!("  {more} more question{s} waiting");
+            out.push(Line::from(Span::styled(waiting, style::dim())));
+        }
         let cursor = cursor.map(|(row, column)| Cursor {
             row: top + row,
             column,
         });
         return (out, cursor);
     }
+    if app.listing.is_some() {
+        out.extend(app.sessions_render(now, &spinner));
+        return (out, None);
+    }
     let prompt = Span::styled("❯ ", style::bold());
-    let (rows, (row, column)) = app.composer.render(prompt, PLACEHOLDER, width);
+    let shown = app.shown();
+    let viewing = shown.parent.as_ref().map(|_| {
+        let lane = app.home_title();
+        format!(
+            "Viewing agent {} · a task you type goes to {lane}",
+            shown.name
+        )
+    });
+    let placeholder = viewing.as_deref().unwrap_or(PLACEHOLDER);
+    let (rows, (row, column)) = app.composer.render(prompt, placeholder, width);
     let cursor = Cursor {
         row: out.len() + row,
         column,
     };
     out.extend(rows);
     let offers = app.offers();
+    if let Some(context) = command_context(&app.composer.text(), &app.lane().mode) {
+        out.push(Line::from(Span::styled(
+            format!("  {}", cut(&context, width.saturating_sub(2))),
+            style::dim(),
+        )));
+    }
     for (at, offer) in offers.iter().enumerate() {
         let marked = at == app.offered.min(offers.len() - 1);
         let name_style = if marked { style::bold() } else { style::dim() };
         // Cut, not wrapped: the names stay in a column.
+        let row = |label: String, what: &str| {
+            let label = cut(&label, width);
+            let room = width.saturating_sub(crate::tui::wrap::width(&label));
+            Line::from(vec![
+                Span::styled(label, name_style),
+                Span::from(if room > 0 { " " } else { "" }),
+                Span::styled(cut(&printable(what), room.saturating_sub(1)), style::dim()),
+            ])
+        };
         let line = match offer {
-            Offer::Command(name, what) => {
-                let what = cut(&printable(what), width.saturating_sub(14));
-                Line::from(vec![
-                    Span::styled(format!("  /{name:<10}"), name_style),
-                    Span::styled(format!(" {what}"), style::dim()),
-                ])
-            }
+            Offer::Command(name, what) => row(format!("  /{name:<10}"), what),
+            Offer::Mode(name, what) => row(format!("  {name:<12}"), what),
             Offer::File(path) => Line::from(Span::styled(
                 format!("  {}", cut(&printable(path), width.saturating_sub(2))),
                 name_style,
@@ -124,31 +174,73 @@ pub fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
         };
         out.push(line);
     }
-    if let Some(footer) = footer(app) {
+    if let Some(footer) = footer(app, now) {
         out.push(Line::from(Span::styled(
             format!("  {footer}"),
             style::dim(),
         )));
     }
+    if offers.is_empty() {
+        let tree = tree::render(app, now, &spinner);
+        if !tree.is_empty() {
+            out.push(Line::default());
+            out.extend(tree);
+        }
+    }
     (out, Some(cursor))
 }
 
-fn footer(app: &App) -> Option<String> {
-    if app.quitting.is_some() {
-        return Some("ctrl-c again to quit".into());
-    }
-    match app.mode.as_str() {
-        "default" => None,
-        "plan" => Some("plan mode · shift+tab to leave".into()),
-        mode => Some(format!("{mode} mode · shift+tab for plan")),
+fn command_context(text: &str, current: &str) -> Option<String> {
+    match text {
+        "/mode" | "/permissions" => Some(format!("mode  ›  current: {current} · enter to list")),
+        "/plan" => Some("plan  ›  enter to switch · tab to add a task".into()),
+        "/mode " | "/permissions " => Some(format!(
+            "mode  ›  current: {current} · ↑↓ choose · tab complete · enter apply"
+        )),
+        _ if text.starts_with("/mode ") || text.starts_with("/permissions ") => Some(format!(
+            "mode  ›  current: {current} · ↑↓ choose · tab complete · enter apply"
+        )),
+        _ if text.starts_with("/plan ") => {
+            Some("plan  ›  type a task · enter to run in plan mode".into())
+        }
+        _ => None,
     }
 }
 
-/// `12s` rather than `2.1s`: the status counts up once a second.
-fn whole_seconds(took: &str) -> String {
-    match took.strip_suffix('s').and_then(|s| s.parse::<f64>().ok()) {
-        Some(seconds) => format!("{}s", seconds as u64),
-        None => took.to_string(),
+/// An entry that waits: a key's by what it does, not the sequence it sent.
+fn waiting(text: &str) -> String {
+    use crate::commands::entry::{LESS_REASONING, MORE_REASONING};
+    use crate::tui::app::SHIFT_TAB;
+    match text {
+        SHIFT_TAB => "shift+tab · next mode".into(),
+        MORE_REASONING => "more reasoning".into(),
+        LESS_REASONING => "less reasoning".into(),
+        text => super::steer::shown(text),
+    }
+}
+
+fn footer(app: &App, now: Instant) -> Option<String> {
+    let window = |at: Instant| now.duration_since(at).as_millis() < super::app::QUIT_WINDOW_MS;
+    if app.quitting.is_some_and(window) {
+        return Some("ctrl-c again to quit".into());
+    }
+    if app.busy().is_some() && !app.composer.is_empty() {
+        return Some("enter tells the task now · tab keeps it for after".into());
+    }
+    let mode = match app.lane().mode.as_str() {
+        "default" => None,
+        "plan" => Some("plan mode · shift+tab to leave".to_string()),
+        mode => Some(format!("{mode} mode · shift+tab for plan")),
+    };
+    // How full the context is, once it matters: below half left.
+    let context = app
+        .lane()
+        .context
+        .filter(|&left| left < 50)
+        .map(|left| format!("{left}% context left"));
+    match (mode, context) {
+        (Some(mode), Some(context)) => Some(format!("{mode} · {context}")),
+        (mode, context) => mode.or(context),
     }
 }
 

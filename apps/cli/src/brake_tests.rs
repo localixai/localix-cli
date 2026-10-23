@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use contracts::chat::Message;
 
@@ -6,11 +6,11 @@ use super::*;
 
 /// A chat model that answers every request with the same text, and counts them.
 #[derive(Default)]
-struct Ready(Cell<usize>);
+struct Ready(AtomicUsize);
 
 impl Chat for Ready {
     fn complete(&self, _: Request) -> Result<Completion, ChatError> {
-        self.0.set(self.0.get() + 1);
+        self.0.fetch_add(1, Ordering::SeqCst);
         Ok(Completion {
             text: Some("ready".into()),
             ..Completion::default()
@@ -27,17 +27,6 @@ fn request(conversation: &[Message]) -> Request<'_> {
 }
 
 #[test]
-fn within_its_time_a_task_reaches_the_model() {
-    let chat = Ready::default();
-    let open = || false;
-    let brake = Brake::new(&chat, &open, &open);
-    brake.arm(Duration::from_secs(60));
-    assert!(brake.complete(request(&[])).is_ok());
-    assert_eq!(chat.0.get(), 1);
-    assert_eq!(brake.halted(), None);
-}
-
-#[test]
 fn past_its_time_a_task_stops_and_the_next_one_starts_fresh() {
     let chat = Ready::default();
     let open = || false;
@@ -45,10 +34,24 @@ fn past_its_time_a_task_stops_and_the_next_one_starts_fresh() {
     brake.arm(Duration::ZERO);
     assert!(brake.complete(request(&[])).is_err());
     assert_eq!(brake.halted(), Some(Halt::TimedOut));
-    assert_eq!(chat.0.get(), 0, "the model was not called");
+    assert_eq!(chat.0.load(Ordering::SeqCst), 0, "the model was not called");
     brake.arm(Duration::from_secs(60));
     assert_eq!(brake.halted(), None);
     assert!(brake.complete(request(&[])).is_ok());
+}
+
+#[test]
+fn a_wait_past_the_deadline_is_due_and_halts_the_task() {
+    let chat = Ready::default();
+    let open = || false;
+    let brake = Brake::new(&chat, &open, &open);
+    assert!(!brake.due(), "no task, no deadline");
+    brake.arm(Duration::from_secs(60));
+    assert!(!brake.due());
+    assert_eq!(brake.halted(), None);
+    brake.arm(Duration::ZERO);
+    assert!(brake.due());
+    assert_eq!(brake.halted(), Some(Halt::TimedOut));
 }
 
 #[test]
@@ -78,19 +81,23 @@ fn a_closed_output_stops_the_task() {
 #[test]
 fn a_stopped_task_halts_at_its_next_turn_and_says_so_after_its_last() {
     let chat = Ready::default();
-    let (open, stopped) = (|| false, Cell::new(false));
-    let stop = || stopped.get();
+    let (open, stopped) = (|| false, AtomicBool::new(false));
+    let stop = || stopped.load(Ordering::SeqCst);
     let brake = Brake::new(&chat, &open, &stop);
     brake.arm(Duration::from_secs(60));
     assert!(brake.complete(request(&[])).is_ok());
-    stopped.set(true);
+    stopped.store(true, Ordering::SeqCst);
     assert_eq!(
         brake.halted(),
         Some(Halt::Interrupted),
         "after the last turn"
     );
     assert!(brake.complete(request(&[])).is_err());
-    assert_eq!(chat.0.get(), 1, "the model was not asked again");
+    assert_eq!(
+        chat.0.load(Ordering::SeqCst),
+        1,
+        "the model was not asked again"
+    );
     assert_eq!(brake.halted(), Some(Halt::Interrupted));
 }
 

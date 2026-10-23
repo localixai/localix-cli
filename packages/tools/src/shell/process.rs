@@ -39,7 +39,7 @@ pub struct Job<'a> {
     /// command can still read them from its parent's environment (see `BashTool::hidden`).
     pub hidden: &'a [&'a str],
     /// Whether the person stopped the task: the command is killed as soon as it says so.
-    pub stop: &'a dyn Fn() -> bool,
+    pub stop: &'a (dyn Fn() -> bool + Sync),
 }
 
 /// How a command ended.

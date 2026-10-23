@@ -18,6 +18,12 @@ pub struct Session {
     /// resumes.
     #[serde(default)]
     pub location: String,
+    /// The session that started this one, when it is an agent another session's agent started.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    /// An agent's short name, as its parent calls it; empty for a session the person started.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
     #[serde(default)]
     pub turns: Vec<Turn>,
 }
@@ -40,6 +46,11 @@ impl Session {
             self.location = location.to_string();
         }
         self.turns.push(turn);
+    }
+
+    /// Whether another session started this one.
+    pub fn is_agent(&self) -> bool {
+        self.parent.is_some()
     }
 }
 

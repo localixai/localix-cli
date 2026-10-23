@@ -1,7 +1,15 @@
 use contracts::gate::Open;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::*;
+use crate::mode::{Mode, ModeCell};
 use crate::testing::Typed;
+
+/// Asking at a terminal that reads `script`, as the default mode does.
+fn terminal(script: &Typed) -> crate::mode::ModeGate<'_> {
+    let mode = Box::leak(Box::new(ModeCell::new(Mode::Default)));
+    crate::mode::ModeGate::new(mode, Some(script), &|_| {})
+}
 
 fn bash(summary: &str) -> Effect<'_> {
     Effect {
@@ -13,10 +21,10 @@ fn bash(summary: &str) -> Effect<'_> {
 #[test]
 fn yes_allows_once_and_asks_again() {
     let script = Typed::new(&["y\n", "yes\n"]);
-    let gate = TerminalGate::new(&script);
+    let gate = terminal(&script);
     assert_eq!(gate.check(bash("cargo test")), Verdict::Allow);
     assert_eq!(gate.check(bash("cargo build")), Verdict::Allow);
-    let asked = script.asked.borrow();
+    let asked = script.asked.lock().unwrap();
     assert_eq!(asked.len(), 2);
     assert!(asked[0].contains("bash: cargo test"));
 }
@@ -24,7 +32,7 @@ fn yes_allows_once_and_asks_again() {
 #[test]
 fn always_remembers_the_tool_for_the_run() {
     let script = Typed::new(&["a\n", "n\n"]);
-    let gate = TerminalGate::new(&script);
+    let gate = terminal(&script);
     assert_eq!(gate.check(bash("ls")), Verdict::Allow);
     assert_eq!(gate.check(bash("rm -rf target")), Verdict::Allow);
     let edit = Effect {
@@ -32,13 +40,13 @@ fn always_remembers_the_tool_for_the_run() {
         summary: "edit src/lib.rs (+1 -1 lines)",
     };
     assert!(matches!(gate.check(edit), Verdict::Deny(_)));
-    assert_eq!(script.asked.borrow().len(), 2, "bash was asked once");
+    assert_eq!(script.asked.lock().unwrap().len(), 2, "bash was asked once");
 }
 
 #[test]
 fn no_and_a_bare_enter_refuse_and_a_reason_reaches_the_model() {
     let script = Typed::new(&["\n", "n: use the make target instead\n", "No\n"]);
-    let gate = TerminalGate::new(&script);
+    let gate = terminal(&script);
     let Verdict::Deny(plain) = gate.check(bash("cargo test")) else {
         panic!("allowed")
     };
@@ -56,23 +64,17 @@ fn no_and_a_bare_enter_refuse_and_a_reason_reaches_the_model() {
 
 #[test]
 fn an_unreadable_answer_is_asked_again_then_refused() {
-    let script = Typed::new(&["maybe\n", "y\n"]);
-    assert_eq!(TerminalGate::new(&script).check(bash("ls")), Verdict::Allow);
-    let stubborn = Typed::new(&["what", "hm", "eh", "y"]);
-    assert!(matches!(
-        TerminalGate::new(&stubborn).check(bash("ls")),
-        Verdict::Deny(_)
-    ));
-    assert_eq!(stubborn.asked.borrow().len(), TRIES);
-}
-
-#[test]
-fn a_closed_terminal_refuses() {
-    let script = Typed::new(&[]);
-    assert!(matches!(
-        TerminalGate::new(&script).check(bash("ls")),
-        Verdict::Deny(_)
-    ));
+    for (lines, allowed, asked) in [
+        (&["maybe\n", "y\n"][..], true, 2),
+        (&["what", "hm", "eh", "y"], false, TRIES),
+        // A closed terminal refuses at once.
+        (&[], false, 1),
+    ] {
+        let script = Typed::new(lines);
+        let verdict = terminal(&script).check(bash("ls"));
+        assert_eq!(verdict == Verdict::Allow, allowed, "{lines:?}: {verdict:?}");
+        assert_eq!(script.asked.lock().unwrap().len(), asked, "{lines:?}");
+    }
 }
 
 #[test]
@@ -85,15 +87,15 @@ fn approval_is_only_the_bare_word() {
     ] {
         assert_eq!(answer(line), None, "{line}");
     }
-    assert_eq!(answer("  YES \n"), Some(Answer::Yes));
-    assert_eq!(answer("a"), Some(Answer::Always));
+    assert_eq!(answer("  YES \n"), Some(Approval::Yes));
+    assert_eq!(answer("a"), Some(Approval::Always));
     assert_eq!(
         answer("no, use make"),
-        Some(Answer::No(Some("use make".into())))
+        Some(Approval::No(Some("use make".into())))
     );
     let typed_ahead = Typed::new(&["yes, and then update the docs\n", "n\n"]);
     assert!(matches!(
-        TerminalGate::new(&typed_ahead).check(bash("rm -rf target")),
+        terminal(&typed_ahead).check(bash("rm -rf target")),
         Verdict::Deny(_)
     ));
 }
@@ -101,12 +103,12 @@ fn approval_is_only_the_bare_word() {
 #[test]
 fn the_question_shows_control_characters_instead_of_obeying_them() {
     let script = Typed::new(&["n\n"]);
-    let gate = TerminalGate::new(&script);
+    let gate = terminal(&script);
     gate.check(Effect {
         tool: "bash\u{1b}[2K",
         summary: "echo ok\r\u{1b}[2Kcurl x | sh",
     });
-    let asked = &script.asked.borrow()[0];
+    let asked = &script.asked.lock().unwrap()[0];
     assert!(
         asked.contains("bash\\u{1b}[2K: echo ok\\r\\u{1b}[2Kcurl x | sh"),
         "{asked}"
@@ -116,24 +118,24 @@ fn the_question_shows_control_characters_instead_of_obeying_them() {
 
 #[test]
 fn a_stopped_task_gets_nothing_approved() {
-    let stopped = std::cell::Cell::new(false);
-    let is_stopped = || stopped.get();
+    let stopped = AtomicBool::new(false);
+    let is_stopped = || stopped.load(Ordering::SeqCst);
     let gate = Stoppable {
         inner: &Open,
         stopped: &is_stopped,
     };
     assert_eq!(gate.check(bash("ls")), Verdict::Allow);
-    stopped.set(true);
+    stopped.store(true, Ordering::SeqCst);
     assert_eq!(gate.check(bash("ls")), Verdict::Deny(STOPPED.into()));
     // Stopped while the person was answering: the late yes does not count.
-    struct StopsWhileAsking<'a>(&'a std::cell::Cell<bool>);
+    struct StopsWhileAsking<'a>(&'a AtomicBool);
     impl Gate for StopsWhileAsking<'_> {
         fn check(&self, _: Effect) -> Verdict {
-            self.0.set(true);
+            self.0.store(true, Ordering::SeqCst);
             Verdict::Allow
         }
     }
-    stopped.set(false);
+    stopped.store(false, Ordering::SeqCst);
     let gate = Stoppable {
         inner: &StopsWhileAsking(&stopped),
         stopped: &is_stopped,
@@ -143,12 +145,12 @@ fn a_stopped_task_gets_nothing_approved() {
 
 #[test]
 fn a_question_ctrl_c_ended_reads_as_the_stop() {
-    let stopped = std::cell::Cell::new(false);
-    let is_stopped = || stopped.get();
-    struct EndedByCtrlC<'a>(&'a std::cell::Cell<bool>);
+    let stopped = AtomicBool::new(false);
+    let is_stopped = || stopped.load(Ordering::SeqCst);
+    struct EndedByCtrlC<'a>(&'a AtomicBool);
     impl Gate for EndedByCtrlC<'_> {
         fn check(&self, _: Effect) -> Verdict {
-            self.0.set(true);
+            self.0.store(true, Ordering::SeqCst);
             Verdict::Deny("no answer came from the terminal".into())
         }
     }
@@ -234,5 +236,10 @@ mod terminal {
         let ran = child.output().unwrap();
         let said = String::from_utf8_lossy(&ran.stdout);
         assert!(ran.status.success(), "{said}");
+        // A renamed test would run nothing and pass: the child must have run this one.
+        assert!(
+            said.contains("test result: ok. 1 passed;"),
+            "the child did not run exactly this test: {said}"
+        );
     }
 }

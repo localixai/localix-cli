@@ -84,6 +84,11 @@ impl Page {
         }
     }
 
+    /// Whether the window is (or opens) hidden.
+    pub fn hidden(&self) -> bool {
+        *self.hidden.lock().unwrap()
+    }
+
     pub fn is_open(&self) -> bool {
         self.driver
             .lock()

@@ -17,9 +17,8 @@ fn only_what_comes_after_the_input_counts() {
     stream.take_in(b"done\r\n");
     stream.expect(Some("done"), true);
     assert!(!stream.matched, "the output before the input");
-    assert_eq!(stream.since_write, 0);
-    stream.take_in(b"x");
-    assert_eq!(stream.since_write, 1);
+    stream.take_in(b"done again\r\n");
+    assert!(stream.matched, "the output after the input");
 }
 
 #[test]
@@ -28,8 +27,7 @@ fn a_read_counts_the_output_not_yet_taken() {
     stream.take_in(b"added 3 packages\r\n");
     stream.expect(Some("added"), false);
     assert!(stream.matched);
-    assert_eq!(stream.since_write, 18);
-    stream.take();
+    assert_eq!(stream.take().as_deref(), Some("added 3 packages"));
     stream.expect(Some("added"), false);
     assert!(!stream.matched, "taken already");
     stream.expect(Some(""), false);

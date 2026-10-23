@@ -61,3 +61,21 @@ fn a_newer_sign_in_cancels_this_one() {
     let outcome = callback.wait(Duration::from_secs(5));
     assert!(matches!(outcome, Some(Err(why)) if why.contains("cancelled")));
 }
+
+#[test]
+fn a_connection_that_says_nothing_does_not_hold_up_the_redirect() {
+    let callback = listening(None);
+    let port = callback.redirect.split(':').nth(2).unwrap();
+    let port: u16 = port.split('/').next().unwrap().parse().unwrap();
+    let _idle = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    std::thread::spawn(move || {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        write!(
+            stream,
+            "GET /auth/callback?code=c HTTP/1.1\r\nHost: x\r\n\r\n"
+        )
+        .unwrap();
+        let _ = stream.read_to_string(&mut String::new());
+    });
+    assert_eq!(callback.wait(Duration::from_secs(5)), Some(Ok("c".into())));
+}

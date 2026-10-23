@@ -47,7 +47,11 @@ pub fn doctor(models: &ModelOptions) -> Result<i32, Failure> {
         )?;
     }
     let choice = choice::resolve(models, choice::saved())?;
-    for provider in Provider::ALL {
+    // The provider in use, and every other one signed in to: the catalog lists hundreds.
+    let listed = Provider::all()
+        .into_iter()
+        .filter(|p| *p == choice.provider || p.signed_in().is_some());
+    for provider in listed {
         match provider.signed_in() {
             Some(from) => line(
                 Mark::Pass,
@@ -133,6 +137,11 @@ fn decision_model(decider: &dyn Decider, model: &str) -> Result<bool, Failure> {
     };
     let questions = BTreeMap::from([("q".to_string(), question)]);
     match decider.decide(&json!({"sky": "blue"}), &questions) {
+        // A reply with no answer in it is no working model, whatever its status.
+        Ok(decision) if !decision.answers.contains_key("q") => {
+            line(Mark::Fail, &format!("decision model {model}: no answer"))?;
+            Ok(false)
+        }
         Ok(decision) => {
             let text = format!(
                 "decision model {} answers in {} ms",

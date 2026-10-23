@@ -41,7 +41,7 @@ pub enum Reply {
     Stopped,
 }
 
-pub trait Person {
+pub trait Person: Send + Sync {
     /// Ask `questions`, in order, and wait for the answers.
     fn ask(&self, questions: &[Question]) -> Reply;
 }

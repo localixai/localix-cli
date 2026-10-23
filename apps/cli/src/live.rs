@@ -2,7 +2,6 @@
 //! it chose (and the browser's decision model, once there is a key for one) without rebuilding
 //! the agent, its tools or its conversation.
 
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::RwLock;
 
@@ -25,7 +24,7 @@ impl Live {
         let chat = choice
             .provider
             .chat(&choice.selection)
-            .unwrap_or_else(|| Box::new(SignedOut(choice.provider)));
+            .unwrap_or_else(|| Box::new(SignedOut(choice.provider.clone())));
         Self {
             chat: LiveChat::new(chat),
             decider: LiveDecider::new(providers::decider(decision)),
@@ -33,22 +32,23 @@ impl Live {
     }
 }
 
-pub struct LiveChat(RefCell<Box<dyn Chat>>);
+pub struct LiveChat(RwLock<Box<dyn Chat>>);
 
 impl LiveChat {
     pub fn new(chat: Box<dyn Chat>) -> Self {
-        Self(RefCell::new(chat))
+        Self(RwLock::new(chat))
     }
 
     /// Think with `chat` from the next request on.
     pub fn set(&self, chat: Box<dyn Chat>) {
-        *self.0.borrow_mut() = chat;
+        *self.0.write().unwrap_or_else(|poison| poison.into_inner()) = chat;
     }
 }
 
 impl Chat for LiveChat {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
-        self.0.borrow().complete(request)
+        let chat = self.0.read().unwrap_or_else(|poison| poison.into_inner());
+        chat.complete(request)
     }
 }
 

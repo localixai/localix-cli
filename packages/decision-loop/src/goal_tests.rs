@@ -11,7 +11,6 @@ fn a_loop_is_a_state_seen_again_not_a_repeated_action() {
 }
 
 mod covered {
-    use std::cell::Cell;
     use std::collections::BTreeMap;
     use std::sync::Mutex;
 
@@ -24,7 +23,7 @@ mod covered {
 
     /// A view whose first click is refused because a banner came over it after the snapshot.
     struct Banner {
-        acts: Mutex<Cell<usize>>,
+        acts: Mutex<usize>,
     }
 
     fn view(question: usize) -> Observation {
@@ -53,13 +52,13 @@ mod covered {
     impl View for Banner {
         fn observe(&self) -> ViewResult<Observation> {
             // The click that went through moved on to the next question.
-            let acts = self.acts.lock().unwrap().get();
+            let acts = *self.acts.lock().unwrap();
             Ok(view(if acts >= 2 { 2 } else { 1 }))
         }
         fn act(&self, _: &str, _: &Action) -> ViewResult<()> {
-            let acts = self.acts.lock().unwrap();
-            acts.set(acts.get() + 1);
-            if acts.get() == 1 {
+            let mut acts = self.acts.lock().unwrap();
+            *acts += 1;
+            if *acts == 1 {
                 return Err(ViewError::Refused(
                     "covered: iframe \"Consent\" is on top".into(),
                 ));
@@ -111,7 +110,7 @@ mod covered {
     #[test]
     fn a_click_under_a_late_banner_is_decided_again_not_the_end() {
         let driver = Banner {
-            acts: Mutex::new(Cell::new(0)),
+            acts: Mutex::new(0),
         };
         let model = Model {
             clicked: Mutex::new(0),
@@ -165,7 +164,7 @@ mod covered {
     #[test]
     fn an_unsure_done_on_a_view_that_stays_put_is_not_asked_again() {
         let driver = Banner {
-            acts: Mutex::new(Cell::new(0)),
+            acts: Mutex::new(0),
         };
         let model = Unsure {
             asked: Mutex::new(0),

@@ -1,4 +1,5 @@
-//! The decision port over OpenRouter's `/systemone`: Jev by default, or any of its decision models.
+//! The decision port over OpenRouter's `/systemone`: any of its decision models (the app names
+//! which).
 
 use std::collections::BTreeMap;
 
@@ -6,8 +7,6 @@ use contracts::model::{Answer, DecideError, Decider, Decision, Question};
 use serde_json::{Map, Value, json};
 
 use crate::client::{ApiError, OpenRouter};
-
-pub const DEFAULT_MODEL: &str = "~typesafe/jev-latest";
 
 pub struct SystemOne {
     pub client: OpenRouter,
@@ -43,7 +42,7 @@ impl Decider for SystemOne {
                 .post("/systemone", &body)
                 .map_err(|error| match error {
                     ApiError::Invalid(message) => DecideError::Invalid(message),
-                    other => DecideError::Unavailable(format!("OpenRouter: {other}")),
+                    other => DecideError::Unavailable(format!("OpenRouter {other}")),
                 })?;
         let mut decision = Decision {
             model: value
@@ -99,32 +98,6 @@ fn read_answer(answer: &Value) -> Option<Answer> {
         "noul" => Some(Answer::Noul(answer.get("noul")?.as_f64()?)),
         _ => None,
     }
-}
-
-/// OpenRouter's decision models, cheapest first: (id, price of a million input tokens in USD,
-/// context in tokens). A decision costs mostly its input.
-pub fn models(client: &OpenRouter) -> Result<Vec<(String, f64, u64)>, ApiError> {
-    let listing = client.get("/models?output_modalities=decisions")?;
-    let mut models: Vec<(String, f64, u64)> = listing
-        .get("data")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .map(|model| {
-            let price = model
-                .pointer("/pricing/prompt")
-                .and_then(Value::as_str)
-                .and_then(|p| p.parse::<f64>().ok())
-                .map_or(f64::MAX, |p| p * 1e6);
-            (
-                model["id"].as_str().unwrap_or("").to_string(),
-                price,
-                model["context_length"].as_u64().unwrap_or(0),
-            )
-        })
-        .collect();
-    models.sort_by(|a, b| a.1.total_cmp(&b.1));
-    Ok(models)
 }
 
 #[cfg(test)]

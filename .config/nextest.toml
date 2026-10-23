@@ -1,0 +1,13 @@
+# cargo nextest: each test in a process of its own. A flaky run gets one retry; a test still
+# running after 60 s is reported as slow, and ended after three such periods.
+
+[profile.default]
+retries = 1
+slow-timeout = { period = "60s", terminate-after = 3 }
+fail-fast = false
+
+# The browser test opens a real window and drives it with timings: it runs with no other test
+# beside it.
+[[profile.default.overrides]]
+filter = "binary(browser)"
+threads-required = "num-test-threads"

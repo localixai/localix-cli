@@ -18,7 +18,7 @@ const LISTED: usize = 30;
 /// Characters of a session's first task in the list.
 const TASK_CHARS: usize = 60;
 
-/// Where sessions are kept: `LLX_SESSIONS`, else `~/.lx/sessions`.
+/// Where sessions are kept: `LLX_SESSIONS`, else `~/.llx/sessions`.
 pub fn store() -> Sessions {
     let dir = match std::env::var_os("LLX_SESSIONS").filter(|dir| !dir.is_empty()) {
         Some(dir) => PathBuf::from(dir),
@@ -34,40 +34,82 @@ pub fn store() -> Sessions {
 
 pub fn list() -> Result<i32, Failure> {
     let all = store().list();
+    let (agents, all): (Vec<Session>, Vec<Session>) = all.into_iter().partition(Session::is_agent);
     if all.is_empty() {
         error::print("No saved sessions.\n")?;
         return Ok(exit::OK);
     }
-    let rows: String = all.iter().take(LISTED).map(row).collect();
+    let rows: String = all
+        .iter()
+        .take(LISTED)
+        .map(|session| row(session, children(session, &agents)))
+        .collect();
     error::print(&rows)?;
     Ok(exit::OK)
 }
 
-/// One session as `llx sessions` lists it: its id, when, how many tasks, where, the first one.
-pub fn row(session: &Session) -> String {
+/// How many of `agents` `session` started.
+fn children(session: &Session, agents: &[Session]) -> usize {
+    agents
+        .iter()
+        .filter(|agent| agent.parent.as_deref() == Some(session.id.as_str()))
+        .count()
+}
+
+/// One session as `llx sessions` lists it: its id, when, how many tasks, where, the first one,
+/// and how many agents it started.
+pub fn row(session: &Session, agents: usize) -> String {
+    let shown = first_task(session);
+    let place = match session.workspace.as_str() {
+        "" => "?".to_string(),
+        dir => printable(&home_relative(dir)),
+    };
+    let tasks = tasks(session);
+    let agents = match agents {
+        0 => String::new(),
+        n => format!("  ({})", crate::tui::cells::count(n as u64, "agent")),
+    };
+    format!(
+        "{}  {:>10}  {tasks:>8}  {place}  {shown}{agents}\n",
+        session.id,
+        session::ago(session.updated)
+    )
+}
+
+/// A session as the interface's list shows it: when, how many tasks, the first one.
+pub fn brief(session: &Session) -> String {
+    let (ago, tasks) = (session::ago(session.updated), tasks(session));
+    format!("{ago:>10}  {tasks:>8}  {}", first_task(session))
+}
+
+/// `1 task `, `4 tasks`: the same width, for a column.
+fn tasks(session: &Session) -> String {
+    match session.turns.len() {
+        1 => "1 task ".to_string(),
+        n => format!("{n} tasks"),
+    }
+}
+
+/// The session's first task on one line, cut.
+fn first_task(session: &Session) -> String {
     let first = session.turns.first().map_or("", |turn| turn.goal.as_str());
     let first = printable(&first.split_whitespace().collect::<Vec<_>>().join(" "));
     let mut shown: String = first.chars().take(TASK_CHARS).collect();
     if shown.len() < first.len() {
         shown.push('…');
     }
-    let place = match session.workspace.as_str() {
-        "" => "?".to_string(),
-        dir => printable(&home_relative(dir)),
-    };
-    let tasks = match session.turns.len() {
-        1 => "1 task ".to_string(),
-        n => format!("{n} tasks"),
-    };
-    format!(
-        "{}  {:>10}  {tasks:>8}  {place}  {shown}\n",
-        session.id,
-        session::ago(session.updated)
-    )
+    shown
+}
+
+/// The sessions of `list` that ran in `dir`, newest first, without the agents'.
+pub fn here(mut list: Vec<Session>, dir: &str) -> Vec<Session> {
+    list.retain(|session| session.workspace == dir && !session.is_agent());
+    list.sort_by_key(|session| std::cmp::Reverse(session.updated));
+    list
 }
 
 /// `dir` with the home directory written `~`, as a person recognizes it.
-fn home_relative(dir: &str) -> String {
+pub(crate) fn home_relative(dir: &str) -> String {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
     let inside = home
         .as_deref()
@@ -94,10 +136,7 @@ pub fn resume(
     let store = store();
     let newest_here = match id {
         Some(_) => None,
-        None => store
-            .list()
-            .into_iter()
-            .find(|session| session.workspace == here),
+        None => self::here(store.list(), &here).into_iter().next(),
     };
     let session = match newest_here {
         Some(session) => session,

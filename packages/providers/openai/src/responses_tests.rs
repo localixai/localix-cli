@@ -1,11 +1,32 @@
 use std::sync::Arc;
 
-use contracts::catalog::Selection;
+use contracts::catalog::{Effort, ModelEntry, Selection};
 use serde_json::json;
 
 use super::*;
-use crate::catalog;
 use crate::testing::{Scripted, access};
+
+/// A model as the catalog gives it: `gpt-6-sol` takes levels, another none.
+fn entry(id: &str) -> ModelEntry {
+    let efforts = match id {
+        "gpt-6-sol" => vec![
+            Effort::Off,
+            Effort::Low,
+            Effort::Medium,
+            Effort::High,
+            Effort::XHigh,
+            Effort::Max,
+        ],
+        _ => vec![],
+    };
+    ModelEntry {
+        id: id.into(),
+        name: id.into(),
+        default: efforts.get(2).copied().unwrap_or(Effort::Off),
+        efforts,
+        context: 400_000,
+    }
+}
 
 const APP: App = App {
     name: "llx",
@@ -58,7 +79,7 @@ const LATER: u64 = 9_999_999_999;
 fn model(replies: Vec<(u16, String)>, held: Tokens) -> (ChatModel, Arc<Scripted>, Arc<Memory>) {
     let http = Arc::new(Scripted::new(replies));
     let memory = Arc::new(Memory::default());
-    let selection = Selection::new(catalog::entry("gpt-6-sol"));
+    let selection = Selection::new(entry("gpt-6-sol"));
     let model = ChatModel::new(
         APP,
         Box::new(Shared(http.clone())),
@@ -114,7 +135,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
         tools: std::slice::from_ref(&spec),
         may_call: true,
     };
-    let selection = Selection::new(catalog::entry("gpt-6-sol"))
+    let selection = Selection::new(entry("gpt-6-sol"))
         .with_effort(Effort::High)
         .unwrap();
     let body = body(&selection, "s1", request);
@@ -148,18 +169,30 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
             body["tool_choice"].clone(),
             body["parallel_tool_calls"].clone()
         ),
-        (json!("auto"), json!(false))
+        (json!("auto"), json!(true))
     );
-}
 
-#[test]
-fn a_model_with_no_level_is_sent_none() {
+    // Off is asked for by name: left out, the backend would reason at its own default.
+    let off = Selection::new(entry("gpt-6-sol"))
+        .with_effort(Effort::Off)
+        .unwrap();
     let request = Request {
+        conversation: &[],
+        tools: &[],
+        may_call: true,
+    };
+    assert_eq!(
+        super::body(&off, "s", request)["reasoning"],
+        json!({"effort": "none"})
+    );
+
+    // A model with no level is sent none, and a request with no tools names none.
+    let bare = Request {
         conversation: &[],
         tools: &[],
         may_call: false,
     };
-    let body = body(&Selection::new(catalog::entry("gpt-next")), "s", request);
+    let body = super::body(&Selection::new(entry("gpt-next")), "s", bare);
     assert!(body.get("reasoning").is_none() && body.get("tools").is_none());
 }
 

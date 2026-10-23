@@ -26,6 +26,16 @@ pub struct ToolOutput {
     pub image: Option<Image>,
 }
 
+/// A report alone: most calls leave no state and no picture.
+impl From<String> for ToolOutput {
+    fn from(report: String) -> Self {
+        Self {
+            report,
+            ..Self::default()
+        }
+    }
+}
+
 /// An encoded picture, as a model reads it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Image {
@@ -58,8 +68,18 @@ impl std::fmt::Display for ToolError {
 
 impl std::error::Error for ToolError {}
 
-pub trait Tool {
+pub trait Tool: Send + Sync {
     fn spec(&self) -> ToolSpec;
     /// Do what `arguments` ask and say what happened.
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError>;
+    /// Whether its calls may run at the same time as other such calls of one turn: they change
+    /// nothing another call of the turn reads (reading, searching, commands). A call that is not
+    /// runs alone, in its turn's order.
+    fn parallel(&self) -> bool {
+        false
+    }
 }
+
+#[cfg(test)]
+#[path = "tool_tests.rs"]
+mod tests;

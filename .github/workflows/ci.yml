@@ -70,6 +70,33 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run -a cargo test --workspace --locked
 
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/linux-deps
+        with:
+          extra: xvfb
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # the stable branch, 2026-10-01
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # Prebuilt binaries from each project's own releases, at a fixed version: no third-party
+      # action to pin, and no newer release changes what runs.
+      - name: Install cargo-nextest and cargo-llvm-cov
+        shell: bash
+        run: |
+          bin="${CARGO_HOME:-$HOME/.cargo}/bin"
+          curl -LsSf https://get.nexte.st/0.9.149/linux | tar zxf - -C "$bin"
+          curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/download/v0.9.1/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz \
+            | tar zxf - -C "$bin"
+      # Every test under nextest, instrumented; fails under 80% of lines.
+      - run: xvfb-run -a scripts/coverage.sh --locked
+
   msrv:
     name: msrv
     runs-on: ubuntu-latest

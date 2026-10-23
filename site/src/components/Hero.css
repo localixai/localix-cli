@@ -1,0 +1,59 @@
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(2.5rem, 6vw, 4rem);
+  padding-block: clamp(2.5rem, 7vw, 5rem) clamp(3rem, 7vw, 5rem);
+}
+h1 {
+  margin: 0;
+  font: 700 clamp(2.75rem, 6.2vw, 5.25rem) / 0.98 var(--display);
+  letter-spacing: -0.05em;
+  text-wrap: balance;
+}
+.chip {
+  display: inline-block;
+  padding: 0 0.1em 0.04em;
+  border-radius: 0.08em;
+  background: var(--white);
+  color: var(--black);
+  transform: rotate(-1.5deg);
+}
+.lede {
+  max-width: 31rem;
+  margin: 1.75rem 0 0;
+  color: var(--soft);
+  font-size: clamp(1rem, 1.4vw, 1.125rem);
+  line-height: 1.55;
+}
+.lede b {
+  color: var(--white);
+  font-weight: 600;
+}
+.under {
+  margin: 0.9rem 0 0;
+  color: var(--muted);
+  font: 400 0.8125rem/1.5 var(--mono);
+}
+
+@media (min-width: 68rem) {
+  .hero {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    align-items: center;
+  }
+}
+
+/* First paint: the copy rises in, line by line, then the demo. */
+h1,
+.lede,
+.hero .command,
+.hero .under,
+.hero-demo {
+  animation: rise 700ms var(--ease-out) both;
+}
+.lede { animation-delay: 80ms; }
+.hero .command { animation-delay: 140ms; }
+.hero .under { animation-delay: 180ms; }
+.hero-demo { animation-delay: 220ms; }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+}

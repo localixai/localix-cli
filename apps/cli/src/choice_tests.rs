@@ -2,7 +2,7 @@ use super::*;
 
 fn options(provider: Provider, model: Option<&str>, reasoning: Option<&str>) -> ModelOptions {
     ModelOptions {
-        provider: Some(provider),
+        provider: Some(provider.id().to_string()),
         model: model.map(str::to_string),
         reasoning: reasoning.map(str::to_string),
         decision_model: "d".into(),
@@ -19,9 +19,9 @@ fn at(choice: Choice, effort: Effort) -> Choice {
 
 #[test]
 fn a_saved_choice_reads_back_and_a_level_its_model_lost_falls_to_the_default() {
-    let choice = at(Choice::new(Provider::OpenAi, "gpt-6-sol"), Effort::Ultra);
+    let choice = at(Choice::new(Provider::openai(), "gpt-6-sol"), Effort::Max);
     assert_eq!(Choice::from_json(&choice.to_json()), Some(choice));
-    let stale = json!({"provider": "openai", "model": "gpt-5.5", "reasoning": "ultra"});
+    let stale = json!({"provider": "openai", "model": "gpt-5.5", "reasoning": "max"});
     let read = Choice::from_json(&stale).unwrap();
     assert_eq!(
         read.selection.effort(),
@@ -36,18 +36,21 @@ fn a_saved_choice_reads_back_and_a_level_its_model_lost_falls_to_the_default() {
 
 #[test]
 fn with_nothing_given_the_saved_choice_of_that_provider_is_used() {
-    let saved = at(Choice::new(Provider::OpenAi, "gpt-6-sol"), Effort::High);
-    let resolved = resolve(&options(Provider::OpenAi, None, None), Some(saved.clone()));
+    let saved = at(Choice::new(Provider::openai(), "gpt-6-sol"), Effort::High);
+    let resolved = resolve(
+        &options(Provider::openai(), None, None),
+        Some(saved.clone()),
+    );
     assert_eq!(resolved, Ok(saved.clone()));
-    let other = resolve(&options(Provider::OpenRouter, None, None), Some(saved)).unwrap();
-    assert_eq!(other.model(), openrouter::catalog::DEFAULT_MODEL);
+    let other = resolve(&options(Provider::openrouter(), None, None), Some(saved)).unwrap();
+    assert_eq!(other.model(), "anthropic/claude-haiku-5.5");
 }
 
 #[test]
 fn another_model_starts_at_its_own_default() {
-    let saved = at(Choice::new(Provider::OpenAi, "gpt-6-sol"), Effort::Ultra);
+    let saved = at(Choice::new(Provider::openai(), "gpt-6-sol"), Effort::Max);
     let resolved = resolve(
-        &options(Provider::OpenAi, Some("gpt-5.5"), None),
+        &options(Provider::openai(), Some("gpt-5.5"), None),
         Some(saved),
     )
     .unwrap();
@@ -59,23 +62,23 @@ fn another_model_starts_at_its_own_default() {
 
 #[test]
 fn a_level_the_model_does_not_take_is_a_usage_error() {
-    let given = options(Provider::OpenAi, Some("gpt-5.5"), Some("xhigh"));
+    let given = options(Provider::openai(), Some("gpt-5.5"), Some("xhigh"));
     assert_eq!(
         resolve(&given, None).unwrap().selection.effort(),
         Effort::XHigh
     );
     let refused = resolve(
-        &options(Provider::OpenAi, Some("gpt-5.5"), Some("ultra")),
+        &options(Provider::openai(), Some("gpt-5.5"), Some("max")),
         None,
     );
     assert_eq!(
         refused,
         Err(Failure::Usage(
-            "--reasoning ultra: gpt-5.5 takes low, medium, high, xhigh".into()
+            "--reasoning max: gpt-5.5 takes off, low, medium, high, xhigh".into()
         ))
     );
     let unknown = resolve(
-        &options(Provider::OpenRouter, Some("v/m"), Some("low")),
+        &options(Provider::openrouter(), Some("v/m"), Some("low")),
         None,
     );
     assert!(matches!(unknown, Err(Failure::Usage(m)) if m.ends_with("takes off")));

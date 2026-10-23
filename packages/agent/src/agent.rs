@@ -1,19 +1,24 @@
 //! The agent's loop: the chat model reads the goal, calls tools until it answers, bounded by
 //! turns. A reply without a tool call is the answer. Near the end of its turns, or after calls keep
-//! failing, the model is asked to answer with what it has.
+//! failing, the model is asked to answer with what it has. The calls of one turn that may run
+//! together do ([`crate::calls`]). Before each turn, what came into the inbox is said; an answer
+//! while something is still to come waits for it, and the run goes on.
 
 use contracts::chat::{Chat, Completion, Message, Request, ToolCall};
+use contracts::inbox::Inbox;
 use contracts::tool::{Image, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
 use crate::answer;
+use crate::calls::{self, Outcome};
 use crate::conversation::Conversation;
+use crate::history::Strategy;
 use crate::observer::Observer;
 use crate::schema;
 pub use crate::spend::Spend;
 
 const SYSTEM: &str = include_str!("prompt.md");
-/// Failed calls in a row before the model is asked to answer.
+/// Turns whose calls all failed, in a row, before the model is asked to answer.
 const MAX_FAILURES: usize = 3;
 /// Times a `result` that breaks its schema goes back to be fixed.
 const MAX_FIXES: usize = 2;
@@ -38,6 +43,13 @@ pub struct Agent<'a> {
     pub observer: &'a dyn Observer,
     /// `--schema`: the run ends with data that matches it, through the `result` tool.
     pub schema: Option<&'a Value>,
+    /// What reaches the run between its turns; `None` for nothing.
+    pub inbox: Option<&'a dyn Inbox>,
+    /// The model's context window in tokens (0 when it is not known): the strategy fits the
+    /// conversation to the limit it leaves.
+    pub window: u64,
+    /// How the conversation is prepared for the model before each request.
+    pub strategy: &'a dyn Strategy,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -62,13 +74,18 @@ pub struct Run {
     pub spend: Spend,
     /// The conversation as it ended: a follow-up goal goes on from it.
     pub conversation: Conversation,
+    /// The tokens the conversation took at its last turn.
+    pub used: u64,
 }
 
 /// What one goal has used of its second chances.
 #[derive(Default)]
 struct Tally {
-    /// Failed calls in a row.
+    /// Turns whose calls all failed, in a row.
     failures: usize,
+    /// Whether a call of this turn failed, and whether one succeeded.
+    failed: bool,
+    succeeded: bool,
     /// `result` calls sent back to be fixed.
     fixes: usize,
     /// Whether the model was told to answer now: it is told once.
@@ -147,9 +164,30 @@ impl Agent<'_> {
             data: None,
             spend: Spend::default(),
             conversation,
+            used: 0,
         };
         let mut tally = Tally::default();
+        // Real tokens per estimated one, from the last answer's usage.
+        let mut ratio = 1.0;
+        // The specs go with every request: they count in the usage the ratio is taken from, and
+        // against the limit, but no stage can elide them.
+        let fixed: u64 = specs
+            .iter()
+            .map(|spec| {
+                let size = spec.name.len() + spec.description.len();
+                (size + spec.parameters.to_string().len()) as u64 / 4
+            })
+            .sum();
         for turn in 0..self.max_turns {
+            self.deliver(&mut run, self.take());
+            // Prepared for the model before each request; the elided stays elided.
+            let ceiling =
+                (self.strategy.ceiling(self.window)).saturating_sub((fixed as f64 * ratio) as u64);
+            let report = self.strategy.prepare(&mut run.conversation, ceiling, ratio);
+            if !report.is_empty() {
+                self.observer.fitted(&report);
+            }
+            let estimate = run.conversation.tokens();
             let wrap_up = turn + 1 == self.max_turns || tally.failures >= MAX_FAILURES;
             if wrap_up {
                 self.remind(&mut run, &mut tally);
@@ -169,8 +207,29 @@ impl Agent<'_> {
             };
             self.observer.turn(&completion.usage);
             run.spend.add(&completion.usage);
+            run.used = completion.usage.input_tokens + completion.usage.output_tokens;
+            if completion.usage.input_tokens > 0 && estimate > 0 {
+                let input = completion.usage.input_tokens as f64;
+                ratio = (input / (estimate + fixed) as f64).clamp(0.3, 4.0);
+            }
             run.conversation.push(completion.message());
             if completion.calls.is_empty() {
+                // Something came in meanwhile, or is still to come: the run goes on with it. On
+                // the last turn the answer stands, and what is still to come waits for the next goal.
+                let last = turn + 1 == self.max_turns;
+                let came = if last { vec![] } else { self.take() };
+                let waits = !last && came.is_empty() && self.expecting();
+                if waits || !came.is_empty() {
+                    self.say(&completion);
+                }
+                let came = match waits {
+                    true => self.inbox.map(|inbox| inbox.wait()).unwrap_or_default(),
+                    false => came,
+                };
+                if !came.is_empty() {
+                    self.deliver(&mut run, came);
+                    continue;
+                }
                 // With a schema, text alone is not the end: the model is asked once for `result`.
                 if self.schema.is_some() && !tally.reminded {
                     self.remind(&mut run, &mut tally);
@@ -185,13 +244,70 @@ impl Agent<'_> {
                 }
                 return run;
             }
-            for call in &completion.calls {
-                if self.handle(call, &specs, &mut run, &mut tally) {
-                    return run;
-                }
+            self.say(&completion);
+            if self.handle_all(&completion.calls, &specs, &mut run, &mut tally) {
+                return run;
             }
         }
         run
+    }
+
+    /// Show what the model said in a turn the run goes on from: it is not the answer.
+    fn say(&self, completion: &Completion) {
+        let text = completion.text.as_deref().map(str::trim);
+        if let Some(text) = text.filter(|text| !text.is_empty()) {
+            self.observer.said(text);
+        }
+    }
+
+    fn take(&self) -> Vec<String> {
+        self.inbox.map(|inbox| inbox.take()).unwrap_or_default()
+    }
+
+    fn expecting(&self) -> bool {
+        self.inbox.is_some_and(|inbox| inbox.expecting())
+    }
+
+    /// Say what came in, after the results of the last turn's calls.
+    fn deliver(&self, run: &mut Run, came: Vec<String>) {
+        for message in came {
+            run.conversation.push(Message::User(message));
+        }
+    }
+
+    /// Carry out a turn's calls, those that may run together at once; whether the run ends.
+    fn handle_all(
+        &self,
+        calls: &[ToolCall],
+        specs: &[ToolSpec],
+        run: &mut Run,
+        tally: &mut Tally,
+    ) -> bool {
+        let parallel =
+            |call: &ToolCall| call.name != schema::TOOL && calls::parallel(self.tools, specs, call);
+        let mut ends = false;
+        let mut start = 0;
+        (tally.failed, tally.succeeded) = (false, false);
+        while start < calls.len() && !ends {
+            let end = calls::batch_end(calls, start, parallel);
+            if end - start == 1 {
+                ends = self.handle(&calls[start], specs, run, tally);
+            } else {
+                let batch = &calls[start..end];
+                let outcomes = calls::together(batch, self.tools, specs, self.observer);
+                for (call, outcome) in batch.iter().zip(outcomes) {
+                    ends |= self.record(call, outcome, run, tally);
+                }
+            }
+            start = end;
+        }
+        if tally.succeeded {
+            tally.failures = 0;
+        } else if tally.failed {
+            tally.failures += 1;
+        }
+        run.conversation.settle();
+        ends
     }
 
     /// Tell the model, once, to end: with its answer, or with `result`.
@@ -216,42 +332,35 @@ impl Agent<'_> {
         tally: &mut Tally,
     ) -> bool {
         self.observer.call(call);
-        let (outcome, ends) = match (call.name.as_str(), self.schema) {
-            (schema::TOOL, Some(schema)) => take_result(call, schema, run, &mut tally.fixes),
-            _ => {
-                let outcome = self.call(specs, call);
-                match &outcome {
-                    Ok(_) => tally.failures = 0,
-                    Err(ToolError::Failed(_)) => tally.failures += 1,
-                    Err(ToolError::Fatal(why)) => run.status = Status::Error(why.clone()),
-                }
-                let ends = matches!(outcome, Err(ToolError::Fatal(_)));
-                (outcome, ends)
-            }
-        };
-        self.observer.result(call, &outcome);
-        match outcome {
-            Ok(output) => run.conversation.result(&call.id, output),
-            Err(error) => run.conversation.failure(&call.id, &error.to_string()),
+        if let (schema::TOOL, Some(schema)) = (call.name.as_str(), self.schema) {
+            let (outcome, ends) = take_result(call, schema, run, &mut tally.fixes);
+            self.observer.result(call, &outcome);
+            answer_call(run, call, outcome);
+            return ends;
         }
-        ends
+        let outcome = calls::invoke(self.tools, specs, call);
+        self.observer.result(call, &outcome);
+        self.record(call, outcome, run, tally)
     }
 
-    /// Run `call` on the tool it names; `specs` are the tools' specs, in the same order.
-    fn call(&self, specs: &[ToolSpec], call: &ToolCall) -> Result<ToolOutput, ToolError> {
-        let tool = specs
-            .iter()
-            .position(|spec| spec.name == call.name)
-            .and_then(|at| self.tools.get(at))
-            .ok_or_else(|| ToolError::Failed(format!("there is no tool {}", call.name)))?;
-        if !call.arguments.is_object() {
-            return Err(ToolError::Failed(
-                "the arguments are not a JSON object (a reply cut short leaves them incomplete): \
-                 call the tool again, and write a large file in parts"
-                    .into(),
-            ));
+    /// Count `outcome` and answer `call` with it; whether the run ends with it.
+    fn record(&self, call: &ToolCall, outcome: Outcome, run: &mut Run, tally: &mut Tally) -> bool {
+        match &outcome {
+            Ok(_) => tally.succeeded = true,
+            Err(ToolError::Failed(_)) => tally.failed = true,
+            Err(ToolError::Fatal(why)) => run.status = Status::Error(why.clone()),
         }
-        tool.call(&call.arguments)
+        let ends = matches!(outcome, Err(ToolError::Fatal(_)));
+        answer_call(run, call, outcome);
+        ends
+    }
+}
+
+/// Answer `call` in the conversation.
+fn answer_call(run: &mut Run, call: &ToolCall, outcome: Outcome) {
+    match outcome {
+        Ok(output) => run.conversation.result(&call.id, output),
+        Err(error) => run.conversation.failure(&call.id, &error.to_string()),
     }
 }
 
@@ -272,12 +381,7 @@ fn take_result(
             };
             run.answer = done.summary;
             run.data = Some(Ok(done.data));
-            let output = ToolOutput {
-                report: RETURNED.into(),
-                state: None,
-                image: None,
-            };
-            (Ok(output), true)
+            (Ok(ToolOutput::from(RETURNED.to_string())), true)
         }
         Err(problems) if *fixes < MAX_FIXES => {
             *fixes += 1;

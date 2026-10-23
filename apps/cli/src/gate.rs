@@ -4,7 +4,6 @@
 //! carries JSON and stderr goes to a file. What the question shows came from the model: its
 //! control characters are escaped, so it reads as what will run.
 
-use std::collections::HashSet;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::sync::Mutex;
@@ -13,6 +12,7 @@ use contracts::gate::{Effect, Gate, Verdict};
 
 use crate::interrupt;
 use crate::printable::printable;
+use crate::tui::event::Approval;
 
 /// Times an unreadable answer is asked again before it counts as no.
 const TRIES: usize = 3;
@@ -27,10 +27,19 @@ const POLL_US: libc::suseconds_t = 100_000;
 /// more runs after Ctrl-C, not even what was approved while the question was open.
 pub struct Stoppable<'a> {
     pub inner: &'a dyn Gate,
-    pub stopped: &'a dyn Fn() -> bool,
+    pub stopped: &'a (dyn Fn() -> bool + Sync),
 }
 
 pub const STOPPED: &str = "the person stopped the task";
+
+/// One question to the person at a time: an approval or an `ask`, from the main session or from
+/// any agent working beside it, waits here for the one open to be answered.
+static ASKING: Mutex<()> = Mutex::new(());
+
+/// Hold the person's attention for one question.
+pub fn one_question() -> std::sync::MutexGuard<'static, ()> {
+    crate::output::lock(&ASKING)
+}
 
 impl Gate for Stoppable<'_> {
     fn check(&self, effect: Effect) -> Verdict {
@@ -47,7 +56,7 @@ impl Gate for Stoppable<'_> {
 }
 
 /// Where a question is asked and its answer read.
-pub trait Prompter {
+pub trait Prompter: Send + Sync {
     /// Show `question` and read one line; `None` when nothing can be read.
     fn ask(&self, question: &str) -> Option<String>;
 }
@@ -91,7 +100,7 @@ impl Prompter for Tty {
         discard_typed_ahead(&input);
         output.write_all(question.as_bytes()).ok()?;
         output.flush().ok()?;
-        if !typed(&input, &|| interrupt::PROCESS.stopped()) {
+        if !typed(&input, &|| interrupt::PROCESS.stopping()) {
             return None;
         }
         let mut line = String::new();
@@ -204,66 +213,40 @@ fn typed(_: &File, _: &dyn Fn() -> bool) -> bool {
     true
 }
 
-/// Asks the person for each effect; `a` allows the tool for the rest of the process.
-pub struct TerminalGate<P: Prompter> {
-    prompter: P,
-    always: Mutex<HashSet<String>>,
+/// Asks the person whether an effect may happen: yes, always for its tool, or no; `None` when no
+/// answer can come. What "always" covers is the mode's (`mode::ModeGate`).
+pub trait Asker: Send + Sync {
+    fn approve(&self, effect: &Effect) -> Option<Approval>;
 }
 
-impl<P: Prompter> TerminalGate<P> {
-    pub fn new(prompter: P) -> Self {
-        Self {
-            prompter,
-            always: Mutex::new(HashSet::new()),
-        }
-    }
-}
+/// Asks at the terminal, on `prompter`.
+pub struct TerminalGate<P: Prompter>(pub P);
 
-impl<P: Prompter> Gate for TerminalGate<P> {
-    fn check(&self, effect: Effect) -> Verdict {
-        if self.always.lock().unwrap().contains(effect.tool) {
-            return Verdict::Allow;
-        }
+impl<P: Prompter> Asker for TerminalGate<P> {
+    fn approve(&self, effect: &Effect) -> Option<Approval> {
         let tool = printable(effect.tool);
         let question = format!(
             "\n  {tool}: {}\n  allow? [y]es  [n]o (n <why> tells the agent)  [a]lways for {tool} > ",
             printable(effect.summary)
         );
         for _ in 0..TRIES {
-            let Some(line) = self.prompter.ask(&question) else {
-                return Verdict::Deny("no answer came from the terminal".into());
-            };
-            match answer(&line) {
-                Some(Answer::Yes) => return Verdict::Allow,
-                Some(Answer::Always) => {
-                    self.always.lock().unwrap().insert(effect.tool.to_string());
-                    return Verdict::Allow;
-                }
-                Some(Answer::No(why)) => return Verdict::Deny(declined(why)),
-                None => {}
+            if let Some(approval) = answer(&self.0.ask(&question)?) {
+                return Some(approval);
             }
         }
-        Verdict::Deny(declined(None))
+        Some(Approval::No(None))
     }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum Answer {
-    Yes,
-    Always,
-    /// No, and what the person said beside it.
-    No(Option<String>),
 }
 
 /// The person's line as an answer; `None` when it is none of them. Approval is only the bare
 /// word (`y`, `yes`, `a`, `always`): a line that says more ("yes, and then...") was likely meant
 /// for something else, and is asked again. A refusal may say why (`n use make`). A bare Enter is
 /// no: nothing runs that was not approved.
-fn answer(line: &str) -> Option<Answer> {
+fn answer(line: &str) -> Option<Approval> {
     let line = line.trim();
     match line.to_ascii_lowercase().as_str() {
-        "y" | "yes" => return Some(Answer::Yes),
-        "a" | "always" => return Some(Answer::Always),
+        "y" | "yes" => return Some(Approval::Yes),
+        "a" | "always" => return Some(Approval::Always),
         _ => {}
     }
     let (word, rest) = line
@@ -271,19 +254,22 @@ fn answer(line: &str) -> Option<Answer> {
         .unwrap_or((line, ""));
     let rest = rest.trim_start_matches([':', ',']).trim();
     match word.to_ascii_lowercase().as_str() {
-        "" | "n" | "no" => Some(Answer::No((!rest.is_empty()).then(|| rest.to_string()))),
+        "" | "n" | "no" => Some(Approval::No((!rest.is_empty()).then(|| rest.to_string()))),
         _ => None,
     }
 }
+
+/// How every refusal of the person starts: the interface knows a declined call by it.
+pub const DECLINED: &str = "the person declined it";
 
 pub fn declined(why: Option<String>) -> String {
     match why {
         // What they said is the person speaking now, not a tool's error: it comes first.
         Some(why) => format!(
-            "the person declined it and said: {why}\nThis is the person's instruction to you: \
-             follow it before anything else."
+            "{DECLINED} and said: {why}\nThis is the person's instruction to you: follow it \
+             before anything else."
         ),
-        None => "the person declined it; do not try the same thing another way".into(),
+        None => format!("{DECLINED}; do not try the same thing another way"),
     }
 }
 

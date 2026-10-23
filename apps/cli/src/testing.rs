@@ -2,12 +2,11 @@
 //! reads back, fakes of the models (no network), a person typing at the terminal, and a whole run
 //! composed around them.
 
-use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use clap::Parser;
 use contracts::chat::{Chat, ChatError, Completion, Message, Request};
@@ -28,6 +27,28 @@ pub struct Scratch(PathBuf);
 
 impl Scratch {
     pub fn new() -> Self {
+        Self::under(&std::env::temp_dir())
+    }
+
+    /// A directory in no git repository, where one can be found: the system's temporary
+    /// directory may sit inside one (TMPDIR=$PWD/tmp, a devcontainer), so the usual others are
+    /// tried too.
+    pub fn outside_repository() -> Option<Self> {
+        let mut bases = vec![std::env::temp_dir()];
+        if cfg!(unix) {
+            bases.extend(["/tmp", "/var/tmp"].map(PathBuf::from));
+        }
+        bases.into_iter().find_map(|base| {
+            let scratch = Self::under(&base);
+            let in_repository = scratch
+                .path()
+                .ancestors()
+                .any(|dir| dir.join(".git").exists());
+            (!in_repository).then_some(scratch)
+        })
+    }
+
+    fn under(base: &Path) -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let name = format!(
             "llx-cli-{}-{}-{}",
@@ -35,7 +56,7 @@ impl Scratch {
             session::now(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         );
-        let dir = std::env::temp_dir().join(name);
+        let dir = base.join(name);
         std::fs::create_dir_all(&dir).unwrap();
         // As the workspace names it (on Windows, without the verbatim `\\?\` prefix), so paths
         // compare equal with what the app reports.
@@ -64,17 +85,17 @@ impl Drop for Scratch {
 
 /// A writer that keeps what is written, shared with the test that reads it.
 #[derive(Clone, Default)]
-pub struct Captured(Rc<RefCell<Vec<u8>>>);
+pub struct Captured(Arc<Mutex<Vec<u8>>>);
 
 impl Captured {
     pub fn text(&self) -> String {
-        String::from_utf8(self.0.borrow().clone()).unwrap()
+        String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
     }
 }
 
 impl Write for Captured {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        self.0.borrow_mut().extend_from_slice(bytes);
+        self.0.lock().unwrap().extend_from_slice(bytes);
         Ok(bytes.len())
     }
 
@@ -97,18 +118,19 @@ impl Write for Closed {
 }
 
 /// A chat model that answers from a script, then is unreachable.
-pub struct ScriptedChat(RefCell<Vec<Completion>>);
+pub struct ScriptedChat(Mutex<Vec<Completion>>);
 
 impl ScriptedChat {
     pub fn new(replies: Vec<Completion>) -> Self {
-        Self(RefCell::new(replies.into_iter().rev().collect()))
+        Self(Mutex::new(replies.into_iter().rev().collect()))
     }
 }
 
 impl Chat for ScriptedChat {
     fn complete(&self, _: Request) -> Result<Completion, ChatError> {
         self.0
-            .borrow_mut()
+            .lock()
+            .unwrap()
             .pop()
             .ok_or_else(|| ChatError::Unavailable("the script ran out".into()))
     }
@@ -129,23 +151,23 @@ impl Decider for NoDecider {
 /// it remembers each question shown.
 #[derive(Default)]
 pub struct Typed {
-    lines: RefCell<VecDeque<&'static str>>,
-    pub asked: RefCell<Vec<String>>,
+    lines: Mutex<VecDeque<&'static str>>,
+    pub asked: Mutex<Vec<String>>,
 }
 
 impl Typed {
     pub fn new(lines: &[&'static str]) -> Self {
         Self {
-            lines: RefCell::new(lines.iter().copied().collect()),
-            asked: RefCell::default(),
+            lines: Mutex::new(lines.iter().copied().collect()),
+            asked: Mutex::default(),
         }
     }
 }
 
 impl Prompter for &Typed {
     fn ask(&self, question: &str) -> Option<String> {
-        self.asked.borrow_mut().push(question.to_string());
-        self.lines.borrow_mut().pop_front().map(str::to_string)
+        self.asked.lock().unwrap().push(question.to_string());
+        self.lines.lock().unwrap().pop_front().map(str::to_string)
     }
 }
 
@@ -167,14 +189,31 @@ pub fn composed(
     replies: Vec<Completion>,
     work: impl FnOnce(&mut Rig) -> i32,
 ) {
+    composed_with(mode, asks, &ScriptedChat::new(replies), work);
+}
+
+/// [`composed`], around `chat`.
+pub fn composed_with(mode: Mode, asks: bool, chat: &dyn Chat, work: impl FnOnce(&mut Rig) -> i32) {
     let scratch = Scratch::new();
+    let (shared, seat) = setup(&scratch, mode, asks).split(None);
+    let models = Models {
+        chat,
+        decider: &NoDecider,
+        live: None,
+    };
+    assemble(&shared, seat, models, &quiet(), &Interrupt::new(), work);
+}
+
+/// A session in `scratch` that starts in `mode`, with no terminal and no interface; its
+/// sessions are kept in `scratch` too.
+pub fn setup(scratch: &Scratch, mode: Mode, asks: bool) -> Setup {
     let history = session::Sessions {
         dir: scratch.path().join("sessions"),
     };
     let session = history.start();
-    let setup = Setup {
+    Setup {
         options: Cli::try_parse_from(["llx"]).unwrap().run,
-        choice: crate::choice::Choice::new(crate::providers::Provider::OpenRouter, "test/model"),
+        choice: crate::choice::Choice::new(crate::providers::Provider::openrouter(), "test/model"),
         workspace: Workspace::new(scratch.path()).unwrap(),
         context: String::new(),
         fresh: String::new(),
@@ -185,20 +224,41 @@ pub fn composed(
         history,
         session,
         ui: None,
-    };
-    let chat = ScriptedChat::new(replies);
-    let models = Models {
-        chat: &chat,
-        decider: &NoDecider,
-        live: None,
-    };
-    let output = Output::with(
+    }
+}
+
+/// Output nobody reads.
+pub fn quiet() -> Output {
+    Output::with(
         false,
         false,
         Box::new(Captured::default()),
         Box::new(Captured::default()),
-    );
-    assemble(setup, models, &output, &Interrupt::new(), None, work);
+    )
+}
+
+/// An answer that says `text` and ends the task well.
+pub fn says(text: &str) -> Completion {
+    Completion {
+        text: Some(format!("{text}\nRESULT: achieved")),
+        ..Completion::default()
+    }
+}
+
+/// What the main conversation's calls came back with, in order: whether each failed, and its
+/// report.
+pub fn results(rig: &Rig) -> Vec<(bool, String)> {
+    let conversation = rig.conversation.as_ref().unwrap();
+    conversation
+        .messages()
+        .iter()
+        .filter_map(|message| match message {
+            Message::ToolResult {
+                content, failed, ..
+            } => Some((*failed, content.clone())),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The user messages of the rig's conversation: the goals and the notes before them.
@@ -212,4 +272,86 @@ pub fn users(rig: &Rig) -> Vec<String> {
             _ => None,
         })
         .collect()
+}
+
+/// A person who picks from a script, and remembers what each step offered.
+#[derive(Default)]
+pub struct Scripted {
+    picks: std::collections::VecDeque<Option<usize>>,
+    pub shown: Vec<(String, Vec<crate::picker::Item>)>,
+}
+
+impl Scripted {
+    pub fn new(picks: &[Option<usize>]) -> Self {
+        Self {
+            picks: picks.iter().copied().collect(),
+            shown: vec![],
+        }
+    }
+
+    pub fn titles(&self) -> Vec<&str> {
+        self.shown.iter().map(|(title, _)| title.as_str()).collect()
+    }
+
+    pub fn offered(&self, title: &str) -> Vec<(String, bool)> {
+        let (_, items) = self
+            .shown
+            .iter()
+            .find(|(shown, _)| shown.starts_with(title))
+            .unwrap();
+        items
+            .iter()
+            .map(|item| (item.label.clone(), item.marked))
+            .collect()
+    }
+}
+
+impl crate::picker::Picker for Scripted {
+    fn pick(&mut self, title: &str, items: &[crate::picker::Item]) -> Option<usize> {
+        self.shown.push((title.to_string(), items.to_vec()));
+        self.picks.pop_front().expect("a pick was scripted")
+    }
+}
+
+impl crate::picker::Lines for Scripted {
+    fn line(&mut self, _: &str, _: bool) -> Option<String> {
+        None
+    }
+}
+
+/// A chat model the test answers one turn at a time (a turn waits until it is sent its reply),
+/// and the conversations it was asked to go on from.
+pub struct Gated {
+    replies: Mutex<std::sync::mpsc::Receiver<Completion>>,
+    pub asked: Mutex<Vec<Vec<Message>>>,
+}
+
+/// A [`Gated`] model, and where its replies are sent.
+pub fn gated() -> (std::sync::mpsc::Sender<Completion>, Gated) {
+    let (replies, received) = std::sync::mpsc::channel();
+    let chat = Gated {
+        replies: Mutex::new(received),
+        asked: Mutex::default(),
+    };
+    (replies, chat)
+}
+
+impl Gated {
+    /// How many turns it was asked for.
+    pub fn turns(&self) -> usize {
+        self.asked.lock().unwrap().len()
+    }
+}
+
+impl Chat for Gated {
+    fn complete(&self, request: Request) -> Result<Completion, ChatError> {
+        self.asked
+            .lock()
+            .unwrap()
+            .push(request.conversation.to_vec());
+        let replies = self.replies.lock().unwrap();
+        // A test that went wrong ends instead of waiting for ever.
+        let waited = replies.recv_timeout(std::time::Duration::from_secs(20));
+        waited.map_err(|_| ChatError::Unavailable("the test sent no reply".into()))
+    }
 }

@@ -23,14 +23,10 @@ pub fn spend(summary: &Summary) -> String {
     let seconds = |ms: u64| ms as f64 / 1000.0;
     let mut out = String::new();
     if agent.calls > 0 {
-        let cached = match agent.cached_tokens {
-            0 => String::new(),
-            cached => format!(" ({} cached)", thousands(cached)),
-        };
         out.push_str(&format!(
-            "agent    {} · {} in{cached} · {} out · ${:.4} · {:.1}s\n",
+            "agent    {} · {} · {} out · ${:.4} · {:.1}s\n",
             agent.model,
-            thousands(agent.input_tokens),
+            tokens_in(agent.input_tokens, agent.cached_tokens),
             thousands(agent.output_tokens),
             agent.cost,
             seconds(agent.millis)
@@ -68,8 +64,16 @@ pub fn answer(summary: &Summary) -> (String, String) {
     }
 }
 
+/// `12,345 in (2,000 cached)`, or `12,345 in` when nothing was cached: `/usage` says it so too.
+pub fn tokens_in(input: u64, cached: u64) -> String {
+    match cached {
+        0 => format!("{} in", thousands(input)),
+        cached => format!("{} in ({} cached)", thousands(input), thousands(cached)),
+    }
+}
+
 /// `12,345`
-fn thousands(n: u64) -> String {
+pub fn thousands(n: u64) -> String {
     let digits = n.to_string();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {

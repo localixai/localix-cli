@@ -57,10 +57,9 @@ pub fn report(turn: &Turn, place: Option<&str>, needle: Option<&str>, input: &st
                 false => "it could not be killed, and may still be running",
             }
         ),
-        (Until::Stopped, _) => format!(
-            "stopped by the person after {waited}: every session was killed, with everything \
-             it started"
-        ),
+        (Until::Stopped, _) => {
+            format!("stopped after {waited}: session {id} was killed, with everything it started")
+        }
     };
     let mut out = vec![];
     match &turn.output {

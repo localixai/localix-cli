@@ -15,11 +15,9 @@ fn approval() -> Select {
             Line::from("  cargo test --workspace"),
         ],
         vec![
-            Choice::new("Yes").key('y'),
-            Choice::new("Yes, and don't ask again for bash").key('a'),
-            Choice::new("No, and tell llx what to do differently")
-                .key('n')
-                .types(),
+            Choice::new("Yes"),
+            Choice::new("Yes, and don't ask again for bash"),
+            Choice::new("No, and tell llx what to do differently").types(),
         ],
         "esc to say no",
     )
@@ -50,7 +48,7 @@ fn an_approval_reads_as_a_short_list() {
 }
 
 #[test]
-fn arrows_numbers_and_keys_pick() {
+fn arrows_and_numbers_pick() {
     let mut select = approval();
     assert_eq!(select.key(key(KeyCode::Down)), None);
     assert_eq!(select.key(key(KeyCode::Enter)), Some(Picked::Option(1)));
@@ -58,10 +56,7 @@ fn arrows_numbers_and_keys_pick() {
         approval().key(key(KeyCode::Char('1'))),
         Some(Picked::Option(0))
     );
-    assert_eq!(
-        approval().key(key(KeyCode::Char('y'))),
-        Some(Picked::Option(0))
-    );
+    assert_eq!(approval().key(key(KeyCode::Char('y'))), None);
     assert_eq!(approval().key(key(KeyCode::Char('9'))), None);
     assert_eq!(approval().key(key(KeyCode::Esc)), Some(Picked::Cancelled));
 }
@@ -69,7 +64,7 @@ fn arrows_numbers_and_keys_pick() {
 #[test]
 fn an_option_that_types_opens_a_line_and_esc_goes_back() {
     let mut select = approval();
-    assert_eq!(select.key(key(KeyCode::Char('n'))), None);
+    assert_eq!(select.key(key(KeyCode::Char('3'))), None);
     for c in "use make".chars() {
         select.key(key(KeyCode::Char(c)));
     }
@@ -81,7 +76,7 @@ fn an_option_that_types_opens_a_line_and_esc_goes_back() {
         Some(Picked::Typed(2, "use make".into()))
     );
     let mut select = approval();
-    select.key(key(KeyCode::Char('n')));
+    select.key(key(KeyCode::Char('3')));
     assert_eq!(select.key(key(KeyCode::Esc)), None);
     assert_eq!(select.key(key(KeyCode::Esc)), Some(Picked::Cancelled));
 }
@@ -148,4 +143,34 @@ fn several_options_are_checked_with_space_and_sent_with_enter() {
         select.key(key(KeyCode::Enter)),
         Some(Picked::Many(vec![0, 2]))
     );
+}
+
+#[test]
+fn a_long_list_shows_a_window_around_the_marked_option() {
+    let choices: Vec<Choice> = (0..40)
+        .map(|n| Choice::new(&format!("model {n}")))
+        .collect();
+    let mut select = Select::new(vec![Line::from("Model")], choices, "↑↓ to choose");
+    for _ in 0..20 {
+        select.key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    }
+    let (rows, _) = select.render(60);
+    let text: Vec<String> = rows.iter().map(crate::tui::style::plain).collect();
+    assert!(text.iter().any(|row| row == "  ↑ 14 more"), "{text:?}");
+    assert!(
+        text.iter().any(|row| row.starts_with("❯ model 20")),
+        "{text:?}"
+    );
+    assert!(text.iter().any(|row| row == "  ↓ 14 more"), "{text:?}");
+    assert!(!text.iter().any(|row| row.contains("model 0")));
+}
+
+#[test]
+fn letters_typed_ahead_into_an_approval_pick_nothing() {
+    // Typing a message as the approval opens must not approve ("a" was "don't ask again").
+    let mut select = crate::tui::questions::approval("bash", "echo second", None);
+    for c in "also n y".chars() {
+        assert_eq!(select.key(key(KeyCode::Char(c))), None, "{c:?} picked");
+    }
+    assert_eq!(select.key(key(KeyCode::Enter)), Some(Picked::Option(0)));
 }

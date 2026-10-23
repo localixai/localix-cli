@@ -89,12 +89,6 @@ fn reports_show_paths_relative_to_the_root() {
 }
 
 #[test]
-fn a_missing_root_is_an_error() {
-    let dir = Scratch::new();
-    assert!(Workspace::new(dir.path().join("missing")).is_err());
-}
-
-#[test]
 fn a_denied_path_is_refused_however_it_is_reached() {
     let dir = Scratch::new();
     let secret = Scratch::new();

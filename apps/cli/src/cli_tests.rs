@@ -18,8 +18,12 @@ fn a_prompt_runs_with_its_options() {
         "-y",
         "-C",
         "/tmp",
+        "--provider",
+        "openai",
         "-m",
         "openai/gpt-5-mini",
+        "--reasoning",
+        "high",
         "--json",
         "-o",
         "last.txt",
@@ -34,11 +38,13 @@ fn a_prompt_runs_with_its_options() {
     let run = cli.run;
     assert!(run.yes && run.json && run.show_browser);
     assert_eq!(run.cd, Some(PathBuf::from("/tmp")));
+    assert_eq!(run.models.provider.as_deref(), Some("openai"));
     assert_eq!(run.models.model.as_deref(), Some("openai/gpt-5-mini"));
+    assert_eq!(run.models.reasoning.as_deref(), Some("high"));
     assert_eq!(run.output_last_message, Some(PathBuf::from("last.txt")));
     assert_eq!(run.max_turns, 7);
-    assert_eq!(run.max_steps, 40);
-    assert_eq!(run.timeout, 1800);
+    let plain = parse(&["x"]).unwrap().run.models;
+    assert!(plain.provider.is_none() && plain.model.is_none() && plain.reasoning.is_none());
 }
 
 #[test]
@@ -68,31 +74,36 @@ fn subcommands_parse() {
 }
 
 #[test]
-fn the_provider_and_the_reasoning_level_are_flags() {
-    let models = parse(&["--provider", "openai", "--reasoning", "high", "x"])
-        .unwrap()
-        .run
-        .models;
-    assert_eq!(models.provider, Some(Provider::OpenAi));
-    assert_eq!(models.reasoning.as_deref(), Some("high"));
-    assert!(parse(&["--provider", "elsewhere", "x"]).is_err());
-    let plain = parse(&["x"]).unwrap().run.models;
-    assert!(plain.provider.is_none() && plain.model.is_none() && plain.reasoning.is_none());
-}
-
-#[test]
 fn resume_takes_an_id_or_the_last_session() {
     let resume = |args: &[&str]| match parse(args).unwrap().command {
         Some(Command::Resume(resume)) => resume,
         _ => panic!("not resume"),
     };
+    // The session and the prompt, owned.
+    let target = |args: &[&str]| {
+        let parsed = resume(args);
+        let (id, prompt) = parsed.target();
+        (id.map(String::from), prompt)
+    };
+    let owned = |id: Option<&str>, prompt: &str| (id.map(String::from), Some(prompt.to_string()));
     let by_id = resume(&["resume", "1700000000-ab12", "go on", "-y"]);
-    assert_eq!(by_id.target(), Ok((Some("1700000000-ab12"), Some("go on"))));
     assert!(by_id.run.yes);
-    let last = resume(&["resume", "--last", "now the README"]);
-    assert_eq!(last.target(), Ok((None, Some("now the README"))));
-    assert_eq!(resume(&["resume", "--last"]).target(), Ok((None, None)));
-    assert!(resume(&["resume", "--last", "a", "b"]).target().is_err());
+    let id = Some("1700000000-ab12");
+    assert_eq!(
+        target(&["resume", "1700000000-ab12", "go on"]),
+        owned(id, "go on")
+    );
+    assert_eq!(
+        target(&["resume", "--last", "now the README"]),
+        owned(None, "now the README")
+    );
+    assert_eq!(target(&["resume", "--last"]), (None, None));
+    // Quotes are optional here too: the words are the prompt.
+    assert_eq!(target(&["resume", "--last", "a", "b"]), owned(None, "a b"));
+    let words = ["resume", "--last", "now", "update", "the", "readme"];
+    assert_eq!(target(&words), owned(None, "now update the readme"));
+    let words = ["resume", "1700000000-ab12", "go", "on", "-y"];
+    assert_eq!(target(&words), owned(id, "go on"));
     let missing = parse(&["resume"]).unwrap_err();
     assert_eq!(missing.kind(), ErrorKind::MissingRequiredArgument);
 }
@@ -119,7 +130,7 @@ fn removed_and_unknown_flags_are_usage_errors() {
 }
 
 #[test]
-fn exec_runs_one_task_as_codex_exec_does() {
+fn exec_runs_one_task() {
     for name in ["exec", "e"] {
         let Some(Command::Exec(exec)) = parse(&[name, "--json", "-y", "fix it"]).unwrap().command
         else {
@@ -137,11 +148,12 @@ fn exec_runs_one_task_as_codex_exec_does() {
     let Some(ExecCommand::Resume(resume)) = exec.command else {
         panic!("not exec resume")
     };
-    assert_eq!(resume.target(), Ok((None, Some("go on"))));
+    let (id, prompt) = resume.target();
+    assert_eq!((id, prompt.as_deref()), (None, Some("go on")));
 }
 
 #[test]
-fn print_and_continue_are_claudes_spellings() {
+fn print_and_continue_are_flags() {
     let print = parse(&["-p", "review this"]).unwrap();
     assert!(print.print && !print.resume_last);
     assert_eq!(joined(&print.prompt).as_deref(), Some("review this"));
@@ -154,7 +166,7 @@ fn print_and_continue_are_claudes_spellings() {
 }
 
 #[test]
-fn the_mode_is_a_flag_with_claudes_spelling_too_and_conflicts_with_yes() {
+fn the_mode_is_a_flag_with_its_other_spellings_and_conflicts_with_yes() {
     assert_eq!(
         parse(&["--mode", "plan", "x"]).unwrap().run.mode,
         Some(Mode::Plan)
@@ -170,10 +182,6 @@ fn the_mode_is_a_flag_with_claudes_spelling_too_and_conflicts_with_yes() {
     let conflict = parse(&["-y", "--mode", "plan", "x"]).unwrap_err();
     assert_eq!(conflict.kind(), ErrorKind::ArgumentConflict);
     assert!(parse(&["--mode", "nope", "x"]).is_err());
-    let help = Cli::command().render_long_help().to_string();
-    for mode in ["default", "plan", "bypass", "autonomous"] {
-        assert!(help.contains(mode), "--help does not list {mode}");
-    }
 }
 
 #[test]
@@ -186,23 +194,27 @@ fn a_command_counts_only_as_the_first_word() {
 }
 
 #[test]
+fn the_help_shows_the_usage_the_examples_and_where_things_are_kept() {
+    let help = Cli::command().render_long_help().to_string();
+    assert!(help.contains("Usage: llx [OPTIONS] [PROMPT]"), "{help}");
+    assert!(help.contains("Examples:"), "{help}");
+    // Signing in is a slash command of a session, not a command of its own.
+    assert!(
+        help.contains("/login") && !help.contains("llx login"),
+        "{help}"
+    );
+    // The default sessions directory, as `commands::sessions::store` builds it.
+    assert!(help.contains("~/.llx/sessions"), "{help}");
+    let version = Cli::command().render_version().to_string();
+    assert!(version.starts_with("llx "), "{version}");
+}
+
+#[test]
 fn help_and_version_are_not_errors() {
     for flag in ["--help", "-h", "--version", "-V"] {
         let shown = parse(&[flag]).unwrap_err();
         assert!(!shown.use_stderr(), "{flag}");
     }
-    let help = Cli::command().render_long_help().to_string();
-    for heading in [
-        "Model:",
-        "Workspace:",
-        "Approvals:",
-        "Output:",
-        "Limits:",
-        "Browser:",
-    ] {
-        assert!(help.contains(heading), "no {heading} in --help");
-    }
-    assert!(help.contains("Examples:"));
 }
 
 #[test]
@@ -226,4 +238,12 @@ fn a_prompt_needs_no_quotes_and_commands_still_parse() {
         panic!("exec resume")
     };
     assert!(matches!(exec.command, Some(ExecCommand::Resume(_))));
+}
+
+#[test]
+fn the_help_says_how_sessions_run_side_by_side() {
+    let help = Cli::command().render_long_help().to_string();
+    for said in ["/new", "Left arrow", "Quit anyway", "x stops"] {
+        assert!(help.contains(said), "{said}: {help}");
+    }
 }

@@ -35,6 +35,23 @@ impl From<&str> for Typed {
     }
 }
 
+/// A job as the list under the composer shows it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JobRow {
+    pub id: String,
+    pub name: String,
+    /// Its command, or its cron and prompt.
+    pub detail: String,
+    /// A monitor's deadline.
+    pub until: Option<std::time::Instant>,
+    /// A schedule's next run, Unix seconds.
+    pub next: Option<u64>,
+    /// Batches a monitor gave.
+    pub events: usize,
+    /// The session whose job it is (set as it arrives): its stop is known under it.
+    pub lane: String,
+}
+
 pub enum Event {
     /// The session's first row: the version and what it runs with.
     Header(Vec<String>),
@@ -94,6 +111,43 @@ pub enum Event {
     },
     /// The question open no longer waits (the task was stopped): it closes unanswered.
     Dismiss,
+    /// A session of the interface began: its stop is known by its id.
+    LaneStarted {
+        id: String,
+        name: String,
+    },
+    /// This directory's saved sessions, newest first: each id and how the list shows it.
+    Saved(Vec<(String, String)>),
+    /// Show lane `id`: the desk opened it, or it was asked for and is open already.
+    Show(String),
+    /// What happened in session `id` (a lane, or an agent): shown in its view.
+    In(String, Box<Event>),
+    /// The session started an agent (sent inside its parent's [`Event::In`]).
+    Started {
+        id: String,
+        name: String,
+    },
+    /// The agent was closed (sent inside its own [`Event::In`]): it stays in the tree, dimmed.
+    Closed,
+    /// Tokens a model turn of an agent used (sent inside [`Event::In`]).
+    Spent(u64),
+    /// The lane's conversation went back or began again: its agents are gone.
+    AgentsCleared,
+    /// What came back from the background (a monitor's lines, a schedule due) while nothing
+    /// runs: a task of its own, after what the person queued.
+    Background(String),
+    /// Words put in the composer for the person to change and send (a rewound task).
+    Prefill(String),
+    /// The share of the model's context window left, in percent, after a task.
+    Context(u8),
+    /// The jobs running in the background, all of them, whenever they change.
+    Jobs(Vec<JobRow>),
+    /// The task running reads what the person said to it meanwhile (taken from the interface,
+    /// and shown as theirs), or only looks whether there is any (`peek`).
+    TakeSteered {
+        reply: Sender<Vec<String>>,
+        peek: bool,
+    },
     Key(KeyEvent),
     Paste(String),
     Resize(u16, u16),

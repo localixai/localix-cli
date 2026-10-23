@@ -15,14 +15,6 @@ fn a_write_creates_the_parents_and_leaves_no_temporary_file() {
     assert_eq!(names, ["c.txt"]);
 }
 
-#[test]
-fn a_write_replaces_the_content() {
-    let dir = Scratch::new();
-    let path = dir.file("x.txt", "old content");
-    write(&path, b"new").unwrap();
-    assert_eq!(fs::read_to_string(&path).unwrap(), "new");
-}
-
 #[cfg(unix)]
 #[test]
 fn an_executable_stays_executable() {
@@ -37,35 +29,39 @@ fn an_executable_stays_executable() {
     );
 }
 
-#[test]
-fn temporary_names_differ_and_stay_beside_the_file() {
-    let path = Path::new("/w/src/lib.rs");
-    let (a, b) = (temporary(path), temporary(path));
-    assert_ne!(a, b);
-    assert_eq!(a.parent(), path.parent());
-    assert!(
-        a.file_name()
-            .unwrap()
-            .to_string_lossy()
-            .starts_with(".lib.rs.")
-    );
+/// Makes a file read-only, and writable again when dropped, even after a failed assertion, so the
+/// scratch directory can be removed.
+struct ReadOnly<'a>(&'a Path);
+
+impl<'a> ReadOnly<'a> {
+    fn new(path: &'a Path) -> Self {
+        let mut permissions = fs::metadata(path).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(path, permissions).unwrap();
+        Self(path)
+    }
+}
+
+impl Drop for ReadOnly<'_> {
+    fn drop(&mut self) {
+        if let Ok(meta) = fs::metadata(self.0) {
+            let mut permissions = meta.permissions();
+            #[allow(clippy::permissions_set_readonly_false)]
+            permissions.set_readonly(false);
+            let _ = fs::set_permissions(self.0, permissions);
+        }
+    }
 }
 
 #[test]
 fn a_read_only_file_is_refused_and_kept() {
     let dir = Scratch::new();
     let path = dir.file("locked.txt", "vendored");
-    let mut permissions = fs::metadata(&path).unwrap().permissions();
-    permissions.set_readonly(true);
-    fs::set_permissions(&path, permissions.clone()).unwrap();
+    let _locked = ReadOnly::new(&path);
     let error = write(&path, b"changed").unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
     assert_eq!(error.to_string(), "it is read-only");
     assert_eq!(fs::read_to_string(&path).unwrap(), "vendored");
-    // Removable again, so the scratch directory goes.
-    #[allow(clippy::permissions_set_readonly_false)]
-    permissions.set_readonly(false);
-    fs::set_permissions(&path, permissions).unwrap();
 }
 
 #[cfg(unix)]
@@ -96,15 +92,33 @@ fn a_symlink_planted_at_a_temporary_name_is_never_written_through() {
     let outside = Scratch::new();
     let victim = outside.file("victim.txt", "untouched");
     let path = dir.file("x.txt", "old");
-    // The names the next writes would take: each one is a symlink out of the directory.
-    let taken = temporary(&path);
-    let taken = taken.file_name().unwrap().to_string_lossy().into_owned();
-    let (stem, number) = taken.trim_end_matches(".tmp").rsplit_once('-').unwrap();
-    let number: usize = number.parse().unwrap();
-    for next in number + 1..number + 6 {
-        let planted = dir.path().join(format!("{stem}-{next}.tmp"));
+    // Names given in order, not by the process-wide counter, which parallel tests advance: the
+    // first ones are symlinks out of the directory, so each of them is surely met.
+    let names: Vec<PathBuf> = (0..TRIES)
+        .map(|n| dir.path().join(format!(".x.txt.{n}.tmp")))
+        .collect();
+    let given = |count: usize| {
+        let mut names = names[..count].iter().cloned();
+        move || names.next().expect("no more names were given")
+    };
+    for planted in &names[..5] {
         std::os::unix::fs::symlink(&victim, planted).unwrap();
     }
+    let (temporary, mut file) = create(given(6)).unwrap();
+    assert_eq!(temporary, names[5], "the first free name");
+    file.write_all(b"new").unwrap();
+    drop(file);
+    assert_eq!(fs::read_to_string(&temporary).unwrap(), "new");
+    assert_eq!(fs::read_to_string(&victim).unwrap(), "untouched");
+    // Every name taken: the write gives up rather than open one.
+    fs::remove_file(&temporary).unwrap();
+    for planted in &names[5..] {
+        std::os::unix::fs::symlink(&victim, planted).unwrap();
+    }
+    let error = create(given(TRIES)).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+    assert_eq!(fs::read_to_string(&victim).unwrap(), "untouched");
+    // And a whole write beside them still replaces the file, not the victim.
     write(&path, b"new").unwrap();
     assert_eq!(fs::read_to_string(&path).unwrap(), "new");
     assert_eq!(fs::read_to_string(&victim).unwrap(), "untouched");

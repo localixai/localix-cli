@@ -1,0 +1,297 @@
+use contracts::catalog::Effort::{High, Low, Max, Medium, Off, XHigh};
+use serde_json::json;
+
+use super::*;
+
+fn reasoning(value: Value) -> Reasoning {
+    serde_json::from_value(value).unwrap()
+}
+
+#[test]
+fn levels_come_from_the_hosts_reasoning_controls() {
+    let effort = reasoning(json!({"supported": true, "effort": ["none", "low", "high", "max"]}));
+    assert_eq!(efforts(&effort), [Off, Low, High, Max]);
+    let toggle = reasoning(json!({"supported": true, "toggle": true}));
+    assert_eq!(efforts(&toggle), [Off, Medium]);
+    let both = reasoning(json!({"supported": true, "toggle": true, "effort": ["low", "high"]}));
+    assert_eq!(efforts(&both), [Off, Low, High]);
+    let budget = reasoning(json!({"supported": true, "budget": {"min": 1024}}));
+    assert_eq!(efforts(&budget), [Low, Medium, High]);
+    let open = reasoning(json!({"supported": true, "budget": {"min": -1}}));
+    assert_eq!(efforts(&open), [Off, Low, Medium, High]);
+    assert!(
+        efforts(&reasoning(json!({"supported": true}))).is_empty(),
+        "always on"
+    );
+    assert!(efforts(&reasoning(json!({"supported": false}))).is_empty());
+}
+
+#[test]
+fn a_model_starts_at_the_hosts_default_else_medium_or_below() {
+    let stated = reasoning(
+        json!({"supported": true, "effort": ["low", "high", "xhigh"],
+        "default": {"type": "effort", "value": "xhigh"}}),
+    );
+    assert_eq!(default(&stated, &efforts(&stated)), XHigh);
+    let off = reasoning(json!({"supported": true, "toggle": true,
+        "default": {"type": "toggle", "value": false}}));
+    assert_eq!(default(&off, &efforts(&off)), Off);
+    let plain = Reasoning::default();
+    assert_eq!(default(&plain, &[Off, Low, Medium, High]), Medium);
+    assert_eq!(default(&plain, &[Off, Low, High]), Low);
+    assert_eq!(default(&plain, &[High, Max]), High);
+    assert_eq!(default(&plain, &[]), Off);
+}
+
+const DOC: &str = r#"{
+  "acme": {"id": "acme", "name": "Acme", "env": ["ACME_API_KEY"], "models": {
+    "new": {"name": "New", "release_date": "2026-09-01", "modalities": {"output": ["text"]},
+      "capabilities": {"tools": {"supported": true},
+        "reasoning": {"supported": true, "effort": ["low", "medium", "high"]}},
+      "limit": {"context": 200000, "input": 180000},
+      "api": {"chat-completions": {"base_url": "https://api.acme.dev/v1"}}},
+    "old": {"name": "Old", "release_date": "2025-01-01", "modalities": {"output": ["text"]},
+      "capabilities": {"tools": {"supported": true}}, "limit": {"context": 64000},
+      "api": {"chat-completions": {"base_url": "https://api.acme.dev/v1"}}},
+    "gone": {"name": "Gone", "status": "deprecated", "modalities": {"output": ["text"]},
+      "capabilities": {"tools": {"supported": true}},
+      "api": {"chat-completions": {"base_url": "https://api.acme.dev/v1"}}},
+    "mute": {"name": "Mute", "modalities": {"output": ["text"]},
+      "capabilities": {"tools": {"supported": false}},
+      "api": {"chat-completions": {"base_url": "https://api.acme.dev/v1"}}},
+    "decide": {"name": "Decide", "type": "decision", "modalities": {"output": ["decision"]},
+      "api": {"decisions": {"base_url": "https://api.acme.dev/alpha"}}},
+    "odd": {"name": 7}}},
+  "cloud": {"id": "cloud", "name": "Cloud", "models": {
+    "m": {"name": "M", "modalities": {"output": ["text"]}, "capabilities": {"tools": {"supported": true}},
+      "api": {"chat-completions": {"base_url": "https://${REGION}.cloud.dev/v1"}}}}},
+  "openai": {"id": "openai", "name": "OpenAI", "models": {
+    "gpt": {"name": "GPT", "modalities": {"output": ["text"]}, "capabilities": {"tools": {"supported": true}},
+      "api": {"responses": {"base_url": "https://api.openai.com/v1"},
+              "chat-completions": {"base_url": "https://api.openai.com/v1"}}},
+    "pro": {"name": "Pro", "modalities": {"output": ["text"]}, "capabilities": {"tools": {"supported": true}},
+      "api": {"responses": {"base_url": "https://api.openai.com/v1"}}}}}
+}"#;
+
+#[test]
+fn providers_llx_can_call_are_listed_the_popular_first() {
+    let catalog = Catalog::parse(DOC).unwrap();
+    assert_eq!(
+        catalog.ids(),
+        ["openai", "acme"],
+        "no fixed address: not callable"
+    );
+}
+
+#[test]
+fn a_model_served_over_another_protocol_is_listed_for_that_protocol_alone() {
+    let catalog = Catalog::parse(DOC).unwrap();
+    let ids = |models: Vec<ModelEntry>| models.into_iter().map(|m| m.id).collect::<Vec<_>>();
+    assert_eq!(ids(catalog.served("openai", RESPONSES)), ["gpt", "pro"]);
+    assert_eq!(ids(catalog.models("openai")), ["gpt"]);
+}
+
+#[test]
+fn models_are_the_usable_ones_newest_first_with_their_window() {
+    let catalog = Catalog::parse(DOC).unwrap();
+    let models = catalog.models("acme");
+    let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        ["new", "old"],
+        "deprecated, toolless and unreadable ones are left out"
+    );
+    assert_eq!(models[0].context, 180_000, "the input limit first");
+    assert_eq!((models[0].default, models[1].context), (Medium, 64_000));
+    let new = catalog.model("acme", "new").unwrap();
+    assert_eq!(
+        new.address(CHAT_COMPLETIONS),
+        Some("https://api.acme.dev/v1")
+    );
+}
+
+#[test]
+fn a_fetched_catalog_goes_over_the_built_in_one_and_is_kept_cut_down() {
+    let fetched = Catalog::parse(DOC).unwrap();
+    let kept = Catalog::parse(&fetched.kept()).unwrap();
+    let models = &kept.provider("acme").unwrap().models;
+    assert_eq!(models.len(), 3, "the chat models and the decision model");
+    assert!(models.contains_key("decide"), "{models:?}");
+    let built_in = Catalog::built_in();
+    let merged = built_in.clone().over(kept.clone());
+    assert_eq!(
+        merged.provider("acme"),
+        kept.provider("acme"),
+        "a new provider is added"
+    );
+    assert_eq!(
+        merged.provider("openai"),
+        kept.provider("openai"),
+        "a fetched provider replaces the built-in one"
+    );
+    assert_ne!(merged.provider("openai"), built_in.provider("openai"));
+    assert!(kept.provider("anthropic").is_none());
+    assert!(built_in.provider("anthropic").is_some());
+    assert_eq!(
+        merged.provider("anthropic"),
+        built_in.provider("anthropic"),
+        "a built-in provider the fetched one lacks stays"
+    );
+}
+
+#[test]
+fn the_built_in_files_resolve_as_models_dev_resolves_them() {
+    let catalog = Catalog::built_in();
+    // The popular providers present come first, in their order; the rest follow by id.
+    let ids = catalog.ids();
+    let popular: Vec<&str> = POPULAR
+        .iter()
+        .copied()
+        .filter(|id| ids.contains(id))
+        .collect();
+    assert!(!popular.is_empty());
+    assert_eq!(ids[..popular.len()], popular[..]);
+    assert!(ids[popular.len()..].windows(2).all(|w| w[0] < w[1]));
+    // One lab model through two hosts: the lab file's facts through both, each host's own
+    // APIs and reasoning controls.
+    let direct = catalog
+        .model("anthropic", "claude-haiku-5-5")
+        .expect("in the files");
+    let relayed = catalog
+        .model("openrouter", "anthropic/claude-haiku-5.5")
+        .expect("in the files");
+    assert!(relayed.limit.is_some());
+    assert_eq!(
+        (&relayed.name, &relayed.limit, &relayed.modalities),
+        (&direct.name, &direct.limit, &direct.modalities),
+        "the lab's facts"
+    );
+    assert!(relayed.usable() && direct.usable());
+    // The relay's APIs are all at its own address, the lab host's at its own.
+    let relay = relayed.address(CHAT_COMPLETIONS).unwrap();
+    assert!(relay.starts_with("https://openrouter.ai/"), "{relay}");
+    assert!(
+        relayed
+            .api
+            .keys()
+            .all(|p| relayed.address(p) == Some(relay)),
+        "{:?}",
+        relayed.api
+    );
+    let host = direct.address(CHAT_COMPLETIONS).unwrap();
+    assert!(host.starts_with("https://api.anthropic.com/"), "{host}");
+    // The levels are what the host's controls give (the lab file names none).
+    for (provider, id, model) in [
+        ("anthropic", "claude-haiku-5-5", direct),
+        ("openrouter", "anthropic/claude-haiku-5.5", relayed),
+    ] {
+        let entry = catalog.entry(provider, id).unwrap();
+        let reasoning = model.capabilities.reasoning.clone().unwrap_or_default();
+        assert!(!entry.efforts.is_empty(), "{provider}/{id}");
+        assert_eq!(entry.efforts, efforts(&reasoning), "{provider}/{id}");
+        assert_eq!(entry.default, default(&reasoning, &entry.efforts));
+    }
+    // A host file with no address of its own: its SDK's default.
+    let luna = catalog.model("openai", "gpt-6-luna").expect("in the files");
+    assert_eq!(luna.address("responses"), Some("https://api.openai.com/v1"));
+    assert_eq!(
+        luna.address(CHAT_COMPLETIONS),
+        Some("https://api.openai.com/v1")
+    );
+    // The mid-conversation flags of a usable model are always published: unset is false.
+    for (provider, found) in &catalog.providers {
+        for (id, model) in found.models.iter().filter(|(_, m)| m.usable()) {
+            let flags = &model.capabilities;
+            assert!(
+                flags.system_updates.is_some() && flags.effort_updates.is_some(),
+                "{provider}/{id}"
+            );
+        }
+    }
+}
+
+/// Every built-in model against models.dev's own resolution of it, in what llx reads:
+/// `MODELS_DEV_V2=api.json cargo test -p models -- --ignored`, the file from
+/// https://models.dev/experimental/v2.0/api.json at the commit `data/` was copied from.
+#[test]
+#[ignore]
+fn the_built_in_files_match_models_dev_s_own_resolution() {
+    let path = std::env::var("MODELS_DEV_V2").expect("MODELS_DEV_V2");
+    let published = Catalog::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let ours = Catalog::built_in();
+    let mut differences = vec![];
+    let mut compared = 0;
+    for id in ours.providers.keys() {
+        for (model_id, mine) in &ours.provider(id).unwrap().models {
+            let Some(theirs) = published.model(id, model_id) else {
+                differences.push(format!("{id}/{model_id}: not published"));
+                continue;
+            };
+            compared += 1;
+            let what = |m: &Model| {
+                let api: Vec<(String, Option<String>)> = m
+                    .api
+                    .iter()
+                    .map(|(p, a)| {
+                        (
+                            p.clone(),
+                            m.address(p)
+                                .map(str::to_string)
+                                .or(Some(a.base_url.clone())),
+                        )
+                    })
+                    .collect();
+                format!(
+                    "{:?}",
+                    (
+                        &m.name,
+                        &m.kind,
+                        &m.release_date,
+                        &m.status,
+                        m.usable(),
+                        &m.limit,
+                        &m.capabilities,
+                        api,
+                        m.api.values().map(|a| &a.compatibility).collect::<Vec<_>>(),
+                    )
+                )
+            };
+            let (a, b) = (what(mine), what(theirs));
+            if a != b {
+                differences.push(format!("{id}/{model_id}:\n  ours   {a}\n  theirs {b}"));
+            }
+        }
+    }
+    println!(
+        "{compared} models compared, {} differences",
+        differences.len()
+    );
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+#[test]
+fn a_request_is_priced_from_the_catalog_with_its_long_context_band() {
+    let model: Model = serde_json::from_value(json!({"name": "M", "cost": {"text": {
+        "input": {"price": 2.0, "cache": {"read": 0.2},
+            "overrides": [{"when": {"context": {"gt": 272000}}, "price": 4.0, "cache": {"read": 0.4}}]},
+        "output": {"price": 10.0,
+            "overrides": [{"when": {"context": {"gt": 272000}}, "price": 15.0}]}}}}))
+    .unwrap();
+    // 100k in, 60k of it cached, 1k out: 40k × $2 + 60k × $0.2 + 1k × $10, per million.
+    let small = model.price(100_000, 60_000, 1_000).unwrap();
+    assert!((small - (0.08 + 0.012 + 0.01)).abs() < 1e-9, "{small}");
+    // Past 272k of input, the long-context prices.
+    let large = model.price(300_000, 0, 1_000).unwrap();
+    assert!((large - (1.2 + 0.015)).abs() < 1e-9, "{large}");
+    let free: Model = serde_json::from_value(json!({"name": "F"})).unwrap();
+    assert_eq!(
+        free.price(10, 0, 10),
+        None,
+        "no price in the catalog: none estimated"
+    );
+    let luna = Catalog::built_in()
+        .model("openai", "gpt-6-luna")
+        .cloned()
+        .unwrap();
+    assert!(luna.price(10_000, 0, 1_000).unwrap() > 0.0);
+}

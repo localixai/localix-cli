@@ -1,0 +1,74 @@
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+use super::*;
+
+fn run(command: &str, seconds: u64, stopped: &dyn Fn() -> bool) -> (Vec<Vec<String>>, String) {
+    hiding(command, &[], seconds, stopped)
+}
+
+fn hiding(
+    command: &str,
+    hidden: &[&str],
+    seconds: u64,
+    stopped: &dyn Fn() -> bool,
+) -> (Vec<Vec<String>>, String) {
+    let batches = Mutex::new(vec![]);
+    let deadline = Instant::now() + Duration::from_secs(seconds);
+    let dir = std::env::temp_dir();
+    let ended = watch(command, &dir, hidden, deadline, stopped, &|lines, _| {
+        batches.lock().unwrap().push(lines);
+    })
+    .unwrap();
+    let ended = match ended {
+        Ended::Exit(how) => how,
+        Ended::Deadline => "deadline".into(),
+        Ended::Stopped => "stopped".into(),
+    };
+    (batches.into_inner().unwrap(), ended)
+}
+
+#[cfg(unix)]
+#[test]
+fn lines_that_come_together_are_one_batch_and_the_exit_is_told() {
+    // The first two in one write; the third long past the gather window.
+    let (batches, ended) = run(
+        "printf 'one\\ntwo\\n'; sleep 2; echo three; exit 3",
+        10,
+        &|| false,
+    );
+    assert_eq!(batches, [vec!["one", "two"], vec!["three"]]);
+    assert_eq!(ended, "exit 3");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_deadline_and_a_stop_end_the_command_and_what_it_started() {
+    let (_, ended) = run("sleep 30 & sleep 30", 1, &|| false);
+    assert_eq!(ended, "deadline");
+    let begun = Instant::now();
+    let (_, ended) = run("sleep 30", 30, &|| {
+        begun.elapsed() > Duration::from_millis(300)
+    });
+    assert_eq!(ended, "stopped");
+    assert!(begun.elapsed() < Duration::from_secs(5));
+}
+
+#[cfg(unix)]
+#[test]
+fn the_apps_secrets_are_not_in_its_environment() {
+    // A variable this process already has stands for a secret, so no test changes the
+    // environment that the others share.
+    let (name, _) = std::env::vars()
+        .find(|(name, _)| {
+            name != "PATH"
+                && name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        })
+        .expect("the test process has an environment variable");
+    let command = format!("echo \"[${{{name}+set}}]\"");
+    let (shown, _) = hiding(&command, &[], 10, &|| false);
+    assert_eq!(shown, [vec!["[set]"]], "{name} is passed on unless hidden");
+    let (hidden, _) = hiding(&command, &[name.as_str()], 10, &|| false);
+    assert_eq!(hidden, [vec!["[]"]], "{name} was hidden");
+}

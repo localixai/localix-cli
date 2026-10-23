@@ -22,6 +22,7 @@ agent.workspace = true
 contracts.workspace = true
 decision-loop.workspace = true
 openai.workspace = true
+models.workspace = true
 openrouter.workspace = true
 provider-kit.workspace = true
 session.workspace = true

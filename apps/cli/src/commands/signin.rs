@@ -26,8 +26,8 @@ pub fn sign_in(
     say: &dyn Fn(&str),
 ) -> Result<String, String> {
     let saved = |path: PathBuf| format!("saved in {}", path.display());
-    match (provider, method) {
-        (Provider::OpenAi, _) => {
+    match (provider.id(), method) {
+        ("openai", Method::Browser) => {
             let login = openai::auth::Login::start(APP)?;
             let code = browser(&login.address, terminal, say, &|t| login.wait(t), &|p| {
                 login.pasted(p)
@@ -40,7 +40,7 @@ pub fn sign_in(
                 saved(path)
             ))
         }
-        (Provider::OpenRouter, Method::Browser) => {
+        ("openrouter", Method::Browser) => {
             let login = openrouter::auth::Login::start(APP)?;
             let code = browser(&login.address, terminal, say, &|t| login.wait(t), &|p| {
                 login.pasted(p)
@@ -53,14 +53,17 @@ pub fn sign_in(
                 saved(path)
             ))
         }
-        (Provider::OpenRouter, Method::Key) => {
-            let prompt = "Paste the OpenRouter key and press Enter (it is not shown): ";
-            let line = terminal.line(prompt, true).ok_or("no key was pasted")?;
+        (_, _) => {
+            let prompt = format!(
+                "Paste the {} key and press Enter (it is not shown): ",
+                provider.name()
+            );
+            let line = terminal.line(&prompt, true).ok_or("no key was pasted")?;
             let key = openrouter::auth::as_key(&line).ok_or("that is not a key")?;
-            let path = openrouter::auth::save(APP, key).map_err(|e| e.to_string())?;
+            let path = provider.save_key(key).map_err(|e| e.to_string())?;
             let mut said = format!("Saved the key {}; {}.", mask(key), saved(path));
             if provider.key_in_env() {
-                said.push_str(" OPENROUTER_API_KEY is set, and it wins over the saved key.");
+                said.push_str(" Its variable is set, and it wins over the saved key.");
             }
             Ok(said)
         }
@@ -84,7 +87,7 @@ fn browser(
 
 /// Wait for the browser to come back, or for the address it ended on to be pasted (when it is
 /// on another machine); the authorization code. The line for the address closes by itself once
-/// the browser is back, as in Codex: nothing to press. It is read on this thread only, so
+/// the browser is back: nothing to press. It is read on this thread only, so
 /// nothing is left reading stdin once the sign-in ends.
 pub fn come_back(
     terminal: &mut dyn Terminal,
@@ -121,19 +124,28 @@ pub fn come_back(
 
 /// `llx logout`: forget every saved sign-in.
 pub fn logout() -> Result<i32, Failure> {
-    for provider in Provider::ALL {
+    let mut any = false;
+    let mut in_env = vec![];
+    for provider in Provider::all() {
         let removed = provider
             .forget()
             .map_err(|error| Failure::Environment(format!("could not sign out: {error}")))?;
-        let said = if removed {
-            "signed out"
-        } else {
-            "no saved sign-in"
-        };
-        error::print(&format!("{}: {said}\n", provider.name()))?;
-        if provider.key_in_env() {
-            error::note("Note: OPENROUTER_API_KEY is still set; unset it to sign out fully.\n");
+        if removed {
+            any = true;
+            error::print(&format!("{}: signed out\n", provider.name()))?;
         }
+        if provider.key_in_env() {
+            in_env.push(provider.name());
+        }
+    }
+    if !any {
+        error::print("No saved sign-in.\n")?;
+    }
+    // After what stdout says: a closed one has ended the command quietly by now.
+    for name in in_env {
+        error::note(&format!(
+            "Note: {name}'s key is still in the environment; unset it to sign out fully.\n"
+        ));
     }
     Ok(exit::OK)
 }

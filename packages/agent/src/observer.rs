@@ -13,8 +13,13 @@ pub trait Observer {
     /// What `call` came to, as the model reads it: every call gets one, including a `result` that
     /// breaks its schema, an unknown tool and a call that ends the run.
     fn result(&self, _call: &ToolCall, _outcome: &Result<ToolOutput, ToolError>) {}
+    /// What the model said beside its calls, or while it waits on what is still to come: not
+    /// its answer, which the run ends with.
+    fn said(&self, _text: &str) {}
     /// One model turn ended, and what it took.
     fn turn(&self, _usage: &Usage) {}
+    /// The conversation neared the model's limit, and was prepared so: what each stage did.
+    fn fitted(&self, _report: &crate::history::Report) {}
 }
 
 /// Shows nothing: `--json`, quiet runs and tests.

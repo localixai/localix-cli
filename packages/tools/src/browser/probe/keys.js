@@ -1,4 +1,4 @@
-  // Keys, as Localix's `pressKey`: a chord such as "ArrowUp", "Enter", "Ctrl+A" or "a" becomes
+  // Keys: a chord such as "ArrowUp", "Enter", "Ctrl+A" or "a" becomes
   // keydown (and keypress for a character) then keyup on the focused element, carrying `key`,
   // `code` and the legacy `keyCode`/`which` that games read. Synthetic keys run no default action,
   // so Tab moves focus and Enter submits a form here.

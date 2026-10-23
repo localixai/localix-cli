@@ -8,24 +8,33 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::app::{Action, App, QUIT_WINDOW_MS, SHIFT_TAB};
 use super::composer::Edit;
 use super::event::Typed;
-use super::questions;
+use crate::mode::Mode;
 
 impl App {
     pub(super) fn key(&mut self, key: KeyEvent, now: Instant) -> Option<Action> {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        if let Some((select, _)) = &mut self.select {
-            let picked = select.key(key)?;
-            let (_, open) = self.select.take()?;
-            let stop = ctrl && key.code == KeyCode::Char('c');
-            self.declined = questions::answer(open, picked);
-            return stop.then(|| self.stop());
+        if self.questions.is_empty()
+            && let Some(row) = self.views.focus
+            && !(ctrl && key.code == KeyCode::Char('c'))
+        {
+            return self.list_key(key, row, now);
+        }
+        if !self.questions.is_empty() {
+            return self.question_key(key, now);
+        }
+        if self.listing.is_some() {
+            return self.sessions_key(key, now);
         }
         if !(ctrl && key.code == KeyCode::Char('c')) {
             self.quitting = None;
         }
         match key.code {
             KeyCode::Char('c') if ctrl => {
-                if self.busy.is_some() {
+                // Stopped already, a stop quits: asked first while another session works.
+                if self.busy().is_some() && self.lane().stopping && self.others_work() {
+                    return self.quit();
+                }
+                if self.busy().is_some() {
                     return Some(self.stop());
                 }
                 if !self.composer.is_empty() {
@@ -36,16 +45,63 @@ impl App {
                     .quitting
                     .is_some_and(|at| now.duration_since(at).as_millis() < QUIT_WINDOW_MS);
                 if again {
-                    return Some(Action::Quit);
+                    self.quitting = None;
+                    return self.quit();
                 }
                 self.quitting = Some(now);
             }
-            KeyCode::Char('d') if ctrl && self.composer.is_empty() && self.busy.is_none() => {
-                return Some(Action::Quit);
+            KeyCode::Char('d') if ctrl && self.composer.is_empty() && self.busy().is_none() => {
+                return self.quit();
             }
-            KeyCode::Esc if self.busy.is_some() && !self.stopping => return Some(self.stop()),
+            // In an agent's view Esc goes back to the main one; Ctrl-C still stops the task.
+            KeyCode::Esc if self.shown().parent.is_some() => {
+                let lane = self.lane_id().to_string();
+                self.show(&lane);
+            }
+            // Esc twice on an empty prompt with nothing running: rewind.
+            KeyCode::Esc if self.busy().is_none() && self.composer.is_empty() => {
+                let again = self
+                    .escaped
+                    .is_some_and(|at| now.duration_since(at).as_millis() < QUIT_WINDOW_MS);
+                self.escaped = if again { None } else { Some(now) };
+                if again {
+                    self.send("/rewind".into());
+                }
+            }
+            // Esc closes the list a `/` opened (not a file list: `@` is part of the words).
+            KeyCode::Esc if self.composer.text().starts_with('/') && !self.offers().is_empty() => {
+                self.composer.clear();
+                self.offered = 0;
+            }
+            KeyCode::Esc if self.busy().is_some() && !self.lane().stopping => {
+                return Some(self.stop());
+            }
+            // ← from an empty prompt lists the sessions in this project.
+            KeyCode::Left if self.opens_sessions(&key) => {
+                self.open_sessions();
+                return Some(Action::Sessions);
+            }
+            // ↓ from an empty prompt goes into the list of sessions under it.
+            KeyCode::Down if self.enters_list(&key) => self.enter_list(),
+            // Tab while a task works keeps the message for after it, instead of sending it now.
+            KeyCode::Tab
+                if self.busy().is_some()
+                    && self.offers().is_empty()
+                    && !self.composer.is_empty() =>
+            {
+                self.queue_for_later();
+            }
             KeyCode::BackTab => self.send(SHIFT_TAB.into()),
+            // The level up or down without a menu; it waits for a task running.
+            KeyCode::Up | KeyCode::Down if key.modifiers == KeyModifiers::SHIFT => {
+                let step = match key.code {
+                    KeyCode::Up => crate::commands::entry::MORE_REASONING,
+                    _ => crate::commands::entry::LESS_REASONING,
+                };
+                self.send(step.into());
+            }
             KeyCode::Char('v') if ctrl => return Some(Action::Clipboard),
+            KeyCode::Char('g') if ctrl => return Some(Action::Editor),
             KeyCode::Tab => {
                 self.complete();
             }
@@ -57,17 +113,36 @@ impl App {
                 };
             }
             KeyCode::Enter if !self.offers().is_empty() && key.modifiers.is_empty() => {
-                // A file goes into the text; a command is sent as soon as it is chosen.
-                if let Some(Offer::File(_)) = self.complete() {
+                // File offers insert a path. A command (or a mode) runs as typed when it is a
+                // whole one, else the one marked.
+                let offers = self.offers();
+                if matches!(offers.first(), Some(Offer::File(_))) {
+                    self.complete();
                     return None;
                 }
-                let entry = self.composer.text();
-                self.composer.clear();
-                let (text, images) = self.composer.take_attached(&entry);
-                self.send(Typed {
-                    text: text.trim_end().to_string(),
-                    images,
+                let typed = self.composer.text();
+                let typed = typed.trim();
+                let whole = offers.iter().any(|offer| match offer {
+                    Offer::Command(name, _) => typed == format!("/{name}"),
+                    Offer::Mode(name, _) => typed.ends_with(&format!(" {name}")),
+                    Offer::File(_) => false,
                 });
+                if !whole {
+                    let marked = offers[self.offered.min(offers.len() - 1)].clone();
+                    let entry = match marked {
+                        Offer::Command(name, _) => format!("/{name}"),
+                        Offer::Mode(name, _) => {
+                            let command = typed.split_whitespace().next().unwrap_or("/mode");
+                            format!("{command} {name}")
+                        }
+                        Offer::File(_) => unreachable!("files are completed above"),
+                    };
+                    self.composer.clear();
+                    self.offered = 0;
+                    return self.submit(Typed::from(entry.as_str()));
+                }
+                self.adopt_paths();
+                return self.typed(key);
             }
             _ => {
                 if key.code == KeyCode::Char('@') {
@@ -77,21 +152,41 @@ impl App {
                 if key.code == KeyCode::Enter && key.modifiers.is_empty() {
                     self.adopt_paths();
                 }
-                if let Edit::Sent(entry) = self.composer.key(key)
-                    && !entry.trim().is_empty()
-                {
-                    let (text, images) = self.composer.take_attached(&entry);
-                    self.send(Typed { text, images });
-                }
+                let action = self.typed(key);
                 self.offered = self.offered.min(self.offers().len().saturating_sub(1));
+                return action;
             }
         }
         None
     }
 
+    /// A key for the composer: what it sends goes, with its attachments.
+    fn typed(&mut self, key: KeyEvent) -> Option<Action> {
+        if let Edit::Sent(entry) = self.composer.key(key)
+            && !entry.trim().is_empty()
+        {
+            let (text, images) = self.composer.take_attached(&entry);
+            return self.submit(Typed { text, images });
+        }
+        None
+    }
+
+    /// What the person sent: `/exit` leaves the interface, every lane with it, and `/new` opens
+    /// a lane; anything else is the shown lane's.
+    fn submit(&mut self, entry: Typed) -> Option<Action> {
+        use crate::commands::entry::{Entry, entry as parse};
+        match parse(&entry.text) {
+            Some(Entry::Exit) => return self.quit(),
+            // A new lane opens now: the lane shown goes on in the background.
+            Some(Entry::New) => return self.opening(crate::desk::Target::New),
+            _ => self.send(entry),
+        }
+        None
+    }
+
     fn stop(&mut self) -> Action {
-        self.stopping = true;
-        Action::Stop
+        self.lane_mut().stopping = true;
+        Action::Stop(self.lane_id().to_string())
     }
 
     /// The commands the composer's text could be the start of: only while it is `/` and a name.
@@ -107,6 +202,19 @@ impl App {
                 .collect();
         }
         let text = self.composer.text();
+        if let Some(typed) = text
+            .strip_prefix("/mode ")
+            .or_else(|| text.strip_prefix("/permissions "))
+        {
+            if typed.contains(char::is_whitespace) {
+                return vec![];
+            }
+            return Mode::ALL
+                .into_iter()
+                .filter(|mode| mode.name().starts_with(typed))
+                .map(|mode| Offer::Mode(mode.name().into(), mode.hint()))
+                .collect();
+        }
         let Some(typed) = text.strip_prefix('/') else {
             return vec![];
         };
@@ -127,7 +235,19 @@ impl App {
             .get(self.offered.min(offers.len().saturating_sub(1)))
             .cloned();
         match &offer {
-            Some(Offer::Command(name, _)) => self.composer.set(&format!("/{name}")),
+            Some(Offer::Command(name, _)) => {
+                let suffix = if name == "mode" || name == "permissions" || name == "plan" {
+                    " "
+                } else {
+                    ""
+                };
+                self.composer.set(&format!("/{name}{suffix}"));
+            }
+            Some(Offer::Mode(name, _)) => {
+                let command = self.composer.text();
+                let prefix = command.split_whitespace().next().unwrap_or("/mode");
+                self.composer.set(&format!("{prefix} {name}"));
+            }
             Some(Offer::File(path)) => {
                 if let Some((start, _)) = self.composer.mention() {
                     self.composer.replace(start, &format!("{path} "));
@@ -145,6 +265,8 @@ impl App {
 pub enum Offer {
     /// A command's name and what it does.
     Command(String, String),
+    /// A mode's name and its effect.
+    Mode(String, String),
     /// A workspace file's path.
     File(String),
 }

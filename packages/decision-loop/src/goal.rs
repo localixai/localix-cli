@@ -50,7 +50,7 @@ pub struct GoalRun<'a> {
     pub view: &'a dyn View,
     pub decider: &'a dyn Decider,
     /// Each executed step as it happens (the live trace).
-    pub on_step: &'a dyn Fn(&GoalStep),
+    pub on_step: &'a (dyn Fn(&GoalStep) + Sync),
     /// Actions this run may take (not counting the steps it resumes from).
     pub max_actions: usize,
 }

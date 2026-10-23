@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex">
+  <title>llx social card</title>
+  <!-- The source of og.png: the demo's browser moment, frozen, rising from the bottom edge as the
+       product shot does on the site. Rendered at 1200×630 by a headless browser. -->
+  <link rel="stylesheet" href="style.css">
+  <style>
+    html, body { width: 1200px; height: 630px; overflow: hidden; }
+    body { position: relative; }
+    .og-head { position: absolute; left: 80px; top: 64px; }
+    .og-name { display: flex; align-items: center; gap: 18px; font: 500 64px/1 var(--font-heading); letter-spacing: -0.04em; }
+    .og-name img { width: 56px; height: 56px; }
+    .og-tag { margin-top: 18px; color: var(--soft); font: 400 26px/1.35 var(--font-sans); letter-spacing: -0.01em; }
+    .og-url { position: absolute; right: 80px; top: 76px; color: var(--muted); font: 400 20px/1 var(--font-mono); }
+    .og-stage { position: absolute; left: 80px; right: 80px; top: 270px; display: grid; grid-template-columns: 300px 1fr; gap: 40px; }
+    .og-stage .rail { justify-content: flex-start; padding-top: 34px; }
+    .og-stage .step { animation: none; }
+    .og-stage .art { position: relative; top: auto; translate: none; opacity: 1; transform: none; }
+    .og-stage .b-results li { transition: none; }
+    .og-fade { position: absolute; inset: auto 0 0 0; height: 150px; background: linear-gradient(transparent, #070707 85%); }
+  </style>
+</head>
+<body>
+  <div class="og-head">
+    <div class="og-name"><img src="logo.svg" alt="">llx</div>
+    <div class="og-tag">Ultrafast, lightweight coding agent for the terminal</div>
+  </div>
+  <div class="og-url">llx.sh</div>
+  <div class="og-stage">
+    <ol class="rail">
+      <li class="step"><button type="button"><span class="t">1.9s</span><span class="tool">browser</span><span class="detail">google.com/travel/flights</span></button><span class="sub">DONE · 100%</span></li>
+      <li class="step is-current"><button type="button"><span class="t">15.2s</span><span class="tool">result</span><span class="detail">easyJet · €57</span></button></li>
+    </ol>
+    <div class="art art-browser is-on">
+      <div class="b-bar"><span class="b-dots"><i></i><i></i><i></i></span><span class="b-url">google.com/travel/flights</span></div>
+      <div class="b-page">
+        <div class="b-row"><span class="b-field b-trip">One way</span></div>
+        <div class="b-row">
+          <span class="b-field b-input has-value"><em>Where from?</em><b>Zürich</b></span>
+          <span class="b-field b-input has-value"><em>Where to?</em><b>London</b></span>
+          <span class="b-field b-input b-date has-value"><em>Departure</em><b>Fri, Nov 20</b></span>
+          <span class="b-button">Search</span>
+        </div>
+        <ul class="b-results" data-state="shown">
+          <li><span>easyJet · nonstop</span><span>€57</span></li>
+          <li><span>SWISS · nonstop</span><span>€89</span></li>
+          <li><span>British Airways · nonstop</span><span>€104</span></li>
+          <li><span>Lufthansa · 1 stop</span><span>€131</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="og-fade"></div>
+</body>
+</html>

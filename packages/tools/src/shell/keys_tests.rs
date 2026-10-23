@@ -5,14 +5,28 @@ fn key(name: &str) -> Vec<u8> {
 }
 
 #[test]
-fn arrows_follow_the_cursor_mode() {
-    assert_eq!(key("Up"), b"\x1b[A");
-    assert_eq!(key("Left"), b"\x1b[D");
-    assert_eq!(key("Home"), b"\x1b[H");
-    assert_eq!(encode("Up", true).unwrap(), b"\x1bOA");
-    assert_eq!(encode("End", true).unwrap(), b"\x1bOF");
-    // Only the cursor keys change with the mode.
-    assert_eq!(encode("PageUp", true).unwrap(), b"\x1b[5~");
+fn named_keys_encode_to_xterm_sequences() {
+    // (name, application cursor mode, bytes): only the cursor keys change with the mode.
+    let cases: [(&str, bool, &[u8]); 11] = [
+        ("Up", false, b"\x1b[A"),
+        ("Left", false, b"\x1b[D"),
+        ("Home", false, b"\x1b[H"),
+        ("Up", true, b"\x1bOA"),
+        ("End", true, b"\x1bOF"),
+        ("PageUp", true, b"\x1b[5~"),
+        ("F1", false, b"\x1bOP"),
+        ("f4", false, b"\x1bOS"),
+        ("F5", false, b"\x1b[15~"),
+        ("F11", false, b"\x1b[23~"),
+        ("F12", false, b"\x1b[24~"),
+    ];
+    for (name, application_cursor, bytes) in cases {
+        assert_eq!(
+            encode(name, application_cursor).as_deref(),
+            Some(bytes),
+            "{name} {application_cursor}"
+        );
+    }
 }
 
 #[test]
@@ -33,15 +47,6 @@ fn spellings_of_one_key_are_equal() {
     assert_eq!(key("Return"), b"\r");
     assert_eq!(key("Esc"), b"\x1b");
     assert_eq!(key("Backspace"), b"\x7f");
-}
-
-#[test]
-fn function_keys() {
-    assert_eq!(key("F1"), b"\x1bOP");
-    assert_eq!(key("f4"), b"\x1bOS");
-    assert_eq!(key("F5"), b"\x1b[15~");
-    assert_eq!(key("F11"), b"\x1b[23~");
-    assert_eq!(key("F12"), b"\x1b[24~");
 }
 
 #[test]

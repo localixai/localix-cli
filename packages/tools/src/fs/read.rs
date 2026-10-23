@@ -62,6 +62,11 @@ impl Tool for ReadTool<'_> {
         }
     }
 
+    /// Reading changes nothing: several files are read at once.
+    fn parallel(&self) -> bool {
+        true
+    }
+
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
         let args: Args = serde_json::from_value(arguments.clone())
             .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
@@ -83,11 +88,7 @@ impl Tool for ReadTool<'_> {
             let file = File::open(&path).map_err(unreadable)?;
             lines(BufReader::new(file), &shown, first, limit)?
         };
-        Ok(ToolOutput {
-            report,
-            state: None,
-            image: None,
-        })
+        Ok(report.into())
     }
 }
 

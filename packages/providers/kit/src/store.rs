@@ -27,7 +27,8 @@ pub fn read(path: &Path) -> Option<String> {
     (!text.is_empty()).then(|| text.to_string())
 }
 
-/// Write `text` to `path`, readable by the person alone.
+/// Write `text` to `path`, readable by the person alone: whole or not at all, through a new file
+/// renamed over the old one, so a save cut short (a process ending mid-write) leaves the old one.
 pub fn save(path: &Path, text: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -36,15 +37,10 @@ pub fn save(path: &Path, text: &str) -> std::io::Result<()> {
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    let mut file = options.open(path)?;
-    // The mode above applies only to a new file: one saved before with wider permissions (by
-    // hand, or under another umask) is narrowed before the secret goes in.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
-    }
-    file.write_all(text.as_bytes())
+    // Its own name per process: two sessions saving at once do not write into one file.
+    let temporary = path.with_extension(format!("tmp{}", std::process::id()));
+    options.open(&temporary)?.write_all(text.as_bytes())?;
+    std::fs::rename(&temporary, path)
 }
 
 /// Remove `path`; whether there was one.

@@ -1,4 +1,6 @@
-//! The chat port over OpenRouter's chat completions, with tool calling: any of its chat models.
+//! The chat port over OpenAI's chat completions, with tool calling: OpenRouter's models, and any
+//! provider's that speaks the same wire. OpenRouter takes its own `reasoning` object, a usage
+//! report with the cost, and prompt-cache marks; the others take `reasoning_effort`.
 
 use contracts::catalog::{Effort, Selection};
 use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
@@ -15,26 +17,13 @@ pub struct ChatModel {
 impl Chat for ChatModel {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let model = &self.selection.model().id;
-        let mut body = json!({
-            "model": model,
-            "messages": cached(request.conversation.iter().map(wire).collect()),
-            // No output limit: a whole file in one call is a long reply, and a cut one breaks the
-            // call's arguments. The model's own maximum applies, as in Codex.
-            "reasoning": reasoning(self.selection.effort()),
-            "usage": {"include": true},
-        });
-        if !request.tools.is_empty() {
-            body["tools"] = request.tools.iter().map(function).collect();
-            body["tool_choice"] = json!(if request.may_call { "auto" } else { "none" });
-            // One call at a time, so every call sees what the previous one left.
-            body["parallel_tool_calls"] = json!(false);
-        }
+        let body = body(self.client.is_openrouter(), &self.selection, &request);
         let (value, timing) = self
             .client
             .post("/chat/completions", &body)
             .map_err(|error| match error {
                 ApiError::Invalid(message) => ChatError::Invalid(message),
-                other => ChatError::Unavailable(other.to_string()),
+                other => ChatError::Unavailable(format!("{} {other}", self.client.name)),
             })?;
         let message = value
             .pointer("/choices/0/message")
@@ -67,6 +56,43 @@ impl Chat for ChatModel {
             },
         })
     }
+}
+
+/// The request's body: OpenRouter's own fields, or the generic ones.
+fn body(openrouter: bool, selection: &Selection, request: &Request) -> Value {
+    let model = &selection.model().id;
+    let messages: Vec<Value> = request.conversation.iter().map(wire).collect();
+    // No output limit: a whole file in one call is a long reply, and a cut one breaks the
+    // call's arguments. The model's own maximum applies.
+    let mut body = json!({"model": model});
+    // Only a model that takes levels is sent one: another may refuse the field.
+    let levels = !selection.model().efforts.is_empty();
+    if openrouter {
+        body["messages"] = json!(cached(messages));
+        if levels {
+            body["reasoning"] = reasoning(selection.effort());
+        }
+        body["usage"] = json!({"include": true});
+    } else {
+        body["messages"] = json!(messages);
+        if levels {
+            let effort = selection.effort();
+            let name = if effort == Effort::Off {
+                "none"
+            } else {
+                effort.name()
+            };
+            body["reasoning_effort"] = json!(name);
+        }
+    }
+    if !request.tools.is_empty() {
+        body["tools"] = request.tools.iter().map(function).collect();
+        body["tool_choice"] = json!(if request.may_call { "auto" } else { "none" });
+        // Several calls in one turn: independent reads and searches cost one turn, not many.
+        // The agent runs together only the calls whose tools allow it, the rest in order.
+        body["parallel_tool_calls"] = json!(true);
+    }
+    body
 }
 
 /// The level as OpenRouter's `reasoning` takes it. Off is no thinking at all: it costs seconds

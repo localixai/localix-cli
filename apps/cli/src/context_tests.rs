@@ -38,16 +38,14 @@ fn instructions_run_from_the_repository_root_down_to_the_workspace() {
 
 #[test]
 fn outside_a_repository_only_the_workspace_counts() {
-    let scratch = Scratch::new();
-    // With the temporary directory inside a repository (TMPDIR=$PWD/tmp, a devcontainer), the
-    // walk rightly finds that repository: there is nothing to check here.
-    if scratch
-        .path()
-        .ancestors()
-        .any(|dir| dir.join(".git").exists())
-    {
+    // Inside a repository the walk rightly finds it, so this needs a directory outside any.
+    let Some(scratch) = Scratch::outside_repository() else {
+        eprintln!(
+            "SKIPPED outside_a_repository_only_the_workspace_counts: every temporary directory \
+             is inside a git repository"
+        );
         return;
-    }
+    };
     scratch.file("AGENTS.md", "parent rules");
     scratch.file("work/AGENTS.md", "work rules");
     let found = instructions(&scratch.path().join("work"));
@@ -174,4 +172,29 @@ fn a_session_from_another_workspace_says_where_it_ran() {
     session.workspace = here.clone();
     let text = gather(&environment(scratch.path()), Some(&session));
     assert!(text.contains(&format!("Its tasks ran in this workspace, {here}.")));
+}
+
+#[test]
+fn a_saved_session_resumed_from_the_fresh_context_reads_as_gathered() {
+    let scratch = Scratch::new();
+    scratch.file("AGENTS.md", "rules");
+    let session = Session {
+        id: "1-ab".into(),
+        turns: vec![Turn {
+            goal: "fix the parser".into(),
+            answer: "Fixed it.".into(),
+            status: "achieved".into(),
+            at: 1,
+        }],
+        ..Session::default()
+    };
+    let environment = environment(scratch.path());
+    let fresh = gather(&environment, None);
+    let root = scratch.path();
+    assert_eq!(
+        resumed(&fresh, &session, root),
+        gather(&environment, Some(&session))
+    );
+    let empty = Session::default();
+    assert_eq!(resumed(&fresh, &empty, root), fresh);
 }

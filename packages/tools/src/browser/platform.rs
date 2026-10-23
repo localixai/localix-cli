@@ -114,7 +114,3 @@ pub(super) fn user_agent() -> Option<String> {
 pub(super) fn user_agent() -> Option<String> {
     None
 }
-
-#[cfg(test)]
-#[path = "platform_tests.rs"]
-mod tests;

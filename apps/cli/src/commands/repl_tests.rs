@@ -1,100 +1,33 @@
-use std::cell::RefCell;
-use std::io::Cursor;
-
 use super::*;
 use crate::testing::{answers, composed, users};
 
-fn lines(input: &str) -> (Vec<String>, String) {
-    raw(input.as_bytes())
-}
-
-fn raw(input: &[u8]) -> (Vec<String>, String) {
-    let mut input = Cursor::new(input.to_vec());
-    let prompts = RefCell::new(String::new());
-    let shown = |text: &str| prompts.borrow_mut().push_str(text);
-    let mut read_all = vec![];
-    while let Some(text) = read(&mut input, &shown, "\n› ") {
-        read_all.push(text);
-    }
-    (read_all, prompts.into_inner())
-}
-
-#[test]
-fn each_line_is_an_entry_and_the_end_of_input_quits() {
-    let (entries, prompts) = lines("fix the test\n\nrun it\r\n");
-    assert_eq!(entries, ["fix the test", "", "run it"]);
-    assert_eq!(prompts.matches("› ").count(), 4, "one prompt per read");
-}
-
-#[test]
-fn a_backslash_goes_on_on_the_next_line() {
-    let (entries, _) = lines("first part \\\nsecond part\nnext\n");
-    assert_eq!(entries, ["first part \nsecond part", "next"]);
-}
-
-#[test]
-fn a_last_line_without_a_newline_still_counts() {
-    assert_eq!(lines("only this").0, ["only this"]);
-    assert_eq!(lines("cut \\").0, ["cut \n"]);
-}
-
 #[test]
 fn slash_commands_are_not_tasks() {
-    assert_eq!(entry("   "), None);
-    assert_eq!(entry(" /exit "), Some(Entry::Exit));
-    assert_eq!(entry("/quit"), Some(Entry::Exit));
-    assert_eq!(entry("/help"), Some(Entry::Help));
-    assert_eq!(entry("/new"), Some(Entry::New));
-    assert_eq!(entry("/clear"), Some(Entry::New));
-    assert_eq!(entry("/status"), Some(Entry::Status));
-    assert_eq!(entry(" /login "), Some(Entry::Login));
-    assert_eq!(
-        entry("/login openai"),
-        Some(Entry::Unknown("login openai".into()))
-    );
-    assert_eq!(entry("/undo"), Some(Entry::Unknown("undo".into())));
-    assert_eq!(
-        entry("add a test for /api/users"),
-        Some(Entry::Task("add a test for /api/users".into()))
-    );
-}
-
-#[test]
-fn a_line_that_is_not_utf8_is_read_not_taken_for_the_end() {
-    let (entries, _) = raw(b"caf\xe9 latin-1\nnext\n");
-    assert_eq!(entries, ["caf\u{fffd} latin-1", "next"]);
-}
-
-#[test]
-fn a_read_error_ends_the_line_and_says_why() {
-    struct Broken;
-    impl std::io::Read for Broken {
-        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
-            Err(std::io::Error::other("the terminal is gone"))
-        }
+    use crate::commands::entry::{LESS_REASONING, MORE_REASONING};
+    let unknown = |text: &str| Some(Entry::Unknown(text.into()));
+    for (typed, read) in [
+        ("   ", None),
+        (" /exit ", Some(Entry::Exit)),
+        ("/quit", Some(Entry::Exit)),
+        ("/help", Some(Entry::Help)),
+        ("/new", Some(Entry::New)),
+        ("/clear", Some(Entry::New)),
+        ("/status", Some(Entry::Status)),
+        (" /login ", Some(Entry::Login)),
+        ("/login openai", unknown("login openai")),
+        // Another spelling of /rewind.
+        ("/undo", Some(Entry::Rewind)),
+        ("/frobnicate", unknown("frobnicate")),
+        (
+            "add a test for /api/users",
+            Some(Entry::Task("add a test for /api/users".into())),
+        ),
+        // Shift+Up and Shift+Down ask for more or less reasoning.
+        (MORE_REASONING, Some(Entry::Reasoning(true))),
+        (LESS_REASONING, Some(Entry::Reasoning(false))),
+    ] {
+        assert_eq!(entry(typed), read, "{typed:?}");
     }
-    let mut input = std::io::BufReader::new(Broken);
-    let said = RefCell::new(String::new());
-    let shown = |text: &str| said.borrow_mut().push_str(text);
-    assert_eq!(read(&mut input, &shown, "\n› "), None);
-    assert!(
-        said.borrow()
-            .contains("could not be read: the terminal is gone")
-    );
-}
-
-#[test]
-fn the_prompt_shows_the_mode_unless_it_is_the_default() {
-    assert_eq!(prompt(Mode::Default), "\n› ");
-    assert_eq!(prompt(Mode::Plan), "\nplan › ");
-    let mut input = Cursor::new(b"go\n".to_vec());
-    let said = RefCell::new(String::new());
-    let shown = |text: &str| said.borrow_mut().push_str(text);
-    assert_eq!(
-        read(&mut input, &shown, &prompt(Mode::Bypass)),
-        Some("go".into())
-    );
-    assert_eq!(said.into_inner(), "\nbypass › ");
 }
 
 #[test]
@@ -117,39 +50,44 @@ fn mode_commands_switch_list_and_plan() {
     assert_eq!(entry("/exit now"), Some(Entry::Unknown("exit now".into())));
 }
 
-#[test]
-fn the_handoff_is_yes_no_or_the_next_entry() {
-    assert_eq!(handoff(Some("y\n")), Handoff::Implement);
-    assert_eq!(handoff(Some(" Yes ")), Handoff::Implement);
-    assert_eq!(handoff(Some("n")), Handoff::Stay);
-    assert_eq!(handoff(Some("")), Handoff::Stay);
-    assert_eq!(handoff(None), Handoff::Stay);
-    assert_eq!(
-        handoff(Some("add tests to step 3\n")),
-        Handoff::Next("add tests to step 3".into())
-    );
-    assert_eq!(
-        handoff(Some("/mode bypass")),
-        Handoff::Next("/mode bypass".into())
-    );
+/// An interface whose person picks `picked` in every list; the titles of the lists shown.
+fn picking(picked: Option<usize>) -> (Ui, std::thread::JoinHandle<Vec<String>>) {
+    let (ui, events) = crate::tui::test_support::fake_ui();
+    let person = std::thread::spawn(move || {
+        let mut titles = vec![];
+        for event in events {
+            if let Event::Choose { title, reply, .. } = event {
+                titles.push(title);
+                let _ = reply.send(picked);
+            }
+        }
+        titles
+    });
+    (ui, person)
 }
 
 /// The plan handoff as a session runs it: plan mode entered from bypass, a plan task that ends
-/// well, then the answer to "Implement this plan?" read from the prompt line's input.
-fn handed_off(answer: &'static str, replies: usize, check: impl FnOnce(&Rig, Next)) {
+/// well, then "Implement this plan?" answered with `picked`; the lists the person was shown.
+fn handed_off(
+    picked: Option<usize>,
+    replies: usize,
+    check: impl FnOnce(&Rig, bool),
+) -> Vec<String> {
+    let (ui, person) = picking(picked);
     composed(Mode::Bypass, true, answers(replies), |rig| {
         rig.switch(Mode::Plan);
-        let mut input = Cursor::new(answer.as_bytes().to_vec());
-        let next = attempt(rig, "plan the change", &mut input, &|_| {});
-        check(rig, next);
+        let went_on = attempt(rig, &ui, "plan the change");
+        check(rig, went_on);
         0
     });
+    drop(ui);
+    person.join().unwrap()
 }
 
 #[test]
 fn yes_carries_out_the_plan_in_the_mode_it_came_from() {
-    handed_off("y\n", 2, |rig, next| {
-        assert!(matches!(next, Next::Prompt));
+    let asked = handed_off(Some(0), 2, |rig, went_on| {
+        assert!(went_on);
         assert_eq!(rig.mode.get(), Mode::Bypass);
         let users = users(rig);
         assert_eq!(users.len(), 4, "{users:?}");
@@ -161,34 +99,32 @@ fn yes_carries_out_the_plan_in_the_mode_it_came_from() {
         );
         assert_eq!(users[3], format!("Goal: {IMPLEMENT}"));
     });
+    assert_eq!(asked, ["Implement this plan?"]);
 }
 
 #[test]
-fn no_stays_in_plan_and_anything_else_is_the_next_entry() {
-    handed_off("n\n", 1, |rig, next| {
-        assert!(matches!(next, Next::Prompt));
-        assert_eq!(rig.mode.get(), Mode::Plan);
-        assert_eq!(users(rig)[1..], ["Goal: plan the change"]);
-    });
-    handed_off("add tests to step 3\n", 1, |rig, next| {
-        assert!(matches!(next, Next::Entry(text) if text == "add tests to step 3"));
-        assert_eq!(rig.mode.get(), Mode::Plan);
-        assert_eq!(users(rig).len(), 2, "nothing ran yet");
-    });
+fn no_or_a_cancel_stays_in_plan() {
+    for picked in [Some(1), None] {
+        handed_off(picked, 1, |rig, went_on| {
+            assert!(went_on);
+            assert_eq!(rig.mode.get(), Mode::Plan);
+            assert_eq!(users(rig)[1..], ["Goal: plan the change"]);
+        });
+    }
 }
 
 #[test]
 fn a_plan_that_failed_or_a_task_outside_plan_is_not_handed_off() {
-    // The script has no answer: the task fails, and nothing is asked or read.
-    handed_off("y\n", 0, |rig, next| {
-        assert!(matches!(next, Next::Prompt));
+    // The script has no answer: the task fails, and nothing is asked.
+    let asked = handed_off(Some(0), 0, |rig, _| {
         assert_eq!(rig.mode.get(), Mode::Plan);
     });
+    assert!(asked.is_empty(), "{asked:?}");
+    let (ui, person) = picking(Some(0));
     composed(Mode::Bypass, true, answers(1), |rig| {
-        let mut input = Cursor::new(b"y\n".to_vec());
-        let next = attempt(rig, "do it", &mut input, &|_| {});
-        assert!(matches!(next, Next::Prompt));
-        assert_eq!(input.position(), 0, "nothing was asked");
+        assert!(attempt(rig, &ui, "do it"));
         0
     });
+    drop(ui);
+    assert!(person.join().unwrap().is_empty(), "nothing was asked");
 }

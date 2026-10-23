@@ -41,6 +41,8 @@ pub struct Composer {
     masked: bool,
     /// The pictures attached, each with the mark that stands for it in the text.
     attached: Vec<(String, Dropped)>,
+    /// Clipboard text hidden behind a mark until the entry is sent.
+    pastes: Vec<(String, String)>,
 }
 
 impl Composer {
@@ -63,6 +65,30 @@ impl Composer {
         self.set("");
     }
 
+    /// Hide clipboard text behind a numbered mark; restore it when the entry is sent.
+    pub fn paste_marked(&mut self, text: &str) {
+        let cleaned: String = cleaned(text).collect();
+        if cleaned.is_empty() {
+            return;
+        }
+        let mut mark = "[Paste]".to_string();
+        let mut n = 2;
+        while self.text().contains(&mark) || self.pastes.iter().any(|(taken, _)| *taken == mark) {
+            mark = format!("[Paste #{n}]");
+            n += 1;
+        }
+        self.insert_mark(&mark);
+        self.pastes.push((mark, cleaned));
+    }
+
+    /// `mark` at the cursor, a word of its own.
+    fn insert_mark(&mut self, mark: &str) {
+        if self.at > 0 && !self.text[self.at - 1].is_whitespace() {
+            self.insert(' ');
+        }
+        mark.chars().chain([' ']).for_each(|c| self.insert(c));
+    }
+
     pub fn set(&mut self, text: &str) {
         self.text = text.chars().collect();
         self.at = self.text.len();
@@ -71,14 +97,19 @@ impl Composer {
     /// Attach the picture at `path`: a mark for it goes in the text where the cursor is.
     pub fn attach(&mut self, path: PathBuf) {
         let mark = self.mark(&Dropped::Image(path.clone()));
-        if self.at > 0 && !self.text[self.at - 1].is_whitespace() {
-            self.insert(' ');
-        }
-        for c in mark.chars() {
-            self.insert(c);
-        }
-        self.insert(' ');
+        self.insert_mark(&mark);
         self.attached.push((mark, Dropped::Image(path)));
+    }
+
+    /// Whether a paste consists entirely of file paths (including shell-escaped spaces).
+    pub fn is_path_list(text: &str, resolve: &dyn Fn(&str) -> Option<Dropped>) -> bool {
+        let chars: Vec<char> = text.chars().collect();
+        let parts = words(&chars);
+        !parts.is_empty()
+            && parts.iter().all(|(from, to)| {
+                let word: String = chars[*from..*to].iter().collect();
+                resolve(&word).is_some()
+            })
     }
 
     /// Every path in the text that names a file (dropped in, pasted, typed whole) turned into a
@@ -147,6 +178,7 @@ impl Composer {
                 Dropped::File(path) => text = text.replace(&mark, &path.display().to_string()),
             }
         }
+        let text = unpasted(&text, &std::mem::take(&mut self.pastes));
         (text, images)
     }
 
@@ -170,13 +202,7 @@ impl Composer {
 
     /// Text that arrived as one paste: its lines are kept, nothing is sent.
     pub fn paste(&mut self, text: &str) {
-        let text = text.replace("\r\n", "\n").replace('\r', "\n");
-        for c in text
-            .chars()
-            .filter(|c| *c == '\n' || *c == '\t' || !c.is_control())
-        {
-            self.insert(if c == '\t' { ' ' } else { c });
-        }
+        cleaned(text).for_each(|c| self.insert(c));
     }
 
     pub fn key(&mut self, key: KeyEvent) -> Edit {
@@ -192,6 +218,7 @@ impl Composer {
             KeyCode::Char('u') if ctrl => self.delete(self.line_start(), self.at),
             KeyCode::Char('k') if ctrl => self.delete(self.at, self.line_end()),
             KeyCode::Char('w') if ctrl => self.delete(self.word_back(), self.at),
+            KeyCode::Char('r') if ctrl => self.search_back(),
             KeyCode::Char('b') if alt => self.at = self.word_back(),
             KeyCode::Char('f') if alt => self.at = self.word_forward(),
             KeyCode::Char(_) if ctrl => return Edit::Ignored,
@@ -287,8 +314,9 @@ impl Composer {
         let text = self.text();
         self.clear();
         self.walking = None;
-        if !text.trim().is_empty() && self.earlier.last() != Some(&text) {
-            self.earlier.push(text.clone());
+        let remembered = unpasted(&text, &self.pastes);
+        if !remembered.trim().is_empty() && self.earlier.last() != Some(&remembered) {
+            self.earlier.push(remembered);
         }
         Edit::Sent(text)
     }
@@ -341,6 +369,27 @@ impl Composer {
         at
     }
 
+    /// Ctrl-R: the next earlier entry with the words typed before the search in it, as a
+    /// shell's reverse search finds them; again for the one before.
+    fn search_back(&mut self) {
+        let (from, typed) = match self.walking.take() {
+            Some((at, typed)) => (at, typed),
+            None => (self.earlier.len(), self.text()),
+        };
+        let found = self.earlier[..from]
+            .iter()
+            .rposition(|entry| entry.contains(typed.trim()));
+        match found {
+            Some(at) => {
+                self.set(&self.earlier[at].clone());
+                self.walking = Some((at, typed));
+            }
+            // Nothing earlier: the entry found last stays, and so does the search.
+            None if from < self.earlier.len() => self.walking = Some((from, typed)),
+            None => {}
+        }
+    }
+
     fn up(&mut self) {
         let start = self.line_start();
         if start > 0 {
@@ -386,6 +435,33 @@ impl Composer {
             None => {}
         }
     }
+}
+
+/// Pasted text as it is typed: one kind of line ending, tabs as spaces, no control characters.
+fn cleaned(text: &str) -> impl Iterator<Item = char> {
+    let text = text.replace("\r\n", "\n").replace('\r', "\n");
+    let kept: Vec<char> = text
+        .chars()
+        .filter(|c| *c == '\n' || *c == '\t' || !c.is_control())
+        .collect();
+    kept.into_iter().map(|c| if c == '\t' { ' ' } else { c })
+}
+
+/// `text` with each paste's mark turned back into what was pasted.
+fn unpasted(text: &str, pastes: &[(String, String)]) -> String {
+    let mut text = text.to_string();
+    let mut replacements = vec![];
+    for (mark, pasted) in pastes {
+        replacements.extend(
+            text.match_indices(mark.as_str())
+                .map(|(at, _)| (at, mark, pasted)),
+        );
+    }
+    replacements.sort_by_key(|item| std::cmp::Reverse(item.0));
+    for (at, mark, pasted) in replacements {
+        text.replace_range(at..at + mark.len(), pasted);
+    }
+    text
 }
 
 /// The words of `text` as ranges: split at whitespace, except inside quotes or after a

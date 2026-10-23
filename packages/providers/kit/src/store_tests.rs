@@ -38,3 +38,19 @@ fn a_file_saved_with_wider_permissions_is_narrowed() {
     assert_eq!(mode & 0o777, 0o600);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_save_replaces_the_file_whole_and_leaves_nothing_behind() {
+    // Written in place, a save cut short would leave a truncated file that looks fresh.
+    let dir = scratch("whole");
+    let path = dir.join("models.json");
+    save(&path, "old catalog").unwrap();
+    let mut before = std::fs::File::open(&path).unwrap();
+    save(&path, "new catalog").unwrap();
+    let mut seen = String::new();
+    std::io::Read::read_to_string(&mut before, &mut seen).unwrap();
+    assert_eq!(seen, "old catalog", "the old file was never cut");
+    assert_eq!(read(&path).as_deref(), Some("new catalog"));
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

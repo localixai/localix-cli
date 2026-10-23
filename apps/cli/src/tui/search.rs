@@ -1,0 +1,173 @@
+//! Type-to-search in a long list: letters go to a query, and the list shows the rows that match
+//! it, best first. A row is found by its label and the lead of its detail (the part before
+//! ` · `, where a list puts an id), never by the notes after it: "signed" must not find every
+//! provider signed in to.
+//!
+//! ```text
+//!   Search: open▏  2 matches
+//!
+//! ❯ OpenAI openai · not signed in
+//!   OpenRouter openrouter · signed in: OPENROUTER_API_KEY
+//! ```
+
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::text::{Line, Span};
+
+use super::style;
+use crate::printable::printable;
+
+/// What a row is found by, lower-cased: its label, and its detail's lead.
+pub fn keys(label: &str, detail: &str) -> [String; 2] {
+    let lead = detail.split(" · ").next().unwrap_or_default();
+    [label.to_lowercase(), lead.to_lowercase()]
+}
+
+/// The rows that match `query`, best first: a key that starts with it, then one that holds it,
+/// then one whose words start with its letters in turn ("gas" finds "Google AI Studio"); rows of
+/// the same rank keep their order. Every row, in order, for an empty query.
+pub fn ranked(query: &str, rows: &[[String; 2]]) -> Vec<usize> {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return (0..rows.len()).collect();
+    }
+    let rank = |keys: &[String; 2]| {
+        let tiers = [
+            keys.iter().any(|key| key.starts_with(&query)),
+            keys.iter().any(|key| key.contains(&query)),
+            keys.iter().any(|key| initials(&query, key)),
+        ];
+        tiers.iter().position(|hit| *hit)
+    };
+    let mut found: Vec<(usize, usize)> = rows
+        .iter()
+        .enumerate()
+        .filter_map(|(at, keys)| rank(keys).map(|tier| (tier, at)))
+        .collect();
+    found.sort();
+    found.into_iter().map(|(_, at)| at).collect()
+}
+
+/// Each letter of `query` starts one of the words of `key`, in order.
+fn initials(query: &str, key: &str) -> bool {
+    let mut starts = key
+        .split(|c: char| !c.is_alphanumeric())
+        .filter_map(|word| word.chars().next());
+    query
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .all(|letter| starts.any(|start| start == letter))
+}
+
+/// A list's query, and the rows that match it.
+pub struct Search {
+    query: String,
+    keys: Vec<[String; 2]>,
+    /// The rows shown, best first.
+    pub shown: Vec<usize>,
+    /// What the list holds, for "No provider matches": its title's first word.
+    noun: String,
+}
+
+/// What a key did to the search.
+pub enum Searched {
+    /// The query changed: the marker goes to the best match.
+    Changed,
+    /// Esc on an empty query: the list is cancelled.
+    Cancel,
+    /// Not a key the search takes.
+    Ignored,
+}
+
+impl Search {
+    pub fn new(rows: Vec<[String; 2]>, title: &[Line<'static>]) -> Self {
+        let heading: String = title
+            .first()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let heading = heading.trim_start_matches(['•', ' ']);
+        let noun = heading.split([' ', '(']).next().unwrap_or_default();
+        Self {
+            query: String::new(),
+            shown: (0..rows.len()).collect(),
+            keys: rows,
+            noun: match noun.is_empty() {
+                true => "option".into(),
+                false => noun.to_lowercase(),
+            },
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.query.is_empty()
+    }
+
+    /// Letters (digits and signs too) add to the query, Backspace takes one off, Esc clears it.
+    pub fn key(&mut self, key: KeyEvent) -> Searched {
+        let plain = !key
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+        match key.code {
+            KeyCode::Char(c) if plain => self.query.push(c),
+            KeyCode::Backspace if self.query.pop().is_some() => {}
+            KeyCode::Esc if self.query.is_empty() => return Searched::Cancel,
+            KeyCode::Esc => self.query.clear(),
+            _ => return Searched::Ignored,
+        }
+        self.shown = ranked(&self.query, &self.keys);
+        Searched::Changed
+    }
+
+    /// Pasted text goes on the query.
+    pub fn paste(&mut self, text: &str) {
+        self.query.extend(text.chars().filter(|c| !c.is_control()));
+        self.shown = ranked(&self.query, &self.keys);
+    }
+
+    /// `Search: open▏  2 matches`, and a line for no match at all.
+    pub fn render(&self) -> Vec<Line<'static>> {
+        let count = match (self.query.is_empty(), self.shown.len()) {
+            (true, all) => format!("{all} in all"),
+            (false, 1) => "1 match".into(),
+            (false, n) => format!("{n} matches"),
+        };
+        let mut out = vec![Line::from(vec![
+            Span::raw("  Search: "),
+            Span::styled(printable(&self.query), style::bold()),
+            Span::raw("▏  "),
+            Span::styled(count, style::dim()),
+        ])];
+        out.push(Line::default());
+        if self.shown.is_empty() {
+            let query = printable(&self.query);
+            let none = format!("  No {} matches '{query}'", self.noun);
+            out.push(Line::from(Span::styled(none, style::dim())));
+        }
+        out
+    }
+}
+
+/// Where Up, Down, PageUp, PageDown, Home and End move the marker among `rows` (positions in
+/// the whole list) from `at`; `None` for another key.
+pub fn moved(rows: &[usize], at: usize, code: KeyCode, page: usize) -> Option<usize> {
+    let last = rows.len().checked_sub(1)?;
+    let now = rows.iter().position(|row| *row == at).unwrap_or(0);
+    let to = match code {
+        KeyCode::Up => now.saturating_sub(1),
+        KeyCode::Down => (now + 1).min(last),
+        KeyCode::PageUp => now.saturating_sub(page),
+        KeyCode::PageDown => (now + page).min(last),
+        KeyCode::Home => 0,
+        KeyCode::End => last,
+        _ => return None,
+    };
+    Some(rows[to])
+}
+
+#[cfg(test)]
+#[path = "search_tests.rs"]
+mod tests;

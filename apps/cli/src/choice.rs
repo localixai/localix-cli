@@ -24,8 +24,8 @@ impl Choice {
     /// `provider`'s model `id` at its default level.
     pub fn new(provider: Provider, id: &str) -> Self {
         Self {
-            provider,
             selection: Selection::new(provider.entry(id)),
+            provider,
         }
     }
 
@@ -83,20 +83,31 @@ pub fn save(choice: &Choice) -> std::io::Result<PathBuf> {
 /// The choice a run starts with: the options, else what was saved, else the first provider
 /// signed in to (OpenRouter when none is) with its default model.
 pub fn resolve(options: &ModelOptions, saved: Option<Choice>) -> Result<Choice, Failure> {
-    let provider = options
-        .provider
-        .or(saved.as_ref().map(|choice| choice.provider))
-        .unwrap_or_else(|| {
-            let signed = [Provider::OpenRouter, Provider::OpenAi];
-            let first = signed.into_iter().find(|p| p.signed_in().is_some());
-            first.unwrap_or(Provider::OpenRouter)
-        });
+    let provider = match &options.provider {
+        Some(id) => Provider::named(id).ok_or_else(|| {
+            Failure::Usage(format!(
+                "--provider {id}: not a provider llx knows (/login lists them)"
+            ))
+        })?,
+        None => match &saved {
+            Some(saved) => saved.provider.clone(),
+            None => {
+                let first = [Provider::openrouter(), Provider::openai()];
+                let first = first.into_iter().chain(Provider::all());
+                let signed = first.into_iter().find(|p| p.signed_in().is_some());
+                signed.unwrap_or_else(Provider::openrouter)
+            }
+        },
+    };
     let saved = saved.filter(|choice| choice.provider == provider);
     let choice = match (&options.model, saved) {
         (Some(model), Some(saved)) if saved.model() == model => saved,
         (Some(model), _) => Choice::new(provider, model),
         (None, Some(saved)) => saved,
-        (None, None) => Choice::new(provider, provider.default_model()),
+        (None, None) => {
+            let model = provider.default_model();
+            Choice::new(provider, &model)
+        }
     };
     let Some(name) = &options.reasoning else {
         return Ok(choice);

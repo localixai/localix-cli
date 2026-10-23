@@ -1,0 +1,23 @@
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-top: auto;
+  padding-block: 1.75rem 2.5rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+.foot nav {
+  display: flex;
+  gap: 1.5rem;
+  font: 500 0.75rem/1 var(--mono);
+}
+.foot nav a {
+  color: var(--soft);
+  transition: color 160ms ease;
+}
+.foot nav a:hover {
+  color: var(--white);
+}

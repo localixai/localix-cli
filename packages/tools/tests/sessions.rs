@@ -3,12 +3,53 @@
 //! sessions run in parallel.
 #![cfg(unix)]
 
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use tools::shell::{Ending, Sessions, Until, Wait, kill_all_now};
+use tools::shell::{Ending, Sessions, Until, Wait, kill_all_now, running_anywhere};
+
+/// The tests empty one table: one at a time.
+fn alone() -> MutexGuard<'static, ()> {
+    static ONE: Mutex<()> = Mutex::new(());
+    ONE.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+#[test]
+fn kill_all_now_reaches_more_than_four() {
+    let _alone = alone();
+    // Two registries, as two sessions of the interface keep: more shells than one may hold.
+    let (one, two) = (Sessions::default(), Sessions::default());
+    let dir = std::env::temp_dir();
+    let wait = Wait {
+        needle: Some("started"),
+        yield_ms: Some(10_000),
+    };
+    let mut started = Vec::new();
+    for sessions in [&one, &one, &one, &two, &two] {
+        let turn = sessions
+            .start("echo started; exec sleep 60", &dir, &[], wait, &|| false)
+            .unwrap();
+        assert_eq!(turn.until, Until::Matched, "{turn:?}");
+        started.push((sessions, turn.id));
+    }
+    assert_eq!(running_anywhere(), 5);
+
+    kill_all_now();
+
+    assert_eq!(running_anywhere(), 0);
+    let poll = Wait {
+        needle: None,
+        yield_ms: Some(2_000),
+    };
+    for (sessions, id) in started {
+        let ended = sessions.send(id, b"", &[], poll, &|| false).unwrap();
+        assert_eq!(ended.until, Until::Exited(Ending::Signal(9)), "{ended:?}");
+    }
+}
 
 #[test]
 fn kill_all_now_kills_a_live_session() {
+    let _alone = alone();
     let sessions = Sessions::default();
     let dir = std::env::temp_dir();
     let wait = Wait {

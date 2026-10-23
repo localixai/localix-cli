@@ -42,6 +42,15 @@ pub fn gather(environment: &Environment, previous: Option<&Session>) -> String {
     parts.join("\n\n")
 }
 
+/// The context `fresh` (gathered with no earlier session) going on from `session`: a saved
+/// session opened in a lane of its own reads as if the run had resumed it.
+pub fn resumed(fresh: &str, session: &Session, root: &Path) -> String {
+    match session.turns.is_empty() {
+        true => fresh.to_string(),
+        false => format!("{fresh}\n\n{}", earlier(session, root)),
+    }
+}
+
 /// The shell is not said here: the `bash` tool's own description names it.
 fn describe(environment: &Environment) -> String {
     let browser = if environment.browser {
@@ -135,15 +144,11 @@ fn goal(goal: &str) -> String {
 }
 
 /// At most `limit` bytes of `text`, cut on a character boundary.
-fn cut(text: &str, limit: usize) -> &str {
-    if text.len() <= limit {
-        return text;
-    }
-    let mut end = limit;
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
+pub fn cut(text: &str, limit: usize) -> &str {
+    let end = (0..=limit.min(text.len()))
+        .rev()
+        .find(|at| text.is_char_boundary(*at));
+    &text[..end.unwrap_or(0)]
 }
 
 /// `2026-10-22` for Unix seconds, in UTC (the civil-from-days algorithm: no date crate needed).

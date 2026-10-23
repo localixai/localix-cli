@@ -1,8 +1,8 @@
 //! What the tools' tests share: a fresh directory per test, and a gate that records what it was
 //! asked.
 
-use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -50,7 +50,7 @@ impl Drop for Scratch {
 /// A gate that records each effect as `tool: summary`, and denies with `deny` when it is set.
 #[derive(Default)]
 pub struct Recorder {
-    pub asked: RefCell<Vec<String>>,
+    pub asked: Mutex<Vec<String>>,
     pub deny: Option<String>,
 }
 
@@ -66,7 +66,8 @@ impl Recorder {
 impl Gate for Recorder {
     fn check(&self, effect: Effect) -> Verdict {
         self.asked
-            .borrow_mut()
+            .lock()
+            .unwrap()
             .push(format!("{}: {}", effect.tool, effect.summary));
         match &self.deny {
             Some(reason) => Verdict::Deny(reason.clone()),

@@ -35,6 +35,6 @@ pub struct Report {
     pub view: Option<Observation>,
 }
 
-pub trait Hands {
+pub trait Hands: Send + Sync {
     fn carry_out(&self, view: &dyn View, task: Task) -> Report;
 }

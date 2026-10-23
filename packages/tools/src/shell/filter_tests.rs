@@ -1,4 +1,5 @@
 use super::*;
+use crate::shell::keys;
 
 /// `input` fed all at once, and fed one byte at a time: the transcript, the pending line and what
 /// was seen must not depend on how the reads were cut.
@@ -21,19 +22,26 @@ fn run(input: &[u8], chunk: usize) -> (String, String, String) {
 }
 
 #[test]
-fn control_sequences_are_dropped() {
-    let (out, pending, seen) = filtered(b"\x1b[31mred\x1b[0m\n\x1b[2K\x1b[1;5Hplain\n");
-    assert_eq!(out, "red\nplain");
-    assert_eq!(pending, "");
-    assert_eq!(seen, "red\nplain\n");
-}
-
-#[test]
-fn string_sequences_are_dropped_with_either_terminator() {
-    let (out, ..) = filtered(b"\x1b]0;title\x07a\x1b]8;;http://x\x1b\\b\x1bP1$r0m\x1b\\c\n");
-    assert_eq!(out, "abc");
-    let (out, ..) = filtered(b"\x1b(Bx\x1b=y\x1b>z\n");
-    assert_eq!(out, "xyz");
+fn non_printing_bytes_are_dropped() {
+    let cases: [(&[u8], &str); 4] = [
+        // Control sequences: colours, erasing, cursor moves.
+        (b"\x1b[31mred\x1b[0m\n\x1b[2K\x1b[1;5Hplain\n", "red\nplain"),
+        // String sequences, ended by BEL or by ST.
+        (
+            b"\x1b]0;title\x07a\x1b]8;;http://x\x1b\\b\x1bP1$r0m\x1b\\c\n",
+            "abc",
+        ),
+        // Two-byte escapes.
+        (b"\x1b(Bx\x1b=y\x1b>z\n", "xyz"),
+        // Bells and other controls; a tab stays.
+        (b"a\x07b\x00c\x7fd\te\n", "abcd\te"),
+    ];
+    for (input, expected) in cases {
+        let (out, pending, seen) = filtered(input);
+        assert_eq!(out, expected, "{input:?}");
+        assert_eq!(pending, "", "{input:?}");
+        assert_eq!(seen, format!("{expected}\n"), "{input:?}");
+    }
 }
 
 #[test]
@@ -52,25 +60,20 @@ fn backspace_removes_a_whole_character() {
 }
 
 #[test]
-fn bells_and_other_controls_are_dropped() {
-    let (out, ..) = filtered(b"a\x07b\x00c\x7fd\te\n");
-    assert_eq!(out, "abcd\te");
-}
-
-#[test]
 fn application_cursor_mode_is_followed() {
     let mut filter = Filter::default();
     let mut out = Output::default();
     let mut seen = vec![];
-    filter.feed(b"\x1b[?1h", &mut out, &mut seen);
-    assert!(filter.application_cursor);
-    filter.feed(b"\x1b[?1049;1l", &mut out, &mut seen);
-    assert!(!filter.application_cursor);
-    filter.feed(b"\x1b[?1049h", &mut out, &mut seen);
-    assert!(!filter.application_cursor, "another mode is not DECCKM");
-    filter.feed(b"\x1b[?", &mut out, &mut seen);
-    filter.feed(b"1h", &mut out, &mut seen);
-    assert!(filter.application_cursor, "split across reads");
+    // What the Up key sends after each output, as a session presses it.
+    let mut up = |bytes: &[u8]| {
+        filter.feed(bytes, &mut out, &mut seen);
+        keys::encode("Up", filter.application_cursor).unwrap()
+    };
+    assert_eq!(up(b"\x1b[?1h"), b"\x1bOA");
+    assert_eq!(up(b"\x1b[?1049;1l"), b"\x1b[A");
+    assert_eq!(up(b"\x1b[?1049h"), b"\x1b[A", "another mode is not DECCKM");
+    up(b"\x1b[?");
+    assert_eq!(up(b"1h"), b"\x1bOA", "split across reads");
 }
 
 #[test]

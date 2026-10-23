@@ -45,7 +45,7 @@ fn a_unique_string_is_replaced_and_shown_in_context() {
         )
     );
     assert_eq!(
-        *gate.asked.borrow(),
+        *gate.asked.lock().unwrap(),
         [format!("edit: edit {shown} (+2 -1 lines)")]
     );
 }
@@ -116,7 +116,7 @@ fn an_empty_old_string_creates_a_file_and_its_directories() {
         "fn a() {}\nfn b() {}\n"
     );
     assert_eq!(
-        *gate.asked.borrow(),
+        *gate.asked.lock().unwrap(),
         [format!("edit: create {shown} (2 lines)")]
     );
 }
@@ -161,7 +161,7 @@ fn files_outside_the_workspace_are_not_changed() {
     assert!(message.contains("outside the workspace"), "{message}");
     assert!(failed(edit(&dir, &gate, change("../x.txt", "", "b"))).contains("outside"));
     assert_eq!(fs::read_to_string(&path).unwrap(), "a");
-    assert!(gate.asked.borrow().is_empty());
+    assert!(gate.asked.lock().unwrap().is_empty());
 }
 
 #[test]
@@ -179,19 +179,35 @@ fn a_denied_edit_changes_nothing_and_says_why() {
 }
 
 #[test]
-fn crlf_files_keep_their_line_endings() {
-    let dir = Scratch::new();
-    let path = dir.file("win.txt", "one\r\ntwo\r\nthree\r\n");
-    edit(&dir, &Open, change("win.txt", "one\ntwo\n", "1\n2\n")).unwrap();
-    assert_eq!(fs::read_to_string(&path).unwrap(), "1\r\n2\r\nthree\r\n");
+fn line_endings_are_kept_as_they_are() {
+    // (file, old_string, new_string, the file after): a CRLF file keeps CRLF for the lines the
+    // model wrote with `\n`; a mixed file is matched and changed as it is.
+    let cases = [
+        (
+            "one\r\ntwo\r\nthree\r\n",
+            "one\ntwo\n",
+            "1\n2\n",
+            "1\r\n2\r\nthree\r\n",
+        ),
+        ("a\r\nb\nc\n", "b\nc", "B\nC", "a\r\nB\nC\n"),
+    ];
+    for (before, old, new, after) in cases {
+        let dir = Scratch::new();
+        let path = dir.file("x.txt", before);
+        edit(&dir, &Open, change("x.txt", old, new)).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), after, "{before:?}");
+    }
 }
 
 #[test]
-fn mixed_line_endings_are_matched_as_they_are() {
+fn a_match_across_a_hidden_crlf_says_why_it_fails() {
     let dir = Scratch::new();
-    let path = dir.file("mixed.txt", "a\r\nb\nc\n");
-    edit(&dir, &Open, change("mixed.txt", "b\nc", "B\nC")).unwrap();
-    assert_eq!(fs::read_to_string(&path).unwrap(), "a\r\nB\nC\n");
+    dir.file("m.txt", "alpha\r\nbeta\ngamma\n");
+    let message = failed(edit(&dir, &Open, change("m.txt", "alpha\nbeta", "x")));
+    assert!(
+        message.contains("mixes \\r\\n and \\n line endings"),
+        "{message}"
+    );
 }
 
 #[test]
@@ -247,5 +263,5 @@ fn a_fifo_is_refused_before_it_is_opened() {
     let gate = Recorder::default();
     let message = failed(edit(&dir, &gate, change("pipe", "", "x")));
     assert_eq!(message, "pipe is not a regular file: edit changes files");
-    assert!(gate.asked.borrow().is_empty());
+    assert!(gate.asked.lock().unwrap().is_empty());
 }

@@ -39,6 +39,9 @@ fn a_task_from_question_to_end() {
         width,
     ));
     out.extend(note("resumed session 2026-10-23-1", width));
+    // The person's lines stay lines; a note keeps its rows and columns.
+    out.extend(user("one\ntwo", width));
+    out.extend(note("model      haiku\nworkspace  ~/shop\n", width));
     insta::assert_snapshot!(shown(out), @r"
     llx 0.1.0 · haiku-5.5 · ~/shop
 
@@ -53,6 +56,10 @@ fn a_task_from_question_to_end() {
     ─ Worked for 48s · 6 turns · $0.0087 ───────────────────────
     ■ the model is unreachable: timed out after 90s
       resumed session 2026-10-23-1
+    ❯ one
+      two
+      model      haiku
+      workspace  ~/shop
     ");
 }
 
@@ -78,24 +85,18 @@ fn the_end_rule_fills_the_width_and_says_how_it_ended() {
 }
 
 #[test]
+fn a_count_says_its_noun_in_the_plural_but_for_one() {
+    assert_eq!(count(1, "turn"), "1 turn");
+    assert_eq!(count(0, "file"), "0 files");
+    assert_eq!(count(12, "event"), "12 events");
+}
+
+#[test]
 fn durations_read_naturally() {
     assert_eq!(duration(2_140), "2.1s");
     assert_eq!(duration(48_900), "48s");
     assert_eq!(duration(65_000), "1m 05s");
     assert_eq!(duration(3_720_000), "1h 02m");
-}
-
-#[test]
-fn many_lines_from_the_person_stay_lines() {
-    assert_eq!(shown(user("one\ntwo", 40)), "❯ one\n  two");
-}
-
-#[test]
-fn a_note_keeps_its_rows_and_columns() {
-    assert_eq!(
-        shown(note("model      haiku\nworkspace  ~/shop\n", 40)),
-        "  model      haiku\n  workspace  ~/shop"
-    );
 }
 
 #[test]
@@ -109,4 +110,45 @@ fn the_header_stays_one_row_and_cuts_the_folder_from_the_start() {
         40,
     );
     assert_eq!(shown(rows), "llx 0.1.0 · haiku-5.5 · …o/the/workspace");
+}
+
+#[test]
+fn the_end_rule_says_a_limit_ran_out_and_a_goal_was_not_achieved() {
+    let verb = |status: &str| {
+        let rule = end(
+            &End {
+                status,
+                millis: 3_000,
+                turns: 1,
+                cost: 0.0,
+            },
+            60,
+        );
+        style::plain(&rule[0])
+    };
+    // A timeout ends as `exhausted` too: the error line under it says which limit.
+    assert!(verb("exhausted").starts_with("─ Ran out after 3.0s"));
+    assert!(verb("not_achieved").starts_with("─ Not achieved after 3.0s"));
+    assert!(verb("achieved").starts_with("─ Worked for 3.0s"));
+}
+
+#[test]
+fn init_reads_as_the_command_typed() {
+    let rows = user(crate::commands::extras::INIT, 60);
+    assert_eq!(shown(rows), "❯ /init");
+}
+
+#[test]
+fn a_wide_row_of_a_table_wraps_under_its_second_column() {
+    let rows = note(
+        "* default     Each command and file change is asked about first.\n  plan        Investigate and plan: no file changes at all.",
+        40,
+    );
+    let under = " ".repeat(16);
+    assert_eq!(
+        shown(rows),
+        format!(
+            "  * default     Each command and file\n{under}change is asked about\n{under}first.\n    plan        Investigate and plan: no\n{under}file changes at all."
+        )
+    );
 }

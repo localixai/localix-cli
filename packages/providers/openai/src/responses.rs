@@ -156,14 +156,22 @@ pub fn body(selection: &Selection, session: &str, request: Request) -> Value {
         "include": [],
         "prompt_cache_key": session,
     });
-    if selection.effort() != Effort::Off {
-        body["reasoning"] = json!({"effort": selection.effort().name()});
+    // Off is said: a request without the field reasons at the backend's own default.
+    if !selection.model().efforts.is_empty() {
+        let effort = selection.effort();
+        let name = if effort == Effort::Off {
+            "none"
+        } else {
+            effort.name()
+        };
+        body["reasoning"] = json!({"effort": name});
     }
     if !request.tools.is_empty() {
         body["tools"] = request.tools.iter().map(function).collect();
         body["tool_choice"] = json!(if request.may_call { "auto" } else { "none" });
-        // One call at a time, so every call sees what the previous one left.
-        body["parallel_tool_calls"] = json!(false);
+        // Several calls in one turn: independent reads and searches cost one turn, not many. The
+        // agent runs together only the calls whose tools allow it, the rest in order.
+        body["parallel_tool_calls"] = json!(true);
     }
     body
 }

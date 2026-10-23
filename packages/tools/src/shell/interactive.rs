@@ -107,9 +107,11 @@ mod unix {
                     None => "in a terminal".to_string(),
                 };
                 ask(tool.gate, NAME, &format!("{}  ({place})", summary(command)))?;
+                let names = (tool.hidden)();
+                let hidden: Vec<&str> = names.iter().map(String::as_str).collect();
                 let turn = tool
                     .sessions
-                    .start(command, &dir, tool.hidden, wait, tool.stop)
+                    .start(command, &dir, &hidden, wait, tool.stop)
                     .map_err(failed)?;
                 report(&turn, Some(&place), wait.needle, "")
             }
@@ -133,11 +135,7 @@ mod unix {
                 report(&turn, None, wait.needle, input)
             }
         };
-        Ok(ToolOutput {
-            report,
-            state: None,
-            image: None,
-        })
+        Ok(report.into())
     }
 
     /// Every problem with the arguments, before anything is asked or typed.

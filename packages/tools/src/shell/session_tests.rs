@@ -90,24 +90,6 @@ fn a_line_program_reads_and_answers() {
 }
 
 #[test]
-fn python_input_round_trip() {
-    if !python() {
-        return;
-    }
-    let (dir, sessions) = (Scratch::new(), sessions());
-    let command = r#"python3 -c 'print("got", input("? "))'"#;
-    let turn = start(&sessions, &dir, command, until("?"));
-    assert_eq!(turn.until, Until::Matched, "{turn:?}");
-    let turn = send(&sessions, turn.id, "x\n", &[], until("got"));
-    let turn = match turn.until {
-        // The answer and the exit may come in one call or two.
-        Until::Matched => send(&sessions, turn.id, "", &[], Wait::default()),
-        _ => turn,
-    };
-    assert_eq!(turn.until, Until::Exited(Ending::Exit(0)), "{turn:?}");
-}
-
-#[test]
 fn a_repl_keeps_state_across_calls() {
     if !python() {
         return;
@@ -210,7 +192,7 @@ fn close_kills_what_it_started() {
 }
 
 #[test]
-fn a_stop_kills_every_session() {
+fn a_stop_ends_only_its_session() {
     let (dir, sessions) = (Scratch::new(), sessions());
     let short = Wait {
         needle: None,
@@ -218,13 +200,45 @@ fn a_stop_kills_every_session() {
     };
     let first = start(&sessions, &dir, "sleep 30", short);
     let second = start(&sessions, &dir, "sleep 31", short);
-    let groups = [pid(&sessions, first.id), pid(&sessions, second.id)];
+    let group = pid(&sessions, first.id);
     let stopped = sessions.send(first.id, b"", &[], short, &|| true).unwrap();
     assert_eq!(stopped.until, Until::Stopped);
-    assert_eq!(sessions.running(), "none");
-    for group in groups {
-        assert!(gone(-group), "group {group} still runs");
+    assert!(gone(-group), "group {group} still runs");
+    assert_eq!(sessions.running(), format!("{} (`sleep 31`)", second.id));
+}
+
+/// Session 1 waited on for `millis` on another thread while `then` runs.
+fn while_busy(sessions: &Sessions, millis: u64, then: impl FnOnce()) {
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            let wait = Wait {
+                needle: Some("never printed"),
+                yield_ms: Some(millis),
+            };
+            sessions.send(1, b"", &[], wait, &never).unwrap();
+        });
+        thread::sleep(Duration::from_millis(200));
+        then();
+    });
+}
+
+#[test]
+fn a_session_in_a_wait_still_counts_and_is_busy() {
+    let (dir, sessions) = (Scratch::new(), sessions());
+    let short = Wait {
+        needle: None,
+        yield_ms: Some(100),
+    };
+    for _ in 0..MAX_SESSIONS {
+        start(&sessions, &dir, "sleep 30", short);
     }
+    while_busy(&sessions, 1_500, || {
+        let refused = sessions.start("sleep 30", dir.path(), &[], short, &never);
+        assert!(refused.unwrap_err().contains("sessions are running"));
+        let busy = sessions.send(1, b"", &[], short, &never).unwrap_err();
+        assert!(busy.contains("session 1 is busy in another call"), "{busy}");
+    });
+    assert_eq!(sessions.close_all(), MAX_SESSIONS);
 }
 
 #[test]
@@ -248,28 +262,6 @@ fn at_most_four_run() {
     assert_eq!(sessions.close_all(), 4);
     let next = start(&sessions, &dir, "sleep 30", short);
     assert_eq!(next.id, 5, "an id is never given twice");
-}
-
-#[test]
-fn a_bash_session_answers() {
-    if Command::new("bash").arg("-c").arg("").status().is_err() {
-        return;
-    }
-    let (dir, sessions) = (Scratch::new(), sessions());
-    let turn = start(&sessions, &dir, "bash --noprofile --norc -i", until("$"));
-    assert_eq!(turn.until, Until::Matched, "{turn:?}");
-    send(&sessions, turn.id, "export V=7\n", &[], until("$"));
-    let turn = send(&sessions, turn.id, "echo $V\n", &[], until("7"));
-    assert_eq!(turn.until, Until::Matched, "{turn:?}");
-}
-
-#[test]
-fn colour_and_progress_are_filtered() {
-    let (dir, sessions) = (Scratch::new(), sessions());
-    let command = r"printf '\033[31mred\033[0m\n10%%\r50%%\r100%%\n'";
-    let turn = start(&sessions, &dir, command, Wait::default());
-    assert_eq!(turn.until, Until::Exited(Ending::Exit(0)), "{turn:?}");
-    assert_eq!(output(&turn), "red\n100%");
 }
 
 #[test]

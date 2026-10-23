@@ -138,11 +138,16 @@ fn past_three_pictures_the_older_ones_go_at_once_and_the_prefix_then_stays() {
             })
             .collect()
     };
-    for n in 1..=3 {
+    // One picture a turn.
+    let turn = |conversation: &mut Conversation, n: u32| {
         conversation.result(&n.to_string(), shot(n));
+        conversation.settle();
+    };
+    for n in 1..=3 {
+        turn(&mut conversation, n);
     }
     assert_eq!(kept(&conversation), ["data1", "data2", "data3"]);
-    conversation.result("4", shot(4));
+    turn(&mut conversation, 4);
     assert_eq!(
         kept(&conversation),
         ["data4"],
@@ -153,8 +158,8 @@ fn past_three_pictures_the_older_ones_go_at_once_and_the_prefix_then_stays() {
         Message::User(IMAGE_OMITTED.into())
     );
     let before = conversation.messages().to_vec();
-    conversation.result("5", shot(5));
-    conversation.result("6", shot(6));
+    turn(&mut conversation, 5);
+    turn(&mut conversation, 6);
     assert_eq!(
         &conversation.messages()[..before.len()],
         &before[..],
@@ -166,22 +171,10 @@ fn past_three_pictures_the_older_ones_go_at_once_and_the_prefix_then_stays() {
 }
 
 #[test]
-fn a_picture_the_person_attached_is_never_dropped() {
+fn a_picture_the_person_attached_follows_their_message_and_is_never_dropped() {
     let mut conversation = Conversation::new("rules");
-    let image = shot(9).image.unwrap();
-    conversation.attach("mockup.png", image);
-    for n in 1..=4 {
-        conversation.result(&n.to_string(), shot(n));
-    }
-    assert!(
-        matches!(&conversation.messages()[1], Message::Image { caption, .. } if caption.contains("mockup.png"))
-    );
-}
-
-#[test]
-fn a_picture_the_person_attached_follows_their_message_with_its_name() {
-    let mut conversation = Conversation::new("rules");
-    conversation.push(Message::User("Goal: make it look like this".into()));
+    let goal = Message::User("Goal: make it look like this".into());
+    conversation.push(goal.clone());
     let image = Image {
         media_type: "image/png".into(),
         data: "iVBORw0KGgo=".into(),
@@ -189,11 +182,103 @@ fn a_picture_the_person_attached_follows_their_message_with_its_name() {
         height: 480,
     };
     conversation.attach("mockup.png", image.clone());
-    assert_eq!(
-        conversation.messages().last(),
-        Some(&Message::Image {
-            caption: "The person attached mockup.png (640x480).".into(),
-            image,
-        })
+    let attached = |conversation: &Conversation| {
+        let messages = conversation.messages();
+        let at = messages
+            .iter()
+            .position(|message| *message == goal)
+            .unwrap();
+        match &messages[at + 1] {
+            Message::Image {
+                caption,
+                image: kept,
+            } => caption.contains("mockup.png") && *kept == image,
+            _ => false,
+        }
+    };
+    assert!(attached(&conversation), "it follows the person's message");
+    for n in 1..=4 {
+        conversation.result(&n.to_string(), shot(n));
+        conversation.settle();
+    }
+    assert!(
+        attached(&conversation),
+        "past three tool pictures it is still there"
+    );
+}
+
+#[test]
+fn pictures_wait_until_the_turn_is_settled() {
+    let mut conversation = Conversation::new("rules");
+    conversation.result("1", shot(1));
+    conversation.result("2", output("read", 10));
+    assert!(
+        !conversation
+            .messages()
+            .iter()
+            .any(|message| matches!(message, Message::Image { .. })),
+        "nothing comes between one turn's results"
+    );
+    conversation.settle();
+    let messages = conversation.messages();
+    assert!(matches!(messages[1], Message::ToolResult { .. }));
+    assert!(matches!(messages[2], Message::ToolResult { .. }));
+    assert!(matches!(messages[3], Message::Image { .. }));
+}
+
+#[test]
+fn a_result_without_state_leaves_the_newest_state_alone() {
+    let mut conversation = Conversation::new("rules");
+    let stateless = |report: &str| ToolOutput {
+        report: report.into(),
+        ..ToolOutput::default()
+    };
+    for i in 0..6 {
+        conversation.result(&i.to_string(), stateless(&"r".repeat(MAX_RESULT - 100)));
+    }
+    conversation.result("look", output("opened view", 500));
+    conversation.result("read", stateless("4 ch"));
+    let contents = results(&conversation);
+    assert!(
+        contents[6].starts_with("opened view\n\nxxx"),
+        "no newer state follows: {}",
+        &contents[6][..40]
+    );
+}
+
+#[test]
+fn a_rewind_forgets_the_states_and_pictures_past_it() {
+    let mut conversation = Conversation::new("rules");
+    // The old state's index is a result again after the rewind, so a stale index would show.
+    conversation.push(Message::User("Goal: first".into()));
+    conversation.result("old", output("opened old", 10));
+    for n in 1..=3 {
+        conversation.result(&n.to_string(), shot(n));
+    }
+    conversation.settle();
+    conversation.truncate(0);
+    assert_eq!(conversation.messages().len(), 1, "the rules stay");
+    conversation.push(Message::User("Goal: again".into()));
+    for n in 4..=7 {
+        conversation.result(&n.to_string(), shot(n));
+        conversation.settle();
+    }
+    let messages = conversation.messages();
+    assert_eq!(messages[1], Message::User("Goal: again".into()));
+    let omitted = messages
+        .iter()
+        .filter(|message| **message == Message::User(IMAGE_OMITTED.into()))
+        .count();
+    assert_eq!(omitted, 3, "only the new older pictures went");
+    assert!(matches!(messages.last(), Some(Message::Image { .. })));
+    // Past the budget, only states still in the conversation are dropped.
+    for i in 0..6 {
+        conversation.result(&format!("s{i}"), output("opened", MAX_RESULT - 100));
+    }
+    assert!(
+        results(&conversation)
+            .iter()
+            .all(|content| !content.starts_with("opened old")),
+        "a state past the rewind is never written back"
     );
 }

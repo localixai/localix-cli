@@ -1,0 +1,50 @@
+/* The command is the primary action: white, mono, with Copy as its own segment. */
+.command {
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+  margin-top: 2rem;
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--black);
+  overflow: hidden;
+}
+.command code {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0.9rem 1.1rem;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  scrollbar-width: none;
+}
+.sigil {
+  margin-right: 0.6ch;
+  color: #8a8a87;
+}
+.command button {
+  flex: none;
+  padding: 0 1.2rem;
+  border: 0;
+  border-left: 1px solid #d6d6d3;
+  background: transparent;
+  color: var(--black);
+  font: 600 0.8125rem/1 var(--mono);
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+.command button:hover {
+  background: #e6e6e3;
+}
+
+@media (max-width: 40rem) {
+  .command code {
+    padding: 0.8rem 0.9rem;
+    font-size: 0.8125rem;
+  }
+  .command button {
+    padding: 0 0.9rem;
+  }
+}

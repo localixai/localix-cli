@@ -2,62 +2,40 @@
 //! a question with its options and a line for the person's own words. Nothing is approved once
 //! the task is stopped, and a stop closes the question open.
 
-use std::cell::Cell;
-use std::collections::HashSet;
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use contracts::gate::{Effect, Gate, Verdict};
+use contracts::gate::Effect;
 use contracts::person::{Person, Question, Reply};
 
 use super::Ui;
 use super::event::Approval;
-use crate::gate::declined;
-use crate::mode::{AUTONOMOUS, Mode};
+use crate::gate::Asker;
+use crate::mode::{AUTONOMOUS, Mode, ModeCell};
 use crate::picker::{Item, Lines, Picker};
 
+/// Approvals asked in the interface; a stopped task closes the question with a no.
 pub struct UiGate<'a> {
     pub ui: Ui,
-    pub stopped: &'a dyn Fn() -> bool,
-    /// The tools the person said not to ask about again.
-    always: Mutex<HashSet<String>>,
+    pub stopped: &'a (dyn Fn() -> bool + Sync),
 }
 
-impl<'a> UiGate<'a> {
-    pub fn new(ui: Ui, stopped: &'a dyn Fn() -> bool) -> Self {
-        Self {
-            ui,
-            stopped,
-            always: Mutex::new(HashSet::new()),
-        }
-    }
-}
-
-impl Gate for UiGate<'_> {
-    fn check(&self, effect: Effect) -> Verdict {
-        if self.always.lock().unwrap().contains(effect.tool) {
-            return Verdict::Allow;
-        }
-        match self.ui.approve(effect.tool, effect.summary, self.stopped) {
-            Approval::Yes => Verdict::Allow,
-            Approval::Always => {
-                self.always.lock().unwrap().insert(effect.tool.to_string());
-                Verdict::Allow
-            }
-            Approval::No(why) => Verdict::Deny(declined(why)),
-        }
+impl Asker for UiGate<'_> {
+    fn approve(&self, effect: &Effect) -> Option<Approval> {
+        Some(self.ui.approve(effect.tool, effect.summary, self.stopped))
     }
 }
 
 pub struct UiPerson<'a> {
     pub ui: Ui,
-    pub mode: &'a Cell<Mode>,
-    pub stopped: &'a dyn Fn() -> bool,
+    pub mode: &'a ModeCell,
+    pub stopped: &'a (dyn Fn() -> bool + Sync),
     /// Told how long the person took, so it does not count toward the time limit.
-    pub waited: &'a dyn Fn(Duration),
+    pub waited: &'a (dyn Fn(Duration) + Sync),
 }
 
 impl Person for UiPerson<'_> {
+    /// Each question in turn, unless the task is stopped or nobody is to be asked; the time the
+    /// person took is told to `waited`. A question skipped is an empty answer.
     fn ask(&self, questions: &[Question]) -> Reply {
         if (self.stopped)() {
             return Reply::Stopped;
@@ -66,12 +44,13 @@ impl Person for UiPerson<'_> {
             return Reply::Nobody(AUTONOMOUS.into());
         }
         let asked = Instant::now();
+        let _asking = crate::gate::one_question();
         let mut answers = Vec::with_capacity(questions.len());
         for (at, question) in questions.iter().enumerate() {
-            let answer = self.ui.ask(question, at, questions.len(), self.stopped);
             if (self.stopped)() {
                 break;
             }
+            let answer = self.ui.ask(question, at, questions.len(), self.stopped);
             answers.push(answer.unwrap_or_default());
         }
         (self.waited)(asked.elapsed());
@@ -100,10 +79,14 @@ impl Picker for UiTerminal {
 
 impl Lines for UiTerminal {
     fn line(&mut self, prompt: &str, hidden: bool) -> Option<String> {
-        self.ui.line(prompt, hidden)
+        self.ui.line(prompt, hidden, None)
     }
 
     fn line_until(&mut self, prompt: &str, done: &dyn Fn() -> bool) -> Option<String> {
-        self.ui.line_until(prompt, done)
+        self.ui.line(prompt, false, Some(done))
     }
 }
+
+#[cfg(test)]
+#[path = "asking_tests.rs"]
+mod tests;

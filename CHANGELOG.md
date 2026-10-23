@@ -2,27 +2,65 @@
 
 ## Unreleased
 
-The browser CLI of 0.1.0 is now `llx` (also installed as `llx`): an ultrafast, lightweight coding agent for the terminal. It has five tools: `read`, `edit`, `bash`, the browser, whose clicks and typing a decision model does, and `ask`, a question to the person in a session. It stays one synchronous binary of about 2 MB, with no async runtime and no plugins, MCP or skills.
+The browser CLI of 0.1.0 is now `llx`: an ultrafast, lightweight coding agent for the terminal. It has seven tools: `read`, `edit`, `bash`, the browser, whose clicks and typing a decision model does, `ask`, a question to the person in a session, `agents`, other agents it starts, and `jobs`, monitors and schedules. It stays one synchronous binary of about 2 MB, with no async runtime and no plugins, MCP or skills.
+
+### Agents, parallel calls, steering, background jobs
+
+- **`agents`: the agent starts other agents, in parallel.** One tool with an `action`: `spawn` (a self-contained task and a short name) starts an agent on a thread of its own and returns at once; `send` tells one more (read at its next step while it works, or a new task in its own conversation once it is done); `wait` (some agents, or all, with `timeout_ms`, 30 s by default) returns the answers that came; `list` and `close` (at most 6 open). An agent's answer, its last message (nothing is summarized), reaches the main agent by itself at its next step as an `<agent_result>` message, and a task does not end while its agents work. An agent is a session of its own whose parent is the main session (`parent` and `name` in its JSON file): its conversation opens with the same context, it works with tools of its own but neither `agents` (one level) nor `ask` (nobody answers an agent), behind the same gate, its approvals marked `[agent name]` and asked one at a time. It stops with the task, or alone with `x` on its row. What agents spend counts in the task's turns and cost, and their turns appear as `turn` events in `--json`. `llx sessions` lists the main sessions with how many agents each started; `resume` never picks an agent's session.
+- **Independent calls run at once.** The model may make several calls in one turn (`parallel_tool_calls` is on for both providers), and the prompt asks it to: `read` and `bash` calls run together, the others alone and in order, and the results go back in the model's order. Reading five files is one turn, not five.
+- **Steering.** A message sent while a task works goes to that task at its next step (shown `↳` until it is read); Tab keeps it for after the task instead (`⏎`), and so do commands and pictures. What the task did not get to read becomes the next task.
+- **`jobs`: monitors and schedules.** `monitor` runs a command in the background (approved like a command), and each batch of lines it prints reaches the main agent as a `<monitor>` message: at its next step while a task runs, else as a task of its own; it ends when the command exits or at its deadline (5 min by default, 30 at most, 10 in `exec`, where the task waits for it), with a notice. `schedule` gives a prompt back as a task of its own at a time (`in: "45m"`, or a 5-field `cron` in local time, `recurring` for at most 7 days), between tasks and behind what the person queued (`◷`); at most 50 jobs; not in `exec`. `list` and `stop`.
+- **One list for everything that runs.** Under the prompt: the main session, each agent (a spinner and its call, or how it ended; time and tokens on the right) and each job (`≋` a monitor with its events and time left, `◷` a schedule with its next run). ↓ from an empty prompt gives it the keys: ↑↓ choose, Enter or → shows an agent's transcript (the screen is drawn again from its start), `x` stops an agent or a job, Esc or ← give the keys back. The main transcript says when an agent finishes (`● Agent "scout" finished · 8s`) and while the task waits for agents.
+- **`/model`** chooses the model and its reasoning level among the providers signed in to, without signing in again; `/login` stays for signing in.
+- **Sessions side by side.** `/new` opens a new session and shows it, at once, even while a task works; the old one goes on in the background with its agents, jobs and terminal sessions. Each session runs on a thread of its own and is recorded in its own file; Ctrl-C stops only the session shown. Questions wait their turn, one open at a time (`1 more question waiting`); one from a session not shown names it (`session <name> (in the background)`) and ignores keys for 300 ms, and that session's own choices (carry out the plan?, `/login`'s steps) wait until it is shown; the name goes once it is.
+- **Sessions in this project.** ← on an empty prompt lists them: the sessions open (working, then waiting for you, then idle or done, each with its time, tokens, tasks and agents), "+ New session", then this directory's saved sessions, newest first (at most 20, agents' hidden). ↑↓ choose, Enter or → opens (a session open is shown, its transcript drawn again; a saved one is resumed in a session of its own; a session is never open twice), `x` stops a session's task without switching to it, Esc or ← close the list. At most 8 sessions are open: another closes the oldest idle one, which the list can open again. When a session not shown finishes, the one shown says so (`● Session "…" finished · 3m 08s · ← to open`) and its row reads `unseen`. Under the prompt each session has a row, with its agents under it, and its time and tokens (its agents' included) on the right.
+- **Quitting asks while work runs.** Ctrl-C twice, Ctrl-D and `/exit` ask `Quit llx?` when a session works or a shell or a monitor runs (`2 sessions still working · 3 shells and 1 monitor running — they will be stopped.`): "Quit anyway" stops every session, waits at most 2 s for them, gives the terminal back and exits; "Stay" (or Esc) closes it. `/exit` no longer waits for the tasks running. A second Ctrl-C while the session shown is stopping still quits at once when nothing else works.
+- **`/rewind` warns** when another session is working in the directory: restoring may undo its changes.
+- **No plain prompt line.** A session runs in its interface only: where the interface cannot start (stdin a terminal it cannot draw on), it is a usage error (exit 3) pointing to `llx exec`, as having no terminal is. `exec` is unchanged.
+- The size budget (`apps/cli/tests/suite/repo/budget.rs`) is 25,000 lines of working code (build scripts count), raised by the owner.
+
+### Models, context and the small commands
+
+- **One model catalog: a Rust port of models.dev** (`packages/providers/models`, MODELS.md). models.dev's own files for the popular providers are built in and resolved as models.dev resolves them (lab models with each host's overrides, `base_model_omit`, every model's API addresses), checked against models.dev's published v2 resolution model by model (268 of 268 match); a session fetches the v2 API in the background, at most once a day with its ETag, and the next one reads it (225 providers, about 6,800 models). Every model fact comes from it: windows, reasoning levels (effort lists, toggles, budgets) and defaults, prices, addresses. The hand-written model tables are gone.
+- **About 200 providers.** `--provider` takes any provider of the catalog by id, and `/login` lists them all: the popular first, then the current one and those signed in to, then the rest by name, those signed in to (or with a key set) marked `✓`. A key comes from the variable models.dev names for it, else a pasted one (`<config>/key-<id>`, 0600); OpenAI takes a ChatGPT sign-in or an API key. Every provider but the ChatGPT backend is called over OpenAI's chat completions at the address the catalog gives, through OpenRouter's client (`reasoning_effort` for any host but OpenRouter). `logout` lists only what it removed.
+- **Each model's context limit, and the history fitted to it before every request** (`agent/src/history.rs`), without a summary: the limit is the window less a reserve, at most 272k; past 90% of it, old tool outputs (those a later call on the same path superseded first) and old calls' large arguments are replaced by pointers down to 60%, in one pass; the recent tail is never touched, and what was elided stays elided, so the prompt cache keeps its prefix. A strategy (`Strategy`, `Pipeline` of `Stage`s) the app chooses, so the way history is prepared can change; a test runs a 300-turn dialogue through it (24 cache breaks, the limit never passed). "N% context left" shows under the prompt once below half.
+- **Every request is priced**: from the catalog's prices (uncached input, cached input at the cache-read price, output; the long-context band by the request's input), unless the provider reports a billed amount (OpenRouter does). A ChatGPT plan's requests show their API-equivalent value, so the cost line is never $0 for a model the catalog prices.
+- **`/rewind`** (also `/undo`, Esc Esc on an empty prompt): back to before a task of the conversation, its files (what `edit` changed, the agents' too), the conversation (its words back in the prompt), or both.
+- **Long lists are searched by typing.** A choice of more than 12 options (`/login`'s providers, `/model`'s models) shows `Search: open▏  2 matches`: letters filter it by name and id, what starts with the query first, then what holds it, then what has its letters as word starts; Backspace edits the query, Esc clears it and then cancels, Enter takes the marked row, and `No provider matches 'xyz'` says when nothing does. It scrolls with ↑↓, PageUp, PageDown, Home and End. A short list (an approval, a short choice) is numbered and picks by number, as before. The "Another provider…" entry, typed by id, is gone.
+- **Shift+Up/Down** move the reasoning level without a menu.
+- **`/diff`**, **`/init`**, **`/copy`**, **`/usage`** (also `/cost`), **Ctrl-R** (the last earlier entry with the words typed before it; again for older) and **Ctrl-G** (the entry in `$EDITOR`).
 
 ### Instructions and the prompt cache
 
-- **CLAUDE.md and more, as Codex and Claude Code read them.** `~/.llx/AGENTS.md` for every project, then in each directory from the repository's root down the first of `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`; `@path` lines import files; a subdirectory's file arrives with the first `read` or `edit` there.
+- **Instruction files: AGENTS.md, CLAUDE.md and more.** `~/.llx/AGENTS.md` for every project, then in each directory from the repository's root down the first of `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`; `@path` lines import files; a subdirectory's file arrives with the first `read` or `edit` there.
 - **The context is its own cached message** before the first goal, so a new session in the same workspace reads it from the prompt cache; old screenshots are dropped together past three, so the prefix is not rewritten at every one; pictures the person attached are never dropped.
 
 ### The terminal interface
 
-- **A browser sign-in goes on by itself.** At `/login`, once the browser comes back to the local callback, the sign-in carries on with nothing to press or paste, as in Codex; pasting the address the browser ended on is still there for a browser on another machine.
-- **A session is drawn like Codex's.** Finished blocks go into the terminal's scrollback once; only the bottom is redrawn, in synchronized updates. Each call is a block: `• Ran cargo test`, the command wrapped under a `│`, and the start and end of its output under `└` (`… +41 lines` between), green when done and red when it failed. The answer is rendered markdown, and each task ends with `─ Worked for 48s · 6 turns · $0.0087 ───`. While a task runs: a spinner on the call, `Working (12s · esc to interrupt)`, the hands' latest actions under a browser call, and the messages queued meanwhile.
+- **A browser sign-in goes on by itself.** At `/login`, once the browser comes back to the local callback, the sign-in carries on with nothing to press or paste; pasting the address the browser ended on is still there for a browser on another machine.
+- **A session drawn into the scrollback.** Finished blocks go into the terminal's scrollback once; only the bottom is redrawn, in synchronized updates. Each call is a block: `• Ran cargo test`, the command wrapped under a `│`, and the start and end of its output under `└` (`… +41 lines` between), green when done and red when it failed. The answer is rendered markdown, and each task ends with `─ Worked for 48s · 6 turns · $0.0087 ───`. While a task runs: a spinner on the call, `Working (12s · esc to interrupt)`, the hands' latest actions under a browser call, and the messages queued meanwhile.
 - **The prompt `❯` is a line editor:** Enter sends, Shift+Enter (or Ctrl-J, or a trailing `\`) starts a new line, a paste keeps its lines, Up and Down walk earlier entries, Alt or Ctrl with the arrows move by word, and Ctrl-A, Ctrl-E, Ctrl-U, Ctrl-K and Ctrl-W edit as in a shell. `/` lists the commands, Tab completes one, Shift+Tab toggles plan mode without Enter.
-- **Approvals and questions are choices:** `1. Yes`, `2. Yes, and don't ask again`, `3. No, and tell llx what to do differently` (a line for why), with the arrows, a number or `y`/`a`/`n`; `ask` questions list their options and a last one to type your own answer. `Implement this plan?` is a choice too.
-- **Files and pictures go in as in Codex.** A path dropped or pasted into the prompt becomes `[image: …]` (a picture, sent to the model as one) or `[file: …]` (sent as its path); `@` finds workspace files; Ctrl+V attaches the clipboard's picture on macOS; `-i/--image FILE` attaches pictures to the first task.
+- **Slash commands and clipboard text:** Tab completes commands (adding a space for commands with arguments) or suggested mode names; Enter runs what is typed, so `/mode` and `/plan` work without arguments. Clipboard text appears as `[Paste]` in the composer and expands when sent; pasted file paths retain file and image marks.
+- **Approvals and questions are choices:** `1. Yes`, `2. Yes, and don't ask again`, `3. No, and tell llx what to do differently` (a line for why), with the arrows and Enter or a number (no letter keys, so words typed as the box opens pick nothing); `ask` questions list their options and a last one to type your own answer. `Implement this plan?` is a choice too.
+- **Files and pictures go in.** A path dropped or pasted into the prompt becomes `[image: …]` (a picture, sent to the model as one) or `[file: …]` (sent as its path); `@` finds workspace files; Ctrl+V attaches the clipboard's picture on macOS; `-i/--image FILE` attaches pictures to the first task.
 - **Esc stops the task;** Ctrl-C stops it, clears the line, or quits when pressed twice at an empty prompt.
 - **`exec` prints the same blocks** on stderr (in colour at a terminal, without the live part), then the answer: rendered when stdout is a terminal, as the model wrote it in a pipe.
 - The release binary is about 2.0 MB.
 
+### Fixed
+
+- **`--timeout` holds while a task waits** on its monitors or agents: a quiet monitor no longer keeps `exec` running past its limit (it ends `exhausted`, exit 2).
+- **An approval ignores keys for its first 300 ms**, so words, `j`/`k` or Enter typed for the prompt as it opens do not answer it; Ctrl-C still stops at once.
+- **The key variables of a provider chosen later with `/login`** are kept from commands too, from the next command on: the list is read at each command.
+- **What an agent says beside its calls** shows in its own view, as the main session's does.
+- **Signed out, `exec` says how to sign in to the provider in use** (`not signed in to Anthropic: … or set ANTHROPIC_API_KEY`), not OpenRouter's variable whatever the provider.
+- **A ChatGPT sign-in offers the models the backend serves alone** (the Codex and Pro models) in `/login` and `/model`.
+- **The browser's decision model keeps a short timeout** (90 s) and is asked once more when it times out; chat models still are not, a reply being written is billed. Its default, `~typesafe/jev-latest`, is the app's policy and is in the catalog, with the other decision models.
+- The OpenAI provider is named `OpenAI` everywhere; how it is signed in to is said where the provider is picked. `/usage` counts tokens with thousands separators, as the trace does. `/init` reads as `/init` in the transcript and in `/rewind`. `exec` with no prompt points to `llx exec "<task>"`, and a session without a terminal to `llx exec resume` too.
+
 ### Breaking
 
-- **Renamed to `llx`, at https://llx.sh.** The command is `llx`, also installed as `llx` (it was `decision-loop`); the repository is `rsaryev/llx`. The key is kept in `~/.config/llx/credentials`, sessions in `~/.llx/sessions`, and the variables are `LLX_MODEL`, `LLX_DECISION_MODEL`, `LLX_SESSIONS`, `LLX_VERSION` and `LLX_INSTALL_DIR`.
+- **Renamed to `llx`, at https://llx.sh.** The command is `llx` (it was `decision-loop`); the repository is `rsaryev/llx`. The key is kept in `~/.config/llx/credentials`, sessions in `~/.llx/sessions`, and the variables are `LLX_MODEL`, `LLX_DECISION_MODEL`, `LLX_SESSIONS`, `LLX_VERSION` and `LLX_INSTALL_DIR`.
 - **`--json` is schema 4: JSON lines.** One event per line replaces the single object of schema 3. The events are `run.started`, `tool.call`, `tool.result`, `step`, `turn` and `run.completed`. `run.completed` has `status` (`achieved`, `not_achieved`, `unstated`, `exhausted`, `error`, `interrupted`), `exit_code`, `answer`, `data` or `data_error`, `error`, `session`, `usage` {`agent`, `decision`, `cost_usd`} and `duration_ms`. `final_url`, `screenshot` and `expects` are gone.
 - **Removed:**
   - commands: `check`, `models`, `skills`;
@@ -33,7 +71,7 @@ The browser CLI of 0.1.0 is now `llx` (also installed as `llx`): an ultrafast, l
   - `-c` and `--resume ID` become `llx resume --last` and `llx resume ID`.
   - `--trace` becomes `--json` or `-v`.
   - `--headless` becomes the default: the window is invisible unless `--show-browser`.
-- **The skill files are removed:** the bundled skill guides, `skills/lxsurf/SKILL.md` and the Claude Code plugin marketplace.
+- **The skill files are removed:** the bundled skill guides, `skills/lxsurf/SKILL.md` and the plugin marketplace.
 - **New defaults:** `--max-turns` is 50 (was 30) and `--timeout` is 1800 s (was 600). `--max-turns` and `--max-steps` take 1 to 10000, and `--timeout` at most 86400 s.
 - **Exit codes keep their meanings:** 0, 1, 2, 3 and 130. Exit 3 now also covers a usage error and a model error.
 - **`llx login` is gone: sign in with `/login` in a session.** `login --with-token` and `login status` go with it (`llx login` is now a session whose first message is "login"). `llx logout` stays, and forgets every saved sign-in. `llx doctor` shows the sign-in to each provider. A session starts when no provider is signed in, so that `/login` can sign in; `exec` still stops with exit 3 ("not signed in").
@@ -88,9 +126,9 @@ The browser CLI of 0.1.0 is now `llx` (also installed as `llx`): an ultrafast, l
   - Starting a session asks the gate (`python3 -q  (in a terminal)`), and so does each `input` or `keys`, showing exactly what will be typed; reading and closing do not ask. Invalid combinations are refused before anything is asked or typed.
   - A call without `tty` or `session` runs as before. On Windows the fields are not offered, and `tty` is refused with a reason. No `--json` schema bump: tool arguments were already free-form.
 - **Context:** the agent starts with an environment block: the workspace, the OS, the date, the mode, and whether a browser is available (the shell is named in `bash`'s own description). After it come the project's `AGENTS.md` files, from the git root down to the workspace (16 KiB each, 32 KiB in all). A resumed session also gets its earlier tasks, each capped (a piped `<stdin>` block left out), and the directory they ran in.
-- **A command line like Codex and Claude Code:**
+- **A command line: a session, or one task:**
   - `llx` opens a session at the terminal, and `llx "<task>"` opens one that starts with that task. Each line typed goes on in the same conversation. Slash commands: `/mode` (also `/permissions`), `/plan`, `/new` (also `/clear`), `/status`, `/help`, `/exit` (also `/quit`, Ctrl-D).
-  - `llx exec "<task>"` (alias `llx e`, or `llx -p "<task>"` as in Claude Code) runs one task and exits. `llx exec - < task.md` reads the prompt from stdin, and piped stdin is added to a prompt as a `<stdin>` block; llx says on stderr when it reads stdin that may stay open (`</dev/null` skips it).
+  - `llx exec "<task>"` (alias `llx e`, or `llx -p "<task>"`) runs one task and exits. `llx exec - < task.md` reads the prompt from stdin, and piped stdin is added to a prompt as a `<stdin>` block; llx says on stderr when it reads stdin that may stay open (`</dev/null` skips it).
   - `llx -c` goes on with the newest session of this directory, like `llx resume --last`; `llx exec resume [ID | --last] "<task>"` runs one more task in a saved session.
   - `--json`, `--schema` and `-o` answer one task, so they need `exec` or `-p`. A session without a terminal on stdin is a usage error that points to `llx exec`.
   - `-y` is also accepted as `--yolo` and `--dangerously-skip-permissions`.
@@ -113,6 +151,48 @@ The browser CLI of 0.1.0 is now `llx` (also installed as `llx`): an ultrafast, l
   - CI runs on macOS, Linux and Windows, with an MSRV check of every target (1.88) and a size check (2.5 MiB). Third-party actions are pinned to commits.
   - A tag `vX.Y.Z` runs the tests on every platform, then builds release archives with SHA256SUMS and build-provenance attestations, plus `scripts/install.sh` (which runs nothing until it is downloaded whole) and `scripts/install.ps1`.
   - New `CONTRIBUTING.md`, `SECURITY.md` and `RELEASING.md`.
+
+### Fixed
+
+- **Secrets:** `bash`, terminal sessions, agents and `jobs monitor` no longer see the key variables of the provider in use (as the catalog names them, such as `DEEPSEEK_API_KEY`), nor `OPENROUTER_API_KEY`; only OpenRouter's was left out before. Other providers' variables stay, so a project's own tests can use them. A provider chosen later with `/login` is not added, and hiding is still no barrier.
+- **The conversation:**
+  - A screenshot taken in a turn with several calls comes after all of that turn's results; chat-completions hosts rejected the request with a 400 before.
+  - The context estimate counts the tool specs, so fresh reads are no longer elided early in a session.
+  - Failed calls in one parallel turn count as one failed turn; before, three of them took the tools away for the rest of the run.
+  - A result without state no longer drops the newest page state.
+  - An answer on the last turn is kept, and the run no longer waits on agents it cannot read.
+  - What the model writes beside its tool calls, or while it waits on agents, is shown in the session and in the stderr trace. `--json` is unchanged (schema 4).
+- **Agents and jobs:**
+  - A monitor's output can no longer close its own `<monitor>` tag, nor an agent's answer its `<agent_result>` tag. A monitor batch that starts a task of its own says that it is data, not the person's instructions, and the `jobs` description says `<monitor>` messages are untrusted.
+  - `/new` ends the old conversation's monitors and schedules, and nothing more from them reaches the new one; a new monitor may take an old one's name.
+  - `/rewind` of the conversation lets the session's agents go (their names and the 6-agent cap are free again), lists background tasks as the transcript shows them (`≋ ticks · tick 1`, `◷ hello · say hello`) and does not put them back in the prompt.
+  - `x` on a schedule's row removes the row, and the chosen row in the list is always one that is drawn and still there.
+  - The "Waiting for …" line is said once per wait.
+  - An agent stopped before it answered tells the main agent so, and that `send` goes on with it; a message an agent ended before reading is reported as unread.
+  - A refused call is drawn as refused even when another call failed meanwhile.
+- **Terminal sessions:** stopping one agent's wait kills only that session ("stopped after Ns: session N was killed, with everything it started"). The limit of 4 holds with parallel calls: a session in use by another call counts, and a call on it is told it is busy.
+- **Tools:**
+  - A `bash` workdir that is a symlink out of the workspace is shown with where it really leads, and as outside the workspace.
+  - `edit` says why `old_string` cannot match across lines in a file that mixes `\r\n` and `\n` endings.
+  - `browser`: a wrong `tab` is refused before the person is asked; `show` no longer reloads a window already shown or hidden that way; an address with no scheme on this machine (`localhost`, `127.*`, `0.0.0.0`, `[::1]`) opens over http.
+- **Providers:**
+  - With a ChatGPT sign-in, reasoning "off" is sent as effort `none`; the backend reasoned at its default before. On OpenRouter, a model that takes no levels is sent no `reasoning` field.
+  - A chat request that times out is not sent again, so a long reply is not billed three times (a connect or DNS timeout is still retried); the chat-completions timeout is 600 s, as on the ChatGPT backend.
+  - A sign-in callback is not held up by a browser connection that says nothing.
+  - Credential files and the cached catalog are written whole (a temporary file, then a rename). A cached catalog cut short is fetched whole again, and a 304 no longer rewrites the cache.
+  - A refused key reads "<Provider> refused the key: …; type /login, or check the key's variable".
+- **The interface:**
+  - The "ctrl-c again to quit" hint goes once its 2 s window has passed, and quitting leaves no prompt row on the screen.
+  - Shift+Tab and Shift+Up/Down pressed during a task are queued as `shift+tab · next mode` and `more/less reasoning`, not as escape codes; queued monitor and schedule results read as in the transcript.
+  - Esc closes the command list `/` opens. `/init` shows as `/init`. `/copy` copies the last answer that says something. A wide row of a table note (`/mode`, `/help`) wraps under its second column.
+  - The closing rule says "Ran out after" when a limit ran out and "Not achieved after" for a goal not achieved.
+  - Shift+Up/Down says "Reasoning: high (saved)."; a model with no levels says it takes none.
+- **The command line:**
+  - `--image` naming a file that is missing or not a picture is a usage error (exit 3) before any model is called; it was skipped before.
+  - `resume` and `exec resume` take the prompt unquoted, like `exec`; with `--last`, every word is the prompt.
+  - `doctor` fails the decision-model check when the model gives no answer.
+  - `--help` names the right sessions folder, `~/.llx/sessions`, and the prompt line's read error starts with `llx:`.
+- **Tests:** unit tests use the built-in model catalog, not the one fetched to the machine; integration tests run the binary with a cleared environment; a new `suite/exec.rs`; `cargo nextest` works (`.config/nextest.toml`); `scripts/coverage.sh` (cargo-llvm-cov with nextest, failing under 80% of lines) runs in CI; build scripts count toward the line budget.
 
 ### Browser
 

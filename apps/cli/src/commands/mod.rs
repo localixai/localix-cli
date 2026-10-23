@@ -5,8 +5,11 @@
 pub mod doctor;
 pub mod ended;
 pub mod entry;
+pub mod extras;
 pub mod login;
+pub mod model;
 pub mod repl;
+pub mod rewind;
 pub mod run;
 pub mod sessions;
 pub mod signin;
@@ -37,7 +40,7 @@ pub fn dispatch(cli: Cli) -> Result<i32, Failure> {
 }
 
 fn resumed(args: crate::cli::ResumeArgs, kind: Kind) -> Result<i32, Failure> {
-    let (id, prompt) = args.target().map_err(Failure::Usage)?;
-    let (id, prompt) = (id.map(str::to_string), prompt.map(str::to_string));
+    let (id, prompt) = args.target();
+    let id = id.map(str::to_string);
     sessions::resume(id.as_deref(), prompt.as_deref(), args.run, kind)
 }

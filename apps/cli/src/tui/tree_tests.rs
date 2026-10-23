@@ -1,0 +1,199 @@
+use std::time::Instant;
+
+use crossterm::event::KeyCode;
+use ratatui::text::Span;
+use serde_json::json;
+
+use super::*;
+use crate::tui::event::Event;
+use crate::tui::style;
+use crate::tui::test_support::{press, render as screen};
+
+fn rows(app: &App) -> Vec<String> {
+    let spinner = |_| Span::raw("*");
+    render(app, Instant::now(), &spinner)
+        .iter()
+        .map(style::plain)
+        .collect()
+}
+
+fn started(app: &mut App, id: &str, name: &str) {
+    let now = Instant::now();
+    app.event(
+        Event::Started {
+            id: id.into(),
+            name: name.into(),
+        },
+        now,
+    );
+}
+
+#[test]
+fn no_agents_no_tree() {
+    assert!(rows(&App::new(60, 20, vec![])).is_empty());
+}
+
+#[test]
+fn each_session_is_a_row_the_shown_one_marked() {
+    let now = Instant::now();
+    let mut app = App::new(60, 20, vec![]);
+    app.event(Event::TaskStarted("go".into()), now);
+    app.event(
+        Event::Call {
+            name: "agents".into(),
+            args: json!({"action": "send", "agent": "tests", "message": "run them"}),
+        },
+        now,
+    );
+    started(&mut app, "s1", "scout");
+    started(&mut app, "s2", "tests");
+    let agent = |event| Event::In("s2".into(), Box::new(event));
+    app.event(agent(Event::TaskStarted("run them".into())), now);
+    app.event(
+        agent(Event::Call {
+            name: "bash".into(),
+            args: json!({"command": "cargo test"}),
+        }),
+        now,
+    );
+    let ended = Event::TaskEnded {
+        status: "achieved".into(),
+        millis: 1,
+        turns: 1,
+        cost: 0.0,
+    };
+    app.event(Event::In("s1".into(), Box::new(ended)), now);
+    assert_eq!(
+        rows(&app),
+        [
+            "  * go       Messaging agent tests · run them",
+            "    ✓ scout  done",
+            "    * tests  Running cargo test",
+            "  ↓ to manage · ← sessions",
+        ]
+    );
+    // ↓ from the empty prompt goes into the list on main, ↓↓ to tests, Enter shows it.
+    for code in [KeyCode::Down, KeyCode::Down, KeyCode::Down, KeyCode::Enter] {
+        press(&mut app, code, now);
+    }
+    insta::assert_snapshot!(screen(&mut app, now), @"
+    ◆ agent tests  ·  session s2  ·  started by go
+
+    ❯ run them
+
+    * Running cargo test
+
+    * Working (Ns · ctrl-c to interrupt)
+
+    ❯ Viewing agent tests · a task you type goes to go
+
+      * go       Messaging agent tests · run them
+        ✓ scout  done
+    ❯   * tests  Running cargo test
+      ↑↓ choose · enter view · x stop · esc back
+    ");
+}
+
+#[test]
+fn an_agent_shows_how_long_it_worked_and_its_tokens_on_the_right() {
+    let now = Instant::now();
+    let mut app = App::new(60, 20, vec![]);
+    started(&mut app, "s1", "scout");
+    let agent = |event| Event::In("s1".into(), Box::new(event));
+    app.event(agent(Event::TaskStarted("look".into())), now);
+    app.event(agent(Event::Spent(54_120)), now);
+    let spinner = |_| Span::raw("*");
+    let later = now + std::time::Duration::from_secs(68);
+    let row = style::plain(&render(&app, later, &spinner)[1]);
+    // The seconds in two digits, as every duration of the interface reads.
+    assert!(row.ends_with("1m 08s · 54.1k tokens"), "{row:?}");
+    assert_eq!(
+        crate::tui::wrap::width(&row),
+        60,
+        "right-aligned to the width"
+    );
+}
+
+#[test]
+fn many_agents_show_a_window_around_the_one_shown() {
+    let mut app = App::new(60, 20, vec![]);
+    for n in 0..8 {
+        started(&mut app, &format!("s{n}"), &format!("a{n}"));
+    }
+    app.show("s7");
+    let shown = rows(&app);
+    assert!(shown[1].contains("↑ 3 more"), "{shown:?}");
+    assert!(shown[6].starts_with("    ○ a7"), "{shown:?}");
+    assert_eq!(shown.len(), 8, "{shown:?}");
+}
+
+/// `event` as session `id` sends it.
+fn from(id: &str, event: Event) -> Event {
+    Event::In(id.into(), Box::new(event))
+}
+
+fn lanes(app: &mut App, lanes: &[(&str, &str)]) {
+    for (id, name) in lanes {
+        let (id, name) = (id.to_string(), name.to_string());
+        app.event(Event::LaneStarted { id, name }, Instant::now());
+    }
+}
+
+#[test]
+fn tree_shows_lane_rows_with_time_and_tokens() {
+    let now = Instant::now();
+    let mut app = App::new(72, 20, vec![]);
+    lanes(&mut app, &[("A", "fix the flaky"), ("B", "refactor")]);
+    app.event(from("A", Event::TaskStarted("fix it".into())), now);
+    app.event(from("A", Event::Spent(54_100)), now);
+    let scout = Event::Started {
+        id: "s1".into(),
+        name: "scout".into(),
+    };
+    app.event(from("A", scout), now);
+    app.event(from("s1", Event::TaskStarted("look".into())), now);
+    app.event(from("s1", Event::Spent(12_000)), now);
+    app.event(from("B", Event::TaskStarted("refactor it".into())), now);
+    let ended = Event::TaskEnded {
+        status: "achieved".into(),
+        millis: 242_000,
+        turns: 3,
+        cost: 0.0,
+    };
+    app.event(from("B", ended), now);
+    app.event(from("B", Event::Spent(81_000)), now);
+    let spinner = |_| Span::raw("*");
+    let later = now + std::time::Duration::from_secs(72);
+    let rows: Vec<String> = render(&app, later, &spinner)
+        .iter()
+        .map(style::plain)
+        .collect();
+    insta::assert_snapshot!(rows.join("\n"), @"
+    * fix the flaky  working                         1m 12s · 54.1k tokens
+      * scout        thinking                        1m 12s · 12.0k tokens
+    ✓ refactor       done · unseen                   4m 02s · 81.0k tokens
+    ↓ to manage · ← sessions
+    ");
+}
+
+#[test]
+fn waiting_for_you_detail_when_held() {
+    let now = Instant::now();
+    let mut app = App::new(60, 20, vec![]);
+    lanes(&mut app, &[("A", "first"), ("B", "add tabs")]);
+    let (reply, _picked) = std::sync::mpsc::channel();
+    let choose = Event::Choose {
+        title: "Implement this plan?".into(),
+        options: vec![("Yes".into(), String::new())],
+        marked: None,
+        reply,
+    };
+    app.event(from("B", choose), now);
+    let shown = rows(&app);
+    assert!(
+        shown
+            .iter()
+            .any(|row| row.starts_with("  ? add tabs") && row.contains("waiting for you")),
+        "{shown:?}"
+    );
+}

@@ -43,11 +43,7 @@ impl Tool for AskTool<'_> {
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
         let questions = questions(arguments).map_err(ToolError::Failed)?;
         match self.person.ask(&questions) {
-            Reply::Answers(answers) => Ok(ToolOutput {
-                report: report(&questions, &answers),
-                state: None,
-                image: None,
-            }),
+            Reply::Answers(answers) => Ok(report(&questions, &answers).into()),
             Reply::Nobody(why) => Err(ToolError::Failed(why)),
             Reply::Stopped => Err(ToolError::Failed(STOPPED.into())),
         }

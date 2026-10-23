@@ -13,8 +13,8 @@ pub enum Failure {
     Usage(String),
     /// What the command needs is not there: the network, a model, a file it must write.
     Environment(String),
-    /// No sign-in to the chosen provider (a key, or ChatGPT tokens).
-    SignedOut,
+    /// No sign-in to the chosen provider (a key, or ChatGPT tokens): how to sign in to it.
+    SignedOut(String),
     /// The reader of stdout went away (`llx … | head -1`): nothing is left to tell anyone, so
     /// the command ends quietly, like any Unix filter.
     Closed,
@@ -24,7 +24,7 @@ impl Failure {
     /// The exit code this failure ends the process with (see [`exit`]).
     pub fn code(&self) -> i32 {
         match self {
-            Self::Usage(_) | Self::Environment(_) | Self::SignedOut => exit::ENVIRONMENT,
+            Self::Usage(_) | Self::Environment(_) | Self::SignedOut(_) => exit::ENVIRONMENT,
             Self::Closed => exit::OK,
         }
     }
@@ -49,11 +49,9 @@ impl Failure {
 impl fmt::Display for Failure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Usage(message) | Self::Environment(message) => f.write_str(message),
-            Self::SignedOut => f.write_str(
-                "not signed in: open a session (`llx`) and type /login, or set \
-                 OPENROUTER_API_KEY",
-            ),
+            Self::Usage(message) | Self::Environment(message) | Self::SignedOut(message) => {
+                f.write_str(message)
+            }
             Self::Closed => f.write_str("the output was closed"),
         }
     }

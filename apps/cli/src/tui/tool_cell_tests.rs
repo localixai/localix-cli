@@ -25,7 +25,10 @@ fn shown(name: &str, args: Value, state: State, width: usize) -> String {
 fn a_command_shows_the_ends_of_what_it_printed() {
     let printed: Vec<String> = (1..=12).map(|n| format!("line {n}")).collect();
     let report = format!("exit 0 in 0.4s\n### stdout\n{}", printed.join("\n"));
-    insta::assert_snapshot!(shown("bash", json!({"command": "seq 12 | sed 's/^/line /'"}), State::Done(&done(&report)), 80), @r"
+    insta::assert_snapshot!([
+        shown("bash", json!({"command": "seq 12 | sed 's/^/line /'"}), State::Done(&done(&report)), 80),
+        shown("bash", json!({"command": "touch a"}), State::Done(&done("exit 0 in 0.0s, no output")), 80),
+    ].join("\n"), @r"
     • Ran seq 12 | sed 's/^/line /'
       └ line 1
         line 2
@@ -33,6 +36,8 @@ fn a_command_shows_the_ends_of_what_it_printed() {
         line 10
         line 11
         line 12
+    • Ran touch a
+      └ (no output)
     ");
 }
 
@@ -63,14 +68,6 @@ fn a_failing_command_ends_with_how_it_exited_in_red() {
     ");
     assert_eq!(lines[0].spans[0].style, style::failed());
     assert_eq!(lines[2].spans[1].style, style::failed());
-}
-
-#[test]
-fn a_command_with_no_output_says_so() {
-    insta::assert_snapshot!(shown("bash", json!({"command": "touch a"}), State::Done(&done("exit 0 in 0.0s, no output")), 80), @r"
-    • Ran touch a
-      └ (no output)
-    ");
 }
 
 #[test]
@@ -125,6 +122,7 @@ fn sessions_browser_and_questions() {
         shown("bash", json!({"session": 1, "close": true}), State::Running, 80),
         shown("browser", json!({"url": "http://127.0.0.1:4173/", "goal": "Click Buy; done when the cart shows 1"}), State::Done(&done("Done: the cart shows 1.\nmore")), 80),
         shown("ask", json!({"questions": [{}, {}]}), State::Running, 80),
+        shown("ask", json!({"questions": [{}]}), State::Done(&done("The person answered:\n- colour: Blue")), 80),
     ].join("\n"), @r"
     • Starting python3 -q
     • Typing into session 1: print(1)
@@ -133,6 +131,8 @@ fn sessions_browser_and_questions() {
     • Browsed http://127.0.0.1:4173/ · Click Buy; done when the cart shows 1
       └ Done: the cart shows 1.
     • Asking 2 questions
+    • Asked 1 question
+      └ - colour: Blue
     ");
 }
 
@@ -145,15 +145,6 @@ fn control_characters_cannot_reach_the_terminal() {
         80,
     );
     assert!(!text.contains('\u{1b}'), "{text}");
-}
-
-#[test]
-fn a_question_shows_what_the_person_answered() {
-    let outcome = done("The person answered:\n- colour: Blue");
-    insta::assert_snapshot!(shown("ask", json!({"questions": [{}]}), State::Done(&outcome), 80), @r"
-    • Asked 1 question
-      └ - colour: Blue
-    ");
 }
 
 #[test]

@@ -1,5 +1,5 @@
-//! The instruction files the agent follows, found as Codex and Claude Code find them, so a
-//! repository written for either works here:
+//! The instruction files the agent follows, found under the names repositories already use for
+//! coding agents:
 //!
 //! - the person's own, for every project: `~/.llx/AGENTS.md`;
 //! - the project's: in each directory from the repository's root down to the working directory,
@@ -11,9 +11,9 @@
 //! A line that is only `@path` brings in that file, as in CLAUDE.md. Everything is read once
 //! and only ever appended, so the conversation's prefix, and the prompt cache, stay as they were.
 
-use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
@@ -86,7 +86,7 @@ fn read(path: &Path, limit: usize) -> Option<Found> {
     if text.is_empty() {
         return None;
     }
-    let kept = cut(text, limit);
+    let kept = crate::context::cut(text, limit);
     let more = match text.len() - kept.len() {
         0 => String::new(),
         cut => format!("\n[{cut} more bytes not shown: read the file for the rest]"),
@@ -136,18 +136,6 @@ fn same(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
-/// At most `limit` bytes of `text`, cut on a character boundary.
-fn cut(text: &str, limit: usize) -> &str {
-    if text.len() <= limit {
-        return text;
-    }
-    let mut end = limit;
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
-}
-
 /// A file's instructions as the agent reads them.
 pub fn block(found: &Found, applies: Option<&Path>) -> String {
     let scope = applies.map_or(String::new(), |dir| {
@@ -167,12 +155,16 @@ pub struct Instructed<'a> {
     pub inner: &'a dyn Tool,
     pub root: PathBuf,
     /// The directories whose instructions the agent has (those of the start among them).
-    pub seen: &'a RefCell<HashSet<PathBuf>>,
+    pub seen: &'a Mutex<HashSet<PathBuf>>,
 }
 
 impl Tool for Instructed<'_> {
     fn spec(&self) -> ToolSpec {
         self.inner.spec()
+    }
+
+    fn parallel(&self) -> bool {
+        self.inner.parallel()
     }
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
@@ -211,9 +203,8 @@ impl Instructed<'_> {
             .unwrap_or_default();
         for part in parts {
             dir.push(part);
-            if self.seen.borrow_mut().insert(dir.clone())
-                && let Some(found) = in_dir(&dir, FILE_LIMIT)
-            {
+            let new = crate::output::lock(self.seen).insert(dir.clone());
+            if new && let Some(found) = in_dir(&dir, FILE_LIMIT) {
                 out.push(found);
             }
         }

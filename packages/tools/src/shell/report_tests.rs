@@ -95,8 +95,7 @@ fn an_ended_session_says_how_it_ended() {
     );
     assert_eq!(
         report(&turn(Until::Stopped, None), None, None, ""),
-        "stopped by the person after 0.3s: every session was killed, with everything it \
-         started, no new output"
+        "stopped after 0.3s: session 1 was killed, with everything it started, no new output"
     );
 }
 

@@ -105,6 +105,15 @@ impl<W: Write> Screen<W> {
         self.out.flush()
     }
 
+    /// Clears the screen and its scrollback, the cursor at the top: another session's
+    /// transcript is drawn from the start.
+    pub fn reset(&mut self) -> io::Result<()> {
+        self.cursor = 0;
+        self.out
+            .write_all(b"\x1b[?2026h\x1b[H\x1b[2J\x1b[3J\x1b[?2026l")?;
+        self.out.flush()
+    }
+
     fn erase_into(&self, out: &mut String) {
         if self.cursor > 0 {
             out.push_str(&format!("\x1b[{}A", self.cursor));

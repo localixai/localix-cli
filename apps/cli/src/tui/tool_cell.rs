@@ -110,6 +110,22 @@ fn failed(name: &str, outcome: &Result<ToolOutput, ToolError>) -> bool {
     }
 }
 
+/// What a call did, in a few words: `Ran cargo test`.
+pub fn summary(name: &str, args: &Value) -> String {
+    let what = describe(name, args);
+    format!("{} {}", what.verb.1, what.subject)
+        .trim()
+        .to_string()
+}
+
+/// What a call running does: `Running cargo test`.
+pub fn doing(name: &str, args: &Value) -> String {
+    let what = describe(name, args);
+    format!("{} {}", what.verb.0, what.subject)
+        .trim()
+        .to_string()
+}
+
 struct What {
     /// The verb while running and once done: `Running`/`Ran`.
     verb: (&'static str, &'static str),
@@ -148,12 +164,10 @@ fn describe(name: &str, args: &Value) -> What {
                 .get("questions")
                 .and_then(Value::as_array)
                 .map_or(1, Vec::len);
-            let subject = if n == 1 {
-                "1 question".into()
-            } else {
-                format!("{n} questions")
-            };
-            what(("Asking", "Asked"), subject)
+            what(
+                ("Asking", "Asked"),
+                super::cells::count(n as u64, "question"),
+            )
         }
         "browser" => {
             let flag = |key: &str| args.get(key) == Some(&Value::Bool(true));
@@ -195,6 +209,14 @@ fn describe(name: &str, args: &Value) -> What {
                 (true, false) => what(("Reading", "Read"), "the page".into()),
                 (false, _) => what(("Browsing", "Browsed"), flat(&parts.join(" · "))),
             }
+        }
+        "agents" => {
+            let (verb, subject) = crate::agents::spec::describe(args);
+            what(verb, flat(&subject))
+        }
+        "jobs" => {
+            let (verb, subject) = crate::jobs::spec::describe(args);
+            what(verb, flat(&subject))
         }
         _ => what(("Calling", "Called"), name.to_string()),
     }
@@ -256,6 +278,12 @@ fn output_rows(name: &str, report: &str) -> Vec<(String, Style)> {
         "read" => vec![],
         // What the person answered, without the report's own heading.
         "ask" => rows(report).into_iter().skip(1).collect(),
+        // The agent's answer, without the line that names it.
+        // What agents said, without the tags that frame it for the model.
+        "agents" => rows(report)
+            .into_iter()
+            .filter(|(row, _)| !row.starts_with("<agent_result") && row != "</agent_result>")
+            .collect(),
         _ => rows(report).into_iter().take(1).collect(),
     }
 }

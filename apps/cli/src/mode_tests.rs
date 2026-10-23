@@ -1,7 +1,9 @@
-use std::cell::RefCell;
+use std::sync::Mutex;
 
 use super::*;
+use crate::gate::Asker;
 use crate::testing::Typed;
+use crate::tui::event::Approval;
 
 fn effect(tool: &str) -> Effect<'_> {
     Effect {
@@ -26,38 +28,39 @@ fn yes_is_bypass_and_otherwise_the_flag_wins_over_the_default() {
     assert_eq!(Mode::named("nope"), None);
     for mode in Mode::ALL {
         assert_eq!(Mode::named(mode.name()), Some(mode));
-        assert!(!mode.hint().is_empty(), "{mode:?} has no hint");
     }
 }
 
 #[test]
 fn default_asks_at_the_terminal_and_refuses_without_one() {
-    let mode = Cell::new(Mode::Default);
+    let mode = ModeCell::new(Mode::Default);
     let typed = Typed::new(&["y\n"]);
     let waited = |_: Duration| {};
     let gate = ModeGate::new(&mode, Some(&typed), &waited);
     assert_eq!(gate.check(effect("bash")), Verdict::Allow);
-    assert_eq!(typed.asked.borrow().len(), 1);
+    assert_eq!(typed.asked.lock().unwrap().len(), 1);
     let gate = ModeGate::new::<&Typed>(&mode, None, &waited);
     assert_eq!(denied(gate.check(effect("bash"))), NO_TERMINAL);
-    assert!(NO_TERMINAL.contains("--yes (-y) or --mode bypass"));
 }
 
 #[test]
 fn plan_refuses_edits_without_asking() {
-    let mode = Cell::new(Mode::Plan);
+    let mode = ModeCell::new(Mode::Plan);
     let typed = Typed::new(&["y\n"]);
     let waited = |_: Duration| {};
     let gate = ModeGate::new(&mode, Some(&typed), &waited);
     assert_eq!(denied(gate.check(effect("edit"))), PLAN_REFUSAL);
-    assert!(typed.asked.borrow().is_empty(), "the person was not asked");
+    assert!(
+        typed.asked.lock().unwrap().is_empty(),
+        "the person was not asked"
+    );
     let gate = ModeGate::new::<&Typed>(&mode, None, &waited);
     assert_eq!(denied(gate.check(effect("edit"))), PLAN_REFUSAL);
 }
 
 #[test]
 fn plan_with_no_terminal_never_points_to_bypass() {
-    let mode = Cell::new(Mode::Plan);
+    let mode = ModeCell::new(Mode::Plan);
     let waited = |_: Duration| {};
     let gate = ModeGate::new::<&Typed>(&mode, None, &waited);
     for tool in ["bash", "browser"] {
@@ -70,7 +73,7 @@ fn plan_with_no_terminal_never_points_to_bypass() {
 
 #[test]
 fn plan_keeps_its_own_always_answers() {
-    let mode = Cell::new(Mode::Default);
+    let mode = ModeCell::new(Mode::Default);
     let typed = Typed::new(&["a\n", "y\n", "a\n"]);
     let waited = |_: Duration| {};
     let gate = ModeGate::new(&mode, Some(&typed), &waited);
@@ -78,47 +81,80 @@ fn plan_keeps_its_own_always_answers() {
     mode.set(Mode::Plan);
     assert_eq!(gate.check(effect("bash")), Verdict::Allow);
     assert_eq!(
-        typed.asked.borrow().len(),
+        typed.asked.lock().unwrap().len(),
         2,
         "plan asked despite the default's always"
     );
     assert_eq!(gate.check(effect("bash")), Verdict::Allow);
     assert_eq!(gate.check(effect("bash")), Verdict::Allow);
-    assert_eq!(typed.asked.borrow().len(), 3, "plan's own always holds");
+    assert_eq!(
+        typed.asked.lock().unwrap().len(),
+        3,
+        "plan's own always holds"
+    );
     mode.set(Mode::Default);
     assert_eq!(
         gate.check(effect("browser")),
         Verdict::Deny("no answer came from the terminal".into())
     );
     assert_eq!(
-        typed.asked.borrow().len(),
+        typed.asked.lock().unwrap().len(),
         4,
         "the default's always is only for bash"
     );
 }
 
+/// An asker whose person answers "always" each time, counted.
+struct Always<'a>(&'a std::sync::atomic::AtomicUsize);
+
+impl Asker for Always<'_> {
+    fn approve(&self, _: &Effect) -> Option<Approval> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Some(Approval::Always)
+    }
+}
+
+#[test]
+fn always_is_kept_by_the_mode_gate_apart_for_working_and_planning() {
+    let mode = ModeCell::new(Mode::Default);
+    let asked = std::sync::atomic::AtomicUsize::new(0);
+    let count = || asked.load(std::sync::atomic::Ordering::SeqCst);
+    let gate = ModeGate::asking(&mode, Some(Box::new(Always(&asked))), &|_| {});
+    assert_eq!(gate.check(effect("bash")), Verdict::Allow);
+    assert_eq!(gate.check(effect("bash")), Verdict::Allow);
+    assert_eq!(count(), 1, "always holds across calls");
+    mode.set(Mode::Plan);
+    assert_eq!(gate.check(effect("bash")), Verdict::Allow);
+    assert_eq!(gate.check(effect("bash")), Verdict::Allow);
+    assert_eq!(count(), 2, "plan asks once for itself");
+    mode.set(Mode::Default);
+    assert_eq!(gate.check(effect("bash")), Verdict::Allow);
+    assert_eq!(gate.check(effect("browser")), Verdict::Allow);
+    assert_eq!(count(), 3, "only bash was always");
+}
+
 #[test]
 fn bypass_and_autonomous_allow_without_asking() {
     for chosen in [Mode::Bypass, Mode::Autonomous] {
-        let mode = Cell::new(chosen);
+        let mode = ModeCell::new(chosen);
         let typed = Typed::new(&[]);
         let waited = |_: Duration| panic!("nobody waited");
         let gate = ModeGate::new(&mode, Some(&typed), &waited);
         assert_eq!(gate.check(effect("edit")), Verdict::Allow);
         assert_eq!(gate.check(effect("bash")), Verdict::Allow);
-        assert!(typed.asked.borrow().is_empty());
+        assert!(typed.asked.lock().unwrap().is_empty());
     }
 }
 
 #[test]
 fn the_time_the_person_takes_is_told() {
-    let mode = Cell::new(Mode::Default);
+    let mode = ModeCell::new(Mode::Default);
     let typed = Typed::new(&["n\n"]);
-    let told = RefCell::new(vec![]);
-    let waited = |took: Duration| told.borrow_mut().push(took);
+    let told = Mutex::new(vec![]);
+    let waited = |took: Duration| told.lock().unwrap().push(took);
     let gate = ModeGate::new(&mode, Some(&typed), &waited);
     assert!(matches!(gate.check(effect("bash")), Verdict::Deny(_)));
-    assert_eq!(told.borrow().len(), 1);
+    assert_eq!(told.lock().unwrap().len(), 1);
 }
 
 #[test]
@@ -137,32 +173,6 @@ fn the_context_mentions_ask_only_where_someone_answers() {
             "{mode:?} with no terminal"
         );
     }
-    assert!(describe(Mode::Default, false, false).contains("--mode bypass"));
-    assert!(describe(Mode::Plan, true, false).contains("`edit` is refused"));
-    assert!(describe(Mode::Plan, false, false).contains("plan from reading files"));
-    assert!(describe(Mode::Autonomous, true, true).contains("nobody answers questions"));
-}
-
-#[test]
-fn a_change_is_a_mode_change_note() {
-    let note = notice(Mode::Plan, true, true);
-    assert!(
-        note.starts_with("<mode_change>\nThe mode is now plan: "),
-        "{note}"
-    );
-    assert!(note.ends_with("no longer holds.\n</mode_change>"), "{note}");
-}
-
-#[test]
-fn the_list_marks_the_current_mode() {
-    let list = list(Mode::Plan);
-    assert_eq!(list.lines().count(), 4);
-    assert!(
-        list.contains("* plan        Investigate and plan"),
-        "{list}"
-    );
-    assert!(list.contains("  default     "), "{list}");
-    assert!(switched(Mode::Bypass).starts_with("Mode: bypass. Everything runs without asking"));
 }
 
 /// `bash`'s terminal sessions through the mode's gate. Starting one and typing into it are
@@ -195,14 +205,14 @@ mod sessions {
     fn run(mode: Mode, terminal: Option<&Typed>) -> (Vec<Result<String, String>>, bool) {
         let scratch = Scratch::new();
         let workspace = Workspace::new(scratch.path()).unwrap();
-        let mode = Cell::new(mode);
+        let mode = ModeCell::new(mode);
         let waited = |_: Duration| {};
         let gate = ModeGate::new(&mode, terminal, &waited);
         let sessions = Sessions::default();
         let bash = BashTool {
             workspace: &workspace,
             gate: &gate,
-            hidden: &[],
+            hidden: &Vec::new,
             stop: &|| false,
             sessions: &sessions,
         };
@@ -221,7 +231,7 @@ mod sessions {
         let typed = Typed::new(&["y\n", "y\n"]);
         let (results, made) = run(Mode::Plan, Some(&typed));
         assert!(results.iter().all(Result::is_ok), "{results:?}");
-        let asked = typed.asked.borrow();
+        let asked = typed.asked.lock().unwrap();
         assert_eq!(asked.len(), 2, "reading and closing ask nothing: {asked:?}");
         assert!(asked[0].contains("sh  (in a terminal)"), "{}", asked[0]);
         assert!(
@@ -261,7 +271,7 @@ mod sessions {
             let typed = Typed::new(&[]);
             let (results, made) = run(mode, Some(&typed));
             assert!(results.iter().all(Result::is_ok), "{mode:?}: {results:?}");
-            assert!(typed.asked.borrow().is_empty(), "{mode:?}");
+            assert!(typed.asked.lock().unwrap().is_empty(), "{mode:?}");
             assert!(made, "{mode:?}");
         }
     }
@@ -272,7 +282,7 @@ mod sessions {
         let (results, made) = run(Mode::Default, Some(&typed));
         assert!(results.iter().all(Result::is_ok), "{results:?}");
         assert_eq!(
-            typed.asked.borrow().len(),
+            typed.asked.lock().unwrap().len(),
             1,
             "`a` for bash holds for typing too"
         );

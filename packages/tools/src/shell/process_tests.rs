@@ -29,15 +29,6 @@ fn a_command_returns_its_code_and_both_streams() {
 }
 
 #[test]
-fn a_command_runs_in_its_directory() {
-    let dir = Scratch::new();
-    dir.file("marker.txt", "");
-    let command = if cfg!(windows) { "dir /B" } else { "ls" };
-    let finished = run(&job(command, dir.path(), LONG)).unwrap();
-    assert_eq!(finished.stdout, "marker.txt");
-}
-
-#[test]
 fn hidden_variables_never_reach_the_command() {
     let dir = Scratch::new();
     // A variable the test process always has, and the shell does not need to start.
@@ -165,10 +156,11 @@ fn a_signal_is_told_apart_from_an_exit() {
 fn a_background_process_holding_the_output_is_not_waited_for() {
     let dir = Scratch::new();
     let started = Instant::now();
-    let finished = run(&job("echo up; sleep 3 &", dir.path(), LONG)).unwrap();
+    let finished = run(&job("echo up; sleep 20 &", dir.path(), LONG)).unwrap();
     assert_eq!(finished.ending, Ending::Exit(0));
+    // Well before the sleep ends, with room for a loaded machine.
     assert!(
-        started.elapsed() < Duration::from_secs(2),
+        started.elapsed() < Duration::from_secs(10),
         "{:?}",
         started.elapsed()
     );

@@ -1,18 +1,20 @@
 use super::*;
 
 #[test]
-fn short_output_is_kept_whole() {
-    let mut output = Output::default();
-    output.push(b"hello ");
-    output.push(b"world\n\n");
-    assert_eq!(output.text(), "hello world");
-}
-
-#[test]
-fn output_at_the_limit_is_kept_whole() {
-    let mut output = Output::default();
-    output.push("a".repeat(2 * HALF).as_bytes());
-    assert_eq!(output.text(), "a".repeat(2 * HALF));
+fn output_up_to_the_limit_is_kept_whole() {
+    let full = "a".repeat(2 * HALF);
+    // (the pushes, the text): trailing line breaks are dropped.
+    let cases: [(Vec<&[u8]>, &str); 2] = [
+        (vec![b"hello ", b"world\n\n"], "hello world"),
+        (vec![full.as_bytes()], &full),
+    ];
+    for (pushes, expected) in cases {
+        let mut output = Output::default();
+        for push in pushes {
+            output.push(push);
+        }
+        assert_eq!(output.text(), expected);
+    }
 }
 
 #[test]

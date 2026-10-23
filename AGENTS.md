@@ -2,7 +2,7 @@
 
 Instructions for AI coding agents working on this repository.
 
-`llx` (also installed as `llx`) is an ultrafast, lightweight coding agent for the terminal. It has five tools: `read`, `edit`, `bash`, a native browser whose clicks and typing are done by a decision model, and `ask`, a question to the person that the app answers. The tool set is deliberately minimal: no plugins, no MCP, no skills, no extra tools. A new capability goes into one of these five, or is left to the shell.
+`llx` is an ultrafast, lightweight coding agent for the terminal. It has seven tools: `read`, `edit`, `bash`, a native browser whose clicks and typing are done by a decision model, `ask`, a question to the person that the app answers, `agents`, other agents it starts (each a session with a parent, run in parallel), and `jobs`, monitors and schedules. The tool set is deliberately minimal: no plugins, no MCP, no skills, no extra tools. A new capability goes into one of these seven (as an `action`), or is left to the shell.
 
 ## Layout
 
@@ -18,11 +18,13 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
   - `model.rs`: the decision-model port: typed questions, `Decider`.
   - `hands.rs`: a `Task` carried out on a view, and its `Report`.
   - `history.rs`: sessions, `History`.
+  - `inbox.rs`: what reaches a run between its turns, `Inbox`.
 - `packages/agent`: the agent.
-  - `agent.rs`: the loop: one tool call at a time, the stop conditions. `Agent::context` is the app's environment block, sent before the first goal; `Agent::tell` is what the app says between goals (a changed mode), naming no tool.
+  - `agent.rs`: the loop: a turn's calls (those that may, at once: `calls.rs`), the inbox between turns, the stop conditions. `Agent::context` is the app's environment block, sent before the first goal; `Agent::tell` is what the app says between goals (a changed mode), naming no tool.
   - `spend.rs`: `Spend`, what the chat model spent in a run.
   - `observer.rs`: what a run shows as it goes: calls, results, turns.
-  - `conversation.rs`: messages that only grow. Older states are dropped past a budget, and open calls are closed.
+  - `conversation.rs`: messages that only grow. Older states are dropped past a budget, and open calls are closed; `truncate` for a rewind.
+  - `history.rs`: how a conversation is prepared before each request, a `Strategy` the app chooses: `Pipeline` (stages `superseded`, `outputs`, `arguments`, behind a 90%→60% gate of the model's limit, a protected tail, elisions that stay: made for the prompt cache) or `Keep`. `history_tests.rs` simulates a 300-turn dialogue.
   - `schema.rs`: `--schema` as the `result` tool.
   - `answer.rs`: the `RESULT:` line.
   - `prompt.md`: the system prompt.
@@ -37,7 +39,7 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
   - `workspace.rs`: where paths resolve. A file can be read anywhere but the paths the app denies (its config directory with the keys and tokens, its sessions), and changed only inside the root.
   - `fs/`: `read.rs` (numbered lines, or a directory's entries) and `edit.rs` (exact replacement, or a new file), with `text.rs` (numbering, line endings, +/- counts) and `atomic.rs` (temporary file, then rename).
   - `shell/`: `bash.rs` (the tool), `process.rs` (its own session with no terminal, a deadline, a stop, both pipes read on threads, the group killed, then the rest of the session), `sweep.rs` (every process of a session killed by its session id, with system calls on the stack only, so the signal handler may use it) and `output.rs` (head and tail kept, the middle cut).
-    - Terminal sessions (`tty`, `session`; unix only): `interactive.rs` (the arguments checked, the gate asked, the call carried out), `report.rs` (what the person and the model read), `pty.rs` (`openpty`, the shell its session leader with the PTY as its terminal, the reader thread, guarded writes), `stream.rs` (the output since the last call, the `wait_for` match), `filter.rs` (control sequences dropped, `\r` redraws, DSR replies, DECCKM), `keys.rs` (named keys), `session.rs` (`Sessions`, the registry the app owns: at most 4) and `running.rs` (one session's event-driven wait and its end, and `kill_all_now` for the signal handler).
+    - Terminal sessions (`tty`, `session`; unix only): `interactive.rs` (the arguments checked, the gate asked, the call carried out), `report.rs` (what the person and the model read), `pty.rs` (`openpty`, the shell its session leader with the PTY as its terminal, the reader thread, guarded writes), `stream.rs` (the output since the last call, the `wait_for` match), `filter.rs` (control sequences dropped, `\r` redraws, DSR replies, DECCKM), `keys.rs` (named keys), `session.rs` (`Sessions`, the registry the app owns: at most 4) and `running.rs` (one session's event-driven wait and its end, and `kill_all_now` for the signal handler: 32 slots, for every registry of the process; `running_anywhere` counts them).
   - `browser/`:
     - `tool.rs`: `BrowserTool`, the agent's `browser`.
     - `page.rs`: `Page`, the window as a `View`.
@@ -47,43 +49,47 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
     - `platform.rs`: what differs by OS.
     - `guard.rs`: what may load, and the probe's token.
     - `script.rs`.
+    - `tabs.rs` (the window's tabs, one WebView each; a closed tab's view kept for reuse), `tab_view.rs` (how a tab's WebView is built), `args.rs` (the tool's arguments, and what of a call the gate reads) and `capture.rs` (the compositor's picture of the page, as JPEG).
     - `probe/*.js`: the page side: snapshot, frames, outline, actions and settle, keys, evaluate.
   - `ask.rs`: `AskTool`, the agent's `ask`: one to three questions, read leniently, answered through `Person`.
   - `testing.rs`: test-only: temporary directories, and a gate that records what it is asked.
 - `packages/providers/`: the models' providers, a package each, told who calls them (`App`).
   - `kit/`: what they share, with no port: `http.rs` (`Http`, a POST answered with a status and a body; `Web` on the OS's TLS; forms and queries), `oauth.rs` (PKCE, random state, a pasted redirect, a token's claims, opening the system browser), `loopback.rs` (the sign-in callback on 127.0.0.1: route and `state` checked, `/cancel` to give way), `page.rs` (the browser's success and failure pages), `store.rs` (credential files, 0600), `sse.rs` (server-sent events).
-  - `openrouter/`: `chat.rs` (chat completions, tool calling, prompt-cache marks, the `reasoning` level), `system_one.rs` (the decision models), `client.rs`, `catalog.rs` (chat models and their levels), `auth.rs` (the key: environment, pasted, or a PKCE sign-in).
-  - `openai/`: a ChatGPT sign-in: `auth.rs` (the OAuth flow: authorize, exchange, refresh), `tokens.rs` (the tokens, the account id from their claims, `openai.json`), `responses.rs` (the chat port over the ChatGPT backend's Responses API, streamed; refresh before expiry and once on 401), `catalog.rs`.
+  - `models/`: the model catalog, the one source of model facts (MODELS.md): `data/` is models.dev's own files for the popular providers (`scripts/models_sync.py` copies them from a clone), `build.rs` resolves them as models.dev does into its v2 shape, `lib.rs` types it (providers, chat and decision models, windows, levels and defaults, cache flags, API addresses), `source.rs` fetches models.dev's v2 API at most once a day (ETag) and keeps it in `<config>/models.json`, over the built-in files.
+  - `openrouter/`: `chat.rs` (chat completions, tool calling; OpenRouter's `reasoning`, cost and prompt-cache marks, or `reasoning_effort` for any other OpenAI-compatible host), `system_one.rs` (the decision models), `client.rs` (OpenRouter, or any address the catalog gives; a timed-out request is not sent again, but a decision is, once), `auth.rs` (the OpenRouter key: environment, pasted, or a PKCE sign-in).
+  - `openai/`: a ChatGPT sign-in: `auth.rs` (the OAuth flow: authorize, exchange, refresh), `tokens.rs` (the tokens, the account id from their claims, `openai.json`), `responses.rs` (the chat port over the ChatGPT backend's Responses API, streamed; refresh before expiry and once on 401).
   - A new provider is a package here implementing `Chat` (and `Decider` where it has decision models) with a catalog, and one arm per `match` in `apps/cli/src/providers.rs`.
 - `packages/session`: a history store: sessions as JSON files.
 - `apps/cli`: the `llx` binary and the composition root.
   - `main.rs`: where the process exits (or the browser host, once its event loop owns the main thread, with the code the run returns).
   - `cli.rs`: the command line.
-  - `commands/`: `run.rs` (a session or one `exec` task: checks, then the browser host, then the work), `repl.rs` (a session's prompt line, its slash commands, and the plan handoff), `login.rs` (`/login`: provider, sign-in, model, level, each a pick), `signin.rs` (signing in to each provider, and `logout`), `sessions.rs` (`sessions`, `resume`), `doctor.rs`.
-  - `providers.rs`: the one place that knows the provider packages: names, catalogs, sign-ins, building a chat model; the decision model (OpenRouter's).
+  - `commands/`: `run.rs` (a session or one `exec` task: checks, then the browser host, then the work), `repl.rs` (a session's prompt, in the interface, and the plan handoff), `entry.rs` (what is typed at the prompt: the slash commands, the help), `ended.rs` (how a task ended: the report, the exit code, the decision model's spend), `login.rs` (`/login`: the provider and its sign-in, each a pick, then `model.rs`'s steps), `model.rs` (`/model`, the reasoning level, Shift+Up/Down; a choice put in, its key's variables kept from commands, saved), `signin.rs` (signing in to each provider, and `logout`), `sessions.rs` (`sessions`, `resume`), `doctor.rs`, `rewind.rs` (`/rewind`), `extras.rs` (`/diff`, `/init`, `/copy`, `/usage`).
+  - `providers.rs`: the one place that knows the provider packages: `Provider` is a catalog id; its sign-ins and keys (its variables, else `key-<id>`), building its chat model (the ChatGPT backend, else chat completions at the catalog's address), the models it offers (with a ChatGPT sign-in, those the backend serves), the catalog's refresh; the decision model (OpenRouter's) and its default, `DECISION_DEFAULT`, a catalog id.
   - `choice.rs`: the provider, model and level a run uses (the options, else what `/login` saved in `settings.json`). `live.rs`: the models a session thinks with, switched by `/login` between tasks.
-  - `picker.rs`: `Picker` (a title and items in, an index or a cancel out) and `Lines`; `Numbered` is the plain fallback.
+  - `picker.rs`: `Picker` (a title and items in, an index or a cancel out) and `Lines`; the interface implements both.
+  - `agents.rs`: `agents`, the tool that starts other agents, and the `Registry` it shares with their threads (scoped to the session in `compose.rs`): each a session whose parent is the main one, with the same context and gate, a stop of its own, and neither `agents` nor `ask`. With `agents/spec.rs` (the description and the arguments), `agents/child.rs` (one task of an agent on its thread, recorded in its session, its answer posted), `agents/kit.rs` (each agent's own tools; one browser action at a time), `agents/inbox.rs` (the main agent's inbox: steering, then agents' answers, then jobs; an agent's letters) and `agents/watch.rs` (its calls to its own view; its approvals named).
+  - `jobs.rs`: `jobs`, monitors and schedules: what comes back goes to the task running, else to the interface as a task of its own. `jobs/monitor.rs` (a command in its own process group, lines in batches), `jobs/cron.rs` (5-field cron in local time, delays), `jobs/spec.rs`.
+  - `checkpoints.rs`: each task's files as it found them (`edit`'s changes, the agents' too), for `/rewind`.
   - `compose.rs`: builds the models, then (`assemble`, testable with fake models) the hands, the mode's gate, the person and the tools, then the `Agent`; `Rig` switches the mode and tells the agent of a change.
   - `context.rs`: the environment block, the instructions, an earlier session; one message, the same all day, cached.
   - `instructions.rs`: `~/.llx/AGENTS.md`, then per directory `AGENTS.override.md`, `AGENTS.md` or `CLAUDE.md` with `@imports`; `Instructed` adds a subdirectory's file to the first `read`/`edit` there.
   - `attach.rs`: pictures and files the person attaches (a dropped path, Ctrl+V, `--image`).
-  - `tui/`: the session's interface: history into the terminal's scrollback, a live area, the composer, choices.
+  - `tui/`: the session's interface: history into the terminal's scrollback, a live area, the composer, choices. `tui/ui.rs` is the sessions' side (`Ui`; a lane's tags each event `In(id, ..)`); `tui/views.rs` keeps a transcript per session (each lane, with its own entries and queue, and its agents), and `tui/agents.rs` routes the events to them and switches the screen between them; `tui/tree.rs` draws them under the composer. `tui/test_support.rs` (test-only): an `App` driven with events and keys, drawn through the real `Screen` into a fixed-size `vt100` terminal, spinners and durations normalized.
   - `mode.rs`: the four modes (`default`, `plan`, `bypass`, `autonomous`), the context's `Mode:` text, the `<mode_change>` note, and `ModeGate`: what each mode allows, refuses or asks.
   - `gate.rs`: asking at the terminal (`Tty`, `TerminalGate`, a wait Ctrl-C ends); nothing once the task is stopped.
-  - `person.rs`: `TerminalPerson`, who answers `ask` at the terminal (nobody in autonomous mode).
-  - `interrupt.rs`: Ctrl-C, SIGTERM and a closed window stop the task, not the process.
+  - `interrupt.rs`: Ctrl-C, SIGTERM and a closed window stop the task, not the process. `Process` (a generation each stop raises) for the signal handler; an `Interrupt` per session, so stopping one leaves the others; the stops by session id (`register`, `stop`) for the interface's keys and `x`.
   - `printable.rs`: model text escaped before it reaches the terminal.
   - `brake.rs`: stops between model turns, on `--timeout` (not counting time spent waiting on the person) or when stdout's reader is gone.
   - `input.rs`: the prompt from arguments and stdin, and `--schema`.
   - `output.rs`, with `output/human.rs` (the trace on stderr) and `output/json.rs` (`--json` events).
   - `error.rs` (`Failure`) and `exit.rs` (the exit-code contract).
   - `testing.rs`: test-only helpers.
-  - `tests/architecture.rs`: the layer rules. `tests/cli.rs`: the binary end to end, with no network.
+  - `tests/all.rs`: the one integration-test binary. `common/`: a home per test, a scripted model, a pseudo-terminal read through `vt100`. `suite/`: the binary end to end, with no network (`suite/tui/`: flows at a real terminal, unix only); `suite/repo/architecture.rs`: the layer rules; `suite/repo/budget.rs`: the size budget.
 - `evals/`: live tasks, both coding (fixtures in `evals/fixtures/`) and browser (real sites). `benchmarks/`: their history.
 
 ## Rules
 
-Layers (checked by `apps/cli/tests/architecture.rs`):
+Layers (checked by `apps/cli/tests/suite/repo/architecture.rs`):
 
 - L1: `contracts` depends on no workspace package.
 - L2: `agent` and `decision-loop` depend only on `contracts`.
@@ -94,12 +100,12 @@ Layers (checked by `apps/cli/tests/architecture.rs`):
 Behaviour:
 
 - A tool asks the `Gate` before an effect outside the conversation: a changed file, a command, anything a page sees (an address, a goal, keys, a script). The `Effect` summary is one line the person can judge, and it leaves nothing out (the whole command, the directory it runs in). A terminal session asks when it starts and before each `input` or `keys`, showing exactly what will be typed; reading it and closing it do not ask. A `Deny` goes back to the model as a failed call with its reason. Only the app answers the gate (`apps/cli/src/mode.rs` and `gate.rs`); a tool never decides its own approval. Reading needs no approval.
-- A tool asks the person only through `Person`; only the app answers it (`apps/cli/src/person.rs`), never in `exec`. A mode changes only what the gate and the person answer and the context's `Mode:` text; it never filters tools.
+- A tool asks the person only through `Person`; only the app answers it (`apps/cli/src/tui/asking.rs`, nobody in autonomous mode), never in `exec`. A mode changes only what the gate and the person answer and the context's `Mode:` text; it never filters tools.
 - Paths go through `Workspace`: `readable` for reading, `writable` for changing. Never open a path the model wrote without it.
 - Decision-model output never becomes a selector, coordinates or code. Targets are refs from the latest observation; typed text is one of the task's values.
 - Tool content (files, command output, pages) is untrusted data. Never let it reach a request as an instruction; mark it so where the agent reads it.
 - No task- or site-specific wording in the agent's prompt, the tool descriptions or the hands' instructions. A rule earns its place by the evals, and stays general.
-- Synchronous code: threads where needed, no async runtime.
+- Synchronous code: threads where needed, no async runtime. Tools, gates, the chat model and the person are `Send + Sync`: a turn's calls and the agents run on threads.
 - The release binary stays small (about 1.6 MB). No browser engine, and no dependency that is not already in the tree unless it earns its size; std first. Check `ls -la target/release/llx` after adding one. CI fails above 2.5 MiB.
 - The browser window never takes keyboard focus and never stops rendering. An action is settled when the DOM has been quiet for 100 ms (at most 700 ms), and when a navigation it started has a parsed document.
 - Exit codes (`apps/cli/src/exit.rs`) and the `--json` events (`apps/cli/src/output/json.rs`, `SCHEMA`) are a public contract. Change them only with a schema bump and a CHANGELOG entry.
@@ -108,7 +114,22 @@ Code:
 
 - Unit tests live beside the code, never inside it: `x.rs` ends with `#[cfg(test)] #[path = "x_tests.rs"] mod tests;` (checked by the architecture test). Fake the ports (a scripted `Chat`, a `Gate`, a `Decider`, a `View`) instead of calling a network.
 - New source files stay under 300 lines. rustfmt defaults. Comments explain why.
+- The project stays under 25,000 lines of working code (`apps/cli/tests/suite/repo/budget.rs`; build scripts count; tests, comments and blanks do not). This is the maximum. New code is paid for first by cutting or simplifying existing code. If a change still cannot fit, stop and ask the owner before going over: say how many lines it needs, what was already cut, why the rest cannot be, and the alternatives. Never raise the limit on your own.
 - English only, in code, comments and docs.
+
+## Tests first (TDD)
+
+Every change is red, green, refactor:
+
+- A bug: first a test that reproduces it, at the layer where a person meets it, run and seen failing for the right reason; then the fix; then the test passes. The red run is the proof the test can fail: never break working code to get one.
+- A feature or a change of behaviour: its tests first, written from what a person does and sees (keys pressed, the screen, what the model was sent), then the code.
+- Refactor only on green. A test that cannot fail, or that restates a text or a constant, is deleted, not kept.
+
+The layers:
+
+- unit tests beside the code (`x_tests.rs`), with the ports faked;
+- screen tests in the crate: the `App` driven by keys and events and drawn into a `vt100` screen (`apps/cli/src/tui/test_support.rs`), asserting what the screen shows, never the app's fields;
+- one integration binary, `apps/cli/tests/all.rs` (`common/` for the harness, `suite/` for the tests): the real binary against a scripted model server that keeps every request (assert what the model received), and pty flows in `suite/tui/` that press keys and read the screen as a person does.
 
 ## When changing behaviour
 
@@ -124,7 +145,9 @@ Update these together:
 ```bash
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace            # unit tests, the layer rules, tests/cli.rs, packages/tools/tests/browser.rs (a real headless window)
+cargo test --workspace            # unit tests, apps/cli/tests/all.rs (the binary, the layer rules), packages/tools/tests/browser.rs (a real headless window)
+cargo nextest run --workspace     # the same tests under cargo-nextest
+scripts/coverage.sh               # line coverage with cargo-llvm-cov; fails under 85% (raised with coverage, never lowered)
 cargo build --release && ls -la target/release/llx
 python3 evals/run.py --repeat 3   # live, paid; run for agent, prompt, tool, loop or probe changes
 python3 evals/run.py --only code  # the coding tasks alone

@@ -67,7 +67,7 @@ fn the_newest_session_is_never_an_agent() {
     let mut agent = sessions.start();
     agent.id = "2-agent".into();
     agent.updated = 2;
-    agent.parent = Some(parent.id.clone());
+    agent.parent = Some(parent.id);
     agent.name = "scout".into();
     sessions.save(&agent).unwrap();
     assert_eq!(sessions.load(None).unwrap().id, "1-parent");

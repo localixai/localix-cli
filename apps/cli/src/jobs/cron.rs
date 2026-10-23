@@ -4,7 +4,7 @@
 
 /// A parsed cron expression: the values each field allows.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Cron {
+pub(crate) struct Cron {
     minutes: u64,
     hours: u64,
     days: u64,
@@ -17,7 +17,7 @@ pub struct Cron {
 
 /// A moment in local time, as cron reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Local {
+pub(crate) struct Local {
     pub minute: u32,
     pub hour: u32,
     pub day: u32,
@@ -27,7 +27,7 @@ pub struct Local {
 }
 
 impl Cron {
-    pub fn parse(text: &str) -> Result<Self, String> {
+    pub(crate) fn parse(text: &str) -> Result<Self, String> {
         let fields: Vec<&str> = text.split_whitespace().collect();
         let [minute, hour, day, month, weekday] = fields[..] else {
             return Err(format!(
@@ -50,7 +50,7 @@ impl Cron {
         })
     }
 
-    pub fn matches(&self, at: Local) -> bool {
+    pub(crate) fn matches(&self, at: Local) -> bool {
         let has = |set: u64, value: u32| set & (1 << value) != 0;
         let day = has(self.days, at.day);
         let weekday = has(self.weekdays, at.weekday);
@@ -65,14 +65,14 @@ impl Cron {
     }
 
     /// The first minute after `after` (Unix seconds) the expression matches, within a year.
-    pub fn next(&self, after: u64) -> Option<u64> {
+    pub(crate) fn next(&self, after: u64) -> Option<u64> {
         let start = after / 60 * 60 + 60;
         (0..366 * 24 * 60)
             .map(|minute| start + minute * 60)
             .find(|&at| self.matches(local(at)))
     }
 
-    pub fn text(&self) -> &str {
+    pub(crate) fn text(&self) -> &str {
         &self.text
     }
 }
@@ -117,7 +117,7 @@ fn field(text: &str, low: u32, high: u32) -> Result<u64, String> {
 }
 
 /// `45m`, `2h`, `1d`, `30s` as seconds (seconds rounded up to a minute, as cron's granularity).
-pub fn delay(text: &str) -> Result<u64, String> {
+pub(crate) fn delay(text: &str) -> Result<u64, String> {
     let text = text.trim();
     let (number, unit) = text.split_at(text.trim_end_matches(char::is_alphabetic).len());
     let count: u64 = number
@@ -135,7 +135,7 @@ pub fn delay(text: &str) -> Result<u64, String> {
 }
 
 /// `at` (Unix seconds) in local time.
-pub fn local(at: u64) -> Local {
+pub(crate) fn local(at: u64) -> Local {
     #[cfg(unix)]
     {
         let time = at as libc::time_t;
@@ -155,7 +155,7 @@ pub fn local(at: u64) -> Local {
 }
 
 /// `at` in UTC: where no local time can be read.
-pub fn utc(at: u64) -> Local {
+pub(crate) fn utc(at: u64) -> Local {
     let days = at / 86_400;
     let seconds = at % 86_400;
     // Days to a civil date (Howard Hinnant's algorithm).
@@ -168,14 +168,15 @@ pub fn utc(at: u64) -> Local {
     Local {
         minute: (seconds / 60 % 60) as u32,
         hour: (seconds / 3600) as u32,
-        day: (doy - (153 * mp + 2) / 5 + 1) as u32,
-        month: if mp < 10 { mp + 3 } else { mp - 9 } as u32,
+        // The algorithm keeps them in 1..=31 and 1..=12.
+        day: u32::try_from(doy - (153 * mp + 2) / 5 + 1).unwrap_or(1),
+        month: u32::try_from(if mp < 10 { mp + 3 } else { mp - 9 }).unwrap_or(1),
         weekday: ((days + 4) % 7) as u32,
     }
 }
 
 /// `10:21`, the clock time of `at` in local time.
-pub fn clock(at: u64) -> String {
+pub(crate) fn clock(at: u64) -> String {
     let local = local(at);
     format!("{:02}:{:02}", local.hour, local.minute)
 }

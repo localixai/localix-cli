@@ -30,7 +30,7 @@ pub(super) fn render(diff: &str, width: usize) -> Vec<Line<'static>> {
                     String::new(),
                     '-',
                     style::failed(),
-                    &line[1..],
+                    line.get(1..).unwrap_or_default(),
                 )
             }
             Some(b'+') => {
@@ -41,7 +41,7 @@ pub(super) fn render(diff: &str, width: usize) -> Vec<Line<'static>> {
                     at.to_string(),
                     '+',
                     style::done(),
-                    &line[1..],
+                    line.get(1..).unwrap_or_default(),
                 )
             }
             Some(b' ') => {
@@ -53,7 +53,7 @@ pub(super) fn render(diff: &str, width: usize) -> Vec<Line<'static>> {
                     at.1.to_string(),
                     ' ',
                     style::dim(),
-                    &line[1..],
+                    line.get(1..).unwrap_or_default(),
                 )
             }
             _ => {

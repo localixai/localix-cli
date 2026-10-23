@@ -9,6 +9,13 @@ use super::super::capture::capture;
 use super::super::deck::{Deck, Shown};
 use super::{Cmd, Shared, WINDOW_CLOSED};
 
+/// The browser is closed: a script waiting on it fails now.
+fn closed(command: &Cmd, shared: &Shared) {
+    if let Cmd::Eval { id, .. } = command {
+        shared.answer(*id, Err(WINDOW_CLOSED.into()));
+    }
+}
+
 /// A command of the browser's own, on its tabs in the window.
 pub(super) fn on_browser(
     command: Cmd,
@@ -17,13 +24,12 @@ pub(super) fn on_browser(
     proxy: &EventLoopProxy<Cmd>,
 ) {
     // A driver exists only once the browser opened: with none now, it was closed.
-    let Some(open) = deck.as_mut().filter(|open| open.web.is_some()) else {
-        if let Cmd::Eval { id, .. } = command {
-            shared.answer(id, Err(WINDOW_CLOSED.into()));
-        }
-        return;
+    let Some(open) = deck.as_mut() else {
+        return closed(&command, shared);
     };
-    let tabs = open.web.as_mut().expect("the browser is open");
+    let Some(tabs) = open.web.as_mut() else {
+        return closed(&command, shared);
+    };
     match command {
         Cmd::Eval {
             id,
@@ -32,7 +38,7 @@ pub(super) fn on_browser(
             tab,
             ..
         } => {
-            let answer = shared.clone();
+            let answer = Arc::clone(shared);
             let sent = tabs
                 .at(tab)
                 .evaluate_script_with_callback(&script, move |started| {

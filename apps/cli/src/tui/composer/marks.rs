@@ -8,7 +8,7 @@ use crate::attach::Dropped;
 
 impl Composer {
     /// Hide clipboard text behind a numbered mark; restore it when the entry is sent.
-    pub fn paste_marked(&mut self, text: &str) {
+    pub(crate) fn paste_marked(&mut self, text: &str) {
         let cleaned: String = cleaned(text).collect();
         if cleaned.is_empty() {
             return;
@@ -32,14 +32,14 @@ impl Composer {
     }
 
     /// Attach the picture at `path`: a mark for it goes in the text where the cursor is.
-    pub fn attach(&mut self, path: PathBuf) {
+    pub(crate) fn attach(&mut self, path: PathBuf) {
         let mark = self.mark(&Dropped::Image(path.clone()));
         self.insert_mark(&mark);
         self.attached.push((mark, Dropped::Image(path)));
     }
 
     /// Whether a paste consists entirely of file paths (including shell-escaped spaces).
-    pub fn is_path_list(text: &str, resolve: &dyn Fn(&str) -> Option<Dropped>) -> bool {
+    pub(crate) fn is_path_list(text: &str, resolve: &dyn Fn(&str) -> Option<Dropped>) -> bool {
         let chars: Vec<char> = text.chars().collect();
         let parts = words(&chars);
         !parts.is_empty()
@@ -52,7 +52,7 @@ impl Composer {
     /// Every path in the text that names a file (dropped in, pasted, typed whole) turned into a
     /// mark: `[image: shot.png]` for a picture, `[file: notes.md]` for anything else. `resolve`
     /// says what a word names; `keep` keeps a picture somewhere lasting.
-    pub fn adopt(
+    pub(crate) fn adopt(
         &mut self,
         resolve: &dyn Fn(&str) -> Option<Dropped>,
         keep: &dyn Fn(&Path) -> PathBuf,
@@ -67,7 +67,7 @@ impl Composer {
             let mark = self.mark(&dropped);
             let dropped = match dropped {
                 Dropped::Image(path) => Dropped::Image(keep(&path)),
-                file => file,
+                file @ Dropped::File(_) => file,
             };
             let at_end = self.at >= end;
             let shift = mark.chars().count() as isize - (end - start) as isize;
@@ -103,7 +103,7 @@ impl Composer {
     /// What is sent for `sent`: its text with each file's mark turned back into the file's path
     /// (the agent reads it), and the pictures whose marks are still there. A mark deleted from
     /// the text takes its attachment with it.
-    pub fn take_attached(&mut self, sent: &str) -> (String, Vec<PathBuf>) {
+    pub(crate) fn take_attached(&mut self, sent: &str) -> (String, Vec<PathBuf>) {
         let mut text = sent.to_string();
         let mut images = vec![];
         for (mark, dropped) in std::mem::take(&mut self.attached) {

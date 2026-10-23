@@ -12,13 +12,13 @@ use crate::mode::{self, Mode};
 use crate::tui::Ui;
 use crate::tui::event::Event;
 
-pub use super::entry::{Entry, HELP, commands, entry};
+pub(crate) use super::entry::{Entry, HELP, commands, entry};
 
 /// The task that carries out a plan.
 const IMPLEMENT: &str = "Implement the plan.";
 
 /// The session in `ui`, after `first` when it is given.
-pub fn run(rig: &mut Rig, ui: &Ui, first: Option<&str>) -> i32 {
+pub(crate) fn run(rig: &mut Rig, ui: &Ui, first: Option<&str>) -> i32 {
     ui.send(Event::Mode(rig.mode.get().name().to_string()));
     ui.send(Event::Header(vec![
         env!("CARGO_PKG_VERSION").to_string(),
@@ -87,7 +87,7 @@ fn command(rig: &mut Rig, entry: Entry) -> Option<String> {
             let current = Mode::ALL
                 .iter()
                 .position(|&mode| mode == rig.mode.get())
-                .unwrap();
+                .unwrap_or(0);
             let mode = Mode::ALL[(current + 1) % Mode::ALL.len()];
             rig.switch(mode);
             note(&mode::switched(mode));
@@ -132,7 +132,7 @@ fn attempt(rig: &mut Rig, ui: &Ui, task: &str) -> bool {
 
 /// `/status`: what the next task runs with, and the terminal sessions `bash` keeps (each task
 /// closes its own as it ends, so this shows one only when something was left behind).
-pub fn status(rig: &Rig) -> String {
+pub(crate) fn status(rig: &Rig) -> String {
     format!(
         "model      {} ({})\ndecision   {}\nworkspace  {}\nmode       {}\nsession    {} ({} tasks)\n\
          terminals  {}\n",

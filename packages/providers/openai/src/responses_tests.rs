@@ -82,8 +82,8 @@ fn model(replies: Vec<(u16, String)>, held: Tokens) -> (ChatModel, Arc<Scripted>
     let selection = Selection::new(entry("gpt-6-sol"));
     let model = ChatModel::new(
         APP,
-        Box::new(Shared(http.clone())),
-        Box::new(memory.clone()),
+        Box::new(Shared(Arc::clone(&http))),
+        Box::new(Arc::clone(&memory)),
         held,
         selection,
     );

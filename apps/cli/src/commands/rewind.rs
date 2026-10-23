@@ -11,7 +11,7 @@ use crate::tui::event::Event;
 /// Characters of a task shown in the list.
 const SHOWN: usize = 70;
 
-pub fn run(rig: &mut Rig, ui: &Ui) {
+pub(crate) fn run(rig: &mut Rig, ui: &Ui) {
     let said = steps(rig, &mut UiTerminal { ui: ui.clone() });
     rig.output.note(&said);
 }

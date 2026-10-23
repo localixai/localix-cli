@@ -18,7 +18,7 @@ use crate::output::lock;
 
 /// Why a task was stopped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Halt {
+pub(crate) enum Halt {
     /// Its time limit ran out.
     TimedOut,
     /// The reader of its output went away.
@@ -28,7 +28,7 @@ pub enum Halt {
 }
 
 /// The chat model, stopped once the task's time is up or its output is closed.
-pub struct Brake<'a> {
+pub(crate) struct Brake<'a> {
     pub chat: &'a dyn Chat,
     /// Whether the output's reader has gone.
     pub closed: &'a (dyn Fn() -> bool + Sync),
@@ -39,7 +39,7 @@ pub struct Brake<'a> {
 }
 
 impl<'a> Brake<'a> {
-    pub fn new(
+    pub(crate) fn new(
         chat: &'a dyn Chat,
         closed: &'a (dyn Fn() -> bool + Sync),
         stopped: &'a (dyn Fn() -> bool + Sync),
@@ -54,14 +54,14 @@ impl<'a> Brake<'a> {
     }
 
     /// Start a task with `limit` to reach its answer in.
-    pub fn arm(&self, limit: Duration) {
+    pub(crate) fn arm(&self, limit: Duration) {
         *lock(&self.deadline) = Instant::now().checked_add(limit);
         *lock(&self.halt) = None;
     }
 
     /// Move the deadline `by` later: the time spent waiting on the person (an approval, a
     /// question) is not the task's, as the time at the prompt line is not.
-    pub fn extend(&self, by: Duration) {
+    pub(crate) fn extend(&self, by: Duration) {
         let mut deadline = lock(&self.deadline);
         if let Some(at) = *deadline {
             *deadline = Some(at.checked_add(by).unwrap_or(at));
@@ -70,7 +70,7 @@ impl<'a> Brake<'a> {
 
     /// Whether the task's time is up, recorded as its halt: a task that waits on its monitors or
     /// agents makes no model turn to be stopped at, so its wait asks this.
-    pub fn due(&self) -> bool {
+    pub(crate) fn due(&self) -> bool {
         let due = lock(&self.deadline).is_some_and(|at| Instant::now() >= at);
         if due {
             *lock(&self.halt) = Some(Halt::TimedOut);
@@ -80,7 +80,7 @@ impl<'a> Brake<'a> {
 
     /// Why the last task was stopped, if it was: a stop that came after its last turn (the window
     /// closed during the final tool call) still counts.
-    pub fn halted(&self) -> Option<Halt> {
+    pub(crate) fn halted(&self) -> Option<Halt> {
         lock(&self.halt).or_else(|| (self.stopped)().then_some(Halt::Interrupted))
     }
 }
@@ -112,7 +112,7 @@ impl Chat for Brake<'_> {
 
 /// The decision model behind the browser's hands, stopped with the task: the hands end their goal
 /// at the next decision instead of acting on for dozens more steps.
-pub struct BrakedDecider<'a> {
+pub(crate) struct BrakedDecider<'a> {
     pub inner: &'a dyn Decider,
     /// Shared with the hands' threads, so the interrupt itself rather than a closure over it.
     pub interrupt: &'a Interrupt,

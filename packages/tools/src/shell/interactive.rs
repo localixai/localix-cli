@@ -21,7 +21,7 @@ pub(super) use unix::run;
 
 #[cfg(unix)]
 mod unix {
-    use super::*;
+    use super::{Args, BashTool, ToolError, ToolOutput};
     use crate::ask;
     use crate::shell::bash::{EMPTY, NAME, summary};
     use crate::shell::keys::{self, NAMES};
@@ -36,7 +36,10 @@ mod unix {
     /// with room for keys pressed after the text.
     const MAX_LINE: usize = 1000;
 
-    pub fn run(tool: &BashTool, args: &Args) -> Result<(ToolOutput, Option<u32>), ToolError> {
+    pub(crate) fn run(
+        tool: &BashTool,
+        args: &Args,
+    ) -> Result<(ToolOutput, Option<u32>), ToolError> {
         check(args)?;
         let input = args.input.as_deref().unwrap_or_default();
         let keys = args.keys.as_deref().unwrap_or_default();

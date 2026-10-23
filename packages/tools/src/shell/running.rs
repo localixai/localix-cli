@@ -23,7 +23,7 @@ const KILL_SLOTS: usize = 32;
 /// The sessions' ids, for [`kill_all_now`]: a signal handler may read only atomics.
 static GROUPS: [AtomicI32; KILL_SLOTS] = [const { AtomicI32::new(0) }; KILL_SLOTS];
 
-pub struct Session {
+pub(super) struct Session {
     pub id: u32,
     pub command: String,
     started: Instant,
@@ -36,7 +36,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(id: u32, command: String, pty: Pty) -> Self {
+    pub(super) fn new(id: u32, command: String, pty: Pty) -> Self {
         let slot = mirror(pty.child.id());
         Self {
             id,
@@ -49,7 +49,7 @@ impl Session {
         }
     }
 
-    pub fn wait(&mut self, wait: Wait, stop: &(dyn Fn() -> bool + Sync)) -> Until {
+    pub(super) fn wait(&mut self, wait: Wait, stop: &(dyn Fn() -> bool + Sync)) -> Until {
         let deadline = Instant::now() + wait.limit();
         let shared = Arc::clone(&self.pty.shared);
         let mut stream = shared.lock();
@@ -107,7 +107,7 @@ impl Session {
 
     /// Kill every process of the session and reap its shell; whether everything it started is
     /// known to be gone.
-    pub fn end(&mut self) -> bool {
+    pub(super) fn end(&mut self) -> bool {
         if self.ended {
             return true;
         }
@@ -127,7 +127,12 @@ impl Session {
         killed
     }
 
-    pub fn turn(&self, until: Until, waited: Duration, stalled: Option<(usize, usize)>) -> Turn {
+    pub(super) fn turn(
+        &self,
+        until: Until,
+        waited: Duration,
+        stalled: Option<(usize, usize)>,
+    ) -> Turn {
         Turn {
             id: self.id,
             command: self.command.clone(),

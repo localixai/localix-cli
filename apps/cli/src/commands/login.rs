@@ -15,17 +15,18 @@ use crate::tui::event::Event;
 
 /// What the steps ask of the world beyond the terminal: where each provider's sign-in comes
 /// from, and signing in (what was saved, in words).
-pub struct World<'a> {
+pub(crate) struct World<'a> {
     pub signed_in: &'a dyn Fn(&Provider) -> Option<String>,
     pub sign_in: &'a SignIn<'a>,
     pub say: &'a dyn Fn(&str),
 }
 
 /// Sign in to a provider in a way, asking at the terminal; what was saved, in words.
-pub type SignIn<'a> = dyn Fn(Provider, Method, &mut dyn Terminal) -> Result<String, String> + 'a;
+pub(crate) type SignIn<'a> =
+    dyn Fn(Provider, Method, &mut dyn Terminal) -> Result<String, String> + 'a;
 
 /// The steps from `current`: the choice made, `Ok(None)` when the person cancelled.
-pub fn choose(
+pub(crate) fn choose(
     current: &Choice,
     terminal: &mut dyn Terminal,
     world: &World,
@@ -118,7 +119,7 @@ fn describe(method: Method) -> &'static str {
 }
 
 /// `/login`: the steps, then the choice put in and saved.
-pub fn run(rig: &mut Rig, ui: &Ui) {
+pub(crate) fn run(rig: &mut Rig, ui: &Ui) {
     let say = |text: &str| ui.send(Event::Note(text.to_string()));
     steps(rig, &mut UiTerminal { ui: ui.clone() }, &say);
 }
@@ -140,7 +141,7 @@ fn steps(rig: &mut Rig, terminal: &mut dyn Terminal, shown: &dyn Fn(&str)) {
 }
 
 /// How the session stands with its provider, for `/status`.
-pub fn signed(choice: &Choice) -> String {
+pub(crate) fn signed(choice: &Choice) -> String {
     match choice.provider.signed_in() {
         Some(from) => format!("signed in: {from}"),
         None => format!("not signed in to {}: type /login", choice.provider.name()),
@@ -148,7 +149,7 @@ pub fn signed(choice: &Choice) -> String {
 }
 
 /// A line for the banner when the session is signed out, else nothing.
-pub fn signed_out(choice: &Choice) -> String {
+pub(crate) fn signed_out(choice: &Choice) -> String {
     match choice.provider.signed_in() {
         Some(_) => String::new(),
         None => format!(

@@ -17,11 +17,11 @@ use crate::compose::APP;
 
 /// A provider, by its catalog id (`openai`, `openrouter`, `deepseek`…).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Provider(pub String);
+pub(crate) struct Provider(pub String);
 
 /// How a provider is signed in to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Method {
+pub(crate) enum Method {
     /// OAuth in the system browser, back to a local callback.
     Browser,
     /// A key the person pastes.
@@ -37,11 +37,11 @@ const DEFAULTS: [(&str, &str); 2] = [
 ];
 
 /// The browser's decision model llx starts with: a policy, by catalog id (OpenRouter's).
-pub const DECISION_DEFAULT: &str = "~typesafe/jev-latest";
+pub(crate) const DECISION_DEFAULT: &str = "~typesafe/jev-latest";
 
 /// The catalog: the built-in files under the last fetched one, read once (unit tests see the
 /// built-in files only, the same on every machine).
-pub fn catalog() -> &'static Catalog {
+pub(crate) fn catalog() -> &'static Catalog {
     static CATALOG: OnceLock<Catalog> = OnceLock::new();
     CATALOG.get_or_init(|| match cfg!(test) {
         true => Catalog::built_in(),
@@ -50,16 +50,16 @@ pub fn catalog() -> &'static Catalog {
 }
 
 impl Provider {
-    pub fn openai() -> Self {
+    pub(crate) fn openai() -> Self {
         Self("openai".into())
     }
 
-    pub fn openrouter() -> Self {
+    pub(crate) fn openrouter() -> Self {
         Self("openrouter".into())
     }
 
     /// Every provider llx can call, the popular first.
-    pub fn all() -> Vec<Provider> {
+    pub(crate) fn all() -> Vec<Provider> {
         catalog()
             .ids()
             .into_iter()
@@ -68,28 +68,28 @@ impl Provider {
     }
 
     /// The provider `id` names, when the catalog lists it.
-    pub fn named(id: &str) -> Option<Self> {
+    pub(crate) fn named(id: &str) -> Option<Self> {
         let id = id.trim().to_ascii_lowercase();
         catalog().ids().contains(&id.as_str()).then_some(Self(id))
     }
 
-    pub fn id(&self) -> &str {
+    pub(crate) fn id(&self) -> &str {
         &self.0
     }
 
     /// What the person reads.
-    pub fn name(&self) -> String {
+    pub(crate) fn name(&self) -> String {
         catalog()
             .provider(&self.0)
             .map_or_else(|| self.0.clone(), |p| p.name.clone())
     }
 
     /// How it is signed in to, where that is not just a key: said where the provider is picked.
-    pub fn hint(&self) -> Option<&'static str> {
+    pub(crate) fn hint(&self) -> Option<&'static str> {
         (self.0 == "openai").then_some("ChatGPT sign-in, or an API key")
     }
 
-    pub fn methods(&self) -> &'static [Method] {
+    pub(crate) fn methods(&self) -> &'static [Method] {
         match self.0.as_str() {
             "openai" => &[Method::Browser, Method::Key],
             "openrouter" => &[Method::Key, Method::Browser],
@@ -99,14 +99,14 @@ impl Provider {
 
     /// The models it is called with: over the ChatGPT backend with a ChatGPT sign-in, else over
     /// chat completions (unit tests read no sign-in: the same on every machine).
-    pub fn models(&self) -> Vec<ModelEntry> {
+    pub(crate) fn models(&self) -> Vec<ModelEntry> {
         let chatgpt = self.0 == "openai" && !cfg!(test) && openai::tokens::load(APP).is_some();
         self.served(chatgpt)
     }
 
     /// Its models over the ChatGPT backend (`chatgpt`, the Responses API), else over chat
     /// completions.
-    pub fn served(&self, chatgpt: bool) -> Vec<ModelEntry> {
+    pub(crate) fn served(&self, chatgpt: bool) -> Vec<ModelEntry> {
         match chatgpt && self.0 == "openai" {
             true => catalog().served(&self.0, RESPONSES),
             false => catalog().models(&self.0),
@@ -114,7 +114,7 @@ impl Provider {
     }
 
     /// The entry for model `id`; one the catalog does not know is offered no level.
-    pub fn entry(&self, id: &str) -> ModelEntry {
+    pub(crate) fn entry(&self, id: &str) -> ModelEntry {
         catalog().entry(&self.0, id).unwrap_or_else(|| ModelEntry {
             id: id.to_string(),
             name: id.to_string(),
@@ -125,7 +125,7 @@ impl Provider {
     }
 
     /// llx's default where it has one and the catalog lists it, else the newest model.
-    pub fn default_model(&self) -> String {
+    pub(crate) fn default_model(&self) -> String {
         let models = self.models();
         let stated = DEFAULTS.iter().find(|(p, _)| *p == self.0).map(|(_, m)| *m);
         match stated.filter(|id| models.iter().any(|m| m.id == *id)) {
@@ -135,7 +135,7 @@ impl Provider {
     }
 
     /// Where the sign-in comes from, in words with no secret in them; `None` when signed out.
-    pub fn signed_in(&self) -> Option<String> {
+    pub(crate) fn signed_in(&self) -> Option<String> {
         if self.0 == "openai"
             && let Some(tokens) = openai::tokens::load(APP)
         {
@@ -146,7 +146,7 @@ impl Provider {
 
     /// The key and where it comes from: its variable (as the catalog names them), else the one
     /// saved for llx.
-    pub fn key(&self) -> Option<(String, String)> {
+    pub(crate) fn key(&self) -> Option<(String, String)> {
         if let Some((name, key)) = self.variables().into_iter().find_map(|name| {
             let key = std::env::var(&name).ok().filter(|k| !k.trim().is_empty())?;
             Some((name, key.trim().to_string()))
@@ -160,7 +160,7 @@ impl Provider {
 
     /// What a run that is not signed in says: a session's /login, or the variable its key is
     /// read from.
-    pub fn how_to_sign_in(&self) -> String {
+    pub(crate) fn how_to_sign_in(&self) -> String {
         let login = format!(
             "not signed in to {}: open a session (`llx`) and type /login",
             self.name()
@@ -172,7 +172,7 @@ impl Provider {
     }
 
     /// Whether the key comes from the environment, which no saved one replaces.
-    pub fn key_in_env(&self) -> bool {
+    pub(crate) fn key_in_env(&self) -> bool {
         self.variables()
             .iter()
             .any(|name| std::env::var(name).is_ok_and(|k| !k.trim().is_empty()))
@@ -180,7 +180,7 @@ impl Provider {
 
     /// What commands never see: the variables its key is read from, and OpenRouter's, which
     /// the decision model is called with.
-    pub fn hidden(&self) -> Vec<String> {
+    pub(crate) fn hidden(&self) -> Vec<String> {
         let mut names = self.variables();
         names.retain(|name| name != openrouter::auth::KEY_VARIABLE);
         names.push(openrouter::auth::KEY_VARIABLE.to_string());
@@ -194,7 +194,7 @@ impl Provider {
     }
 
     /// Where its pasted key is kept (OpenRouter's where it always was).
-    pub fn key_path(&self) -> Option<PathBuf> {
+    pub(crate) fn key_path(&self) -> Option<PathBuf> {
         match self.0.as_str() {
             "openrouter" => openrouter::auth::credentials_path(APP),
             id => provider_kit::store::path(APP, &format!("key-{id}")),
@@ -202,7 +202,7 @@ impl Provider {
     }
 
     /// Keep `key` for llx; where.
-    pub fn save_key(&self, key: &str) -> std::io::Result<PathBuf> {
+    pub(crate) fn save_key(&self, key: &str) -> std::io::Result<PathBuf> {
         let path = self
             .key_path()
             .ok_or_else(|| std::io::Error::other("no home directory"))?;
@@ -211,7 +211,7 @@ impl Provider {
     }
 
     /// The chat model for `selection`, each request priced; `None` when not signed in.
-    pub fn chat(&self, selection: &Selection) -> Option<Box<dyn Chat>> {
+    pub(crate) fn chat(&self, selection: &Selection) -> Option<Box<dyn Chat>> {
         let inner = self.unpriced(selection)?;
         Some(Box::new(Priced {
             inner,
@@ -255,7 +255,7 @@ impl Provider {
     }
 
     /// Forget the saved sign-in; whether there was one.
-    pub fn forget(&self) -> std::io::Result<bool> {
+    pub(crate) fn forget(&self) -> std::io::Result<bool> {
         let mut removed = false;
         if self.0 == "openai" {
             removed |= openai::tokens::remove(APP)?;
@@ -292,7 +292,7 @@ impl Chat for Priced {
 
 /// The browser's decision model: OpenRouter's, the one provider that serves decision models,
 /// so it needs an OpenRouter key whichever provider the agent thinks with.
-pub fn decider(model: &str) -> Option<Box<dyn Decider>> {
+pub(crate) fn decider(model: &str) -> Option<Box<dyn Decider>> {
     let (key, _) = Provider::openrouter().key()?;
     let client = openrouter::client::OpenRouter::deciding(key, APP);
     Some(Box::new(openrouter::system_one::SystemOne {
@@ -303,7 +303,7 @@ pub fn decider(model: &str) -> Option<Box<dyn Decider>> {
 
 /// Ask models.dev for a newer catalog, at most once a day, on a thread of its own: the next
 /// session reads what it keeps.
-pub fn refresh_catalog() {
+pub(crate) fn refresh_catalog() {
     // `LLX_MODELS_REFRESH=0`: no network for it (tests, offline machines).
     if std::env::var("LLX_MODELS_REFRESH").is_ok_and(|v| v == "0") {
         return;

@@ -41,22 +41,31 @@ mod xterm;
 
 use clap::Parser;
 
+#[allow(
+    clippy::exit,
+    clippy::disallowed_methods,
+    reason = "the one place the process ends, with the exit-code contract (exit.rs)"
+)]
 fn main() {
+    std::process::exit(run());
+}
+
+/// The command line parsed and its command run; the process's exit code.
+fn run() -> i32 {
     let cli = match cli::Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
             // `--help` and `--version` come here too, and are no error; a closed pipe while they
             // print is no error either.
-            let code = if error.use_stderr() {
+            let _ = error.print();
+            return if error.use_stderr() {
                 exit::ENVIRONMENT
             } else {
                 exit::OK
             };
-            let _ = error.print();
-            std::process::exit(code);
         }
     };
-    let code = match commands::dispatch(cli) {
+    match commands::dispatch(cli) {
         Ok(code) => code,
         Err(failure) => {
             if let Some(message) = failure.message() {
@@ -65,6 +74,5 @@ fn main() {
             }
             failure.code()
         }
-    };
-    std::process::exit(code);
+    }
 }

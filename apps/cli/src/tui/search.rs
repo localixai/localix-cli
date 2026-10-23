@@ -17,7 +17,7 @@ use super::style;
 use crate::printable::printable;
 
 /// What a row is found by, lower-cased: its label, and its detail's lead.
-pub fn keys(label: &str, detail: &str) -> [String; 2] {
+pub(super) fn keys(label: &str, detail: &str) -> [String; 2] {
     let lead = detail.split(" · ").next().unwrap_or_default();
     [label.to_lowercase(), lead.to_lowercase()]
 }
@@ -25,7 +25,7 @@ pub fn keys(label: &str, detail: &str) -> [String; 2] {
 /// The rows that match `query`, best first: a key that starts with it, then one that holds it,
 /// then one whose words start with its letters in turn ("gas" finds "Google AI Studio"); rows of
 /// the same rank keep their order. Every row, in order, for an empty query.
-pub fn ranked(query: &str, rows: &[[String; 2]]) -> Vec<usize> {
+pub(super) fn ranked(query: &str, rows: &[[String; 2]]) -> Vec<usize> {
     let query = query.trim().to_lowercase();
     if query.is_empty() {
         return (0..rows.len()).collect();
@@ -59,7 +59,7 @@ fn initials(query: &str, key: &str) -> bool {
 }
 
 /// A list's query, and the rows that match it.
-pub struct Search {
+pub(super) struct Search {
     query: String,
     keys: Vec<[String; 2]>,
     /// The rows shown, best first.
@@ -69,7 +69,7 @@ pub struct Search {
 }
 
 /// What a key did to the search.
-pub enum Searched {
+pub(super) enum Searched {
     /// The query changed: the marker goes to the best match.
     Changed,
     /// Esc on an empty query: the list is cancelled.
@@ -79,7 +79,7 @@ pub enum Searched {
 }
 
 impl Search {
-    pub fn new(rows: Vec<[String; 2]>, title: &[Line<'static>]) -> Self {
+    pub(super) fn new(rows: Vec<[String; 2]>, title: &[Line<'static>]) -> Self {
         let heading: String = title
             .first()
             .map(|line| {
@@ -102,12 +102,12 @@ impl Search {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.query.is_empty()
     }
 
     /// Letters (digits and signs too) add to the query, Backspace takes one off, Esc clears it.
-    pub fn key(&mut self, key: KeyEvent) -> Searched {
+    pub(super) fn key(&mut self, key: KeyEvent) -> Searched {
         let plain = !key
             .modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
@@ -123,13 +123,13 @@ impl Search {
     }
 
     /// Pasted text goes on the query.
-    pub fn paste(&mut self, text: &str) {
+    pub(super) fn paste(&mut self, text: &str) {
         self.query.extend(text.chars().filter(|c| !c.is_control()));
         self.shown = ranked(&self.query, &self.keys);
     }
 
     /// `Search: open▏  2 matches`, and a line for no match at all.
-    pub fn render(&self) -> Vec<Line<'static>> {
+    pub(super) fn render(&self) -> Vec<Line<'static>> {
         let count = match (self.query.is_empty(), self.shown.len()) {
             (true, all) => format!("{all} in all"),
             (false, 1) => "1 match".into(),
@@ -153,7 +153,7 @@ impl Search {
 
 /// Where Up, Down, PageUp, PageDown, Home and End move the marker among `rows` (positions in
 /// the whole list) from `at`; `None` for another key.
-pub fn moved(rows: &[usize], at: usize, code: KeyCode, page: usize) -> Option<usize> {
+pub(super) fn moved(rows: &[usize], at: usize, code: KeyCode, page: usize) -> Option<usize> {
     let last = rows.len().checked_sub(1)?;
     let now = rows.iter().position(|row| *row == at).unwrap_or(0);
     let to = match code {

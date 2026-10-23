@@ -61,7 +61,12 @@ pub struct Timing {
 
 impl OpenRouter {
     pub fn new(key: String, app: crate::App) -> Self {
-        let base = std::env::var("OPENROUTER_BASE_URL").unwrap_or_else(|_| BASE_URL.into());
+        Self::openrouter_at(std::env::var("OPENROUTER_BASE_URL").ok(), key, app)
+    }
+
+    /// OpenRouter at `base` (one standing in for it), else at its own address.
+    fn openrouter_at(base: Option<String>, key: String, app: crate::App) -> Self {
+        let base = base.unwrap_or_else(|| BASE_URL.into());
         let at = Self::at(&base, key, app, crate::NAME);
         Self {
             openrouter: true,
@@ -139,7 +144,11 @@ impl OpenRouter {
             if status == 200 {
                 // OpenRouter reports some upstream failures inside a 200 body.
                 if let Some(error) = parsed.as_ref().and_then(|value| value.get("error")) {
-                    let code = error.get("code").and_then(Value::as_u64).unwrap_or(502) as u16;
+                    let code = error
+                        .get("code")
+                        .and_then(Value::as_u64)
+                        .and_then(|code| u16::try_from(code).ok())
+                        .unwrap_or(502);
                     last = ApiError::Http(code, message_of(error));
                     if RETRY_STATUSES.contains(&code) {
                         continue;
@@ -150,7 +159,7 @@ impl OpenRouter {
                 return Ok((
                     value,
                     Timing {
-                        millis: started.elapsed().as_millis() as u64,
+                        millis: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
                     },
                 ));
             }

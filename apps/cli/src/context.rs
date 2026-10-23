@@ -17,7 +17,7 @@ const ANSWER_LIMIT: usize = 1500;
 const GOAL_LIMIT: usize = 500;
 
 /// Where the run happens, as the context block's first part says it.
-pub struct Environment<'a> {
+pub(crate) struct Environment<'a> {
     /// The workspace root (canonical).
     pub root: &'a Path,
     /// The mode: what runs without asking, what is refused, whether questions are answered.
@@ -30,7 +30,7 @@ pub struct Environment<'a> {
 
 /// The whole context: the environment, the project's instructions, and what a resumed session
 /// did before.
-pub fn gather(environment: &Environment, previous: Option<&Session>) -> String {
+pub(crate) fn gather(environment: &Environment, previous: Option<&Session>) -> String {
     let mut parts = vec![describe(environment)];
     let instructions = instructions(environment.root);
     if !instructions.is_empty() {
@@ -44,7 +44,7 @@ pub fn gather(environment: &Environment, previous: Option<&Session>) -> String {
 
 /// The context `fresh` (gathered with no earlier session) going on from `session`: a saved
 /// session opened in a lane of its own reads as if the run had resumed it.
-pub fn resumed(fresh: &str, session: &Session, root: &Path) -> String {
+pub(crate) fn resumed(fresh: &str, session: &Session, root: &Path) -> String {
     match session.turns.is_empty() {
         true => fresh.to_string(),
         false => format!("{fresh}\n\n{}", earlier(session, root)),
@@ -72,7 +72,7 @@ fn describe(environment: &Environment) -> String {
 
 /// The person's own instructions, then the project's from the repository root down to `root`,
 /// each in its own block, capped.
-pub fn instructions(root: &Path) -> String {
+pub(crate) fn instructions(root: &Path) -> String {
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let mut blocks = vec![];
     if let Some(own) = instructions::personal(home.as_deref()) {
@@ -144,15 +144,15 @@ fn goal(goal: &str) -> String {
 }
 
 /// At most `limit` bytes of `text`, cut on a character boundary.
-pub fn cut(text: &str, limit: usize) -> &str {
+pub(crate) fn cut(text: &str, limit: usize) -> &str {
     let end = (0..=limit.min(text.len()))
         .rev()
         .find(|at| text.is_char_boundary(*at));
-    &text[..end.unwrap_or(0)]
+    text.get(..end.unwrap_or(0)).unwrap_or_default()
 }
 
 /// `2026-10-22` for Unix seconds, in UTC (the civil-from-days algorithm: no date crate needed).
-pub fn date(unix: u64) -> String {
+pub(crate) fn date(unix: u64) -> String {
     let days = (unix / 86_400) as i64 + 719_468;
     let era = days.div_euclid(146_097);
     let day_of_era = days.rem_euclid(146_097);

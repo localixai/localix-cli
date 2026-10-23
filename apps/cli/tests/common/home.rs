@@ -8,13 +8,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use super::model::Model;
 
 /// An OpenRouter key's shape, never a real one.
-pub const FAKE_KEY: &str = "sk-or-v1-0000000000000000000000000000wxyz";
+pub(crate) const FAKE_KEY: &str = "sk-or-v1-0000000000000000000000000000wxyz";
 
 /// A fresh, empty home for one test, removed when it ends.
-pub struct Home(PathBuf);
+pub(crate) struct Home(PathBuf);
 
 impl Home {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let dir = std::env::temp_dir().join(format!(
             "llx-e2e-{}-{}",
@@ -26,19 +26,19 @@ impl Home {
         Self(dir)
     }
 
-    pub fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &Path {
         &self.0
     }
 
     /// `llx args…` with this home, no key in the environment and stdin closed.
-    pub fn llx(&self, args: &[&str]) -> Command {
+    pub(crate) fn llx(&self, args: &[&str]) -> Command {
         let mut command = self.command(env!("CARGO_BIN_EXE_llx"));
         command.args(args);
         command
     }
 
     /// `program` as [`Home::llx`] runs the binary: in this home, stdin closed.
-    pub fn command(&self, program: &str) -> Command {
+    pub(crate) fn command(&self, program: &str) -> Command {
         let mut command = Command::new(program);
         isolate(&mut command, &self.0);
         command.stdin(Stdio::null());
@@ -46,12 +46,12 @@ impl Home {
     }
 
     /// `llx args…` run to its end.
-    pub fn run(&self, args: &[&str]) -> Output {
+    pub(crate) fn run(&self, args: &[&str]) -> Output {
         self.llx(args).output().unwrap()
     }
 
     /// `llx args…` run to its end with [`FAKE_KEY`] in the environment.
-    pub fn run_with_key(&self, args: &[&str]) -> Output {
+    pub(crate) fn run_with_key(&self, args: &[&str]) -> Output {
         self.llx(args)
             .env("OPENROUTER_API_KEY", FAKE_KEY)
             .output()
@@ -59,7 +59,7 @@ impl Home {
     }
 
     /// `llx args…` signed in with [`FAKE_KEY`], thinking with the scripted `model`.
-    pub fn with_model(&self, model: &Model, args: &[&str]) -> Command {
+    pub(crate) fn with_model(&self, model: &Model, args: &[&str]) -> Command {
         let mut command = self.llx(args);
         command
             .env("OPENROUTER_API_KEY", FAKE_KEY)
@@ -69,7 +69,7 @@ impl Home {
 
     /// A saved session, as the store writes it, last updated at `updated`: one turn, "fix the
     /// parser".
-    pub fn save_session(&self, id: &str, workspace: &str, updated: u64) {
+    pub(crate) fn save_session(&self, id: &str, workspace: &str, updated: u64) {
         let dir = self.0.join("sessions");
         std::fs::create_dir_all(&dir).unwrap();
         let session = format!(
@@ -80,7 +80,7 @@ impl Home {
     }
 
     /// The saved session `id`, as JSON.
-    pub fn session(&self, id: &str) -> serde_json::Value {
+    pub(crate) fn session(&self, id: &str) -> serde_json::Value {
         let file = self.0.join("sessions").join(format!("{id}.json"));
         serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
     }
@@ -95,7 +95,7 @@ impl Drop for Home {
 /// The environment every run of the binary gets, and nothing else of the shell that runs the
 /// tests: no provider key, no setting, and a model address that fails at once, so a test never
 /// depends on the machine and never reaches a real model.
-pub fn isolate(command: &mut Command, home: &Path) {
+pub(crate) fn isolate(command: &mut Command, home: &Path) {
     command.env_clear();
     // What the system itself needs to start a process and find a temporary directory, and where
     // an instrumented binary writes its coverage.
@@ -123,6 +123,6 @@ pub fn isolate(command: &mut Command, home: &Path) {
 }
 
 /// Bytes a process wrote, as text.
-pub fn text(bytes: &[u8]) -> String {
+pub(crate) fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }

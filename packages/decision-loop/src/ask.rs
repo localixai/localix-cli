@@ -84,24 +84,13 @@ pub fn ask(input: &AskInput) -> Ask {
         input.history,
         input.view.busy,
     );
-    let mut offered = BTreeMap::new();
-    let mut questions = BTreeMap::new();
-    let mut head = |key: &str, instructions: String, criteria: Map<String, Value>| {
-        questions.insert(
-            key.to_string(),
-            Question::Choice {
-                instructions: json!(instructions),
-                criteria: criteria.clone(),
-            },
-        );
-        offered.insert(key.to_string(), criteria);
-    };
+    let mut heads = Heads::default();
     let goal = input.goal;
     let target_rules = with_conventions(TARGET, input.conventions);
     let premise = |operation: &str| {
         format!("Goal: {goal}\n\n{target_rules}\nThis question assumes: {operation}.")
     };
-    head(
+    heads.add(
         "operation",
         format!(
             "Goal: {goal}\n\n{}",
@@ -117,10 +106,69 @@ pub fn ask(input: &AskInput) -> Ask {
         let targets = elements
             .iter()
             .filter(|e| clickable(e) && e.options.is_empty());
-        head("click_target", premise("CLICK"), criteria(targets));
+        heads.add("click_target", premise("CLICK"), criteria(targets));
     }
-    let mut pairs = BTreeMap::new();
     if operations.contains(&Operation::TypeText) {
+        let typed = heads.typed(typing, input.values);
+        heads.add(
+            "type_entry",
+            premise("TYPE_TEXT, which value into which field"),
+            typed,
+        );
+    }
+    if operations.contains(&Operation::Wait) {
+        heads.add(
+            "wait_for",
+            premise("WAIT, for how long: as long as what is coming usually takes"),
+            waits(),
+        );
+    }
+    if operations.contains(&Operation::Select) {
+        let options = heads.options(&elements);
+        heads.add(
+            "select_target",
+            premise("SELECT, which dropdown option"),
+            options,
+        );
+    }
+    let mut state = state(input, &elements);
+    if dialog_open {
+        state["dialog_open"] = json!(true);
+    }
+    Ask {
+        state,
+        questions: heads.questions,
+        offered: heads.offered,
+        pairs: heads.pairs,
+    }
+}
+
+/// The heads asked so far, what each offered, and what a type or select key stands for.
+#[derive(Default)]
+struct Heads {
+    questions: BTreeMap<String, Question>,
+    offered: BTreeMap<String, Map<String, Value>>,
+    pairs: BTreeMap<String, (String, String)>,
+}
+
+impl Heads {
+    fn add(&mut self, key: &str, instructions: String, criteria: Map<String, Value>) {
+        self.questions.insert(
+            key.to_string(),
+            Question::Choice {
+                instructions: json!(instructions),
+                criteria: criteria.clone(),
+            },
+        );
+        self.offered.insert(key.to_string(), criteria);
+    }
+
+    /// Each field with each value it may take, the pair kept under its key.
+    fn typed(
+        &mut self,
+        typing: Vec<(String, String, String)>,
+        values: &[String],
+    ) -> Map<String, Value> {
         let mut criteria = Map::new();
         for (key, reference, text) in typing {
             let index: usize = key
@@ -128,34 +176,15 @@ pub fn ask(input: &AskInput) -> Ask {
                 .next()
                 .and_then(|i| i.parse().ok())
                 .unwrap_or(1);
-            pairs.insert(key.clone(), (reference, input.values[index - 1].clone()));
+            self.pairs
+                .insert(key.clone(), (reference, values[index - 1].clone()));
             criteria.insert(key, json!(text));
         }
-        head(
-            "type_entry",
-            premise("TYPE_TEXT, which value into which field"),
-            criteria,
-        );
+        criteria
     }
-    if operations.contains(&Operation::Wait) {
-        let seconds = WAITS
-            .iter()
-            .map(|s| {
-                (
-                    s.to_string(),
-                    json!(format!(
-                        "{s} seconds at most; it ends as soon as the view changes"
-                    )),
-                )
-            })
-            .collect();
-        head(
-            "wait_for",
-            premise("WAIT, for how long: as long as what is coming usually takes"),
-            seconds,
-        );
-    }
-    if operations.contains(&Operation::Select) {
+
+    /// Every option of every dropdown, the pair kept under its key.
+    fn options(&mut self, elements: &[&Element]) -> Map<String, Value> {
         let mut options = Map::new();
         for element in elements.iter().filter(|e| dropdown(e)) {
             for (i, option) in element.options.iter().enumerate() {
@@ -164,15 +193,30 @@ pub fn ask(input: &AskInput) -> Ask {
                     key.clone(),
                     json!(format!("{} → {}", element.describe(), option.label)),
                 );
-                pairs.insert(key, (element.reference.clone(), option.value.clone()));
+                self.pairs
+                    .insert(key, (element.reference.clone(), option.value.clone()));
             }
         }
-        head(
-            "select_target",
-            premise("SELECT, which dropdown option"),
-            options,
-        );
+        options
     }
+}
+
+fn waits() -> Map<String, Value> {
+    WAITS
+        .iter()
+        .map(|s| {
+            (
+                s.to_string(),
+                json!(format!(
+                    "{s} seconds at most; it ends as soon as the view changes"
+                )),
+            )
+        })
+        .collect()
+}
+
+/// What the model reads: the goal, the view, the recent actions.
+fn state(input: &AskInput, elements: &[&Element]) -> Value {
     // Numbered from the goal's first step, so the model can count what it has done ("answer three
     // questions" is three new views).
     let first = input.history.len().saturating_sub(10);
@@ -181,9 +225,10 @@ pub fn ask(input: &AskInput) -> Ask {
         .enumerate()
         .map(|(i, step)| format!("{}. {}", first + i + 1, step.history_line()))
         .collect();
+    let goal = input.goal;
     // An outline says the view's words and controls once, in reading order and by structure
     // (which question a radio answers); a view without one is read as its text and its controls.
-    let mut state = if input.view.outline.is_empty() {
+    if input.view.outline.is_empty() {
         json!({
             "goal": goal,
             "view": {"location": input.view.location, "title": input.view.title, "text": input.view.text},
@@ -196,15 +241,6 @@ pub fn ask(input: &AskInput) -> Ask {
             "view": {"location": input.view.location, "title": input.view.title, "outline": input.view.outline},
             "recent_actions": recent,
         })
-    };
-    if dialog_open {
-        state["dialog_open"] = json!(true);
-    }
-    Ask {
-        state,
-        questions,
-        offered,
-        pairs,
     }
 }
 

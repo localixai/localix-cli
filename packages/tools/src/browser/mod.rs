@@ -125,3 +125,15 @@ pub struct PageText {
     pub total: usize,
     pub offset: usize,
 }
+
+/// With `BROWSER_DEBUG` set, `line` on stderr: a driver's timings and navigations, for whoever
+/// debugs one.
+#[expect(
+    clippy::print_stderr,
+    reason = "a developer's trace, printed only with BROWSER_DEBUG set (AGENTS.md)"
+)]
+fn debug(line: impl FnOnce() -> String) {
+    if std::env::var_os("BROWSER_DEBUG").is_some() {
+        eprintln!("{}", line());
+    }
+}

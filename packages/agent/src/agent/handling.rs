@@ -31,7 +31,7 @@ impl Agent<'_> {
                 let batch = &calls[start..end];
                 let outcomes = calls::together(batch, self.tools, specs, self.observer);
                 for (call, outcome) in batch.iter().zip(outcomes) {
-                    ends |= self.record(call, outcome, run, tally);
+                    ends |= Self::record(call, outcome, run, tally);
                 }
             }
             start = end;
@@ -62,11 +62,11 @@ impl Agent<'_> {
         }
         let outcome = calls::invoke(self.tools, specs, call);
         self.observer.result(call, &outcome);
-        self.record(call, outcome, run, tally)
+        Self::record(call, outcome, run, tally)
     }
 
     /// Count `outcome` and answer `call` with it; whether the run ends with it.
-    fn record(&self, call: &ToolCall, outcome: Outcome, run: &mut Run, tally: &mut Tally) -> bool {
+    fn record(call: &ToolCall, outcome: Outcome, run: &mut Run, tally: &mut Tally) -> bool {
         match &outcome {
             Ok(_) => tally.succeeded = true,
             Err(ToolError::Failed(_)) => tally.failed = true,

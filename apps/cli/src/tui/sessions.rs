@@ -47,7 +47,7 @@ enum Row {
 }
 
 /// The list open, and the row chosen.
-pub struct SessionList {
+pub(super) struct SessionList {
     rows: Vec<Row>,
     at: usize,
 }
@@ -99,7 +99,7 @@ impl App {
             _ if self.waits_for_person(at) => 1,
             _ => 2,
         };
-        let mut live = lanes.clone();
+        let mut live = lanes;
         live.sort_by_key(|&at| rank(at));
         let mut rows: Vec<Row> = live
             .iter()
@@ -164,7 +164,7 @@ impl App {
     }
 
     /// The list's rows at `now`.
-    pub fn sessions_render(
+    pub(crate) fn sessions_render(
         &self,
         now: Instant,
         spinner: &dyn Fn(Instant) -> Span<'static>,
@@ -242,9 +242,9 @@ impl App {
             .filter(|agent| agent.parent.as_deref() == Some(id))
             .count();
         let worked = view.worked
-            + view
-                .busy
-                .map_or(0, |b| now.duration_since(b).as_millis() as u64);
+            + view.busy.map_or(0, |b| {
+                u64::try_from(now.duration_since(b).as_millis()).unwrap_or(u64::MAX)
+            });
         let spent = match (worked < 1000, view.tokens) {
             (true, 0) => None,
             (_, 0) => Some(cells::clock(worked / 1000)),

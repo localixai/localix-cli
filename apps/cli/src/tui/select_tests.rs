@@ -155,7 +155,7 @@ fn a_long_list_shows_a_window_around_the_marked_option() {
         select.key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
     }
     let (rows, _) = select.render(60);
-    let text: Vec<String> = rows.iter().map(crate::tui::style::plain).collect();
+    let text: Vec<String> = rows.iter().map(style::plain).collect();
     assert!(text.iter().any(|row| row == "  ↑ 14 more"), "{text:?}");
     assert!(
         text.iter().any(|row| row.starts_with("❯ model 20")),

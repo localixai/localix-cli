@@ -1,9 +1,9 @@
 //! The worker's side of the native window: each [`Driver`] call becomes a probe call on the page
 //! (webview_driver.rs); here, the calls themselves and the window's tabs.
 
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
+use std::sync::{Arc, PoisonError};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
@@ -73,7 +73,7 @@ impl WebviewDriver {
     ) -> BrowserResult<(u64, mpsc::Receiver<Reply>)> {
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = mpsc::channel();
-        self.shared.pending.lock().unwrap().insert(id, sender);
+        crate::lock(&self.shared.pending).insert(id, sender);
         let script = form(id);
         let sent = self.send(Cmd::Eval {
             id,
@@ -83,7 +83,7 @@ impl WebviewDriver {
             tab: self.tab,
         });
         if sent.is_err() {
-            self.shared.pending.lock().unwrap().remove(&id);
+            crate::lock(&self.shared.pending).remove(&id);
         }
         sent.map(|()| (id, receiver))
     }
@@ -96,7 +96,7 @@ impl WebviewDriver {
         };
         let (id, receiver) = self.post(call, "probe_not_ready")?;
         let reply = receiver.recv_timeout(timeout);
-        self.shared.pending.lock().unwrap().remove(&id);
+        crate::lock(&self.shared.pending).remove(&id);
         match reply {
             Ok(Ok(value)) => Ok(value),
             Ok(Err(error)) => Err(classify(&error)),
@@ -126,13 +126,13 @@ impl WebviewDriver {
 
     /// The loads of the tab acted on.
     fn loads(&self) -> Loads {
-        active_loads(&self.shared.loads.lock().unwrap(), self.target())
+        active_loads(&crate::lock(&self.shared.loads), self.target())
     }
 
     /// Wait for a load newer than `before` to start, up to `grace`: in the tab acted on, which
     /// may be a tab the page just opened.
     fn load_started_since(&self, before: Loads, grace: Duration) -> bool {
-        let guard = self.shared.loads.lock().unwrap();
+        let guard = crate::lock(&self.shared.loads);
         let active = || self.target();
         let (loads, _) = self
             .shared
@@ -140,13 +140,13 @@ impl WebviewDriver {
             .wait_timeout_while(guard, grace, |loads| {
                 active_loads(loads, active()).started == before.started
             })
-            .unwrap();
+            .unwrap_or_else(PoisonError::into_inner);
         active_loads(&loads, active()).started != before.started
     }
 
     /// The tabs open now, and the id of the one acted on (this driver's own, when pinned).
     pub fn tabs(&self) -> (Vec<Tab>, u32) {
-        let tabs = self.shared.tabs.lock().unwrap().clone();
+        let tabs = crate::lock(&self.shared.tabs).clone();
         (tabs, self.target())
     }
 
@@ -166,7 +166,7 @@ impl WebviewDriver {
             url: url.to_string(),
             reply: Some(reply),
         })?;
-        self.reply(opened)
+        answered(opened)
     }
 
     /// Wait for the first document of a tab just opened.
@@ -180,7 +180,7 @@ impl WebviewDriver {
         self.open_or_closed()?;
         let (reply, switched) = mpsc::channel();
         self.send(Cmd::SwitchTab { id, reply })?;
-        self.reply(switched)
+        answered(switched)
     }
 
     /// Close tab `id`; returns whether tabs are left (with none, the window is closed).
@@ -188,7 +188,7 @@ impl WebviewDriver {
         self.open_or_closed()?;
         let (reply, closed) = mpsc::channel();
         self.send(Cmd::CloseTab { id, reply })?;
-        self.reply(closed)
+        answered(closed)
     }
 
     fn send(&self, command: Cmd) -> BrowserResult<()> {
@@ -196,13 +196,14 @@ impl WebviewDriver {
             .send_event(command)
             .map_err(|_| BrowserError::Unavailable("the browser window is gone".into()))
     }
+}
 
-    fn reply<T>(&self, answer: mpsc::Receiver<Result<T, String>>) -> BrowserResult<T> {
-        match answer.recv_timeout(CALL_TIMEOUT) {
-            Ok(Ok(value)) => Ok(value),
-            Ok(Err(why)) => Err(BrowserError::Refused(why)),
-            Err(_) => Err(closed()),
-        }
+/// What the event loop answered a command with.
+fn answered<T>(answer: mpsc::Receiver<Result<T, String>>) -> BrowserResult<T> {
+    match answer.recv_timeout(CALL_TIMEOUT) {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(why)) => Err(BrowserError::Refused(why)),
+        Err(_) => Err(closed()),
     }
 }
 

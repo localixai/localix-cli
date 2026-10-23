@@ -38,7 +38,7 @@ fn model_offers_signed_in_models_and_confirms_without_a_second_menu() {
 }
 
 fn level(efforts: Vec<Effort>, at: Effort) -> Selection {
-    let model = contracts::catalog::ModelEntry {
+    let model = ModelEntry {
         id: "lab/model".into(),
         name: "Model".into(),
         default: at,

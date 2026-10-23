@@ -100,7 +100,7 @@ fn a_person_reads_the_trace_on_stderr_and_the_answer_alone_on_stdout() {
 #[test]
 fn a_closed_stdout_is_noticed_and_never_panics() {
     let err = Captured::default();
-    let output = Output::with(true, false, Box::new(Closed), Box::new(err.clone()));
+    let output = Output::with(true, false, Box::new(Closed), Box::new(err));
     assert!(!output.closed());
     run(&output);
     assert!(output.closed());
@@ -132,12 +132,12 @@ fn what_the_model_says_beside_its_calls_is_in_the_trace_and_not_in_the_events() 
 fn a_turn_tells_the_interface_its_tokens() {
     let (ui, events) = crate::tui::test_support::fake_ui();
     let output = Output::new(false, false).in_ui(Some(ui.for_lane("lane")));
-    let usage = contracts::chat::Usage {
+    let usage = Usage {
         input_tokens: 1000,
         output_tokens: 200,
         ..Default::default()
     };
-    agent::observer::Observer::turn(&output, &usage);
+    Observer::turn(&output, &usage);
     let spent = events.try_iter().find_map(|event| match event {
         Event::In(lane, inner) => match *inner {
             Event::Spent(tokens) => Some((lane, tokens)),

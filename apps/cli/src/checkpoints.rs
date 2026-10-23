@@ -12,7 +12,7 @@ use tools::workspace::Workspace;
 
 /// One task: what it asked, where the conversation stood before it, the files as it found them.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Task {
+pub(crate) struct Task {
     pub goal: String,
     pub at: usize,
     files: Vec<(PathBuf, Option<Vec<u8>>)>,
@@ -20,14 +20,14 @@ pub struct Task {
 
 impl Task {
     /// How many files it changed.
-    pub fn changed(&self) -> usize {
+    pub(crate) fn changed(&self) -> usize {
         self.files.len()
     }
 }
 
 /// The tasks of the conversation, oldest first.
 #[derive(Default)]
-pub struct Checkpoints(Mutex<Vec<Task>>);
+pub(crate) struct Checkpoints(Mutex<Vec<Task>>);
 
 impl Checkpoints {
     fn lock(&self) -> std::sync::MutexGuard<'_, Vec<Task>> {
@@ -35,7 +35,7 @@ impl Checkpoints {
     }
 
     /// A task starts, the conversation `at` messages long.
-    pub fn begin(&self, goal: &str, at: usize) {
+    pub(crate) fn begin(&self, goal: &str, at: usize) {
         self.lock().push(Task {
             goal: goal.to_string(),
             at,
@@ -43,7 +43,7 @@ impl Checkpoints {
         });
     }
 
-    pub fn tasks(&self) -> Vec<Task> {
+    pub(crate) fn tasks(&self) -> Vec<Task> {
         self.lock().clone()
     }
 
@@ -61,7 +61,7 @@ impl Checkpoints {
 
     /// Put the files back as they were before task `index`, and forget it and those after it;
     /// the files written back, and any that could not be.
-    pub fn restore(&self, index: usize) -> (usize, Vec<String>) {
+    pub(crate) fn restore(&self, index: usize) -> (usize, Vec<String>) {
         let mut tasks = self.lock();
         let mut restored = 0;
         let mut failed = vec![];
@@ -85,13 +85,13 @@ impl Checkpoints {
     }
 
     /// Forget task `index` and those after it, leaving the files as they are.
-    pub fn forget(&self, index: usize) {
+    pub(crate) fn forget(&self, index: usize) {
         self.lock().truncate(index);
     }
 }
 
 /// `edit`, keeping each file's content before its first change in the task.
-pub struct Tracked<'a> {
+pub(crate) struct Tracked<'a> {
     pub inner: &'a dyn Tool,
     pub workspace: &'a Workspace,
     pub checkpoints: &'a Checkpoints,

@@ -2,12 +2,12 @@
 //! change (see CHANGELOG.md).
 
 /// The goal was reached (or the agent answered without saying it was not).
-pub const OK: i32 = 0;
+pub(crate) const OK: i32 = 0;
 /// The agent answered that the goal was not reached, or the data did not match `--schema`.
-pub const FAILED: i32 = 1;
+pub(crate) const FAILED: i32 = 1;
 /// Turns or the time limit ran out before an answer.
-pub const EXHAUSTED: i32 = 2;
+pub(crate) const EXHAUSTED: i32 = 2;
 /// The environment or the command line is not ready: no key, no network, a bad argument.
-pub const ENVIRONMENT: i32 = 3;
+pub(crate) const ENVIRONMENT: i32 = 3;
 /// Interrupted: Ctrl-C, or the browser window closed by the person.
-pub const INTERRUPTED: i32 = 130;
+pub(crate) const INTERRUPTED: i32 = 130;

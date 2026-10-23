@@ -60,7 +60,7 @@ fn shown(
     }
 }
 
-pub fn scenario(browser: &Browser, driver: &WebviewDriver) {
+pub(crate) fn scenario(browser: &Browser, driver: &WebviewDriver) {
     let page = tools::shell::page("session 1 · cat", None, None);
     let panel = browser.panel(1, "session 1 · cat", page, None);
     let second = Duration::from_secs(1);
@@ -90,7 +90,7 @@ pub fn scenario(browser: &Browser, driver: &WebviewDriver) {
     let tab = format!("t{}", panel.id());
     let (shown_now, keys) = showing(browser).expect("the window is open");
     assert_eq!(
-        (shown_now.as_str(), keys.clone()),
+        (shown_now.as_str(), keys),
         (tab.as_str(), vec!["w1".into(), tab.clone()])
     );
 
@@ -159,7 +159,7 @@ pub fn scenario(browser: &Browser, driver: &WebviewDriver) {
     until_shown(&tab);
     // Its × closes the tab: the caller hears so, and so does whoever listens to the window.
     let heard = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
-    let told = heard.clone();
+    let told = std::sync::Arc::clone(&heard);
     browser.listen(move |key, what| {
         told.lock()
             .unwrap()
@@ -188,7 +188,7 @@ pub fn scenario(browser: &Browser, driver: &WebviewDriver) {
 
 /// The shown browser window: glass on macOS behind its titlebar, its page the viewport exactly,
 /// and its pages opaque: a clear page and a white one make the same screenshot.
-pub fn glass(browser: &Browser, driver: &WebviewDriver, window: &Window, origin: &str) {
+pub(crate) fn glass(browser: &Browser, driver: &WebviewDriver, window: &Window, origin: &str) {
     driver.close();
     let shown = Window {
         url: format!("{origin}/blank-white.html"),
@@ -249,7 +249,7 @@ fn asset(name: &str, honest: bool) -> tools::shell::Asset {
 
 /// The emulator's page runs the scripts it was given by their hashes, and nothing whose hash is
 /// not the one given: an emulator that was not verified never runs.
-pub fn emulator(browser: &Browser) {
+pub(crate) fn emulator(browser: &Browser) {
     let read = "({ made: JSON.parse(JSON.stringify(window.made || null)), drawn: window.drawn || '', title: document.title, \
         opened: window.opened || false })";
     let wait = Duration::from_secs(10);
@@ -266,13 +266,13 @@ pub fn emulator(browser: &Browser) {
         let drawn = "\u{1b}[?25h\u{1b}[m\u{1b}[H\u{1b}[J$ ls";
         let frame = format!("F({},0,4,false,null,{})", json!(rows), json!(drawn));
         assert!(panel.paint(frame));
-        let deadline = std::time::Instant::now() + wait;
+        let deadline = Instant::now() + wait;
         let page = loop {
             let page = browser.peek(&panel, read).unwrap_or(Value::Null);
             if !honest && page["title"] == "session 3 · sh" || page["drawn"].as_str() > Some("") {
                 break page;
             }
-            assert!(std::time::Instant::now() < deadline, "{page:#}");
+            assert!(Instant::now() < deadline, "{page:#}");
             std::thread::sleep(Duration::from_millis(20));
         };
         if honest {
@@ -294,15 +294,12 @@ pub fn emulator(browser: &Browser) {
 
 /// A panel opened before any browser window draws as a shown page does, with animation frames
 /// (an emulator draws in them): WebKit must not take it for a hidden one.
-pub fn first(browser: &Browser) {
+pub(crate) fn first(browser: &Browser) {
     let page = tools::shell::page("session 0 · sh", None, None);
     let panel = browser.panel(9, "session 0 · sh", page, None);
-    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(10);
     while browser.peek(&panel, "typeof F") != Ok(json!("function")) {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "the panel never loaded"
-        );
+        assert!(Instant::now() < deadline, "the panel never loaded");
         std::thread::sleep(Duration::from_millis(50));
     }
     // The window opens for it alone: its one tab, shown.
@@ -319,9 +316,9 @@ pub fn first(browser: &Browser) {
     assert!(seen[0].as_u64() > Some(5), "no animation frames: {seen}");
     // The last tab gone, the window is too.
     drop(panel);
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(5);
     while showing(browser).is_some() {
-        assert!(std::time::Instant::now() < deadline, "the window stayed");
+        assert!(Instant::now() < deadline, "the window stayed");
         std::thread::sleep(Duration::from_millis(50));
     }
 }

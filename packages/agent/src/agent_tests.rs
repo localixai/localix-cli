@@ -311,7 +311,7 @@ fn turn_of(names: &[&str]) -> Completion {
 #[test]
 fn a_picture_a_call_took_follows_every_result_of_its_turn() {
     let chat = Scripted::new(vec![turn_of(&["echo", "echo"]), says("Seen.")]);
-    let picture = contracts::tool::Image {
+    let picture = Image {
         media_type: "image/png".into(),
         data: "AA==".into(),
         width: 1,
@@ -395,13 +395,8 @@ fn what_the_model_says_beside_its_calls_is_shown() {
 #[derive(Default)]
 struct Measured(std::sync::Mutex<Vec<(u64, f64)>>);
 
-impl crate::history::Strategy for Measured {
-    fn prepare(
-        &self,
-        _: &mut crate::conversation::Conversation,
-        ceiling: u64,
-        ratio: f64,
-    ) -> crate::history::Report {
+impl Strategy for Measured {
+    fn prepare(&self, _: &mut Conversation, ceiling: u64, ratio: f64) -> crate::history::Report {
         self.0.lock().unwrap().push((ceiling, ratio));
         vec![]
     }
@@ -411,8 +406,8 @@ impl crate::history::Strategy for Measured {
 struct Wordy;
 
 impl Tool for Wordy {
-    fn spec(&self) -> contracts::tool::ToolSpec {
-        contracts::tool::ToolSpec {
+    fn spec(&self) -> ToolSpec {
+        ToolSpec {
             name: "echo".into(),
             description: "d".repeat(40_000),
             parameters: json!({"type": "object"}),

@@ -12,7 +12,7 @@ use tools::browser::Browser;
 use tools::shell::{Painter, Sessions, Theme, Watch};
 
 /// The window as the `window` tool reads it: the browser host's tabs, of whatever kind.
-pub struct Tabs(pub tools::browser::Browser);
+pub(crate) struct Tabs(pub Browser);
 
 impl tools::window::Windowed for Tabs {
     fn tabs(&self) -> Option<Vec<tools::window::WindowTab>> {
@@ -42,19 +42,19 @@ impl tools::window::Windowed for Tabs {
 }
 
 /// Whether windows show by themselves.
-pub fn shown(options: &RunOptions, asks: bool, started: Mode, remote: bool) -> bool {
+pub(crate) fn shown(options: &RunOptions, asks: bool, started: Mode, remote: bool) -> bool {
     options.show_browser || (asks && started != Mode::Autonomous && !remote)
 }
 
 /// Whether llx runs over SSH, as `set` tells of the environment's variables.
-pub fn remote(set: impl Fn(&str) -> bool) -> bool {
+pub(crate) fn remote(set: impl Fn(&str) -> bool) -> bool {
     ["SSH_CONNECTION", "SSH_TTY"].into_iter().any(set)
 }
 
 /// The terminal sessions `bash` keeps: each in a window through `watch` once kept, where windows
 /// show; else in none, whatever a call asks.
 #[cfg(unix)]
-pub fn terminals(watch: Option<Watch>, shown: bool) -> Sessions {
+pub(crate) fn terminals(watch: Option<Watch>, shown: bool) -> Sessions {
     match watch.filter(|_| shown) {
         Some(watch) => Sessions::new(watch, true),
         None => Sessions::default(),
@@ -63,7 +63,7 @@ pub fn terminals(watch: Option<Watch>, shown: bool) -> Sessions {
 
 /// The lanes, and the lane a terminal's tab is for.
 #[cfg(unix)]
-pub type Owner = (
+pub(crate) type Owner = (
     std::sync::Arc<crate::arrivals::Lanes>,
     std::sync::Weak<queue::Queue>,
 );
@@ -72,7 +72,7 @@ pub type Owner = (
 /// xterm.js when it is kept (checked as each opens), else as a plain grid. A panel closes when
 /// its painter is dropped.
 #[cfg(unix)]
-pub fn panels(browser: Browser, theme: Option<Theme>, owner: Owner) -> Watch {
+pub(crate) fn panels(browser: Browser, theme: Option<Theme>, owner: Owner) -> Watch {
     std::sync::Arc::new(move |id: u32, title: &str| {
         let title = format!("llx · {title}");
         let emulator = crate::xterm::installed();
@@ -87,6 +87,8 @@ pub fn panels(browser: Browser, theme: Option<Theme>, owner: Owner) -> Watch {
     })
 }
 
-#[cfg(all(test, unix))]
+// Two attributes: `cfg(test)` alone is what marks test code for the lints.
+#[cfg(test)]
+#[cfg(unix)]
 #[path = "windows_tests.rs"]
 mod tests;

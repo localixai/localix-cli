@@ -33,7 +33,7 @@ fn line(mark: Mark, text: &str) -> Result<(), Failure> {
     error::print(&format!("{mark} {text}\n"))
 }
 
-pub fn doctor(models: &ModelOptions) -> Result<i32, Failure> {
+pub(crate) fn doctor(models: &ModelOptions) -> Result<i32, Failure> {
     let mut ok = shell()?;
     if tools::browser::has_display() {
         line(

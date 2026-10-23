@@ -13,22 +13,22 @@ use super::screen::Screen;
 
 /// A window's painter: a frame in, whether the window is still open out.
 pub type Painter = Box<dyn Fn(String) -> bool + Send>;
-pub const PAINT_EVERY: Duration = Duration::from_millis(33);
+pub(super) const PAINT_EVERY: Duration = Duration::from_millis(33);
 
 /// The output read so far, and the wake for who waits on it.
 #[derive(Default)]
-pub struct Shared {
+pub(super) struct Shared {
     state: Mutex<Stream>,
     pub wake: Condvar,
 }
 
 impl Shared {
-    pub fn lock(&self) -> MutexGuard<'_, Stream> {
+    pub(super) fn lock(&self) -> MutexGuard<'_, Stream> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
-pub struct Stream {
+pub(super) struct Stream {
     filter: Filter,
     /// The ended lines since the output was last taken.
     fresh: Output,
@@ -87,7 +87,7 @@ impl Stream {
     /// Wait for `needle` from now on. Before typing, only what comes after counts; for a read,
     /// the output not yet taken counts too, and so does the line not yet ended, which the next
     /// output goes on (a call may end while `Successfully insta` is printed).
-    pub fn expect(&mut self, needle: Option<&str>, typing: bool) {
+    pub(super) fn expect(&mut self, needle: Option<&str>, typing: bool) {
         // Empty text is in any output: it is no condition at all.
         let needle = needle.filter(|needle| !needle.is_empty());
         self.needle = needle.map(|needle| needle.as_bytes().to_vec());
@@ -113,7 +113,7 @@ impl Stream {
     /// The output since it was last taken: the ended lines, then the line not yet ended (a
     /// prompt). The pending line stays, so the next ended line still shows the prompt with what
     /// was typed after it, as a terminal's transcript does.
-    pub fn take(&mut self) -> Option<String> {
+    pub(super) fn take(&mut self) -> Option<String> {
         if self.bytes == 0 {
             return None;
         }
@@ -136,7 +136,7 @@ impl Stream {
 
     /// The screen now, whatever was read of it before: `screen 120×40, cursor at row R col C:`
     /// and its rows.
-    pub fn screen_now(&self) -> String {
+    pub(super) fn screen_now(&self) -> String {
         match &self.screen {
             Some(screen) => {
                 let (text, (row, column)) = screen.text();
@@ -147,7 +147,7 @@ impl Stream {
     }
 
     /// Take in what the terminal printed; the answers to its queries are returned.
-    pub fn take_in(&mut self, chunk: &[u8]) -> Vec<u8> {
+    pub(super) fn take_in(&mut self, chunk: &[u8]) -> Vec<u8> {
         let mut seen = vec![];
         self.filter.feed(chunk, &mut self.fresh, &mut seen);
         self.bytes += chunk.len();
@@ -175,13 +175,13 @@ impl Stream {
         replies
     }
 
-    pub fn application_cursor(&self) -> bool {
+    pub(super) fn application_cursor(&self) -> bool {
         self.filter.application_cursor
     }
 
     /// Show the screen in the window `painter` paints, from now on. With no screen, or once the
     /// session ended, the window is let go at once.
-    pub fn attach(&mut self, painter: Painter) {
+    pub(super) fn attach(&mut self, painter: Painter) {
         if self.screen.is_none() || self.eof || self.closed {
             return;
         }
@@ -191,17 +191,17 @@ impl Stream {
     }
 
     /// Close the window, if one is open.
-    pub fn detach(&mut self) {
+    pub(super) fn detach(&mut self) {
         self.painter = None;
         self.dismissed = true;
     }
 
-    pub fn attached(&self) -> bool {
+    pub(super) fn attached(&self) -> bool {
         self.painter.is_some()
     }
 
     /// How long until a paint is due, while output waits for one.
-    pub fn paint_wait(&self) -> Option<Duration> {
+    pub(super) fn paint_wait(&self) -> Option<Duration> {
         match (self.dirty, &self.painter) {
             (true, Some(_)) => Some(PAINT_EVERY.saturating_sub(self.painted_at.elapsed())),
             _ => None,
@@ -209,14 +209,14 @@ impl Stream {
     }
 
     /// Paint what waits, if its time came.
-    pub fn paint_due(&mut self) {
+    pub(super) fn paint_due(&mut self) {
         if self.paint_wait() == Some(Duration::ZERO) {
             self.paint();
         }
     }
 
     /// The terminal closed: its window, if one is open, and the screen it shows, to say so.
-    pub fn finish(&mut self) -> Option<(Painter, Screen)> {
+    pub(super) fn finish(&mut self) -> Option<(Painter, Screen)> {
         self.eof = true;
         let painter = self.painter.take()?;
         Some((painter, self.screen.take()?))
@@ -233,12 +233,12 @@ impl Stream {
         self.dirty = false;
     }
 
-    pub fn close(&mut self) {
+    pub(super) fn close(&mut self) {
         self.closed = true;
         self.painter = None;
     }
 
-    pub fn closed(&self) -> bool {
+    pub(super) fn closed(&self) -> bool {
         self.closed
     }
 }

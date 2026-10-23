@@ -13,7 +13,7 @@ use crate::tui::event::Event;
 use crate::tui::tool_cell;
 
 /// Watches one agent's run.
-pub struct Watch<'a> {
+pub(crate) struct Watch<'a> {
     pub output: &'a Output,
     /// Its session id: where the interface shows it.
     pub id: &'a str,
@@ -22,7 +22,7 @@ pub struct Watch<'a> {
 
 impl Watch<'_> {
     /// Send `event` to the agent's view.
-    pub fn show(&self, event: Event) {
+    pub(crate) fn show(&self, event: Event) {
         if let Some(ui) = self.output.ui() {
             ui.send(Event::In(self.id.to_string(), Box::new(event)));
         }
@@ -58,7 +58,7 @@ impl Observer for Watch<'_> {
 }
 
 /// The gate as an agent asks it: each effect's summary starts with the agent's name.
-pub struct Labeled<'a> {
+pub(crate) struct Labeled<'a> {
     pub inner: &'a dyn Gate,
     pub label: String,
 }

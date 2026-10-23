@@ -1,5 +1,18 @@
 //! The native driver against fixture pages on a local server, in a real headless window.
 //! The event loop must own the main thread, so this test has its own `main` (`harness = false`).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::print_stdout,
+    clippy::print_stderr,
+    clippy::exit,
+    clippy::disallowed_methods,
+    clippy::too_many_lines,
+    clippy::cognitive_complexity,
+    reason = "test code: a panic fails the test; its own `main` prints the harness's lines and \
+              exits with the run's code; a scenario is one window's checks, read in order"
+)]
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;

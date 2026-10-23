@@ -18,7 +18,7 @@ const QUERY: &[u8] = b"\x1b]10;?\x1b\\\x1b]11;?\x1b\\\x1b]12;?\x1b\\\x1b[c";
 const WAIT: Duration = Duration::from_millis(150);
 
 /// Where the questions go and the answers come from.
-pub trait Terminal {
+pub(crate) trait Terminal {
     /// Whether all of `bytes` were written.
     fn write(&mut self, bytes: &[u8]) -> bool;
     /// What the terminal sent within `wait`, or nothing.
@@ -27,7 +27,7 @@ pub trait Terminal {
 
 /// The colours of llx's own terminal, or none. Asked before the interface reads the keys, since
 /// that reader would take the answers.
-pub fn ask() -> Option<Theme> {
+pub(crate) fn ask() -> Option<Theme> {
     if !(std::io::stdin().is_terminal() && std::io::stdout().is_terminal()) {
         return None;
     }
@@ -46,7 +46,7 @@ pub fn ask() -> Option<Theme> {
 }
 
 /// Ask `terminal` for its colours, waiting at most `wait` for the answers.
-pub fn query(terminal: &mut dyn Terminal, wait: Duration) -> Option<Theme> {
+pub(crate) fn query(terminal: &mut dyn Terminal, wait: Duration) -> Option<Theme> {
     if !terminal.write(QUERY) {
         return None;
     }

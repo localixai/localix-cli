@@ -18,7 +18,7 @@ use super::wrap::{line_width, wrap};
 use crate::printable::printable;
 
 /// What the person typed.
-pub fn user(text: &str, width: usize) -> Vec<Line<'static>> {
+pub(crate) fn user(text: &str, width: usize) -> Vec<Line<'static>> {
     // `/init` sends a long instruction; the person typed the command.
     let text = match text == crate::commands::extras::INIT {
         true => "/init",
@@ -37,7 +37,7 @@ pub fn user(text: &str, width: usize) -> Vec<Line<'static>> {
 }
 
 /// What the model wrote, as markdown under a bullet.
-pub fn agent(text: &str, width: usize) -> Vec<Line<'static>> {
+pub(crate) fn agent(text: &str, width: usize) -> Vec<Line<'static>> {
     let rows = markdown::render(text.trim(), width.saturating_sub(2));
     rows.into_iter()
         .enumerate()
@@ -52,7 +52,7 @@ pub fn agent(text: &str, width: usize) -> Vec<Line<'static>> {
 }
 
 /// How a task ended.
-pub struct End<'a> {
+pub(crate) struct End<'a> {
     /// As the run reports it: `achieved`, `not_achieved`, `unstated`, `exhausted`, `error`,
     /// `interrupted`.
     pub status: &'a str,
@@ -62,7 +62,7 @@ pub struct End<'a> {
 }
 
 /// A rule across the width with how long the task took and what it cost.
-pub fn end(end: &End, width: usize) -> Vec<Line<'static>> {
+pub(crate) fn end(end: &End, width: usize) -> Vec<Line<'static>> {
     let verb = match end.status {
         "interrupted" => "Stopped after",
         "error" => "Failed after",
@@ -89,7 +89,7 @@ const EARLIER: usize = 20;
 
 /// A resumed session's tasks as blocks: how many there were, then each task, its answer, and how
 /// it ended when it did not end well. Only the tasks and answers are kept, not their calls.
-pub fn earlier(turns: &[contracts::history::Turn], width: usize) -> Vec<Vec<Line<'static>>> {
+pub(crate) fn earlier(turns: &[contracts::history::Turn], width: usize) -> Vec<Vec<Line<'static>>> {
     let skipped = turns.len().saturating_sub(EARLIER);
     let mut said = count(turns.len() as u64, "earlier task");
     if skipped > 0 {
@@ -113,7 +113,7 @@ pub fn earlier(turns: &[contracts::history::Turn], width: usize) -> Vec<Vec<Line
 }
 
 /// Something that went wrong outside a tool call: the model, the network, the session.
-pub fn error(text: &str, width: usize) -> Vec<Line<'static>> {
+pub(crate) fn error(text: &str, width: usize) -> Vec<Line<'static>> {
     let line = Line::from(Span::styled(printable(text.trim()), style::failed()));
     wrap(
         &line,
@@ -125,7 +125,7 @@ pub fn error(text: &str, width: usize) -> Vec<Line<'static>> {
 
 /// A quiet line from llx itself: a setting changed, a session resumed.
 /// Its rows are kept as they are (a table, a list of commands), and only a row too wide wraps.
-pub fn note(text: &str, width: usize) -> Vec<Line<'static>> {
+pub(crate) fn note(text: &str, width: usize) -> Vec<Line<'static>> {
     let mut out = vec![];
     for row in text.trim_matches('\n').lines() {
         let row = printable(row.trim_end());
@@ -137,11 +137,12 @@ pub fn note(text: &str, width: usize) -> Vec<Line<'static>> {
             false => {
                 // A table's row (a label, two spaces or more, then its text) wraps under its
                 // second column, so the columns stay; any other row hangs by two.
-                let lead = row.len() - row.trim_start().len();
-                let label = row[lead..]
-                    .find("  ")
-                    .map(|at| row.len() - row[lead + at..].trim_start().len())
-                    .filter(|&end| super::wrap::width(&row[..end]) * 2 < width)
+                let trimmed = row.trim_start();
+                let label = (trimmed.find("  ").and_then(|at| trimmed.get(at..)))
+                    .map(|rest| row.len() - rest.trim_start().len())
+                    .filter(|&end| {
+                        (row.get(..end)).is_some_and(|head| super::wrap::width(head) * 2 < width)
+                    })
                     .unwrap_or(0);
                 let (label, body) = row.split_at(label);
                 let under = match label.is_empty() {
@@ -159,7 +160,7 @@ pub fn note(text: &str, width: usize) -> Vec<Line<'static>> {
 
 /// The session's first row: the version, then what it runs with.
 /// It stays one row: the last fact (the folder) loses its start when the row is too narrow.
-pub fn header(version: &str, facts: &[&str], width: usize) -> Vec<Line<'static>> {
+pub(crate) fn header(version: &str, facts: &[&str], width: usize) -> Vec<Line<'static>> {
     let mut line = Line::from(vec![Span::styled(format!("llx {version}"), style::bold())]);
     let facts: Vec<String> = facts
         .iter()
@@ -189,7 +190,7 @@ fn cut_start(text: &str, columns: usize) -> String {
 }
 
 /// `48s`, `1m 05s`, `1h 02m`.
-pub fn duration(millis: u64) -> String {
+pub(crate) fn duration(millis: u64) -> String {
     match millis {
         0..10_000 => format!("{:.1}s", millis as f64 / 1000.0),
         _ => clock(millis / 1000),
@@ -197,7 +198,7 @@ pub fn duration(millis: u64) -> String {
 }
 
 /// `n` of `noun`: `1 turn`, `3 turns`.
-pub fn count(n: u64, noun: &str) -> String {
+pub(crate) fn count(n: u64, noun: &str) -> String {
     match n {
         1 => format!("1 {noun}"),
         n => format!("{n} {noun}s"),
@@ -205,7 +206,7 @@ pub fn count(n: u64, noun: &str) -> String {
 }
 
 /// Whole `seconds` as they count up: `12s`, `3m 08s`, `1h 02m`.
-pub fn clock(seconds: u64) -> String {
+pub(crate) fn clock(seconds: u64) -> String {
     match seconds {
         0..60 => format!("{seconds}s"),
         60..3600 => format!("{}m {:02}s", seconds / 60, seconds % 60),

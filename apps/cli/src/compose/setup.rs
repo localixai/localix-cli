@@ -16,7 +16,7 @@ use crate::tui::Ui;
 
 /// Everything a session is built from, decided before the browser's event loop takes the main
 /// thread (so a bad argument still fails fast, with no window machinery started).
-pub struct Setup {
+pub(crate) struct Setup {
     pub options: RunOptions,
     /// The provider, model and reasoning level the agent thinks with.
     pub choice: Choice,
@@ -47,7 +47,7 @@ pub struct Setup {
 /// What every lane of a session shares: the options, the workspace, the browser's page (one
 /// action at a time), the session store, and the fresh context, the same bytes for each lane so
 /// the prompt cache is shared too.
-pub struct Shared {
+pub(crate) struct Shared {
     pub options: RunOptions,
     pub workspace: Workspace,
     pub page: Option<Page>,
@@ -77,7 +77,7 @@ pub struct Shared {
 }
 
 /// What one lane is built from beside what it shares.
-pub struct Seat {
+pub(crate) struct Seat {
     pub context: String,
     pub session: Session,
     pub ui: Option<Ui>,
@@ -88,12 +88,12 @@ pub struct Seat {
 
 impl Setup {
     /// What the lanes share, with the page on `browser`, and the first lane's seat.
-    pub fn split(self, browser: Option<Browser>) -> (Shared, Seat) {
+    pub(crate) fn split(self, browser: Option<Browser>) -> (Shared, Seat) {
         let shown = self.shown;
         let lanes = Arc::new(crate::arrivals::Lanes::default());
         // What the person does in the window reaches the lanes' runs.
         if let Some(browser) = &browser {
-            let told = lanes.clone();
+            let told = Arc::clone(&lanes);
             browser.listen(move |tab, what| told.post(tab, what));
         }
         let shared = Shared {
@@ -129,7 +129,7 @@ impl Setup {
 
 impl Shared {
     /// The seat of a new lane, recorded in `session`: the fresh context, as the session began.
-    pub fn seat(&self, mut session: Session, ui: Option<Ui>) -> Seat {
+    pub(crate) fn seat(&self, mut session: Session, ui: Option<Ui>) -> Seat {
         if session.workspace.is_empty() {
             session.workspace = self.workspace.root().display().to_string();
         }

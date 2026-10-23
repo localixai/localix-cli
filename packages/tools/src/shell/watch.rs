@@ -14,18 +14,18 @@ use super::stream::Shared;
 /// A window for a session: its title in, a painter out, or none when no window can open.
 pub type Watch = Arc<dyn Fn(u32, &str) -> Option<Painter> + Send + Sync>;
 /// How long a session that ended by itself keeps its window.
-pub const LINGER: Duration = Duration::from_secs(3);
+pub(super) const LINGER: Duration = Duration::from_secs(3);
 /// How long the end's status is looked for once the terminal closed.
 const STATUS_WAIT: Duration = Duration::from_millis(200);
 
 /// A session's window title.
-pub fn title(id: u32, command: &str) -> String {
+pub(super) fn title(id: u32, command: &str) -> String {
     format!("session {id} · {command}")
 }
 
 /// The terminal closed: the window says how the program ended (`status`), then closes after
 /// [`LINGER`], or at once when a call closes it.
-pub fn linger(shared: &Shared, status: Option<i32>, painter: Painter, screen: &Screen) {
+pub(super) fn linger(shared: &Shared, status: Option<i32>, painter: Painter, screen: &Screen) {
     let end = match status {
         Some(code) => format!(" · exited {code}"),
         None => " · exited".to_string(),
@@ -42,7 +42,7 @@ pub fn linger(shared: &Shared, status: Option<i32>, painter: Painter, screen: &S
 }
 
 /// How `pid` ended: its exit code, or 128 and the signal that killed it. It is not reaped.
-pub fn status(pid: u32) -> Option<i32> {
+pub(super) fn status(pid: u32) -> Option<i32> {
     let deadline = Instant::now() + STATUS_WAIT;
     loop {
         // SAFETY: waitid only writes into `info`, which is zeroed and lives through the call.

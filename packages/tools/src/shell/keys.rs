@@ -2,13 +2,13 @@
 //! names are strict: literal text goes in `input`, so what the person approves is unambiguous.
 
 /// The names a key may have, for the message that refuses another.
-pub const NAMES: &str = "Enter, Tab, Escape, Backspace, Space, Up, Down, Left, Right, Home, End, \
+pub(super) const NAMES: &str = "Enter, Tab, Escape, Backspace, Space, Up, Down, Left, Right, Home, End, \
 PageUp, PageDown, Delete, F1-F12, or Ctrl-<letter>";
 
 /// The bytes of the key called `name`, or `None` when no key is called that. With
 /// `application_cursor` (a program turned DECCKM on) the cursor keys are sent as SS3, as a
 /// terminal would.
-pub fn encode(name: &str, application_cursor: bool) -> Option<Vec<u8>> {
+pub(super) fn encode(name: &str, application_cursor: bool) -> Option<Vec<u8>> {
     let lower = name.trim().to_ascii_lowercase();
     if let Some(control) = control(&lower) {
         return Some(vec![control]);
@@ -67,7 +67,7 @@ fn control(lower: &str) -> Option<u8> {
 
 /// `input` as a terminal types it: a line break is Enter (`\r`), which the terminal turns back
 /// into `\n` for a program that reads lines.
-pub fn typed(input: &str) -> Vec<u8> {
+pub(super) fn typed(input: &str) -> Vec<u8> {
     input.replace("\r\n", "\r").replace('\n', "\r").into_bytes()
 }
 

@@ -27,7 +27,7 @@ pub(super) struct Slot {
 impl Slot {
     /// The newest frame, for the loop: a paint after this one queues again. The frame stays, for
     /// a page that loads after it was painted.
-    pub fn latest(&self) -> Option<String> {
+    pub(super) fn latest(&self) -> Option<String> {
         self.queued.store(false, Ordering::SeqCst);
         let frame = self.frame.lock().unwrap_or_else(PoisonError::into_inner);
         frame.clone()

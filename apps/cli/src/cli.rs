@@ -88,7 +88,7 @@ LLX_SESSIONS (where sessions are kept, default
     after_long_help = EXAMPLES,
     args_conflicts_with_subcommands = true
 )]
-pub struct Cli {
+pub(crate) struct Cli {
     /// The first message of the session; with -p, the task (`-` reads it from stdin). Quotes
     /// are optional: the words are joined with spaces.
     #[arg(value_name = "PROMPT", num_args = 1..)]
@@ -106,7 +106,7 @@ pub struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
-pub enum Command {
+pub(crate) enum Command {
     /// Run one task without a session and exit; the answer alone goes to stdout.
     ///
     /// Given a prompt, stdin that is not a terminal is read to its end and added in a <stdin>
@@ -128,7 +128,7 @@ pub enum Command {
 }
 
 #[derive(Args, Debug)]
-pub struct ExecArgs {
+pub(crate) struct ExecArgs {
     /// The task, in plain words, quoted or not; `-` reads it from stdin. Without one, piped
     /// stdin is the task.
     #[arg(value_name = "PROMPT", num_args = 1..)]
@@ -140,14 +140,14 @@ pub struct ExecArgs {
 }
 
 #[derive(Subcommand, Debug)]
-pub enum ExecCommand {
+pub(crate) enum ExecCommand {
     /// Go on with a saved session with one task, then exit.
     #[command(group(ArgGroup::new("which").args(["id", "last"]).required(true).multiple(true)))]
     Resume(ResumeArgs),
 }
 
 #[derive(Args, Debug)]
-pub struct ResumeArgs {
+pub(crate) struct ResumeArgs {
     /// The session to continue (see `llx sessions`).
     #[arg(value_name = "ID")]
     pub id: Option<String>,
@@ -164,7 +164,7 @@ pub struct ResumeArgs {
 impl ResumeArgs {
     /// The session asked for (`None`: the newest) and the prompt. With `--last` every argument
     /// is a word of the prompt.
-    pub fn target(&self) -> (Option<&str>, Option<String>) {
+    pub(crate) fn target(&self) -> (Option<&str>, Option<String>) {
         match (self.last, &self.id) {
             (true, Some(first)) => {
                 let words = [std::slice::from_ref(first), &self.prompt].concat();
@@ -179,7 +179,7 @@ impl ResumeArgs {
 /// what `/login` saved.
 #[derive(Args, Debug, Clone)]
 #[command(next_help_heading = "Model")]
-pub struct ModelOptions {
+pub(crate) struct ModelOptions {
     /// Where the agent's chat model comes from: a provider of the model catalog (models.dev), by
     /// id: openai (a ChatGPT sign-in or a key), openrouter, anthropic, deepseek, xai… Default:
     /// the one /login saved, else the one signed in to.
@@ -201,7 +201,7 @@ pub struct ModelOptions {
 /// How a task runs: shared by a session, `exec` and `resume`. The output options answer one task,
 /// so they need `exec` or -p.
 #[derive(Args, Debug, Clone)]
-pub struct RunOptions {
+pub(crate) struct RunOptions {
     #[command(flatten)]
     pub models: ModelOptions,
 
@@ -284,7 +284,7 @@ pub struct RunOptions {
 }
 
 /// A prompt given as words, unquoted or quoted, as one text; `None` when none was given.
-pub fn joined(words: &[String]) -> Option<String> {
+pub(crate) fn joined(words: &[String]) -> Option<String> {
     (!words.is_empty()).then(|| words.join(" "))
 }
 

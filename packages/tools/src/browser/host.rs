@@ -186,13 +186,13 @@ pub(super) struct Loads {
 impl Shared {
     /// Tell the listener what the person did to `key`.
     fn heard(&self, key: &str, what: &str) {
-        if let Some(listen) = self.listener.lock().unwrap().as_ref() {
+        if let Some(listen) = crate::lock(&self.listener).as_ref() {
             listen(key, what);
         }
     }
 
     fn answer(&self, id: u64, reply: Reply) {
-        if let Some(sender) = self.pending.lock().unwrap().remove(&id) {
+        if let Some(sender) = crate::lock(&self.pending).remove(&id) {
             let _ = sender.send(reply);
         }
     }
@@ -201,45 +201,45 @@ impl Shared {
     /// the load counts start over, so a window opened again waits for its own first document.
     pub(super) fn closed(&self) {
         self.open.store(false, Ordering::SeqCst);
-        for (_, sender) in self.pending.lock().unwrap().drain() {
+        for (_, sender) in crate::lock(&self.pending).drain() {
             let _ = sender.send(Err(WINDOW_CLOSED.into()));
         }
-        self.loads.lock().unwrap().clear();
-        self.tabs.lock().unwrap().clear();
+        crate::lock(&self.loads).clear();
+        crate::lock(&self.tabs).clear();
         self.loaded.notify_all();
     }
 
     pub(super) fn navigation_requested(&self, tab: u32) {
         let next = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
-        self.loads.lock().unwrap().entry(tab).or_default().requested = next;
+        crate::lock(&self.loads).entry(tab).or_default().requested = next;
         self.loaded.notify_all();
     }
 
     pub(super) fn page_load(&self, tab: u32, event: PageLoadEvent, url: &str) {
         let next = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
         {
-            let mut loads = self.loads.lock().unwrap();
+            let mut loads = crate::lock(&self.loads);
             let loads = loads.entry(tab).or_default();
             match event {
                 PageLoadEvent::Started => loads.started = next,
                 PageLoadEvent::Finished => loads.finished = loads.started,
             }
         }
-        if let Some(entry) = self.tabs.lock().unwrap().iter_mut().find(|t| t.id == tab) {
+        if let Some(entry) = crate::lock(&self.tabs).iter_mut().find(|t| t.id == tab) {
             entry.url = url.to_string();
         }
         self.loaded.notify_all();
     }
 
     pub(super) fn titled(&self, tab: u32, title: String) {
-        if let Some(entry) = self.tabs.lock().unwrap().iter_mut().find(|t| t.id == tab) {
+        if let Some(entry) = crate::lock(&self.tabs).iter_mut().find(|t| t.id == tab) {
             entry.title = title;
         }
     }
 
     /// The tabs open now, `active` acted on; what is known of each is kept.
     pub(super) fn set_tabs(&self, active: u32, ids: &[u32]) {
-        let mut tabs = self.tabs.lock().unwrap();
+        let mut tabs = crate::lock(&self.tabs);
         tabs.retain(|tab| ids.contains(&tab.id));
         for id in ids {
             if !tabs.iter().any(|tab| tab.id == *id) {

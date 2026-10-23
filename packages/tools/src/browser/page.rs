@@ -46,9 +46,9 @@ impl Page {
     /// it); `title` names the window. `show` overrides the run's default for this call: a window
     /// open the other way is closed and opened again, on `url`.
     pub fn open(&self, url: &str, title: &str, show: Option<bool>) -> ViewResult<()> {
-        let mut driver = self.driver.lock().unwrap();
+        let mut driver = crate::lock(&self.driver);
         let hidden = show.map_or(self.headless, |show| !show);
-        let mut current = self.hidden.lock().unwrap();
+        let mut current = crate::lock(&self.hidden);
         if let Some(open) = driver.as_ref().filter(|driver| driver.is_open()) {
             if *current == hidden {
                 return open.navigate(url);
@@ -71,7 +71,7 @@ impl Page {
     /// Close the window, as the agent asks (not the person: the task goes on); the next call that
     /// needs it opens it again. Returns whether one was open.
     pub fn close(&self) -> bool {
-        let driver = self.driver.lock().unwrap();
+        let driver = crate::lock(&self.driver);
         match driver.as_ref().filter(|driver| driver.is_open()) {
             Some(open) => {
                 closed(open);
@@ -83,22 +83,18 @@ impl Page {
 
     /// Whether the window is (or opens) hidden.
     pub fn hidden(&self) -> bool {
-        *self.hidden.lock().unwrap()
+        *crate::lock(&self.hidden)
     }
 
     pub fn is_open(&self) -> bool {
-        self.driver
-            .lock()
-            .unwrap()
+        crate::lock(&self.driver)
             .as_ref()
             .is_some_and(WebviewDriver::is_open)
     }
 
     /// The open window's driver, for what only a browser has (scripts, keys, the whole text).
     pub fn driver(&self) -> ViewResult<WebviewDriver> {
-        self.driver
-            .lock()
-            .unwrap()
+        crate::lock(&self.driver)
             .clone()
             .filter(WebviewDriver::is_open)
             .ok_or_else(|| ViewError::Unavailable("the browser window is not open".into()))
@@ -111,8 +107,8 @@ impl Page {
             browser: self.browser.clone(),
             headless: self.headless,
             hidden: Mutex::new(self.hidden()),
-            size: Mutex::new(self.size.lock().unwrap().clone()),
-            driver: Mutex::new(self.driver.lock().unwrap().as_ref().map(|d| d.on(id))),
+            size: Mutex::new(crate::lock(&self.size).clone()),
+            driver: Mutex::new(crate::lock(&self.driver).as_ref().map(|d| d.on(id))),
         }
     }
 
@@ -138,7 +134,7 @@ impl Page {
         let (width, height) = toolbar::size(size)
             .ok_or_else(|| ViewError::Refused(format!("no page size {size}")))?;
         self.driver()?.resize(width, height)?;
-        *self.size.lock().unwrap() = size.to_string();
+        *crate::lock(&self.size) = size.to_string();
         Ok(())
     }
 }
@@ -159,7 +155,7 @@ impl View for Page {
 
     fn observe(&self) -> ViewResult<Observation> {
         let mut view = Observation::from(self.driver()?.observe()?);
-        let controls = toolbar::controls(&self.size.lock().unwrap());
+        let controls = toolbar::controls(&crate::lock(&self.size));
         let mut bar = toolbar::outline(&controls);
         let (tabs, active) = self.driver()?.tabs();
         if tabs.len() > 1 {

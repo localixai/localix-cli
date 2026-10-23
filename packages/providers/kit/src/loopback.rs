@@ -65,7 +65,7 @@ pub fn listen(spec: Listen) -> Result<Callback, String> {
         provider: spec.provider.to_string(),
         app: spec.app.to_string(),
     };
-    let stopped = stop.clone();
+    let stopped = Arc::clone(&stop);
     std::thread::spawn(move || serve.run(listener, &sender, &stopped));
     Ok(Callback {
         redirect: format!("http://127.0.0.1:{port}{}", spec.path),

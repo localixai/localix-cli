@@ -44,7 +44,7 @@ pub(super) struct Deck {
 
 impl Deck {
     /// The window for the browser, on its first tab.
-    pub fn for_web(
+    pub(super) fn for_web(
         target: &EventLoopWindowTarget<Cmd>,
         window: &Window,
         shared: &Arc<Shared>,
@@ -62,7 +62,7 @@ impl Deck {
     }
 
     /// The window for a terminal session's screen, before the browser opened.
-    pub fn for_term(
+    pub(super) fn for_term(
         target: &EventLoopWindowTarget<Cmd>,
         opening: Opening,
         proxy: &EventLoopProxy<Cmd>,
@@ -115,7 +115,7 @@ impl Deck {
     }
 
     /// Open the browser in the window, and show it.
-    pub fn open_web(
+    pub(super) fn open_web(
         &mut self,
         window: &Window,
         shared: &Arc<Shared>,
@@ -132,7 +132,7 @@ impl Deck {
     }
 
     /// Add a terminal session's screen as a tab, and show it.
-    pub fn add_term(
+    pub(super) fn add_term(
         &mut self,
         opening: Opening,
         proxy: &EventLoopProxy<Cmd>,
@@ -146,12 +146,12 @@ impl Deck {
         Ok(())
     }
 
-    pub fn term(&self, id: u32) -> Option<&Open> {
+    pub(super) fn term(&self, id: u32) -> Option<&Open> {
         self.terms.iter().find(|open| open.id == id)
     }
 
     /// Take terminal `id` out, telling its caller; whether anything is left in the window.
-    pub fn remove_term(&mut self, id: u32) -> bool {
+    pub(super) fn remove_term(&mut self, id: u32) -> bool {
         if let Some(at) = self.terms.iter().position(|open| open.id == id) {
             let gone = self.terms.remove(at);
             gone.slot.alive.store(false, Ordering::SeqCst);
@@ -162,21 +162,21 @@ impl Deck {
 
     /// The browser is gone from the window (closed by the agent, or its last tab by the person);
     /// whether anything is left in it.
-    pub fn remove_web(&mut self) -> bool {
+    pub(super) fn remove_web(&mut self) -> bool {
         self.web = None;
         self.settle();
         !self.terms.is_empty()
     }
 
     /// Every terminal's caller is told the window is gone.
-    pub fn let_go(&self) {
+    pub(super) fn let_go(&self) {
         for open in &self.terms {
             open.slot.alive.store(false, Ordering::SeqCst);
         }
     }
 
     /// Show `shown`, if it is there.
-    pub fn show(&mut self, shown: Shown) {
+    pub(super) fn show(&mut self, shown: Shown) {
         let there = match shown {
             Shown::Web => self.web.is_some(),
             Shown::Term(id) => self.term(id).is_some(),
@@ -186,7 +186,7 @@ impl Deck {
         }
     }
 
-    pub fn titled(&mut self, id: u32, title: String) {
+    pub(super) fn titled(&mut self, id: u32, title: String) {
         if let Some(open) = self.terms.iter_mut().find(|open| open.id == id) {
             open.title = title;
         }
@@ -218,7 +218,7 @@ impl Deck {
     }
 
     /// Give the pages `width` by `height` (the browser's viewport), the strip above them.
-    pub fn resize(&self, width: f64, height: f64) {
+    pub(super) fn resize(&self, width: f64, height: f64) {
         let top = if self.strip.is_some() { HEIGHT } else { 0.0 };
         self.frame
             .native
@@ -226,7 +226,7 @@ impl Deck {
     }
 
     /// The strip along the top, what is shown under it, and the rest beside, out of sight.
-    pub fn layout(&self) {
+    pub(super) fn layout(&self) {
         let (size, top) = self.content();
         if let Some(strip) = &self.strip {
             let _ = strip.set_bounds(fill(LogicalSize::new(size.width, top), 0.0, 0.0));
@@ -242,7 +242,7 @@ impl Deck {
     }
 
     /// Lay the window out again and tell the strip what it holds now.
-    pub fn refresh(&self, shared: &Shared) {
+    pub(super) fn refresh(&self, shared: &Shared) {
         self.layout();
         let Some(strip) = &self.strip else {
             return;

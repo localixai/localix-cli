@@ -9,25 +9,25 @@ const MOST: usize = 20_000;
 const SHOWN: usize = 8;
 
 #[derive(Default)]
-pub struct Files {
+pub(crate) struct Files {
     root: Option<PathBuf>,
     list: Option<Vec<String>>,
 }
 
 impl Files {
-    pub fn new(root: Option<PathBuf>) -> Self {
+    pub(crate) fn new(root: Option<PathBuf>) -> Self {
         Self { root, list: None }
     }
 
     /// Reads the list the first time it is wanted.
-    pub fn load(&mut self) {
+    pub(crate) fn load(&mut self) {
         if self.list.is_none() {
             self.list = Some(self.root.as_deref().map(list).unwrap_or_default());
         }
     }
 
     /// The files whose paths hold `query`'s letters in order, the closest first.
-    pub fn matching(&self, query: &str) -> Vec<String> {
+    pub(crate) fn matching(&self, query: &str) -> Vec<String> {
         let Some(list) = &self.list else {
             return vec![];
         };
@@ -49,7 +49,7 @@ impl Files {
     }
 
     #[cfg(test)]
-    pub fn with(list: Vec<String>) -> Self {
+    pub(crate) fn with(list: Vec<String>) -> Self {
         Self {
             root: None,
             list: Some(list),

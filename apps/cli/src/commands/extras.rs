@@ -12,7 +12,7 @@ use crate::compose::Rig;
 const DIFF_ROWS: usize = 400;
 
 /// What `/init` asks.
-pub const INIT: &str = "Write an AGENTS.md at the root of this repository for coding agents \
+pub(crate) const INIT: &str = "Write an AGENTS.md at the root of this repository for coding agents \
 working in it: what the project is, how it is laid out (the main directories and what lives \
 where), how to build, test, lint and run it (the exact commands, checked by running them where \
 that is quick and harmless), the conventions the code follows (style, naming, tests, commits), \
@@ -21,7 +21,7 @@ CI configuration, a few representative files. Keep it short and concrete, every 
 an agent will act on. If an AGENTS.md or CLAUDE.md exists, improve it instead of replacing it.";
 
 /// `/diff`: what changed since the last commit, and the files git does not track yet.
-pub fn diff(root: &Path) -> String {
+pub(crate) fn diff(root: &Path) -> String {
     let git = |args: &[&str]| {
         let out = Command::new("git")
             .args(args)
@@ -54,7 +54,7 @@ pub fn diff(root: &Path) -> String {
 }
 
 /// `/copy`: the last answer to the system clipboard.
-pub fn copy(rig: &Rig) -> String {
+pub(crate) fn copy(rig: &Rig) -> String {
     let Some(answer) = last_answer(&rig.session.turns) else {
         return "No answer to copy yet.\n".into();
     };
@@ -102,7 +102,7 @@ fn last_answer(turns: &[contracts::history::Turn]) -> Option<String> {
 }
 
 /// `/usage`: what the session's tasks spent, the models' turns and tokens and the time.
-pub fn usage(rig: &Rig) -> String {
+pub(crate) fn usage(rig: &Rig) -> String {
     use crate::output::human::{thousands, tokens_in};
     let spent = &rig.spent;
     let decision = rig.meter.spend();

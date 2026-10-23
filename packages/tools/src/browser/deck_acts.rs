@@ -18,7 +18,7 @@ pub(in super::super) enum After {
 
 impl Deck {
     /// Show or close the tab `click` names; why not, when it is not there.
-    pub fn act(&mut self, click: Click, shared: &Shared) -> Result<After, String> {
+    pub(crate) fn act(&mut self, click: Click, shared: &Shared) -> Result<After, String> {
         let key = match click {
             Click::Show(key) | Click::Close(key) => key,
         };
@@ -63,11 +63,11 @@ impl Deck {
     }
 
     /// Every tab, the browser's first: its key, its kind, its title and what it holds.
-    pub fn listing(&self, shared: &Shared) -> Vec<Listed> {
+    pub(crate) fn listing(&self, shared: &Shared) -> Vec<Listed> {
         let mut out = vec![];
         if let Some(web) = &self.web {
             let (ids, active) = web.listed();
-            let known = shared.tabs.lock().unwrap().clone();
+            let known = crate::lock(&shared.tabs).clone();
             for id in ids {
                 let tab = known.iter().find(|tab| tab.id == id);
                 let (title, url) = tab.map_or((String::new(), String::new()), |tab| {

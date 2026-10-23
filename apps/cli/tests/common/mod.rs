@@ -2,7 +2,7 @@
 //! behind a local server (`model`), and, for the flows at a terminal, a pseudo-terminal read as a
 //! screen (`term`).
 
-pub mod home;
-pub mod model;
+pub(crate) mod home;
+pub(crate) mod model;
 #[cfg(unix)]
-pub mod term;
+pub(crate) mod term;

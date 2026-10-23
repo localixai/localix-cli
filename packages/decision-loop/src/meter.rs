@@ -2,7 +2,7 @@
 //! all of them.
 
 use std::collections::BTreeMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 
 use serde_json::Value;
 
@@ -40,7 +40,10 @@ pub struct Meter(Mutex<Spend>);
 
 impl Meter {
     pub fn spend(&self) -> Spend {
-        self.0.lock().unwrap().clone()
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 }
 
@@ -56,13 +59,17 @@ impl Decider for MeteredDecider<'_> {
         questions: &BTreeMap<String, Question>,
     ) -> Result<Decision, DecideError> {
         let decision = self.inner.decide(state, questions)?;
-        self.meter.0.lock().unwrap().add(
-            &decision.model,
-            decision.input_tokens,
-            decision.output_tokens,
-            decision.cost,
-            decision.millis,
-        );
+        self.meter
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .add(
+                &decision.model,
+                decision.input_tokens,
+                decision.output_tokens,
+                decision.cost,
+                decision.millis,
+            );
         Ok(decision)
     }
 }

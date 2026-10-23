@@ -34,14 +34,48 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT"
 
-# The workspace's lints, taken by every crate (ARCHITECTURE.md S4): an allowed lint says why.
+# The workspace's lints, taken by every crate (ARCHITECTURE.md S4). Hard: a lint is allowed only
+# in place, with its `reason`, never turned off here. Tests may unwrap, panic and print
+# (clippy.toml); working code may not.
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
+# The tightest visibility that compiles (L9): `pub` only for what another crate uses.
+unreachable_pub = "deny"
+unused_qualifications = "deny"
 
 [workspace.lints.clippy]
-dbg_macro = "deny"
+# A panic is a bug (R4): no unwrap, expect, panic or unreachable in working code; an error is
+# handled, returned or shown.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
 todo = "deny"
 unimplemented = "deny"
+# A string sliced inside a character panics.
+string_slice = "deny"
+# A number cut short by `as` is a silent bug: `try_from`, or a reason.
+cast_possible_truncation = "deny"
+# What reaches the terminal goes through the interface and the output; the process ends in
+# `main.rs` only, with the exit-code contract (K6).
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+exit = "deny"
+mem_forget = "deny"
+# Shared state is Mutex or atomics (R2); the rest of the banned API is in clippy.toml.
+disallowed_methods = "deny"
+disallowed_types = "deny"
+# Small functions, as small files (S1): at most 100 lines, a bounded complexity.
+too_many_lines = "deny"
+cognitive_complexity = "deny"
+# Explicit where it matters.
+clone_on_ref_ptr = "deny"
+redundant_clone = "deny"
+match_wildcard_for_single_variants = "deny"
+wildcard_imports = "deny"
+unused_self = "deny"
+# A lint allowed says why.
 allow_attributes_without_reason = "deny"
 
 [workspace.dependencies]

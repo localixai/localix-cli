@@ -8,16 +8,16 @@ use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthChar;
 
 /// The columns `text` takes.
-pub fn width(text: &str) -> usize {
+pub(crate) fn width(text: &str) -> usize {
     text.chars().map(|c| c.width().unwrap_or(0)).sum()
 }
 
-pub fn line_width(line: &Line) -> usize {
+pub(crate) fn line_width(line: &Line) -> usize {
     line.spans.iter().map(|span| width(&span.content)).sum()
 }
 
 /// `line` wrapped to `width` columns: rows start with `first`, then `rest`.
-pub fn wrap(
+pub(crate) fn wrap(
     line: &Line<'static>,
     width: usize,
     first: &Line<'static>,
@@ -97,7 +97,8 @@ fn split(word: &str, columns: usize) -> (String, String) {
     for (at, c) in word.char_indices() {
         let w = c.width().unwrap_or(0);
         if used + w > columns && at > 0 {
-            return (word[..at].to_string(), word[at..].to_string());
+            let (head, tail) = word.split_at(at);
+            return (head.to_string(), tail.to_string());
         }
         used += w;
     }
@@ -106,7 +107,7 @@ fn split(word: &str, columns: usize) -> (String, String) {
 
 /// `text` in rows of at most `columns`, broken anywhere and keeping its spaces: for code, whose
 /// indentation and alignment mean something.
-pub fn hard(text: &str, columns: usize) -> Vec<String> {
+pub(crate) fn hard(text: &str, columns: usize) -> Vec<String> {
     let mut rows = vec![];
     let mut rest = text.to_string();
     while width(&rest) > columns {
@@ -120,7 +121,7 @@ pub fn hard(text: &str, columns: usize) -> Vec<String> {
 
 /// `line` in rows of at most `columns`, broken anywhere with its styles kept: what the terminal
 /// would do to a row too wide, done first so the rows drawn are the rows counted.
-pub fn fit(line: &Line<'static>, columns: usize) -> Vec<Line<'static>> {
+pub(crate) fn fit(line: &Line<'static>, columns: usize) -> Vec<Line<'static>> {
     let columns = columns.max(1);
     if line_width(line) <= columns {
         return vec![line.clone()];
@@ -133,26 +134,25 @@ pub fn fit(line: &Line<'static>, columns: usize) -> Vec<Line<'static>> {
         for c in span.content.chars() {
             let w = c.width().unwrap_or(0);
             if used + w > columns {
-                rows.last_mut()
-                    .unwrap()
-                    .spans
-                    .push(Span::styled(std::mem::take(&mut text), style));
+                if let Some(row) = rows.last_mut() {
+                    row.spans
+                        .push(Span::styled(std::mem::take(&mut text), style));
+                }
                 rows.push(Line::default());
                 used = 0;
             }
             text.push(c);
             used += w;
         }
-        rows.last_mut()
-            .unwrap()
-            .spans
-            .push(Span::styled(text, style));
+        if let Some(row) = rows.last_mut() {
+            row.spans.push(Span::styled(text, style));
+        }
     }
     rows
 }
 
 /// `text` cut to `columns`, ending in `…` when cut.
-pub fn cut(text: &str, columns: usize) -> String {
+pub(crate) fn cut(text: &str, columns: usize) -> String {
     if width(text) <= columns {
         return text.to_string();
     }

@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use tools::window::{Kind, Opened};
 
 /// Terminal tabs: a program in a terminal session, `t1`, `t2` (its session's id).
-pub struct Terminal<'a> {
+pub(crate) struct Terminal<'a> {
     pub bash: &'a tools::shell::BashTool<'a>,
     pub sessions: &'a tools::shell::Sessions,
     pub stop: &'a (dyn Fn() -> bool + Sync),

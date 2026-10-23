@@ -5,7 +5,7 @@
 //! written to it, never with a panic: with `--json` that is every event, so the run stops at its
 //! next turn; otherwise only the answer is written, at the end, and the process then ends quietly.
 
-pub mod human;
+pub(crate) mod human;
 mod json;
 mod observer;
 
@@ -43,10 +43,10 @@ fn stderr_width() -> Option<usize> {
 
 /// The `--json` event schema: a public contract (see CHANGELOG.md). 4: JSON lines replace the one
 /// object of schema 3.
-pub const SCHEMA: u32 = 4;
+pub(crate) const SCHEMA: u32 = 4;
 
 /// What a run starts with, as `run.started` reports it.
-pub struct Start<'a> {
+pub(crate) struct Start<'a> {
     pub goal: &'a str,
     pub session: &'a str,
     pub model: &'a str,
@@ -55,7 +55,7 @@ pub struct Start<'a> {
 }
 
 /// How a run ended, as the closing lines and `run.completed` report it.
-pub struct Summary<'a> {
+pub(crate) struct Summary<'a> {
     /// `achieved`, `not_achieved`, `unstated`, `exhausted`, `error`, `interrupted`.
     pub status: &'a str,
     pub code: i32,
@@ -69,7 +69,7 @@ pub struct Summary<'a> {
     pub session: &'a str,
 }
 
-pub struct Output {
+pub(crate) struct Output {
     /// JSON lines on stdout.
     json: bool,
     /// The trace on stderr.
@@ -95,7 +95,7 @@ pub struct Output {
 
 impl Output {
     /// Output on the process's stdout and stderr.
-    pub fn new(json: bool, verbose: bool) -> Self {
+    pub(crate) fn new(json: bool, verbose: bool) -> Self {
         let out = Box::new(std::io::stdout());
         let mut output = Self::with(json, verbose, out, Box::new(std::io::stderr()));
         output.colour = style::colour_stderr();
@@ -105,7 +105,7 @@ impl Output {
     }
 
     /// Output on given writers: `out` for the answer or the events, `err` for the trace.
-    pub fn with(
+    pub(crate) fn with(
         json: bool,
         verbose: bool,
         out: Box<dyn Write + Send>,
@@ -130,18 +130,18 @@ impl Output {
     }
 
     /// The run shown in the interface: blocks for the calls and the answer, nothing on stderr.
-    pub fn in_ui(mut self, ui: Option<Ui>) -> Self {
+    pub(crate) fn in_ui(mut self, ui: Option<Ui>) -> Self {
         self.ui = ui;
         self
     }
 
     /// Whether the reader of stdout has gone.
-    pub fn closed(&self) -> bool {
+    pub(crate) fn closed(&self) -> bool {
         self.closed.load(Ordering::SeqCst)
     }
 
     /// A task starts: the trace's clock restarts.
-    pub fn started(&self, start: &Start) {
+    pub(crate) fn started(&self, start: &Start) {
         *lock(&self.started) = Instant::now();
         lock(&self.done).clear();
         if let Some(ui) = &self.ui {
@@ -154,7 +154,7 @@ impl Output {
     }
 
     /// One action of the browser hands.
-    pub fn step(&self, step: &GoalStep) {
+    pub(crate) fn step(&self, step: &GoalStep) {
         if let Some(ui) = &self.ui {
             return ui.send(Event::Step(step.trace_line()));
         }
@@ -167,13 +167,13 @@ impl Output {
     }
 
     /// The interface the run is shown in, at a terminal.
-    pub fn ui(&self) -> Option<&Ui> {
+    pub(crate) fn ui(&self) -> Option<&Ui> {
         self.ui.as_ref()
     }
 
     /// One line under the call running (what an agent it started does): in the interface under
     /// the call, in the trace once the call is done; `--json` has the agent's turns instead.
-    pub fn substep(&self, line: String) {
+    pub(crate) fn substep(&self, line: String) {
         if let Some(ui) = &self.ui {
             return ui.send(Event::Step(line));
         }
@@ -183,7 +183,7 @@ impl Output {
     }
 
     /// The task ended: the closing lines on stderr and the answer on stdout, or `run.completed`.
-    pub fn completed(&self, summary: &Summary) {
+    pub(crate) fn completed(&self, summary: &Summary) {
         if let Some(ui) = &self.ui {
             if let Some(error) = summary.error {
                 ui.send(Event::Error(error.to_string()));
@@ -234,7 +234,7 @@ impl Output {
     }
 
     /// Lines for the person on stderr, as they are.
-    pub fn note(&self, text: &str) {
+    pub(crate) fn note(&self, text: &str) {
         if let Some(ui) = &self.ui {
             return ui.send(Event::Note(text.to_string()));
         }
@@ -243,14 +243,14 @@ impl Output {
     }
 
     /// What the task did since it began, in the order each step began.
-    pub fn take_steps(&self) -> Vec<contracts::history::Step> {
+    pub(crate) fn take_steps(&self) -> Vec<contracts::history::Step> {
         let mut steps: Vec<_> = lock(&self.done).drain(..).map(|(_, step)| step).collect();
         steps.sort_by_key(|step| step.at_ms);
         steps
     }
 
     fn millis(&self) -> u64 {
-        lock(&self.started).elapsed().as_millis() as u64
+        u64::try_from(lock(&self.started).elapsed().as_millis()).unwrap_or(u64::MAX)
     }
 
     /// Rows on stderr, after a blank row when blocks came before.
@@ -290,7 +290,7 @@ impl Output {
 }
 
 /// `mutex` locked: a thread that panicked holding it left a value that is still whole.
-pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poison| poison.into_inner())
 }
 

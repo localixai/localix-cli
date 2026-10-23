@@ -13,7 +13,7 @@ use super::select::{Picked, Select};
 const SETTLE: Duration = Duration::from_millis(300);
 
 /// A question open or waiting its turn, and the lane that asked it.
-pub struct Asked {
+pub(crate) struct Asked {
     pub select: Select,
     pub open: Open,
     /// The lane that asked: Ctrl-C stops it, and its `Dismiss` closes the question.
@@ -24,7 +24,7 @@ pub struct Asked {
 
 impl Asked {
     /// A question of the interface's own, asked by no lane.
-    pub fn new(select: Select, open: Open) -> Self {
+    pub(crate) fn new(select: Select, open: Open) -> Self {
         Self {
             select,
             open,
@@ -46,7 +46,7 @@ impl App {
 
     /// Whether the session at `at` waits for the person: a question of its own is open or
     /// waiting its turn, or a choice of its own is held until it is shown.
-    pub fn waits_for_person(&self, at: usize) -> bool {
+    pub(crate) fn waits_for_person(&self, at: usize) -> bool {
         let view = &self.views.sessions[at];
         let held = view.lane.as_ref().is_some_and(|lane| !lane.held.is_empty());
         held || self.questions.iter().any(|asked| asked.asker == view.id)

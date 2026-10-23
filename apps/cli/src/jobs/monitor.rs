@@ -15,7 +15,7 @@ const LINES: usize = 40;
 const LINE_CHARS: usize = 400;
 
 /// How a watch ended.
-pub enum Ended {
+pub(super) enum Ended {
     Exit(String),
     Deadline,
     Stopped,
@@ -23,7 +23,7 @@ pub enum Ended {
 
 /// Run `command` in `dir` until it exits, `deadline` passes or `stopped` says so; give each
 /// batch of lines to `lines`.
-pub fn watch(
+pub(super) fn watch(
     command: &str,
     dir: &Path,
     hidden: &[&str],

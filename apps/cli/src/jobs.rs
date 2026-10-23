@@ -4,9 +4,9 @@
 //! queued. Both live as long as the session (a monitor until its deadline); in `exec` a task waits
 //! for its monitors, and schedules are refused: the process ends with the task.
 
-pub mod cron;
+pub(crate) mod cron;
 mod monitor;
-pub mod spec;
+pub(crate) mod spec;
 mod tool;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,12 +16,12 @@ use std::time::{Duration, Instant};
 use contracts::gate::Gate;
 use tools::workspace::Workspace;
 
-pub use self::tool::JobsTool;
+pub(crate) use self::tool::JobsTool;
 use crate::output::Output;
 use crate::tui::event::{Event, JobRow};
 
 /// What the jobs are built from.
-pub struct Kit<'a> {
+pub(crate) struct Kit<'a> {
     pub workspace: &'a Workspace,
     pub gate: &'a dyn Gate,
     /// What commands never see, read as each monitor starts.
@@ -35,7 +35,7 @@ pub struct Kit<'a> {
 
 /// The jobs of a session, shared by the tool, the monitors' threads and the scheduler.
 #[derive(Default)]
-pub struct Jobs {
+pub(crate) struct Jobs {
     state: Mutex<State>,
     /// The session is over: every job ends.
     over: AtomicBool,
@@ -76,7 +76,7 @@ enum What {
 
 impl Jobs {
     /// The jobs of session `owner`.
-    pub fn of(owner: &str) -> Self {
+    pub(crate) fn of(owner: &str) -> Self {
         Self {
             owner: owner.to_string(),
             ..Self::default()
@@ -86,7 +86,7 @@ impl Jobs {
     /// Know `stop` as job `id`'s stop, under the session's id.
     fn known(&self, id: &str, stop: &Arc<AtomicBool>) -> Option<crate::interrupt::Known> {
         let key = crate::interrupt::job_key(&self.owner, id);
-        Some(crate::interrupt::register_flag(&key, stop.clone()))
+        Some(crate::interrupt::register_flag(&key, Arc::clone(stop)))
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
@@ -94,7 +94,7 @@ impl Jobs {
     }
 
     /// The task ended: in `exec` its monitors end (what they gave back goes by its kind).
-    pub fn end(&self, kit: &Kit) {
+    pub(crate) fn end(&self, kit: &Kit) {
         if !kit.session {
             for job in &self.lock().jobs {
                 job.stop.store(true, Ordering::SeqCst);
@@ -103,7 +103,7 @@ impl Jobs {
     }
 
     /// Whether the task must wait: in `exec`, a monitor still runs.
-    pub fn expecting(&self, kit: &Kit) -> bool {
+    pub(crate) fn expecting(&self, kit: &Kit) -> bool {
         !kit.session
             && self
                 .lock()
@@ -113,7 +113,7 @@ impl Jobs {
     }
 
     /// The session is over: every job ends.
-    pub fn close(&self) {
+    pub(crate) fn close(&self) {
         self.over.store(true, Ordering::SeqCst);
         for job in &self.lock().jobs {
             job.stop.store(true, Ordering::SeqCst);
@@ -130,7 +130,7 @@ impl Jobs {
     }
 
     /// The scheduler: each second, the schedules that are due give their prompt.
-    pub fn tick(&self, kit: &Kit) {
+    pub(crate) fn tick(&self, kit: &Kit) {
         while !self.over.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_secs(1));
             let now = session::now();

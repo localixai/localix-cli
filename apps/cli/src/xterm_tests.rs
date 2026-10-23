@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::*;
 use crate::testing::Scratch;
@@ -92,18 +92,22 @@ fn what_is_kept_is_not_fetched_again_and_a_changed_file_is() {
     let (scratch, pins) = (Scratch::new(), pins());
     let dir = scratch.path().join("xterm");
     fetch(&dir, &pins, &network(None)).unwrap();
-    let asked = Cell::new(0);
+    let asked = AtomicUsize::new(0);
     let counted = |url: &str| {
-        asked.set(asked.get() + 1);
+        asked.fetch_add(1, Ordering::SeqCst);
         network(None)(url)
     };
     assert_eq!(fetch(&dir, &pins, &counted), Ok(0));
-    assert_eq!(asked.get(), 0, "already cached: no network");
+    assert_eq!(
+        asked.load(Ordering::SeqCst),
+        0,
+        "already cached: no network"
+    );
     // A kept file changed on disk is not run, and it alone is fetched again.
     std::fs::write(dir.join("xterm.js"), "var Terminal; steal()").unwrap();
     assert!(load(&dir, &pins).is_none());
     assert_eq!(fetch(&dir, &pins, &counted), Ok(1));
-    assert_eq!(asked.get(), 1);
+    assert_eq!(asked.load(Ordering::SeqCst), 1);
     assert!(load(&dir, &pins).is_some());
 }
 

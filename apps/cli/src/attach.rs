@@ -12,13 +12,13 @@ const MAX_BYTES: usize = 8 * 1024 * 1024;
 
 /// A picture attached to a message, and the name it is shown with.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Attachment {
+pub(crate) struct Attachment {
     pub name: String,
     pub image: Image,
 }
 
 /// The picture at `path`, read and checked.
-pub fn read(path: &Path) -> Result<Attachment, String> {
+pub(crate) fn read(path: &Path) -> Result<Attachment, String> {
     let shown = path.display();
     let bytes =
         std::fs::read(path).map_err(|error| format!("{shown} could not be read: {error}"))?;
@@ -46,7 +46,7 @@ pub fn read(path: &Path) -> Result<Attachment, String> {
 }
 
 /// The picture's media type and size, from its first bytes.
-pub fn kind(bytes: &[u8]) -> Option<(&'static str, (u32, u32))> {
+pub(crate) fn kind(bytes: &[u8]) -> Option<(&'static str, (u32, u32))> {
     let be = |at: usize, n: usize| {
         bytes
             .get(at..at + n)
@@ -100,7 +100,7 @@ pub fn kind(bytes: &[u8]) -> Option<(&'static str, (u32, u32))> {
 
 /// A file named in what the person typed or dropped in.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Dropped {
+pub(crate) enum Dropped {
     /// A picture: sent to the model as one.
     Image(PathBuf),
     /// Any other file or folder: named by its path, for the agent to read.
@@ -109,7 +109,7 @@ pub enum Dropped {
 
 /// What `token` names, when it is a path that exists: as a terminal writes a dropped file
 /// (quoted, its spaces escaped, or as a `file://` address) or as typed (`~/x`).
-pub fn resolve(token: &str) -> Option<Dropped> {
+pub(crate) fn resolve(token: &str) -> Option<Dropped> {
     let token = token.trim();
     let unquoted = token
         .strip_prefix('\'')
@@ -155,7 +155,7 @@ fn unescape(word: &str) -> String {
 
 /// A copy of the picture at `path` under `dir`, so a file the system removes soon (a screenshot's
 /// temporary file) is still there when the message is sent; the original when it cannot be made.
-pub fn keep(path: &Path, dir: &Path) -> PathBuf {
+pub(crate) fn keep(path: &Path, dir: &Path) -> PathBuf {
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -172,7 +172,7 @@ pub fn keep(path: &Path, dir: &Path) -> PathBuf {
 
 /// Where pictures the person pasted or dropped in are kept: beside the sessions, so they outlive
 /// the files they came from.
-pub fn pasted_dir() -> PathBuf {
+pub(crate) fn pasted_dir() -> PathBuf {
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_default();
@@ -181,7 +181,7 @@ pub fn pasted_dir() -> PathBuf {
 
 /// The clipboard's picture, saved as a PNG under `dir`; why not when there is none.
 #[cfg(target_os = "macos")]
-pub fn clipboard(dir: &Path) -> Result<PathBuf, String> {
+pub(crate) fn clipboard(dir: &Path) -> Result<PathBuf, String> {
     std::fs::create_dir_all(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

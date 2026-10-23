@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 use super::cron::{self, Cron};
 
-pub const NAME: &str = "jobs";
+pub(crate) const NAME: &str = "jobs";
 /// A watch's deadline by default, and at most.
 const WATCH_MS: u64 = 300_000;
 const MAX_WATCH_MS: u64 = 1_800_000;
@@ -29,7 +29,7 @@ schedule (for 7 days at most). For reminders, polling a deploy, checking back la
 
 /// What a call asks.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Action {
+pub(crate) enum Action {
     Monitor {
         command: String,
         name: Option<String>,
@@ -49,17 +49,17 @@ pub enum Action {
 
 /// When a schedule runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum When {
+pub(crate) enum When {
     Cron(Cron),
     /// This many seconds from now.
     In(u64),
 }
 
-pub fn description() -> String {
+pub(crate) fn description() -> String {
     DESCRIPTION.into()
 }
 
-pub fn parameters() -> Value {
+pub(crate) fn parameters() -> Value {
     use crate::agents::spec::text;
     json!({
         "type": "object",
@@ -82,7 +82,7 @@ pub fn parameters() -> Value {
 }
 
 /// The action `arguments` ask for, or what is wrong with them.
-pub fn action(arguments: &Value) -> Result<Action, String> {
+pub(crate) fn action(arguments: &Value) -> Result<Action, String> {
     let text = |key: &str| {
         arguments
             .get(key)
@@ -141,7 +141,7 @@ pub fn action(arguments: &Value) -> Result<Action, String> {
 }
 
 /// What a call does, as its block's head says it while it runs and once it is done.
-pub fn describe(arguments: &Value) -> ((&'static str, &'static str), String) {
+pub(crate) fn describe(arguments: &Value) -> ((&'static str, &'static str), String) {
     match action(arguments) {
         Ok(Action::Monitor { command, name, .. }) => {
             let name = name.map(|name| format!("{name} · ")).unwrap_or_default();

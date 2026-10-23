@@ -13,21 +13,21 @@ use std::time::{Duration, Instant};
 
 use super::model::Model;
 
-pub const COLS: u16 = 110;
-pub const ROWS: u16 = 40;
+pub(crate) const COLS: u16 = 110;
+pub(crate) const ROWS: u16 = 40;
 
 /// Keys as a terminal sends them (only those the flows press).
-pub mod key {
-    pub const ENTER: &str = "\r";
-    pub const ESC: &str = "\x1b";
-    pub const DOWN: &str = "\x1b[B";
-    pub const LEFT: &str = "\x1b[D";
-    pub const CTRL_C: &str = "\x03";
-    pub const CTRL_D: &str = "\x04";
+pub(crate) mod key {
+    pub(crate) const ENTER: &str = "\r";
+    pub(crate) const ESC: &str = "\x1b";
+    pub(crate) const DOWN: &str = "\x1b[B";
+    pub(crate) const LEFT: &str = "\x1b[D";
+    pub(crate) const CTRL_C: &str = "\x03";
+    pub(crate) const CTRL_D: &str = "\x04";
 }
 
 /// A session of `llx` at a terminal.
-pub struct Term {
+pub(crate) struct Term {
     child: Child,
     input: File,
     screen: Arc<Mutex<vt100::Parser>>,
@@ -39,7 +39,7 @@ pub struct Term {
 
 impl Term {
     /// `llx` with `args`, in a fresh home and workspace, thinking with `model`.
-    pub fn start(model: &Model, args: &[&str]) -> Self {
+    pub(crate) fn start(model: &Model, args: &[&str]) -> Self {
         let term = Self::spawn(model, args, &[]);
         term.wait_for("❯", Duration::from_secs(10));
         term
@@ -47,7 +47,7 @@ impl Term {
 
     /// `llx resume ID`, where session `id` was saved in the workspace with the tasks `turns`
     /// (their JSON array).
-    pub fn resuming(model: &Model, id: &str, turns: &str) -> Self {
+    pub(crate) fn resuming(model: &Model, id: &str, turns: &str) -> Self {
         let (home, workspace) = place();
         let dir = home.join("sessions");
         std::fs::create_dir_all(&dir).unwrap();
@@ -61,7 +61,7 @@ impl Term {
     }
 
     /// `llx` with `args` and the variables `env`, not waited on.
-    pub fn spawn(model: &Model, args: &[&str], env: &[(&str, &str)]) -> Self {
+    pub(crate) fn spawn(model: &Model, args: &[&str], env: &[(&str, &str)]) -> Self {
         let (home, workspace) = place();
         Self::spawn_at(home, workspace, model, args, env)
     }
@@ -117,9 +117,9 @@ impl Term {
             .unwrap();
         drop(slave);
         let screen = Arc::new(Mutex::new(vt100::Parser::new(ROWS, COLS, 0)));
-        let reading = screen.clone();
+        let reading = Arc::clone(&screen);
         let raw = Arc::new(Mutex::new(vec![]));
-        let written = raw.clone();
+        let written = Arc::clone(&raw);
         let mut output = File::from(master.try_clone().unwrap());
         std::thread::spawn(move || {
             let mut buffer = [0u8; 65536];
@@ -142,18 +142,18 @@ impl Term {
     }
 
     /// Every byte llx wrote so far.
-    pub fn raw(&self) -> Vec<u8> {
+    pub(crate) fn raw(&self) -> Vec<u8> {
         self.raw.lock().unwrap().clone()
     }
 
     /// What the screen shows now, row by row.
-    pub fn screen(&self) -> String {
+    pub(crate) fn screen(&self) -> String {
         self.screen.lock().unwrap().screen().contents()
     }
 
     /// The row the cursor is on: the composer's while the prompt waits, never a row of the
     /// history above it.
-    pub fn cursor_row(&self) -> String {
+    pub(crate) fn cursor_row(&self) -> String {
         let parser = self.screen.lock().unwrap();
         let (row, _) = parser.screen().cursor_position();
         let row = parser.screen().rows(0, COLS).nth(row as usize);
@@ -161,7 +161,7 @@ impl Term {
     }
 
     /// Wait until the cursor's row reads `row`; the screen, or a panic that prints it.
-    pub fn wait_for_cursor_row(&self, row: &str, timeout: Duration) -> String {
+    pub(crate) fn wait_for_cursor_row(&self, row: &str, timeout: Duration) -> String {
         let end = Instant::now() + timeout;
         loop {
             let (at, screen) = (self.cursor_row(), self.screen());
@@ -177,7 +177,7 @@ impl Term {
 
     /// Press keys, or type text, as a terminal sends them, then wait 60 ms: keys sent back to
     /// back can arrive in one read and parse as one key (two Escs as Alt+Esc).
-    pub fn press(&mut self, keys: &str) -> &mut Self {
+    pub(crate) fn press(&mut self, keys: &str) -> &mut Self {
         self.input.write_all(keys.as_bytes()).unwrap();
         self.input.flush().unwrap();
         std::thread::sleep(Duration::from_millis(60));
@@ -185,7 +185,7 @@ impl Term {
     }
 
     /// Type `text` a character at a time, as a person does.
-    pub fn type_text(&mut self, text: &str) -> &mut Self {
+    pub(crate) fn type_text(&mut self, text: &str) -> &mut Self {
         for c in text.chars() {
             self.input.write_all(c.to_string().as_bytes()).unwrap();
             std::thread::sleep(Duration::from_millis(4));
@@ -195,13 +195,17 @@ impl Term {
     }
 
     /// Wait until the screen shows `needle`; the screen, or a panic that prints it.
-    pub fn wait_for(&self, needle: &str, timeout: Duration) -> String {
+    pub(crate) fn wait_for(&self, needle: &str, timeout: Duration) -> String {
         self.wait_for_any(&[needle], timeout).1
     }
 
     /// Wait until the screen shows one of `needles`; the first one shown and the screen, or a
     /// panic that prints it.
-    pub fn wait_for_any<'a>(&self, needles: &[&'a str], timeout: Duration) -> (&'a str, String) {
+    pub(crate) fn wait_for_any<'a>(
+        &self,
+        needles: &[&'a str],
+        timeout: Duration,
+    ) -> (&'a str, String) {
         let end = Instant::now() + timeout;
         loop {
             let screen = self.screen();
@@ -216,7 +220,7 @@ impl Term {
     }
 
     /// Wait up to `timeout` for llx to exit; its exit code, `None` if it did not.
-    pub fn exited(&mut self, timeout: Duration) -> Option<i32> {
+    pub(crate) fn exited(&mut self, timeout: Duration) -> Option<i32> {
         let end = Instant::now() + timeout;
         while Instant::now() < end {
             if let Ok(Some(status)) = self.child.try_wait() {
@@ -228,7 +232,7 @@ impl Term {
     }
 
     /// The sessions saved so far, as JSON.
-    pub fn saved(&self) -> Vec<serde_json::Value> {
+    pub(crate) fn saved(&self) -> Vec<serde_json::Value> {
         let files = std::fs::read_dir(self.home.join("sessions"))
             .into_iter()
             .flatten();
@@ -239,7 +243,7 @@ impl Term {
     }
 
     /// A file of the workspace the session runs in.
-    pub fn file(&self, name: &str) -> PathBuf {
+    pub(crate) fn file(&self, name: &str) -> PathBuf {
         self.workspace.join(name)
     }
 }
@@ -277,7 +281,7 @@ impl Drop for Term {
 }
 
 /// A pseudo-terminal: its master, then its slave.
-pub fn pty() -> (OwnedFd, OwnedFd) {
+pub(crate) fn pty() -> (OwnedFd, OwnedFd) {
     let (mut master, mut slave) = (0, 0);
     // SAFETY: openpty fills both descriptors, which become ours.
     let opened = unsafe {

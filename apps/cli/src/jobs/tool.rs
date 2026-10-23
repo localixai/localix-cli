@@ -23,14 +23,18 @@ const MAX_EVENTS: usize = 100;
 /// A watch's deadline at most in `exec`, where nobody is waiting.
 const EXEC_WATCH: Duration = Duration::from_secs(600);
 
-pub struct JobsTool<'scope, 'env> {
+pub(crate) struct JobsTool<'scope, 'env> {
     kit: &'env Kit<'env>,
     jobs: &'env Jobs,
     scope: &'scope Scope<'scope, 'env>,
 }
 
 impl<'scope, 'env> JobsTool<'scope, 'env> {
-    pub fn new(kit: &'env Kit<'env>, jobs: &'env Jobs, scope: &'scope Scope<'scope, 'env>) -> Self {
+    pub(crate) fn new(
+        kit: &'env Kit<'env>,
+        jobs: &'env Jobs,
+        scope: &'scope Scope<'scope, 'env>,
+    ) -> Self {
         Self { kit, jobs, scope }
     }
 
@@ -42,16 +46,6 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
             Verdict::Allow => Ok(()),
             Verdict::Deny(why) => Err(ToolError::Failed(why)),
         }
-    }
-
-    /// A new job's id and name (the name given, else its id).
-    fn name(&self, state: &mut State, name: Option<String>) -> (String, String) {
-        state.made += 1;
-        let id = format!("job-{}", state.made);
-        let name = name
-            .filter(|name| state.jobs.iter().all(|job| job.name != *name))
-            .unwrap_or_else(|| id.clone());
-        (id, name)
     }
 
     fn monitor(
@@ -79,7 +73,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                     "{running} monitors run already: stop one first"
                 )));
             }
-            let (id, name) = self.name(&mut state, name);
+            let (id, name) = new_job(&mut state, name);
             state.jobs.push(Job {
                 id: id.clone(),
                 name: name.clone(),
@@ -87,7 +81,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                     command: command.to_string(),
                     until: Instant::now() + timeout,
                 },
-                stop: stop.clone(),
+                stop: Arc::clone(&stop),
                 events: 0,
                 _known: self.jobs.known(&id, &stop),
             });
@@ -189,7 +183,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                     "{kept} jobs are kept: stop one first"
                 )));
             }
-            let (id, name) = self.name(&mut state, name);
+            let (id, name) = new_job(&mut state, name);
             let stop = Arc::new(AtomicBool::new(false));
             let known = self.jobs.known(&id, &stop);
             state.jobs.push(Job {
@@ -269,4 +263,14 @@ impl Tool for JobsTool<'_, '_> {
             Action::Stop { job } => self.stop(&job),
         }
     }
+}
+
+/// A new job's id and name (the name given, else its id).
+fn new_job(state: &mut State, name: Option<String>) -> (String, String) {
+    state.made += 1;
+    let id = format!("job-{}", state.made);
+    let name = name
+        .filter(|name| state.jobs.iter().all(|job| job.name != *name))
+        .unwrap_or_else(|| id.clone());
+    (id, name)
 }

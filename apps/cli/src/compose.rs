@@ -11,47 +11,49 @@ mod rig;
 mod setup;
 
 #[cfg(test)]
-pub use lane::lane_with;
-pub use lane::{Models, compose, lane};
-pub use rig::Rig;
-pub use setup::{Seat, Setup, Shared};
+pub(crate) use lane::lane_with;
+pub(crate) use lane::{Models, compose, lane};
+pub(crate) use rig::Rig;
+pub(crate) use setup::{Seat, Setup, Shared};
 
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
-use agent::agent::Agent;
+use contracts::gate::Gate;
+use contracts::hands::Hands;
 use contracts::person::{Person, Question, Reply};
-use contracts::tool::Tool;
 use decision_loop::decision_loop::DecisionLoop;
 use decision_loop::meter::{Meter, MeteredDecider};
 use decision_loop::step::GoalStep;
 use provider_kit::App;
 use tools::ask::AskTool;
 
+use crate::agents::Registry;
 use crate::agents::inbox::MainInbox;
 use crate::agents::kit::{Kit, Own, Tools};
-use crate::agents::{AgentsTool, Delegation, Registry};
 use crate::brake::{Brake, BrakedDecider};
 use crate::checkpoints::Checkpoints;
 use crate::gate::{Stoppable, Tty};
 use crate::instructions;
 use crate::interrupt::Interrupt;
-use crate::jobs::{self, Jobs, JobsTool};
-use crate::mode::{Mode, ModeCell, ModeGate};
+use crate::jobs::{self, Jobs};
+use crate::live::Live;
+use crate::mode::{ModeCell, ModeGate};
 use crate::output::{Output, lock};
 use crate::tui::asking::{UiGate, UiPerson};
 use crate::windows;
 
 /// Who calls the providers: attribution, the sign-in pages, the folder sign-ins are saved in.
-pub const APP: App = App {
+pub(crate) const APP: App = App {
     name: "llx",
     slug: "llx",
     version: env!("CARGO_PKG_VERSION"),
 };
 
 /// Build a lane's agent from `seat` over `shared`, around `models`, reporting on `output` and
-/// stopped by `interrupt`, and run `work` with it.
-pub fn assemble(
+/// stopped by `interrupt`, and run `work` with it: here the brake, the hands, the mode's gate and
+/// the person; [`equip`] the rest.
+pub(crate) fn assemble(
     shared: &Shared,
     seat: Seat,
     models: Models,
@@ -59,26 +61,6 @@ pub fn assemble(
     interrupt: &Interrupt,
     work: impl FnOnce(&mut Rig) -> i32,
 ) -> i32 {
-    let Shared {
-        options,
-        workspace,
-        page,
-        browser_lock,
-        history,
-        fresh,
-        terminal,
-        asks,
-        ..
-    } = shared;
-    let (terminal, asks) = (*terminal, *asks);
-    let Seat {
-        context,
-        session,
-        ui,
-        choice,
-        mode: started,
-        schema,
-    } = seat;
     let closed = || output.closed();
     let stopped = || interrupt.stopped();
     let brake = Brake::new(models.chat, &closed, &stopped);
@@ -95,11 +77,11 @@ pub fn assemble(
     let hands = DecisionLoop {
         decider: &decider,
         on_step: &on_step,
-        max_actions: options.max_steps,
+        max_actions: shared.options.max_steps,
     };
-    let mode = ModeCell::new(started);
+    let mode = ModeCell::new(seat.mode);
     let waited = |took| brake.extend(took);
-    let approver = match &ui {
+    let approver = match &seat.ui {
         Some(ui) => {
             let stopped = &stopped;
             let asker = Box::new(UiGate {
@@ -108,13 +90,13 @@ pub fn assemble(
             });
             ModeGate::asking(&mode, Some(asker), &waited)
         }
-        None => ModeGate::new(&mode, terminal.then_some(Tty), &waited),
+        None => ModeGate::new(&mode, shared.terminal.then_some(Tty), &waited),
     };
     let gate = Stoppable {
         inner: &approver,
         stopped: &stopped,
     };
-    let person: Box<dyn Person> = match &ui {
+    let person: Box<dyn Person> = match &seat.ui {
         Some(ui) => Box::new(UiPerson {
             ui: ui.clone(),
             mode: &mode,
@@ -126,13 +108,44 @@ pub fn assemble(
     let ask = AskTool {
         person: person.as_ref(),
     };
+    let base = Base {
+        shared,
+        output,
+        interrupt,
+        brake: &brake,
+        meter: &meter,
+        hands: &hands,
+        mode: &mode,
+        gate: &gate,
+        ask: &ask,
+        stopped: &stopped,
+        live: models.live,
+    };
+    equip(&base, seat, work)
+}
+
+/// The tools around `base`, the agents and the jobs, the lane's queue and its inbox; then the
+/// rig is built and `work` run with it ([`rig::drive`]).
+fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
+    let (shared, output) = (base.shared, base.output);
+    let Shared {
+        options,
+        workspace,
+        page,
+        browser_lock,
+        history,
+        fresh,
+        terminal,
+        asks,
+        ..
+    } = shared;
     // The one window as its tabs, where it shows.
     let tabs = (shared.browser.clone())
         .filter(|_| shared.shown)
-        .map(crate::windows::Tabs);
+        .map(windows::Tabs);
     // What commands never see: the variables of the key the models are called with, and of a
     // provider chosen later with `/login` (hiding is no barrier anyway).
-    let hidden_names = Mutex::new(choice.provider.hidden());
+    let hidden_names = Mutex::new(seat.choice.provider.hidden());
     let hidden = || lock(&hidden_names).clone();
     // The lane's queue: what reaches its run from outside its calls.
     let lane_queue = Arc::new(crate::arrivals::queue(output.ui().cloned()));
@@ -141,29 +154,29 @@ pub fn assemble(
     #[cfg(unix)]
     let sessions = windows::terminals(
         (shared.browser.clone()).map(|b| {
-            let owner = (shared.lanes.clone(), Arc::downgrade(&lane_queue));
+            let owner = (Arc::clone(&shared.lanes), Arc::downgrade(&lane_queue));
             windows::panels(b, shared.theme, owner)
         }),
         shared.shown,
     )
-    .numbered(shared.terminal_ids.clone());
+    .numbered(Arc::clone(&shared.terminal_ids));
     #[cfg(not(unix))]
     let sessions = tools::shell::Sessions::default();
     let checkpoints = Checkpoints::default();
-    let window = AtomicU64::new(choice.selection.model().context);
+    let window = AtomicU64::new(seat.choice.selection.model().context);
     // Each participant keeps its own conversation; one pipeline prepares them all.
     let strategy = agent::history::Pipeline::default();
     // Agents build tools of their own from these, on a gate that names them, with neither
     // `agents` (one level) nor `ask` (nobody answers an agent).
     let kit = Kit {
-        chat: &brake,
+        chat: base.brake,
         workspace,
-        gate: &gate,
+        gate: base.gate,
         hidden: &hidden,
-        stopped: &stopped,
+        stopped: base.stopped,
         sessions: &sessions,
         browser: page.as_ref(),
-        hands: &hands,
+        hands: base.hands,
         windowed: tabs
             .as_ref()
             .map(|tabs| tabs as &dyn tools::window::Windowed),
@@ -175,31 +188,31 @@ pub fn assemble(
         checkpoints: &checkpoints,
         output,
         history,
-        mode: &mode,
-        started,
-        terminal,
+        mode: base.mode,
+        started: seat.mode,
+        terminal: *terminal,
     };
     // The main session's tools are an agent's, on the session's own gate and stop. A
     // subdirectory's own instructions come with the first call that touches a file there; the
     // directories the context already covers are known.
     let own = Own {
-        gate: &gate,
-        stop: &stopped,
+        gate: base.gate,
+        stop: base.stopped,
         seen: Mutex::new(instructions::chain(workspace.root()).into_iter().collect()),
     };
     let main_tools = Tools::new(&kit, &own);
-    let registry = Registry::new(lane_queue.clone());
-    let jobs = Jobs::of(&session.id);
+    let registry = Registry::new(Arc::clone(&lane_queue));
+    let jobs = Jobs::of(&seat.session.id);
     let jobs_kit = jobs::Kit {
         workspace,
-        gate: &gate,
+        gate: base.gate,
         hidden: &hidden,
         output,
-        session: asks,
+        session: *asks,
         queue: &lane_queue,
     };
     // The wait between turns ends at the time limit too; the gates and tools keep `stopped`.
-    let waiting = || stopped() || brake.due();
+    let waiting = || (base.stopped)() || base.brake.due();
     let inbox = MainInbox {
         registry: &registry,
         queue: &lane_queue,
@@ -208,80 +221,50 @@ pub fn assemble(
         output,
         stopped: &waiting,
     };
-    // The agents' threads end with the session at the latest: each task waits for its own. The
-    // guard ends the jobs and stops the agents even when the session unwinds from a panic, or
-    // the scope would wait for their threads for ever.
-    std::thread::scope(|scope| {
-        // Inside the scope: it is dropped while unwinding, before the scope waits for threads.
-        let _ending = Ending {
-            jobs: &jobs,
-            registry: &registry,
-        };
-        let agents = AgentsTool::new(&kit, &registry, scope);
-        agents.adopt(&session.id);
-        let jobs_tool = JobsTool::new(&jobs_kit, &jobs, scope);
-        if asks {
-            scope.spawn(|| jobs.tick(&jobs_kit));
-        }
-        main_tools.with(|own| {
-            let mut tools: Vec<&dyn Tool> = own.to_vec();
-            if asks {
-                tools.push(&ask);
-            }
-            tools.push(&agents);
-            tools.push(&jobs_tool);
-            let agent = Agent {
-                chat: &brake,
-                tools: &tools,
-                context: &context,
-                max_turns: options.max_turns,
-                observer: output,
-                schema: schema.as_ref(),
-                inbox: Some(&inbox),
-                window: 0,
-                strategy: &strategy,
-            };
-            let mut rig = Rig {
-                agent,
-                shared,
-                options,
-                workspace,
-                output,
-                brake: &brake,
-                interrupt,
-                meter: &meter,
-                history,
-                sessions: &sessions,
-                agents: &agents,
-                jobs: &jobs,
-                jobs_kit: &jobs_kit,
-                window: &window,
-                checkpoints: &checkpoints,
-                spent: agent::agent::Spend::default(),
-                begun: std::time::Instant::now(),
-                session,
-                conversation: None,
-                mode: &mode,
-                terminal,
-                asks,
-                told: started,
-                // `llx --mode plan`: carrying out the plan goes on in the default mode.
-                before_plan: match started {
-                    Mode::Plan => Mode::Default,
-                    other => other,
-                },
-                ui,
-                attached: vec![],
-                choice,
-                live: models.live,
-                hidden: &hidden_names,
-                meta: crate::meta::Pending::default(),
-            };
-            let code = work(&mut rig);
-            rig.agents.settle();
-            code
-        })
-    })
+    let lane = Lane {
+        kit: &kit,
+        tools: &main_tools,
+        registry: &registry,
+        jobs: &jobs,
+        jobs_kit: &jobs_kit,
+        inbox: &inbox,
+        sessions: &sessions,
+        checkpoints: &checkpoints,
+        window: &window,
+        strategy: &strategy,
+        hidden: &hidden_names,
+    };
+    rig::drive(base, &lane, seat, work)
+}
+
+/// What [`assemble`] made, for the rest of the lane to borrow.
+struct Base<'a> {
+    shared: &'a Shared,
+    output: &'a Output,
+    interrupt: &'a Interrupt,
+    brake: &'a Brake<'a>,
+    meter: &'a Meter,
+    hands: &'a dyn Hands,
+    mode: &'a ModeCell,
+    gate: &'a dyn Gate,
+    ask: &'a AskTool<'a>,
+    stopped: &'a (dyn Fn() -> bool + Sync),
+    live: Option<&'a Live>,
+}
+
+/// What [`equip`] made around the base: the tools, the agents, the jobs and the inbox.
+struct Lane<'a> {
+    kit: &'a Kit<'a>,
+    tools: &'a Tools<'a>,
+    registry: &'a Registry,
+    jobs: &'a Jobs,
+    jobs_kit: &'a jobs::Kit<'a>,
+    inbox: &'a MainInbox<'a>,
+    sessions: &'a tools::shell::Sessions,
+    checkpoints: &'a Checkpoints,
+    window: &'a AtomicU64,
+    strategy: &'a agent::history::Pipeline,
+    hidden: &'a Mutex<Vec<String>>,
 }
 
 /// Who answers with no interface (`exec`, where `ask` is not offered anyway): nobody.
@@ -290,19 +273,6 @@ struct Nobody;
 impl Person for Nobody {
     fn ask(&self, _: &[Question]) -> Reply {
         Reply::Nobody("nobody is at a terminal to answer".into())
-    }
-}
-
-/// Ends the session's background work when it is dropped.
-struct Ending<'a> {
-    jobs: &'a Jobs,
-    registry: &'a Registry,
-}
-
-impl Drop for Ending<'_> {
-    fn drop(&mut self) {
-        self.jobs.close();
-        self.registry.stop_all();
     }
 }
 

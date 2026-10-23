@@ -8,8 +8,10 @@ mod task;
 
 use std::io::IsTerminal;
 use std::path::Path;
+use std::sync::mpsc::Receiver;
 
 use contracts::history::{History, Session};
+use tools::browser::Browser;
 use tools::workspace::Workspace;
 
 use crate::attach;
@@ -27,11 +29,11 @@ use crate::mode::{self, Mode};
 use crate::tui;
 use crate::windows;
 
-pub use super::ended::{Ended, since};
+pub(crate) use super::ended::{Ended, since};
 
 /// The workspace `options` name (`-C`, else the current directory), with llx's config (keys,
 /// tokens) and sessions off limits to the tools: a prompt injection must not read them.
-pub fn root(options: &RunOptions) -> Result<Workspace, Failure> {
+pub(crate) fn root(options: &RunOptions) -> Result<Workspace, Failure> {
     let root = options.cd.as_deref().unwrap_or(Path::new("."));
     let workspace = Workspace::new(root)
         .map_err(|error| Failure::Usage(format!("-C {}: {error}", root.display())))?;
@@ -45,7 +47,7 @@ pub fn root(options: &RunOptions) -> Result<Workspace, Failure> {
 
 /// How a run takes its tasks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
+pub(crate) enum Kind {
     /// A session at the terminal: the prompt, when given, is its first message.
     Session,
     /// One task, then exit (`exec`, -p).
@@ -54,7 +56,7 @@ pub enum Kind {
 
 /// What a run does once composed.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Work {
+pub(crate) enum Work {
     /// One task, then exit.
     One(String),
     /// A session in the interface, after a first message when there is one.
@@ -82,7 +84,7 @@ fn work(prompt: Option<&str>, kind: Kind) -> Result<Work, Failure> {
 }
 
 /// Whether a session can run: at a terminal, with no option that answers one task.
-pub fn session_allowed(
+pub(crate) fn session_allowed(
     prompt: Option<&str>,
     options: &RunOptions,
     terminal: bool,
@@ -97,7 +99,7 @@ pub fn session_allowed(
 }
 
 /// Run `prompt` with `options` as `kind`, in `resumed` when a session goes on.
-pub fn run(
+pub(crate) fn run(
     prompt: Option<&str>,
     options: RunOptions,
     resumed: Option<Session>,
@@ -123,9 +125,6 @@ pub fn run(
     let browser = tools::browser::has_display();
     let remote = windows::remote(|name| std::env::var_os(name).is_some());
     let shown = windows::shown(&options, asks, mode, remote);
-    // The person's colours are asked only where terminal windows will show them.
-    #[cfg(unix)]
-    let windowed = browser && shown;
     let environment = Environment {
         root: workspace.root(),
         mode: &mode::describe(mode, terminal, asks),
@@ -156,37 +155,35 @@ pub fn run(
         #[cfg(unix)]
         theme: None,
     };
-    // A session takes the terminal for its interface; one that cannot draw there (no size to
-    // draw at) is a usage error, as having no terminal is.
-    let running = match &work {
-        Work::Session(_) => {
-            // Before the interface reads the keys, which would take the terminal's answers.
-            #[cfg(unix)]
-            if windowed {
-                setup.theme = crate::colours::ask();
-            }
-            // xterm.js for the terminal windows, once: until it is kept they show a grid.
-            #[cfg(unix)]
-            if crate::xterm::wanted(true, windowed, |name| std::env::var(name).ok()) {
-                crate::xterm::prefetch();
-            }
-            let running = tui::start(repl::commands(), setup.workspace.root());
-            let why = |error| Failure::Usage(format!("{NO_INTERFACE} ({error}): {RUN_EXEC}"));
-            Some(running.map_err(why)?)
+    let ready = match work {
+        // The person's colours are asked only where terminal windows will show them.
+        Work::Session(first) => {
+            let (running, requests) = interface(&mut setup, browser && shown)?;
+            Ready::Session(first, running, requests)
         }
-        Work::One(_) => None,
+        Work::One(task) => Ready::One(task),
     };
-    // A newer model catalog, for the next session: nothing here waits on it.
-    if running.is_some() {
-        crate::providers::refresh_catalog();
+    let work = move |browser| ready.run(setup, browser);
+    interrupt::install();
+    if !browser {
+        return Ok(work(None));
     }
-    let mut running = running;
-    let work = move |browser| {
-        let code = match (work, running.as_mut()) {
+    tools::browser::host(interrupt::window_closed, move |b| work(Some(b)))
+}
+
+/// A run's work with what it runs in: a session with its interface, or one task.
+enum Ready {
+    Session(Option<String>, tui::Running, Receiver<desk::Request>),
+    One(String),
+}
+
+impl Ready {
+    /// Run it with `browser`; the exit code.
+    fn run(self, setup: Setup, browser: Option<Browser>) -> i32 {
+        match self {
             // Each lane of the session is a session of its own, on its own thread.
-            (Work::Session(first), Some(interface)) => {
-                let ui = interface.ui.clone();
-                let requests = interface.requests.take().expect("the desk's requests");
+            Self::Session(first, running, requests) => {
+                let ui = running.ui.clone();
                 let (shared, seat) = setup.split(browser);
                 let seat = Seat {
                     ui: Some(ui.clone()),
@@ -198,22 +195,42 @@ pub fn run(
                     tui::restore();
                     interrupt::quit_now();
                 };
-                desk::run(&shared, &ui, requests, seat, first, &start, &quit)
+                let code = desk::run(&shared, &ui, requests, seat, first, &start, &quit);
+                drop(running);
+                code
             }
-            (Work::Session(_), None) => unreachable!("a session has its interface"),
-            (Work::One(task), _) => compose(setup, browser, |rig| {
+            Self::One(task) => compose(setup, browser, |rig| {
                 rig.attached = rig.options.images.clone();
                 rig.task(&task)
             }),
-        };
-        drop(running);
-        code
-    };
-    interrupt::install();
-    if !browser {
-        return Ok(work(None));
+        }
     }
-    tools::browser::host(interrupt::window_closed, move |b| work(Some(b)))
+}
+
+/// A session takes the terminal for its interface; one that cannot draw there (no size to draw
+/// at) is a usage error, as having no terminal is. `windowed`: terminal windows will show.
+fn interface(
+    setup: &mut Setup,
+    windowed: bool,
+) -> Result<(tui::Running, Receiver<desk::Request>), Failure> {
+    // Before the interface reads the keys, which would take the terminal's answers.
+    #[cfg(unix)]
+    if windowed {
+        setup.theme = crate::colours::ask();
+    }
+    // xterm.js for the terminal windows, once: until it is kept they show a grid.
+    #[cfg(unix)]
+    if crate::xterm::wanted(true, windowed, |name| std::env::var(name).ok()) {
+        crate::xterm::prefetch();
+    }
+    #[cfg(not(unix))]
+    let _ = windowed;
+    let running = tui::start(repl::commands(), setup.workspace.root());
+    let why = |error| Failure::Usage(format!("{NO_INTERFACE} ({error}): {RUN_EXEC}"));
+    let running = running.map_err(why)?;
+    // A newer model catalog, for the next session: nothing here waits on it.
+    crate::providers::refresh_catalog();
+    Ok(running)
 }
 
 #[cfg(test)]

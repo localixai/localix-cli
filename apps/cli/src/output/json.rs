@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 
 use super::{SCHEMA, Start, Summary};
 
-pub fn started(start: &Start) -> Value {
+pub(super) fn started(start: &Start) -> Value {
     json!({
         "type": "run.started",
         "schema": SCHEMA,
@@ -30,7 +30,7 @@ pub fn started(start: &Start) -> Value {
     })
 }
 
-pub fn call(call: &ToolCall, ms: u64) -> Value {
+pub(super) fn call(call: &ToolCall, ms: u64) -> Value {
     json!({
         "type": "tool.call",
         "id": call.id,
@@ -40,7 +40,7 @@ pub fn call(call: &ToolCall, ms: u64) -> Value {
     })
 }
 
-pub fn result(call: &ToolCall, outcome: &Result<ToolOutput, ToolError>, ms: u64) -> Value {
+pub(super) fn result(call: &ToolCall, outcome: &Result<ToolOutput, ToolError>, ms: u64) -> Value {
     let mut event = json!({
         "type": "tool.result",
         "id": call.id,
@@ -61,7 +61,7 @@ pub fn result(call: &ToolCall, outcome: &Result<ToolOutput, ToolError>, ms: u64)
     event
 }
 
-pub fn step(step: &GoalStep, ms: u64) -> Value {
+pub(super) fn step(step: &GoalStep, ms: u64) -> Value {
     json!({
         "type": "step",
         "operation": step.operation.key(),
@@ -75,7 +75,7 @@ pub fn step(step: &GoalStep, ms: u64) -> Value {
     })
 }
 
-pub fn turn(usage: &Usage, ms: u64) -> Value {
+pub(super) fn turn(usage: &Usage, ms: u64) -> Value {
     json!({
         "type": "turn",
         "model": usage.model,
@@ -88,7 +88,7 @@ pub fn turn(usage: &Usage, ms: u64) -> Value {
     })
 }
 
-pub fn completed(summary: &Summary) -> Value {
+pub(super) fn completed(summary: &Summary) -> Value {
     let mut event = json!({
         "type": "run.completed",
         "status": summary.status,

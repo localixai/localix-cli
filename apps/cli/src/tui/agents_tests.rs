@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Instant;
 
 use contracts::tool::ToolOutput;
@@ -190,8 +191,8 @@ fn x_stops_the_agent_chosen() {
     // The stops are known process-wide: an id no other test uses.
     let id = "tui-x-stops-the-agent-chosen";
     let mut app = with_scout_as(id, now);
-    let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let _known = crate::interrupt::register_flag(id, flag.clone());
+    let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let _known = crate::interrupt::register_flag(id, Arc::clone(&flag));
     keys(
         &mut app,
         &[KeyCode::Down, KeyCode::Down, KeyCode::Char('x')],
@@ -281,10 +282,7 @@ fn esc_in_an_agents_view_goes_back_before_it_stops_anything() {
     let esc = || Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert_eq!(app.event(esc(), now), None);
     assert!(app.shown().parent.is_none());
-    assert_eq!(
-        app.event(esc(), now),
-        Some(crate::tui::app::Action::Stop(String::new()))
-    );
+    assert_eq!(app.event(esc(), now), Some(Action::Stop(String::new())));
 }
 
 fn job(id: &str, name: &str) -> super::super::event::JobRow {
@@ -312,9 +310,9 @@ fn the_list_chooses_only_job_rows_it_draws_and_keeps_a_row_chosen_when_rows_go()
         .map(|(n, id)| job(id, &format!("job{}", n + 1)))
         .collect();
     app.event(Event::Jobs(rows), now);
-    let hidden = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let hidden = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let key = crate::interrupt::job_key("", &ids[5]);
-    let _known = crate::interrupt::register_flag(&key, hidden.clone());
+    let _known = crate::interrupt::register_flag(&key, Arc::clone(&hidden));
     // Into the list, then past its last drawn row.
     keys(&mut app, &[KeyCode::Down; 10], now);
     let screen = Term::new(&app).draw(&mut app, now);
@@ -435,12 +433,12 @@ fn each_sessions_jobs_are_kept_apart_and_stopped_by_their_lane() {
         "the last to report does not win"
     );
     let (a, b) = (
-        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        Arc::new(std::sync::atomic::AtomicBool::new(false)),
     );
     let key = |lane| crate::interrupt::job_key(lane, "job-1");
-    let _a = crate::interrupt::register_flag(&key("jobs-lane-a"), a.clone());
-    let _b = crate::interrupt::register_flag(&key("jobs-lane-b"), b.clone());
+    let _a = crate::interrupt::register_flag(&key("jobs-lane-a"), Arc::clone(&a));
+    let _b = crate::interrupt::register_flag(&key("jobs-lane-b"), Arc::clone(&b));
     // Into the list: two lanes, then B's job.
     keys(
         &mut app,

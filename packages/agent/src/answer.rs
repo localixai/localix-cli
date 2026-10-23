@@ -4,10 +4,10 @@
 /// The answer without its closing `RESULT:` line, and what that line says.
 pub fn read(text: &str) -> (String, Option<bool>) {
     let text = text.trim();
-    let Some(at) = text.rfind("RESULT:") else {
+    let Some((answer, verdict)) = text.rsplit_once("RESULT:") else {
         return (text.to_string(), None);
     };
-    let verdict = text[at + "RESULT:".len()..].trim().to_lowercase();
+    let verdict = verdict.trim().to_lowercase();
     let achieved = if verdict.starts_with("not") {
         Some(false)
     } else if verdict.starts_with("achieved") {
@@ -15,7 +15,7 @@ pub fn read(text: &str) -> (String, Option<bool>) {
     } else {
         None
     };
-    (text[..at].trim().to_string(), achieved)
+    (answer.trim().to_string(), achieved)
 }
 
 #[cfg(test)]

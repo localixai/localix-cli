@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 pub(super) const HALF: usize = 5_000;
 
 #[derive(Debug, Default)]
-pub struct Output {
+pub(super) struct Output {
     head: Vec<u8>,
     tail: VecDeque<u8>,
     /// Bytes dropped between the head and the tail.
@@ -19,7 +19,7 @@ pub struct Output {
 }
 
 impl Output {
-    pub fn push(&mut self, mut bytes: &[u8]) {
+    pub(super) fn push(&mut self, mut bytes: &[u8]) {
         self.chars += characters(bytes);
         let taken = (HALF - self.head.len()).min(bytes.len());
         self.head.extend_from_slice(&bytes[..taken]);
@@ -31,7 +31,7 @@ impl Output {
     }
 
     /// The output as text, trailing whitespace dropped, with a marker where the middle was cut.
-    pub fn text(&self) -> String {
+    pub(super) fn text(&self) -> String {
         let mut tail = Vec::with_capacity(self.tail.len());
         let (front, back) = self.tail.as_slices();
         tail.extend_from_slice(front);

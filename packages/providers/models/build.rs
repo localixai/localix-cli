@@ -7,6 +7,14 @@
 //! else the provider's default API, the protocol from the SDK package and the address from the
 //! table, the provider, or the SDK's default.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    reason = "a build script fails the build: its panic is the error message"
+)]
+
 use std::fs;
 use std::path::Path;
 

@@ -41,7 +41,7 @@ const WAITS: &str = "waiting for you";
 
 /// The list's rows: the lane shown with its agents, and the jobs; the other lanes are one line.
 /// None while there is nothing of the kind.
-pub fn render(
+pub(crate) fn render(
     app: &App,
     now: Instant,
     spinner: &dyn Fn(Instant) -> Span<'static>,
@@ -217,7 +217,7 @@ pub(super) fn tokens(count: u64) -> String {
 
 /// How an agent's task ended, as the interface says it: a style, a mark and a word for its row,
 /// and what its transcript's line says it did.
-pub fn ending(status: &str) -> (Style, &'static str, &'static str, &'static str) {
+pub(crate) fn ending(status: &str) -> (Style, &'static str, &'static str, &'static str) {
     match status {
         "achieved" | "unstated" => (style::done(), "✓", "done", "finished"),
         "not_achieved" => (

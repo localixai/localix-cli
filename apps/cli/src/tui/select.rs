@@ -27,7 +27,7 @@ mod render;
 /// Options shown at once; a longer list scrolls with the marked one.
 const WINDOW: usize = 12;
 
-pub struct Choice {
+pub(crate) struct Choice {
     pub label: String,
     /// Said after the label, dim.
     pub detail: String,
@@ -36,7 +36,7 @@ pub struct Choice {
 }
 
 impl Choice {
-    pub fn new(label: &str) -> Self {
+    pub(crate) fn new(label: &str) -> Self {
         Self {
             label: label.into(),
             detail: String::new(),
@@ -44,19 +44,19 @@ impl Choice {
         }
     }
 
-    pub fn detail(mut self, detail: &str) -> Self {
+    pub(crate) fn detail(mut self, detail: &str) -> Self {
         self.detail = detail.into();
         self
     }
 
-    pub fn types(mut self) -> Self {
+    pub(crate) fn types(mut self) -> Self {
         self.types = true;
         self
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Picked {
+pub(crate) enum Picked {
     Option(usize),
     Adjusted(usize, usize),
     /// The options checked, in order, where several may be.
@@ -66,7 +66,7 @@ pub enum Picked {
     Cancelled,
 }
 
-pub struct Select {
+pub(crate) struct Select {
     title: Vec<Line<'static>>,
     choices: Vec<Choice>,
     at: usize,
@@ -86,7 +86,7 @@ pub struct Select {
 }
 
 impl Select {
-    pub fn new(title: Vec<Line<'static>>, choices: Vec<Choice>, escape: &str) -> Self {
+    pub(crate) fn new(title: Vec<Line<'static>>, choices: Vec<Choice>, escape: &str) -> Self {
         let choices_len = choices.len();
         Self {
             search: None,
@@ -105,7 +105,7 @@ impl Select {
     }
 
     /// Each original row owns its value even when the search changes its position.
-    pub fn adjustable(mut self, mut adjustments: Vec<crate::picker::Adjustment>) -> Self {
+    pub(crate) fn adjustable(mut self, mut adjustments: Vec<crate::picker::Adjustment>) -> Self {
         adjustments.resize_with(self.choices.len(), Default::default);
         for adjustment in &mut adjustments {
             adjustment.at = adjustment.at.min(adjustment.values.len().saturating_sub(1));
@@ -115,7 +115,7 @@ impl Select {
     }
 
     /// Letters filter the list, and no number picks.
-    pub fn searchable(mut self, on: bool) -> Self {
+    pub(crate) fn searchable(mut self, on: bool) -> Self {
         let rows = self
             .choices
             .iter()
@@ -132,32 +132,32 @@ impl Select {
         }
     }
 
-    pub fn multiple(mut self, multiple: bool) -> Self {
+    pub(crate) fn multiple(mut self, multiple: bool) -> Self {
         self.multiple = multiple;
         self.checked = vec![false; self.choices.len()];
         self
     }
 
     /// The marker starts on `at`.
-    pub fn at(mut self, at: usize) -> Self {
+    pub(crate) fn at(mut self, at: usize) -> Self {
         self.at = at.min(self.choices.len().saturating_sub(1));
         self
     }
 
-    pub fn hidden(mut self, hidden: bool) -> Self {
+    pub(crate) fn hidden(mut self, hidden: bool) -> Self {
         self.hidden = hidden;
         self
     }
 
     /// The title without its line `at` (who asked, once that is plain).
-    pub fn drop_title_line(&mut self, at: usize) {
+    pub(crate) fn drop_title_line(&mut self, at: usize) {
         if at < self.title.len() {
             self.title.remove(at);
         }
     }
 
     /// Opens the line of the option at `at` at once: a question with nothing to pick from.
-    pub fn typing(mut self, at: usize) -> Self {
+    pub(crate) fn typing(mut self, at: usize) -> Self {
         self.at = at;
         self.typing = Some(Composer::masked(self.hidden));
         // With nothing else to pick, the line is the whole question: no list, and Esc cancels.
@@ -166,7 +166,7 @@ impl Select {
     }
 
     /// What a key did: `None` while the choice is still open.
-    pub fn key(&mut self, key: KeyEvent) -> Option<Picked> {
+    pub(crate) fn key(&mut self, key: KeyEvent) -> Option<Picked> {
         if let Some(composer) = &mut self.typing {
             return match key.code {
                 KeyCode::Esc if self.direct => Some(Picked::Cancelled),
@@ -247,7 +247,7 @@ impl Select {
     }
 
     /// Text pasted while typing goes on the line, else on the query; elsewhere it is ignored.
-    pub fn paste(&mut self, text: &str) {
+    pub(crate) fn paste(&mut self, text: &str) {
         if let Some(composer) = &mut self.typing {
             composer.paste(text);
         } else if let Some(search) = &mut self.search {

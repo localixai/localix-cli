@@ -5,8 +5,6 @@
 //! sheet; the browser's pages stay opaque, so what the agent sees in a screenshot never changes.
 //! Elsewhere, and when the person reduces transparency, the windows are ordinary ones.
 
-use std::rc::Rc;
-
 use tao::dpi::{LogicalPosition, LogicalSize};
 use tao::event::WindowEvent;
 use tao::event_loop::EventLoopWindowTarget;
@@ -113,7 +111,7 @@ pub(super) fn dress(page: &str, look: Look) -> String {
 
 /// A window as built here, and its glass.
 pub(super) struct Frame {
-    pub native: Rc<Window>,
+    pub native: Window,
     look: Look,
     /// Whether the glass is coated, and in the page's own ground when it has one.
     coat: Option<Option<Rgb>>,
@@ -124,7 +122,7 @@ pub(super) struct Frame {
 impl Frame {
     /// A window titled `title` with pages of `size`, at `at` when given. A coated one (`coat`)
     /// is a panel's, in its page's ground or the system's.
-    pub fn build(
+    pub(super) fn build(
         target: &EventLoopWindowTarget<Cmd>,
         (title, size, at): (&str, LogicalSize<f64>, Option<LogicalPosition<f64>>),
         look: Look,
@@ -150,7 +148,7 @@ impl Frame {
         };
         let native = builder.build(target).map_err(|error| error.to_string())?;
         Ok(Self {
-            native: Rc::new(native),
+            native,
             look,
             coat,
             #[cfg(target_os = "macos")]
@@ -159,7 +157,7 @@ impl Frame {
     }
 
     /// Show the window with its first page, without taking the keyboard, then its glass.
-    pub fn show(&mut self, first: &WebView) {
+    pub(super) fn show(&mut self, first: &WebView) {
         keep_rendering(first, self.look == Look::Hidden);
         #[cfg(not(target_os = "macos"))]
         if self.look == Look::Hidden {
@@ -173,7 +171,7 @@ impl Frame {
     }
 
     /// Tint the glass for the system's appearance now, unless its ground is the page's own.
-    pub fn retint(&self) {
+    pub(super) fn retint(&self) {
         #[cfg(target_os = "macos")]
         if let Some(glass) = &self.glass {
             let system = self.native.theme() == Theme::Dark;
@@ -184,7 +182,7 @@ impl Frame {
     }
 
     /// Take `ground` as the window's own (a terminal's colours), its appearance with it.
-    pub fn ground(&mut self, ground: Rgb) {
+    pub(super) fn ground(&mut self, ground: Rgb) {
         self.coat = Some(Some(ground));
         let theme = if dark(ground) {
             Theme::Dark

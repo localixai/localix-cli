@@ -6,15 +6,19 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use serde_json::Value;
+use std::sync::mpsc::Sender;
+
 use tao::event::{Event, WindowEvent};
-use tao::event_loop::{ControlFlow, EventLoopBuilder};
+use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
+use tao::window::WindowId;
 
 use super::super::deck::{After, Deck};
 use super::super::frame;
 use super::super::guard::token;
+use super::super::panel::Opening;
 use super::super::strip::{Click, Key, click};
 use super::web::on_browser;
-use super::{Browser, Cmd, Shared, WINDOW_CLOSED};
+use super::{Browser, Cmd, Shared, WINDOW_CLOSED, Window};
 
 /// Take the main thread for the browser's event loop and run `work` on a worker thread with a
 /// handle that opens the window when it is needed. The event loop never returns, so the process
@@ -53,7 +57,7 @@ where
     });
     let browser = Browser {
         proxy: proxy.clone(),
-        shared: shared.clone(),
+        shared: Arc::clone(&shared),
     };
     let exit = proxy.clone();
     std::thread::spawn(move || {
@@ -64,119 +68,124 @@ where
     let mut deck: Option<Deck> = None;
     event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
-        let Event::UserEvent(command) = event else {
-            let Event::WindowEvent {
+        match event {
+            #[expect(
+                clippy::exit,
+                clippy::disallowed_methods,
+                reason = "the event loop owns the main thread and never returns: the process ends \
+                          here, with the code the run returned (main.rs hands it over)"
+            )]
+            Event::UserEvent(Cmd::Exit(code)) => std::process::exit(code),
+            Event::UserEvent(command) => {
+                let mut on = On {
+                    deck: &mut deck,
+                    target,
+                    shared: &shared,
+                    proxy: &proxy,
+                    on_close,
+                };
+                on.command(command);
+            }
+            Event::WindowEvent {
                 window_id, event, ..
-            } = event
-            else {
-                return;
-            };
-            let Some(open) = deck.as_mut().filter(|d| d.frame.native.id() == window_id) else {
-                return;
-            };
-            match event {
-                // The person closed the window: the browser's calls fail and the task is told,
-                // and the terminals' callers let their screens go.
-                WindowEvent::CloseRequested => {
-                    open.let_go();
-                    let browser = open.web.is_some();
-                    deck = None;
-                    shared.heard("window", CLOSED_WINDOW);
-                    if browser {
-                        shared.closed();
-                        on_close();
-                    }
-                }
-                event if frame::relayout(&event) => open.layout(),
-                // The system's appearance changed: a glass that follows it is tinted again.
-                WindowEvent::ThemeChanged(_) => open.frame.retint(),
-                _ => {}
+            } => on_window(&mut deck, window_id, &event, &shared, on_close),
+            _ => {}
+        }
+    })
+}
+
+/// The person did something to the window itself.
+fn on_window(
+    deck: &mut Option<Deck>,
+    window_id: WindowId,
+    event: &WindowEvent<'_>,
+    shared: &Shared,
+    on_close: fn(),
+) {
+    let Some(open) = deck.as_mut().filter(|d| d.frame.native.id() == window_id) else {
+        return;
+    };
+    match event {
+        // The person closed the window: the browser's calls fail and the task is told, and the
+        // terminals' callers let their screens go.
+        WindowEvent::CloseRequested => {
+            open.let_go();
+            let browser = open.web.is_some();
+            *deck = None;
+            shared.heard("window", CLOSED_WINDOW);
+            if browser {
+                shared.closed();
+                on_close();
             }
-            return;
-        };
+        }
+        event if frame::relayout(event) => open.layout(),
+        // The system's appearance changed: a glass that follows it is tinted again.
+        WindowEvent::ThemeChanged(_) => open.frame.retint(),
+        _ => {}
+    }
+}
+
+/// What a command is carried out with, on the event loop.
+struct On<'a> {
+    deck: &'a mut Option<Deck>,
+    target: &'a EventLoopWindowTarget<Cmd>,
+    shared: &'a Arc<Shared>,
+    proxy: &'a EventLoopProxy<Cmd>,
+    on_close: fn(),
+}
+
+impl On<'_> {
+    fn command(&mut self, command: Cmd) {
+        let (shared, proxy) = (self.shared, self.proxy);
         match command {
-            Cmd::Open { window, reply } => {
-                let opened = match deck.as_mut() {
-                    Some(open) if open.web.is_some() => Err("the window is already open".into()),
-                    Some(open) => open.open_web(&window, &shared, &proxy),
-                    None => Deck::for_web(target, &window, &shared, &proxy).map(|open| {
-                        deck = Some(open);
-                    }),
-                };
-                shared.open.store(opened.is_ok(), Ordering::SeqCst);
-                let _ = reply.send(opened.clone());
-                if let (Ok(()), Some(open)) = (opened, &deck) {
-                    open.refresh(&shared);
-                }
-            }
-            Cmd::Exit(code) => std::process::exit(code),
-            Cmd::Panel(opening) => {
-                let alive = Arc::clone(&opening.4);
-                let opened = match deck.as_mut() {
-                    Some(open) => open.add_term(opening, &proxy),
-                    None => Deck::for_term(target, opening, &proxy).map(|open| {
-                        deck = Some(open);
-                    }),
-                };
-                match (opened, &deck) {
-                    (Ok(()), Some(open)) => open.refresh(&shared),
-                    _ => alive.alive.store(false, Ordering::SeqCst),
-                }
-            }
+            Cmd::Open { window, reply } => self.open(&window, &reply),
+            Cmd::Panel(opening) => self.panel(opening),
             Cmd::Paint(id) => {
-                let open = deck.as_ref().and_then(|open| open.term(id));
+                let open = self.deck.as_ref().and_then(|open| open.term(id));
                 if let Some((open, frame)) = open.and_then(|o| Some((o, o.slot.latest()?))) {
                     let _ = open.webview.evaluate_script(&frame);
                 }
             }
             Cmd::Unpanel(id) => {
-                if let Some(open) = deck.as_mut() {
+                if let Some(open) = self.deck.as_mut() {
                     match open.remove_term(id) {
-                        true => open.refresh(&shared),
-                        false => deck = None,
+                        true => open.refresh(shared),
+                        false => *self.deck = None,
                     }
                 }
             }
             Cmd::Titled(id, title) => {
-                if let Some(open) = deck.as_mut() {
+                if let Some(open) = self.deck.as_mut() {
                     open.titled(id, title);
-                    open.refresh(&shared);
+                    open.refresh(shared);
                 }
             }
             Cmd::Strip => {
-                if let Some(open) = &deck {
-                    open.refresh(&shared);
+                if let Some(open) = self.deck.as_ref() {
+                    open.refresh(shared);
                 }
             }
-            // The person's click: closing the browser's last tab is closing its window.
-            Cmd::Clicked(said) => {
-                if let Some(said) = click(&said)
-                    && act(&mut deck, said, &shared, Some(on_close)).is_ok()
-                    && let Click::Close(key) = said
-                {
-                    let what = match key {
-                        Key::Web(_) => CLOSED_PAGE,
-                        Key::Term(_) => CLOSED_TERMINAL,
-                    };
-                    shared.heard(&key.name(), what);
-                }
-            }
+            Cmd::Clicked(said) => self.clicked(&said),
             Cmd::Sized(width, height, reply) => {
-                let sized = deck.as_ref().ok_or("the window is not open").map(|open| {
-                    let size = tao::dpi::LogicalSize::new(width, height);
-                    open.frame.native.set_inner_size(size);
-                    open.layout();
-                });
+                let sized = self
+                    .deck
+                    .as_ref()
+                    .ok_or("the window is not open")
+                    .map(|open| {
+                        let size = tao::dpi::LogicalSize::new(width, height);
+                        open.frame.native.set_inner_size(size);
+                        open.layout();
+                    });
                 let _ = reply.send(sized.map_err(String::from));
             }
             Cmd::Act(said, reply) => {
-                let _ = reply.send(act(&mut deck, said, &shared, None));
+                let _ = reply.send(act(self.deck, said, shared, None));
             }
             Cmd::Listing(reply) => {
-                let _ = reply.send(deck.as_ref().map(|open| open.listing(&shared)));
+                let _ = reply.send(self.deck.as_ref().map(|open| open.listing(shared)));
             }
             Cmd::Dressed(reply) => {
-                let _ = reply.send(deck.as_ref().map(|open| {
+                let _ = reply.send(self.deck.as_ref().map(|open| {
                     open.frame.retint();
                     frame::dressed(&open.frame.native)
                 }));
@@ -186,30 +195,76 @@ where
                 script,
                 panel: Some(panel),
                 ..
-            } => {
-                let answer = shared.clone();
-                let reply = move |value: String| {
-                    let value = serde_json::from_str(&value).unwrap_or(Value::String(value));
-                    answer.answer(id, Ok(value));
-                };
-                match deck.as_ref().and_then(|open| open.term(panel)) {
-                    Some(open) => drop(open.webview.evaluate_script_with_callback(&script, reply)),
-                    None => shared.answer(id, Err(WINDOW_CLOSED.into())),
-                }
-            }
+            } => self.eval_panel(id, &script, panel),
             Cmd::Close => {
                 // The agent closed the browser: the terminals stay.
-                if let Some(open) = deck.as_mut() {
+                if let Some(open) = self.deck.as_mut() {
                     shared.closed();
                     match open.remove_web() {
-                        true => open.refresh(&shared),
-                        false => deck = None,
+                        true => open.refresh(shared),
+                        false => *self.deck = None,
                     }
                 }
             }
-            command => on_browser(command, &mut deck, &shared, &proxy),
+            command => on_browser(command, self.deck, shared, proxy),
         }
-    })
+    }
+
+    fn open(&mut self, window: &Window, reply: &Sender<Result<(), String>>) {
+        let (shared, proxy) = (self.shared, self.proxy);
+        let opened = match self.deck.as_mut() {
+            Some(open) if open.web.is_some() => Err("the window is already open".into()),
+            Some(open) => open.open_web(window, shared, proxy),
+            None => Deck::for_web(self.target, window, shared, proxy).map(|open| {
+                *self.deck = Some(open);
+            }),
+        };
+        shared.open.store(opened.is_ok(), Ordering::SeqCst);
+        let _ = reply.send(opened.clone());
+        if let (Ok(()), Some(open)) = (opened, self.deck.as_ref()) {
+            open.refresh(shared);
+        }
+    }
+
+    fn panel(&mut self, opening: Opening) {
+        let alive = Arc::clone(&opening.4);
+        let opened = match self.deck.as_mut() {
+            Some(open) => open.add_term(opening, self.proxy),
+            None => Deck::for_term(self.target, opening, self.proxy).map(|open| {
+                *self.deck = Some(open);
+            }),
+        };
+        match (opened, self.deck.as_ref()) {
+            (Ok(()), Some(open)) => open.refresh(self.shared),
+            _ => alive.alive.store(false, Ordering::SeqCst),
+        }
+    }
+
+    /// The person's click: closing the browser's last tab is closing its window.
+    fn clicked(&mut self, said: &str) {
+        if let Some(said) = click(said)
+            && act(self.deck, said, self.shared, Some(self.on_close)).is_ok()
+            && let Click::Close(key) = said
+        {
+            let what = match key {
+                Key::Web(_) => CLOSED_PAGE,
+                Key::Term(_) => CLOSED_TERMINAL,
+            };
+            self.shared.heard(&key.name(), what);
+        }
+    }
+
+    fn eval_panel(&self, id: u64, script: &str, panel: u32) {
+        let answer = Arc::clone(self.shared);
+        let reply = move |value: String| {
+            let value = serde_json::from_str(&value).unwrap_or(Value::String(value));
+            answer.answer(id, Ok(value));
+        };
+        match self.deck.as_ref().and_then(|open| open.term(panel)) {
+            Some(open) => drop(open.webview.evaluate_script_with_callback(script, reply)),
+            None => self.shared.answer(id, Err(WINDOW_CLOSED.into())),
+        }
+    }
 }
 
 /// Show or close the tab `said` names. A person's click closing the browser's last tab stops the

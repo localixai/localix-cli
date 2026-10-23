@@ -10,11 +10,11 @@ use crate::compose::Rig;
 use crate::tui::event::Event;
 
 /// Characters a title takes at most.
-pub const MAX: usize = 36;
+pub(crate) const MAX: usize = 36;
 /// Bytes of the prompt at most: a long task is cut, on a character.
 const PROMPT_BYTES: usize = 960;
 /// What the model is told; the scripted model of the tests knows a title's request by it.
-pub const INSTRUCTIONS: &str = "Generate a concise, single-line task title of at most 36 \
+pub(crate) const INSTRUCTIONS: &str = "Generate a concise, single-line task title of at most 36 \
 characters and under five words where possible. Start with an imperative verb. Capitalize only \
 the first word unless the user's language, proper nouns, acronyms, or code terms require \
 otherwise. Preserve ticket references exactly. Write in the user's language. Do not use quotes, \
@@ -23,7 +23,7 @@ markdown, or trailing punctuation. Do not answer the request. Reply with the tit
 /// Name the session of `rig` from `goal` on a thread of its own, in the interface only (one task
 /// of `exec` is not listed), when it has no title and none is being asked for. The title goes to
 /// the interface and to the saved session as an [`Update`].
-pub fn start(rig: &Rig, goal: &str) {
+pub(crate) fn start(rig: &Rig, goal: &str) {
     let Some(ui) = rig.ui.clone() else { return };
     let Some(naming) = rig.meta.begin(&rig.session) else {
         return;
@@ -56,7 +56,7 @@ fn lowest(selection: &Selection) -> Selection {
 }
 
 /// The title `chat` gives the task `goal`; `None` when it fails or says nothing usable.
-pub fn ask(chat: &dyn Chat, goal: &str) -> Option<String> {
+pub(crate) fn ask(chat: &dyn Chat, goal: &str) -> Option<String> {
     if goal.trim().is_empty() {
         return None;
     }

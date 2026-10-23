@@ -16,7 +16,7 @@ use crate::output::{Start, Summary};
 
 impl Rig<'_> {
     /// Run one task in the session: report it, record it, and return its exit code.
-    pub fn task(&mut self, goal: &str) -> i32 {
+    pub(crate) fn task(&mut self, goal: &str) -> i32 {
         let started = Instant::now();
         let before = self.meter.spend();
         let workspace = self.workspace.root().display().to_string();
@@ -79,7 +79,7 @@ impl Rig<'_> {
             error: error.as_deref(),
             agent: &run.spend,
             decision: &decision,
-            millis: started.elapsed().as_millis() as u64,
+            millis: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
             session: &self.session.id,
         };
         self.output.completed(&summary);
@@ -117,7 +117,9 @@ impl Rig<'_> {
         let ceiling = self.agent.strategy.ceiling(self.agent.window);
         if let (Some(ui), true) = (&self.ui, self.agent.window > 0) {
             let left = 100u64.saturating_sub(used * 100 / ceiling.max(1));
-            ui.send(crate::tui::event::Event::Context(left as u8));
+            ui.send(crate::tui::event::Event::Context(
+                u8::try_from(left).unwrap_or(u8::MAX),
+            ));
         }
     }
 

@@ -83,9 +83,9 @@ fn process_stop_with_nothing_busy_quits() {
 
 #[test]
 fn stop_by_id_returns_true_the_second_time() {
-    let one = std::sync::Arc::new(Interrupt::of(process()));
+    let one = Arc::new(Interrupt::of(process()));
     one.begin();
-    let lane = one.clone();
+    let lane = Arc::clone(&one);
     let _known = register("lane-stopped-twice", move || lane.stop());
     assert!(!stop("lane-stopped-twice"));
     assert!(one.stopped());
@@ -99,8 +99,8 @@ fn stop_by_unknown_id_does_nothing() {
 
 #[test]
 fn a_stop_that_ended_is_not_found() {
-    let flag = std::sync::Arc::new(AtomicBool::new(false));
-    let known = register_flag("agent-that-ended", flag.clone());
+    let flag = Arc::new(AtomicBool::new(false));
+    let known = register_flag("agent-that-ended", Arc::clone(&flag));
     drop(known);
     assert!(!stop("agent-that-ended"));
     assert!(!flag.load(Ordering::SeqCst), "its entry went with it");
@@ -109,11 +109,11 @@ fn a_stop_that_ended_is_not_found() {
 #[test]
 fn a_job_is_known_by_its_lane() {
     let (one, two) = (
-        std::sync::Arc::new(AtomicBool::new(false)),
-        std::sync::Arc::new(AtomicBool::new(false)),
+        Arc::new(AtomicBool::new(false)),
+        Arc::new(AtomicBool::new(false)),
     );
-    let _one = register_flag(&job_key("lane-one", "job-1"), one.clone());
-    let _two = register_flag(&job_key("lane-two", "job-1"), two.clone());
+    let _one = register_flag(&job_key("lane-one", "job-1"), Arc::clone(&one));
+    let _two = register_flag(&job_key("lane-two", "job-1"), Arc::clone(&two));
     stop(&job_key("lane-one", "job-1"));
     assert!(one.load(Ordering::SeqCst));
     assert!(

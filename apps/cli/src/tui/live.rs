@@ -31,7 +31,7 @@ const FRAME_MS: u128 = 80;
 const PLACEHOLDER: &str = "Type a task, / for commands";
 
 /// The live rows at `now`, and where the cursor goes among them.
-pub fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
+pub(crate) fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
     let width = app.width.max(10);
     let spinner = |since: Instant| {
         let frame = now.duration_since(since).as_millis() / FRAME_MS;
@@ -40,38 +40,7 @@ pub fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
             style::code(),
         )
     };
-    let mut out: Vec<Line<'static>> = vec![];
-    let (running, busy) = app.shown_work();
-    // While a question is open it says what the call would do; the calls show again after.
-    let running = if app.questions.is_empty() {
-        running
-    } else {
-        &[]
-    };
-    for (at, (name, args, started)) in running.iter().enumerate() {
-        let mut rows = tool_cell::lines(name, args, State::Running, width);
-        if let Some(first) = rows.first_mut() {
-            first.spans[0] = spinner(*started);
-            first.spans.insert(1, Span::raw(" "));
-        }
-        out.extend(rows);
-        // The hands' steps belong to the main session's last call.
-        let last = at + 1 == running.len();
-        let steps = match (&app.shown().lane, last) {
-            (Some(lane), true) => &lane.steps[..],
-            _ => &[],
-        };
-        for step in steps {
-            let step = cut(&printable(step), width.saturating_sub(4));
-            out.push(Line::from(Span::styled(
-                format!("  └ {step}"),
-                style::dim(),
-            )));
-        }
-    }
-    if !running.is_empty() {
-        out.push(Line::default());
-    }
+    let (mut out, busy) = running_rows(app, width, &spinner);
     if let Some(started) = busy.filter(|_| app.questions.is_empty()) {
         let took = clock(now.duration_since(started).as_secs());
         let state = if app.lane().stopping {
@@ -88,23 +57,7 @@ pub fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
             Span::styled(format!(" ({took} · {state})"), style::dim()),
         ]));
     }
-    // Sent to the task, waiting for its next step; then what waits for the task to end, as the
-    // transcript will show it (the background's by where it came from, `≋ ticker · …`).
-    let lane = app.lane();
-    let waiting = lane
-        .steered
-        .iter()
-        .map(|entry| format!("↳ {}", waiting(&entry.text)))
-        .chain(
-            lane.queued
-                .iter()
-                .map(|e| format!("⏎ {}", waiting(&e.text))),
-        )
-        .chain(lane.background.iter().map(|entry| waiting(&entry.text)));
-    for entry in waiting {
-        let entry = cut(&printable(&entry.replace('\n', " ")), width - 2);
-        out.push(Line::from(Span::styled(format!("  {entry}"), style::dim())));
-    }
+    out.extend(waiting_rows(app, width));
     if !out.is_empty() && out.last() != Some(&Line::default()) {
         out.push(Line::default());
     }
@@ -151,6 +104,90 @@ pub fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
             style::dim(),
         )));
     }
+    out.extend(offer_rows(app, &offers, width));
+    if let Some(footer) = footer(app, now) {
+        out.push(Line::from(Span::styled(
+            format!("  {}", cut(&footer, width.saturating_sub(2))),
+            style::dim(),
+        )));
+    }
+    if offers.is_empty() {
+        let tree = tree::render(app, now, &spinner);
+        if !tree.is_empty() {
+            out.push(Line::default());
+            out.extend(tree);
+        }
+    }
+    (out, Some(cursor))
+}
+
+/// The calls running in the view shown, a spinner each, the hands' steps under the last; and
+/// when its task started.
+fn running_rows(
+    app: &App,
+    width: usize,
+    spinner: &dyn Fn(Instant) -> Span<'static>,
+) -> (Vec<Line<'static>>, Option<Instant>) {
+    let mut out: Vec<Line<'static>> = vec![];
+    let (running, busy) = app.shown_work();
+    // While a question is open it says what the call would do; the calls show again after.
+    let running = if app.questions.is_empty() {
+        running
+    } else {
+        &[]
+    };
+    for (at, (name, args, started)) in running.iter().enumerate() {
+        let mut rows = tool_cell::lines(name, args, State::Running, width);
+        if let Some(first) = rows.first_mut() {
+            first.spans[0] = spinner(*started);
+            first.spans.insert(1, Span::raw(" "));
+        }
+        out.extend(rows);
+        // The hands' steps belong to the main session's last call.
+        let last = at + 1 == running.len();
+        let steps = match (&app.shown().lane, last) {
+            (Some(lane), true) => &lane.steps[..],
+            _ => &[],
+        };
+        for step in steps {
+            let step = cut(&printable(step), width.saturating_sub(4));
+            out.push(Line::from(Span::styled(
+                format!("  └ {step}"),
+                style::dim(),
+            )));
+        }
+    }
+    if !running.is_empty() {
+        out.push(Line::default());
+    }
+    (out, busy)
+}
+
+/// What waits, a row each.
+fn waiting_rows(app: &App, width: usize) -> Vec<Line<'static>> {
+    // Sent to the task, waiting for its next step; then what waits for the task to end, as the
+    // transcript will show it (the background's by where it came from, `≋ ticker · …`).
+    let lane = app.lane();
+    let waiting = lane
+        .steered
+        .iter()
+        .map(|entry| format!("↳ {}", waiting(&entry.text)))
+        .chain(
+            lane.queued
+                .iter()
+                .map(|e| format!("⏎ {}", waiting(&e.text))),
+        )
+        .chain(lane.background.iter().map(|entry| waiting(&entry.text)));
+    let rows = waiting.map(|entry| {
+        let entry = cut(&printable(&entry.replace('\n', " ")), width - 2);
+        Line::from(Span::styled(format!("  {entry}"), style::dim()))
+    });
+    rows.collect()
+}
+
+/// What `/` or `@` offers, the one marked in bold.
+fn offer_rows(app: &App, offers: &[Offer], width: usize) -> Vec<Line<'static>> {
+    let mut out = vec![];
     for (at, offer) in offers.iter().enumerate() {
         let marked = at == app.offered.min(offers.len() - 1);
         let name_style = if marked { style::bold() } else { style::dim() };
@@ -174,20 +211,7 @@ pub fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
         };
         out.push(line);
     }
-    if let Some(footer) = footer(app, now) {
-        out.push(Line::from(Span::styled(
-            format!("  {}", cut(&footer, width.saturating_sub(2))),
-            style::dim(),
-        )));
-    }
-    if offers.is_empty() {
-        let tree = tree::render(app, now, &spinner);
-        if !tree.is_empty() {
-            out.push(Line::default());
-            out.extend(tree);
-        }
-    }
-    (out, Some(cursor))
+    out
 }
 
 fn command_context(text: &str, current: &str) -> Option<String> {

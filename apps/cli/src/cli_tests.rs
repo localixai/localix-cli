@@ -205,7 +205,7 @@ fn the_help_shows_the_usage_the_examples_and_where_things_are_kept() {
     );
     // The default sessions directory, as `commands::sessions::store` builds it.
     assert!(help.contains("~/.llx/sessions"), "{help}");
-    let version = Cli::command().render_version().to_string();
+    let version = Cli::command().render_version();
     assert!(version.starts_with("llx "), "{version}");
 }
 

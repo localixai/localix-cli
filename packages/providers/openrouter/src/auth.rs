@@ -46,10 +46,10 @@ pub struct Login {
 
 impl Login {
     pub fn start(app: App) -> Result<Self, String> {
-        let (verifier, challenge) = oauth::pkce();
+        let (verifier, challenge) = oauth::pkce()?;
         // OpenRouter sends no `state` back; a random route keeps stray requests from completing
         // the sign-in.
-        let path = format!("/oauth/callback/{}", oauth::random(12));
+        let path = format!("/oauth/callback/{}", oauth::random(12)?);
         let callback = loopback::listen(Listen {
             ports: &[0],
             path: &path,

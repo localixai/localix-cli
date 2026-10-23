@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use crate::observer::Observer;
 
 /// A chat model that replies from a script, and remembers what each request allowed.
-pub struct Scripted {
+pub(crate) struct Scripted {
     replies: Mutex<Vec<Completion>>,
     /// Whether each request let the model call tools.
     pub may_call: Mutex<Vec<bool>>,
@@ -19,7 +19,7 @@ pub struct Scripted {
 }
 
 impl Scripted {
-    pub fn new(replies: Vec<Completion>) -> Self {
+    pub(crate) fn new(replies: Vec<Completion>) -> Self {
         Self {
             replies: Mutex::new(replies.into_iter().rev().collect()),
             may_call: Mutex::new(vec![]),
@@ -53,10 +53,10 @@ impl Chat for Scripted {
 
 /// An observer that writes each event down as one line.
 #[derive(Default)]
-pub struct Recorder(Mutex<Vec<String>>);
+pub(crate) struct Recorder(Mutex<Vec<String>>);
 
 impl Recorder {
-    pub fn events(&self) -> Vec<String> {
+    pub(crate) fn events(&self) -> Vec<String> {
         self.0.lock().unwrap().clone()
     }
 }
@@ -84,14 +84,14 @@ impl Observer for Recorder {
     }
 }
 
-pub fn says(text: &str) -> Completion {
+pub(crate) fn says(text: &str) -> Completion {
     Completion {
         text: Some(text.into()),
         ..Completion::default()
     }
 }
 
-pub fn calls(name: &str, arguments: Value) -> Completion {
+pub(crate) fn calls(name: &str, arguments: Value) -> Completion {
     Completion {
         calls: vec![ToolCall {
             id: "c1".into(),
@@ -103,10 +103,10 @@ pub fn calls(name: &str, arguments: Value) -> Completion {
 }
 
 /// A tool that answers each call from a script.
-pub struct Echo(Mutex<Vec<Result<ToolOutput, ToolError>>>);
+pub(crate) struct Echo(Mutex<Vec<Result<ToolOutput, ToolError>>>);
 
 impl Echo {
-    pub fn new(outcomes: Vec<Result<ToolOutput, ToolError>>) -> Self {
+    pub(crate) fn new(outcomes: Vec<Result<ToolOutput, ToolError>>) -> Self {
         Self(Mutex::new(outcomes.into_iter().rev().collect()))
     }
 }
@@ -124,7 +124,7 @@ impl Tool for Echo {
     }
 }
 
-pub fn ok(report: &str) -> Result<ToolOutput, ToolError> {
+pub(crate) fn ok(report: &str) -> Result<ToolOutput, ToolError> {
     Ok(ToolOutput {
         report: report.into(),
         state: Some("state".into()),

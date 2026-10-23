@@ -11,7 +11,7 @@ use serde_json::Value;
 
 /// The answer to an approval.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Approval {
+pub(crate) enum Approval {
     Yes,
     /// Yes, and the same tool is not asked about again.
     Always,
@@ -21,7 +21,7 @@ pub enum Approval {
 
 /// What the person sent: the text, and the pictures attached to it.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct Typed {
+pub(crate) struct Typed {
     pub text: String,
     pub images: Vec<PathBuf>,
 }
@@ -37,7 +37,7 @@ impl From<&str> for Typed {
 
 /// A job as the list under the composer shows it.
 #[derive(Debug, Clone, PartialEq)]
-pub struct JobRow {
+pub(crate) struct JobRow {
     pub id: String,
     pub name: String,
     /// Its command, or its cron and prompt.
@@ -52,7 +52,7 @@ pub struct JobRow {
     pub lane: String,
 }
 
-pub enum Event {
+pub(crate) enum Event {
     /// The session's first row: the version and what it runs with.
     Header(Vec<String>),
     /// A quiet line from llx; its rows are kept as they are.

@@ -81,7 +81,7 @@ fn the_end_rule_fills_the_width_and_says_how_it_ended() {
             "─".repeat(8)
         )
     );
-    assert_eq!(super::super::wrap::line_width(&rule[0]), 50);
+    assert_eq!(line_width(&rule[0]), 50);
 }
 
 #[test]

@@ -4,13 +4,13 @@ use super::*;
 
 #[test]
 fn the_challenge_is_the_verifiers_sha256() {
-    let (verifier, challenge) = pkce();
+    let (verifier, challenge) = pkce().unwrap();
     assert_eq!(verifier.len(), 43);
     assert_eq!(
         challenge,
         URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
     );
-    assert_ne!(pkce().0, verifier);
+    assert_ne!(pkce().unwrap().0, verifier);
 }
 
 #[test]

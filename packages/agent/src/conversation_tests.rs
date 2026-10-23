@@ -58,7 +58,9 @@ fn a_result_too_long_keeps_its_head_and_tail() {
     assert!(
         short.contains("… 10 characters cut …"),
         "{}",
-        &short[MAX_RESULT / 2..MAX_RESULT / 2 + 40]
+        short
+            .get(MAX_RESULT / 2..MAX_RESULT / 2 + 40)
+            .unwrap_or(&short)
     );
     assert_eq!(shortened("short"), "short");
 }
@@ -242,7 +244,7 @@ fn a_result_without_state_leaves_the_newest_state_alone() {
     assert!(
         contents[6].starts_with("opened view\n\nxxx"),
         "no newer state follows: {}",
-        &contents[6][..40]
+        contents[6].chars().take(40).collect::<String>()
     );
 }
 

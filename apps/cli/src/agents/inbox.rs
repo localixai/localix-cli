@@ -18,7 +18,7 @@ const POLL: Duration = Duration::from_millis(200);
 
 /// The main agent's inbox: the person's words, then the lane's queue, which holds whatever else
 /// came (agents' answers, monitors, the window, ...) and knows no source.
-pub struct MainInbox<'a> {
+pub(crate) struct MainInbox<'a> {
     pub registry: &'a Registry,
     pub queue: &'a queue::Queue,
     pub jobs: &'a crate::jobs::Jobs,
@@ -76,10 +76,10 @@ impl Inbox for MainInbox<'_> {
 
 /// What the main agent sends an agent while it works.
 #[derive(Default)]
-pub struct Letters(Mutex<VecDeque<String>>);
+pub(crate) struct Letters(Mutex<VecDeque<String>>);
 
 impl Letters {
-    pub fn post(&self, message: &str) {
+    pub(crate) fn post(&self, message: &str) {
         crate::output::lock(&self.0).push_back(message.to_string());
     }
 
@@ -89,7 +89,7 @@ impl Letters {
 }
 
 /// An agent's inbox: its letters, shown in its view as they are read.
-pub struct AgentInbox<'a> {
+pub(crate) struct AgentInbox<'a> {
     pub letters: &'a Letters,
     pub watch: &'a Watch<'a>,
 }

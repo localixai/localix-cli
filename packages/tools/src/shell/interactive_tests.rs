@@ -300,7 +300,10 @@ fn python(show: bool) -> (Vec<String>, Vec<String>, Vec<String>) {
         }
         let report = in_session(&sessions, &dir, &gate, arguments).unwrap();
         match report.split_once(" after ") {
-            Some((head, rest)) => format!("{head}{}", &rest[rest.find('\n').unwrap_or(0)..]),
+            Some((head, rest)) => format!(
+                "{head}{}",
+                rest.get(rest.find('\n').unwrap_or(0)..).unwrap()
+            ),
             None => report,
         }
     };

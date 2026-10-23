@@ -14,14 +14,14 @@ pub(super) struct Table {
 }
 
 impl Table {
-    pub fn new(alignments: Vec<Alignment>) -> Self {
+    pub(super) fn new(alignments: Vec<Alignment>) -> Self {
         Self {
             rows: vec![],
             alignments,
         }
     }
 
-    pub fn render(
+    pub(super) fn render(
         self,
         width: usize,
         first: Line<'static>,
@@ -54,12 +54,8 @@ impl Table {
         }
         let budget = room.saturating_sub(columns * 3 + 1);
         while widths.iter().sum::<usize>() > budget {
-            let at = widths
-                .iter()
-                .enumerate()
-                .max_by_key(|(_, width)| **width)
-                .unwrap()
-                .0;
+            let widest = widths.iter().enumerate().max_by_key(|(_, width)| **width);
+            let Some((at, _)) = widest else { break };
             widths[at] -= 1;
         }
         for (index, row) in self.rows.into_iter().enumerate() {

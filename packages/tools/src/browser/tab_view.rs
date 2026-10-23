@@ -19,10 +19,10 @@ pub(super) fn builder<'a>(
     proxy: EventLoopProxy<Cmd>,
     with_ipc: bool,
 ) -> WebViewBuilder<'a> {
-    let ipc = shared.clone();
-    let loads = shared.clone();
-    let requests = shared.clone();
-    let titles = shared.clone();
+    let ipc = Arc::clone(shared);
+    let loads = Arc::clone(shared);
+    let requests = Arc::clone(shared);
+    let titles = Arc::clone(shared);
     // A title or a load changes what the strip names the tab.
     let (titled, loaded) = (proxy.clone(), proxy.clone());
     let mut builder = WebViewBuilder::new()
@@ -36,14 +36,14 @@ pub(super) fn builder<'a>(
             true,
         )
         .with_on_page_load_handler(move |event, url| {
-            if std::env::var_os("BROWSER_DEBUG").is_some() {
+            super::debug(|| {
                 let kind = if matches!(event, PageLoadEvent::Started) {
                     "started"
                 } else {
                     "finished"
                 };
-                eprintln!("tab {id} load {kind}: {url}");
-            }
+                format!("tab {id} load {kind}: {url}")
+            });
             loads.page_load(id, event, &url);
             let _ = loaded.send_event(Cmd::Strip);
         })
@@ -53,9 +53,7 @@ pub(super) fn builder<'a>(
         })
         .with_navigation_handler(move |url| {
             let allow = allowed(&url) || url == BLANK;
-            if std::env::var_os("BROWSER_DEBUG").is_some() {
-                eprintln!("tab {id} navigation requested: {url} (allowed: {allow})");
-            }
+            super::debug(|| format!("tab {id} navigation requested: {url} (allowed: {allow})"));
             if allow {
                 requests.navigation_requested(id);
             }

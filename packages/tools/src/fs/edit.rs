@@ -245,7 +245,7 @@ fn replace(content: &str, args: &Args, shown: &str) -> Result<Change, ToolError>
         text.replacen(old.as_str(), &new, 1)
     };
     let at = text.find(old.as_str()).unwrap_or(0);
-    let first = text[..at].matches('\n').count() + 1;
+    let first = text.get(..at).unwrap_or_default().matches('\n').count() + 1;
     let last = first + new.lines().count().max(1) - 1;
     let (added, removed) = changed(&old, &new);
     Ok(Change {

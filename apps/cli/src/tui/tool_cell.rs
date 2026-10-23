@@ -28,13 +28,13 @@ const HEAD: usize = 2;
 const TAIL: usize = 3;
 
 /// Where a call is.
-pub enum State<'a> {
+pub(crate) enum State<'a> {
     Running,
     Done(&'a Result<ToolOutput, ToolError>),
 }
 
 /// The block for a call of `name` with `args`.
-pub fn lines(name: &str, args: &Value, state: State, width: usize) -> Vec<Line<'static>> {
+pub(crate) fn lines(name: &str, args: &Value, state: State, width: usize) -> Vec<Line<'static>> {
     let mut out = head(name, args, &state, width);
     if let State::Done(outcome) = state {
         out.extend(body(name, outcome, width));
@@ -43,7 +43,7 @@ pub fn lines(name: &str, args: &Value, state: State, width: usize) -> Vec<Line<'
 }
 
 /// A call the person said no to: not a failure, so not red; what they said is under it.
-pub fn declined(name: &str, args: &Value, said: &str, width: usize) -> Vec<Line<'static>> {
+pub(crate) fn declined(name: &str, args: &Value, said: &str, width: usize) -> Vec<Line<'static>> {
     let mut out = head(name, args, &State::Running, width);
     out[0].spans[0] = Span::styled("• ", style::waiting());
     out[0].spans[1] = Span::styled("Skipped", style::bold());
@@ -62,7 +62,7 @@ pub fn declined(name: &str, args: &Value, said: &str, width: usize) -> Vec<Line<
 }
 
 /// The bullet and what the call does, wrapped under a rule.
-pub fn head(name: &str, args: &Value, state: &State, width: usize) -> Vec<Line<'static>> {
+pub(crate) fn head(name: &str, args: &Value, state: &State, width: usize) -> Vec<Line<'static>> {
     let what = describe(name, args);
     let (verb, bullet) = match state {
         State::Running => (what.verb.0, style::dim()),
@@ -83,7 +83,7 @@ pub fn head(name: &str, args: &Value, state: &State, width: usize) -> Vec<Line<'
 }
 
 /// What a finished call printed or why it failed, under its head.
-pub fn body(
+pub(crate) fn body(
     name: &str,
     outcome: &Result<ToolOutput, ToolError>,
     width: usize,
@@ -134,7 +134,7 @@ fn failed(name: &str, outcome: &Result<ToolOutput, ToolError>) -> bool {
 }
 
 /// What a call did, in a few words: `Ran cargo test`.
-pub fn summary(name: &str, args: &Value) -> String {
+pub(crate) fn summary(name: &str, args: &Value) -> String {
     let what = describe(name, args);
     format!("{} {}", what.verb.1, what.subject)
         .trim()
@@ -142,7 +142,7 @@ pub fn summary(name: &str, args: &Value) -> String {
 }
 
 /// What a call running does: `Running cargo test`.
-pub fn doing(name: &str, args: &Value) -> String {
+pub(crate) fn doing(name: &str, args: &Value) -> String {
     let what = describe(name, args);
     format!("{} {}", what.verb.0, what.subject)
         .trim()
@@ -301,7 +301,7 @@ fn output_rows(name: &str, report: &str) -> Vec<(String, Style)> {
         "edit" => report
             .lines()
             .next()
-            .and_then(|line| line.rfind("(").map(|at| &line[at..]))
+            .and_then(|line| line.rfind("(").and_then(|at| line.get(at..)))
             .map(|counts| vec![(counts.trim_end_matches('.').to_string(), style::dim())])
             .unwrap_or_default(),
         "read" => vec![],

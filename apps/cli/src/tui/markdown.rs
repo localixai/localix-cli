@@ -14,7 +14,7 @@ use super::wrap::{hard, line_width, wrap};
 use crate::printable::printable;
 
 /// `text` as rows of at most `width` columns.
-pub fn render(text: &str, width: usize) -> Vec<Line<'static>> {
+pub(crate) fn render(text: &str, width: usize) -> Vec<Line<'static>> {
     let mut out = Renderer {
         width: width.max(8),
         ..Renderer::default()

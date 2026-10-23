@@ -11,7 +11,7 @@ use serde_json::Value;
 use super::event::Typed;
 
 /// Every session the interface knows, and which one it shows.
-pub struct Views {
+pub(crate) struct Views {
     /// Each lane, followed by the agents it started, in the order they started.
     pub sessions: Vec<SessionView>,
     /// The jobs running in the background.
@@ -39,7 +39,7 @@ impl Default for Views {
 }
 
 /// One session as the interface keeps it: a lane, or an agent with its parent.
-pub struct SessionView {
+pub(crate) struct SessionView {
     pub id: String,
     /// The lane that started it, for an agent.
     pub parent: Option<String>,
@@ -63,7 +63,7 @@ pub struct SessionView {
 }
 
 impl SessionView {
-    pub fn new(id: String, parent: Option<String>, name: String) -> Self {
+    pub(crate) fn new(id: String, parent: Option<String>, name: String) -> Self {
         let lane = parent.is_none().then(|| {
             Box::new(LaneState {
                 mode: "default".into(),
@@ -92,7 +92,7 @@ const NAMED: usize = 48;
 
 impl SessionView {
     /// What the person knows it by: its name, else an explicitly new session.
-    pub fn title(&self) -> &str {
+    pub(crate) fn title(&self) -> &str {
         match self.name.is_empty() {
             true => "New session",
             false => &self.name,
@@ -100,7 +100,7 @@ impl SessionView {
     }
 
     /// A lane with no name is named by the first line of its first task.
-    pub fn named_by(&mut self, goal: &str) {
+    pub(crate) fn named_by(&mut self, goal: &str) {
         if self.lane.is_none() || !self.name.is_empty() {
             return;
         }
@@ -115,7 +115,7 @@ impl SessionView {
 
 /// A lane's own: what the person sent it, and what its task reports beside its transcript.
 #[derive(Default)]
-pub struct LaneState {
+pub(crate) struct LaneState {
     /// The session waits for its next entry here.
     pub waiting: Option<Sender<Option<Typed>>>,
     /// Entries for after the task running (Tab, or a command), oldest first.
@@ -138,7 +138,7 @@ pub struct LaneState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AgentState {
+pub(crate) enum AgentState {
     /// Started, and given nothing yet.
     Idle,
     Working,
@@ -148,13 +148,13 @@ pub enum AgentState {
 }
 
 impl Views {
-    pub fn find(&self, id: &str) -> Option<usize> {
+    pub(crate) fn find(&self, id: &str) -> Option<usize> {
         self.sessions.iter().position(|session| session.id == id)
     }
 
     /// A lane began: the interface's first takes its id (it is shown from the start); another
     /// is kept beside the others.
-    pub fn lane_started(&mut self, id: String, name: String) {
+    pub(crate) fn lane_started(&mut self, id: String, name: String) {
         let first = &mut self.sessions[0];
         if first.id.is_empty() {
             first.id = id.clone();
@@ -168,7 +168,7 @@ impl Views {
     }
 
     /// The lane of the session shown: itself, or the agent's parent.
-    pub fn home(&self) -> usize {
+    pub(crate) fn home(&self) -> usize {
         let at = self.find(&self.shown).unwrap_or(0);
         match &self.sessions[at].parent {
             Some(parent) => self.find(parent).unwrap_or(0),
@@ -178,7 +178,7 @@ impl Views {
 
     /// The sessions the tree draws, in its order: the lane shown and the agents it started, or
     /// none while it has started none. The other lanes are the ← list's.
-    pub fn order(&self) -> Vec<usize> {
+    pub(crate) fn order(&self) -> Vec<usize> {
         let lane = self.home();
         let id = &self.sessions[lane].id;
         let agents = (0..self.sessions.len())

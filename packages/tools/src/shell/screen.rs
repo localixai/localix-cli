@@ -17,32 +17,32 @@ pub struct Theme {
     pub cursor: Rgb,
 }
 
-pub struct Screen {
+pub(super) struct Screen {
     safe: Safe,
     parser: vt100::Parser,
 }
 
 impl Screen {
-    pub fn new(rows: u16, columns: u16) -> Self {
+    pub(super) fn new(rows: u16, columns: u16) -> Self {
         Self {
             safe: Safe::default(),
             parser: vt100::Parser::new(rows, columns, 0),
         }
     }
 
-    pub fn feed(&mut self, bytes: &[u8]) {
+    pub(super) fn feed(&mut self, bytes: &[u8]) {
         let kept = self.safe.keep(bytes);
         self.parser.process(&kept);
     }
 
     /// Whether the program drew on the alternate screen (a full-screen program).
-    pub fn alternate(&self) -> bool {
+    pub(super) fn alternate(&self) -> bool {
         self.parser.screen().alternate_screen()
     }
 
     /// The screen as text, its blank rows at the end left out, and where the cursor is (row and
     /// column, from 1).
-    pub fn text(&self) -> (String, (u16, u16)) {
+    pub(super) fn text(&self) -> (String, (u16, u16)) {
         let screen = self.parser.screen();
         let rows: Vec<String> = screen
             .rows(0, screen.size().1)
@@ -57,7 +57,7 @@ impl Screen {
     }
 
     /// Where the cursor is: row and column, from 1.
-    pub fn cursor(&self) -> (u16, u16) {
+    pub(super) fn cursor(&self) -> (u16, u16) {
         let (row, column) = self.parser.screen().cursor_position();
         (row + 1, column + 1)
     }
@@ -65,7 +65,7 @@ impl Screen {
     /// The page's call that draws the screen: `F(rows, row, column, hidden, end, drawn)`, each
     /// a JSON value; `end` is what the title gains once the session ended, `drawn` the screen as
     /// a terminal would be told to draw it (for an emulator's page; the grid's reads the rows).
-    pub fn frame(&self, end: Option<&str>) -> String {
+    pub(super) fn frame(&self, end: Option<&str>) -> String {
         let screen = self.parser.screen();
         let columns = screen.size().1;
         let rows: Vec<String> = screen
@@ -98,8 +98,9 @@ pub struct Emulator {
 }
 
 /// The emulator page's own script, and its SHA-384: the page's policy runs it by that hash.
-pub const GLUE: &str = include_str!("emulator.js");
-pub const GLUE_SHA384: &str = "vToWxmZHk9q/wazU7Pk5pO2OELsGJdZCJXYSFHvLkyofCRAivli5vXNq4jM8BpD6";
+pub(super) const GLUE: &str = include_str!("emulator.js");
+pub(super) const GLUE_SHA384: &str =
+    "vToWxmZHk9q/wazU7Pk5pO2OELsGJdZCJXYSFHvLkyofCRAivli5vXNq4jM8BpD6";
 
 /// The page that shows a screen, titled `title`, in the person's colours, else the system's:
 /// drawn by `emulator` when there is one, else as a grid of rows. Its policy runs its own scripts
@@ -162,15 +163,17 @@ fn fill(template: &str, values: &[(&str, &str)]) -> String {
     let mut page =
         String::with_capacity(template.len() + values.iter().map(|v| v.1.len()).sum::<usize>());
     let mut rest = template;
-    while let Some(at) = rest.find("{{") {
-        page.push_str(&rest[..at]);
-        let after = &rest[at + 2..];
-        let end = after.find("}}").unwrap_or(after.len());
-        match values.iter().find(|(key, _)| *key == &after[..end]) {
+    while let Some((before, after)) = rest.split_once("{{") {
+        page.push_str(before);
+        let (key, next) = after.split_once("}}").unwrap_or((after, ""));
+        match values.iter().find(|(known, _)| *known == key) {
             Some((_, value)) => page.push_str(value),
-            None => page.push_str(&rest[at..at + 2 + end]),
+            None => {
+                page.push_str("{{");
+                page.push_str(key);
+            }
         }
-        rest = after.get(end + 2..).unwrap_or("");
+        rest = next;
     }
     page.push_str(rest);
     page

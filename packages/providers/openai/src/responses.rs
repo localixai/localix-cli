@@ -64,7 +64,8 @@ impl ChatModel {
             app,
             selection,
             tokens: Mutex::new(tokens),
-            session: oauth::random(16),
+            // Only the prompt cache's key: without randomness, the time is unique enough.
+            session: oauth::random(16).unwrap_or_else(|_| format!("llx-{}", tokens::now())),
             base: BASE.into(),
         }
     }
@@ -127,7 +128,8 @@ impl Chat for ChatModel {
             match reply.status {
                 200 => {
                     let mut completion = read(&reply.body, self.selection.model().id.as_str())?;
-                    completion.usage.millis = started.elapsed().as_millis() as u64;
+                    completion.usage.millis =
+                        u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
                     return Ok(completion);
                 }
                 401 if !renewed => {

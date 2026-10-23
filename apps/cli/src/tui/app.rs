@@ -22,7 +22,7 @@ use crate::printable::printable;
 
 /// What the person asked for that the interface cannot do itself.
 #[derive(Debug, PartialEq)]
-pub enum Action {
+pub(crate) enum Action {
     /// Stop the task of the lane named.
     Stop(String),
     /// Leave the session now.
@@ -42,10 +42,10 @@ pub enum Action {
 }
 
 /// What Shift+Tab sends: the session reads it as the plan-mode switch.
-pub const SHIFT_TAB: &str = "\u{1b}[Z";
+pub(crate) const SHIFT_TAB: &str = "\u{1b}[Z";
 
 /// A question open, and where its answer goes.
-pub enum Open {
+pub(crate) enum Open {
     Approval(Sender<Approval>),
     Question(Sender<Option<Answer>>),
     Choice(Sender<Option<usize>>),
@@ -55,7 +55,7 @@ pub enum Open {
     Quit,
 }
 
-pub struct App {
+pub(crate) struct App {
     pub width: usize,
     pub height: usize,
     /// Finished blocks not printed yet.
@@ -97,7 +97,7 @@ pub struct App {
 pub(super) const QUIT_WINDOW_MS: u128 = 2000;
 
 impl App {
-    pub fn new(width: usize, height: usize, commands: Vec<(String, String)>) -> Self {
+    pub(crate) fn new(width: usize, height: usize, commands: Vec<(String, String)>) -> Self {
         Self {
             width,
             height,
@@ -122,7 +122,7 @@ impl App {
     }
 
     /// The finished blocks to print, with a blank row between them; they are printed once.
-    pub fn take_history(&mut self) -> Vec<Line<'static>> {
+    pub(crate) fn take_history(&mut self) -> Vec<Line<'static>> {
         let mut out = vec![];
         for block in self.pending.drain(..) {
             out.extend(block);
@@ -132,11 +132,19 @@ impl App {
     }
 
     /// The lane of the session shown: what the person types goes there.
-    pub fn lane(&self) -> &LaneState {
+    #[allow(
+        clippy::expect_used,
+        reason = "`home` is a lane: an agent's view is its parent's, and the first view is a lane"
+    )]
+    pub(crate) fn lane(&self) -> &LaneState {
         let lane = self.views.sessions[self.views.home()].lane.as_deref();
         lane.expect("a lane")
     }
 
+    #[allow(
+        clippy::expect_used,
+        reason = "`home` is a lane: an agent's view is its parent's, and the first view is a lane"
+    )]
     pub(super) fn lane_mut(&mut self) -> &mut LaneState {
         let home = self.views.home();
         let lane = self.views.sessions[home].lane.as_deref_mut();
@@ -144,21 +152,21 @@ impl App {
     }
 
     /// When the task of the lane shown started, while it runs.
-    pub fn busy(&self) -> Option<Instant> {
+    pub(crate) fn busy(&self) -> Option<Instant> {
         self.views.sessions[self.views.home()].busy
     }
 
     /// What the lane shown is known by: an agent's view names it.
-    pub fn home_title(&self) -> String {
+    pub(crate) fn home_title(&self) -> String {
         printable(self.views.sessions[self.views.home()].title())
     }
 
     /// The id of the lane shown: its stop is known by it.
-    pub fn lane_id(&self) -> &str {
+    pub(crate) fn lane_id(&self) -> &str {
         &self.views.sessions[self.views.home()].id
     }
 
-    pub fn event(&mut self, event: Event, now: Instant) -> Option<Action> {
+    pub(crate) fn event(&mut self, event: Event, now: Instant) -> Option<Action> {
         match event {
             Event::In(id, inner) => match self.views.find(&id) {
                 Some(at) => self.on(at, *inner, now),
@@ -297,14 +305,14 @@ impl App {
     }
 
     /// Each path in the composer that names a file becomes its mark; a picture is kept a copy of.
-    pub fn adopt_paths(&mut self) {
+    pub(crate) fn adopt_paths(&mut self) {
         let dir = self.pasted.clone();
         let keep = |path: &std::path::Path| attach::keep(path, &dir);
         self.composer.adopt(&attach::resolve, &keep);
     }
 
     /// The person is leaving: the session's wait ends with nothing.
-    pub fn leave(&mut self) {
+    pub(crate) fn leave(&mut self) {
         self.left = true;
         for lane in self
             .views

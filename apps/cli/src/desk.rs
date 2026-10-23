@@ -24,13 +24,13 @@ use crate::tui::event::Event;
 /// How often the desk looks whether its lanes are gone while nothing is asked of it.
 const POLL: Duration = Duration::from_millis(200);
 /// Lanes open at most: opening another closes the oldest idle one.
-pub const MAX_LANES: usize = 8;
+pub(crate) const MAX_LANES: usize = 8;
 /// Saved sessions the list shows at most.
 const SAVED: usize = 20;
 
 /// What the interface asks of the desk.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Request {
+pub(crate) enum Request {
     /// Open a lane, or show it when it is open already.
     Open(Target),
     /// This directory's saved sessions, for the list.
@@ -40,7 +40,7 @@ pub enum Request {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Target {
+pub(crate) enum Target {
     /// A new session.
     New,
     /// A session saved before, by its id.
@@ -52,14 +52,14 @@ pub enum Target {
 }
 
 /// What a lane does once built: its session at the prompt.
-pub type Work<'w> = Box<dyn for<'r, 's> FnOnce(&'r mut Rig<'s>) -> i32 + Send + 'w>;
+pub(crate) type Work<'w> = Box<dyn for<'r, 's> FnOnce(&'r mut Rig<'s>) -> i32 + Send + 'w>;
 
 /// Builds a lane over what is shared, from its seat, and runs its work in it.
-pub type Start<'a> = dyn Fn(&Shared, Seat, Work) -> i32 + Sync + 'a;
+pub(crate) type Start<'a> = dyn Fn(&Shared, Seat, Work) -> i32 + Sync + 'a;
 
 /// The session in `ui`: the first lane from `first` (with `task` as its first message), then a
 /// lane for each request, until none is left; its exit code.
-pub fn run(
+pub(crate) fn run(
     shared: &Shared,
     ui: &Ui,
     requests: Receiver<Request>,
@@ -162,6 +162,8 @@ impl<'e> Desk<'e> {
             self.ui.send(Event::Show(id.clone()));
         }
         let (shared, lanes, start) = (self.shared, self.lanes, self.start);
+        // The lane's own interface is the desk's, tagged with its id, as `lane` tags it.
+        let tagged = self.ui.for_lane(&id);
         scope.spawn(move || {
             let _leaving = Leaving { lanes, id };
             let work: Work = Box::new(move |rig| {
@@ -169,7 +171,7 @@ impl<'e> Desk<'e> {
                 if first {
                     rig.attached = rig.options.images.clone();
                 }
-                let ui = rig.ui.clone().expect("a lane is shown in the interface");
+                let ui = rig.ui.clone().unwrap_or(tagged);
                 repl::run(rig, &ui, task.as_deref())
             });
             start(shared, seat, work)

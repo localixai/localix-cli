@@ -10,14 +10,14 @@ use crate::exit;
 
 /// How a task ended, for the report and the exit code.
 #[derive(Debug, PartialEq)]
-pub struct Ended {
+pub(crate) struct Ended {
     pub status: &'static str,
     pub code: i32,
     pub error: Option<String>,
 }
 
 impl Ended {
-    pub fn of(
+    pub(crate) fn of(
         status: &Status,
         data: Option<&Result<Value, String>>,
         halt: Option<Halt>,
@@ -53,7 +53,7 @@ impl Ended {
 }
 
 /// What the decision model spent since `before`: the meter counts over the whole process.
-pub fn since(now: &Spend, before: &Spend) -> Spend {
+pub(crate) fn since(now: &Spend, before: &Spend) -> Spend {
     Spend {
         model: now.model.clone(),
         calls: now.calls - before.calls,

@@ -27,7 +27,10 @@ impl Browser {
             .map_err(|error| {
                 BrowserError::Unavailable(format!("could not open the browser window: {error}"))
             })?;
-        Ok(WebviewDriver::new(self.proxy.clone(), self.shared.clone()))
+        Ok(WebviewDriver::new(
+            self.proxy.clone(),
+            Arc::clone(&self.shared),
+        ))
     }
 
     /// A tab `id` (unique among the panels: a terminal session's id) titled `title` in the window, showing `html` (a page of the caller's, which paints
@@ -59,7 +62,7 @@ impl Browser {
     /// Hear what the person does in the window: a tab or the window closed, by key (`window` for
     /// the whole of it) and in words. It runs on the window's thread: it must not wait.
     pub fn listen(&self, listener: impl Fn(&str, &str) + Send + Sync + 'static) {
-        *self.shared.listener.lock().unwrap() = Some(Box::new(listener));
+        *crate::lock(&self.shared.listener) = Some(Box::new(listener));
     }
 
     /// The window's tabs, in the strip's order; `None` while it is closed.
@@ -110,7 +113,7 @@ impl Browser {
     pub fn peek(&self, panel: &Panel, script: &str) -> Result<Value, String> {
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = mpsc::channel();
-        self.shared.pending.lock().unwrap().insert(id, sender);
+        crate::lock(&self.shared.pending).insert(id, sender);
         let script = script.to_string();
         let panel = Some(panel.id());
         let _ = (self.proxy).send_event(Cmd::Eval {
@@ -121,7 +124,7 @@ impl Browser {
             tab: None,
         });
         let reply = receiver.recv_timeout(std::time::Duration::from_secs(5));
-        self.shared.pending.lock().unwrap().remove(&id);
+        crate::lock(&self.shared.pending).remove(&id);
         reply.unwrap_or_else(|_| Err("no answer".into()))
     }
 }

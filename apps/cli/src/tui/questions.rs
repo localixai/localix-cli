@@ -11,7 +11,7 @@ use super::style;
 use crate::printable::printable;
 
 /// `label` names the session asking when it is not the one shown.
-pub fn approval(tool: &str, summary: &str, label: Option<&str>) -> Select {
+pub(crate) fn approval(tool: &str, summary: &str, label: Option<&str>) -> Select {
     let title = match tool {
         "bash" => "Run this command?".to_string(),
         "edit" => "Change this file?".to_string(),
@@ -37,7 +37,7 @@ pub fn approval(tool: &str, summary: &str, label: Option<&str>) -> Select {
 }
 
 /// The `at`th of `of` questions: its options, then the person's own words.
-pub fn question(question: &Question, at: usize, of: usize, label: Option<&str>) -> Select {
+pub(crate) fn question(question: &Question, at: usize, of: usize, label: Option<&str>) -> Select {
     let count = match of {
         1 => String::new(),
         of => format!("  {} of {of}", at + 1),
@@ -55,7 +55,7 @@ pub fn question(question: &Question, at: usize, of: usize, label: Option<&str>) 
     if own == 0 { select.typing(0) } else { select }
 }
 
-pub fn choice(title: &str, options: &[(String, String)], marked: Option<usize>) -> Select {
+pub(crate) fn choice(title: &str, options: &[(String, String)], marked: Option<usize>) -> Select {
     let title = vec![heading(&printable(title), "")];
     let choices = options
         .iter()
@@ -65,7 +65,7 @@ pub fn choice(title: &str, options: &[(String, String)], marked: Option<usize>) 
 }
 
 /// A line to type, its characters hidden for a secret.
-pub fn line(prompt: &str, hidden: bool) -> Select {
+pub(crate) fn line(prompt: &str, hidden: bool) -> Select {
     let prompt = printable(prompt.trim().trim_end_matches(['>', ':']).trim());
     let title = vec![heading(&prompt, "")];
     let select = Select::new(title, vec![Choice::new("Type it").types()], "esc to cancel");
@@ -92,7 +92,7 @@ fn heading(title: &str, after: &str) -> Line<'static> {
 
 /// Sends what `picked` means to whoever asked. A refused approval returns what the person said
 /// (empty for nothing), for the call's block.
-pub fn answer(open: Open, picked: Picked) -> Option<String> {
+pub(crate) fn answer(open: Open, picked: Picked) -> Option<String> {
     match open {
         Open::Approval(reply) => {
             let approval = match picked {

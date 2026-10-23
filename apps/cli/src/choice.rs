@@ -15,26 +15,26 @@ use crate::providers::Provider;
 const FILE: &str = "settings.json";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Choice {
+pub(crate) struct Choice {
     pub provider: Provider,
     pub selection: Selection,
 }
 
 impl Choice {
     /// `provider`'s model `id` at its default level.
-    pub fn new(provider: Provider, id: &str) -> Self {
+    pub(crate) fn new(provider: Provider, id: &str) -> Self {
         Self {
             selection: Selection::new(provider.entry(id)),
             provider,
         }
     }
 
-    pub fn model(&self) -> &str {
+    pub(crate) fn model(&self) -> &str {
         &self.selection.model().id
     }
 
     /// `openai · gpt-6-sol · medium`.
-    pub fn label(&self) -> String {
+    pub(crate) fn label(&self) -> String {
         format!(
             "{} · {} · {}",
             self.provider.id(),
@@ -69,12 +69,12 @@ fn path() -> Option<PathBuf> {
 }
 
 /// The choice `/login` saved.
-pub fn saved() -> Option<Choice> {
+pub(crate) fn saved() -> Option<Choice> {
     let text = std::fs::read_to_string(path()?).ok()?;
     Choice::from_json(&serde_json::from_str(&text).ok()?)
 }
 
-pub fn save(choice: &Choice) -> std::io::Result<PathBuf> {
+pub(crate) fn save(choice: &Choice) -> std::io::Result<PathBuf> {
     let path = path().ok_or_else(|| std::io::Error::other("no home directory"))?;
     provider_kit::store::save(&path, &format!("{:#}\n", choice.to_json()))?;
     Ok(path)
@@ -82,7 +82,7 @@ pub fn save(choice: &Choice) -> std::io::Result<PathBuf> {
 
 /// The choice a run starts with: the options, else what was saved, else the first provider
 /// signed in to (OpenRouter when none is) with its default model.
-pub fn resolve(options: &ModelOptions, saved: Option<Choice>) -> Result<Choice, Failure> {
+pub(crate) fn resolve(options: &ModelOptions, saved: Option<Choice>) -> Result<Choice, Failure> {
     let provider = match &options.provider {
         Some(id) => Provider::named(id).ok_or_else(|| {
             Failure::Usage(format!(
@@ -127,7 +127,7 @@ pub fn resolve(options: &ModelOptions, saved: Option<Choice>) -> Result<Choice, 
 }
 
 /// The levels a selection's model takes, for a message: `low, medium, high`.
-pub fn levels(selection: &Selection) -> String {
+pub(crate) fn levels(selection: &Selection) -> String {
     let offered = selection.model().offered().iter().map(|e| e.name());
     offered.collect::<Vec<_>>().join(", ")
 }

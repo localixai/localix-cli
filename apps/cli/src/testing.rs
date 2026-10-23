@@ -23,17 +23,17 @@ use crate::mode::Mode;
 use crate::output::Output;
 
 /// A directory for one test, removed when it ends: tests run in parallel, so each gets its own.
-pub struct Scratch(PathBuf);
+pub(crate) struct Scratch(PathBuf);
 
 impl Scratch {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::under(&std::env::temp_dir())
     }
 
     /// A directory in no git repository, where one can be found: the system's temporary
     /// directory may sit inside one (TMPDIR=$PWD/tmp, a devcontainer), so the usual others are
     /// tried too.
-    pub fn outside_repository() -> Option<Self> {
+    pub(crate) fn outside_repository() -> Option<Self> {
         let mut bases = vec![std::env::temp_dir()];
         if cfg!(unix) {
             bases.extend(["/tmp", "/var/tmp"].map(PathBuf::from));
@@ -60,16 +60,16 @@ impl Scratch {
         std::fs::create_dir_all(&dir).unwrap();
         // As the workspace names it (on Windows, without the verbatim `\\?\` prefix), so paths
         // compare equal with what the app reports.
-        let root = tools::workspace::Workspace::new(&dir).unwrap();
+        let root = Workspace::new(&dir).unwrap();
         Self(root.root().to_path_buf())
     }
 
-    pub fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &Path {
         &self.0
     }
 
     /// Write `content` at `name` under the directory, creating its parents.
-    pub fn file(&self, name: &str, content: &str) -> PathBuf {
+    pub(crate) fn file(&self, name: &str, content: &str) -> PathBuf {
         let path = self.0.join(name);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, content).unwrap();
@@ -85,10 +85,10 @@ impl Drop for Scratch {
 
 /// A writer that keeps what is written, shared with the test that reads it.
 #[derive(Clone, Default)]
-pub struct Captured(Arc<Mutex<Vec<u8>>>);
+pub(crate) struct Captured(Arc<Mutex<Vec<u8>>>);
 
 impl Captured {
-    pub fn text(&self) -> String {
+    pub(crate) fn text(&self) -> String {
         String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
     }
 }
@@ -105,7 +105,7 @@ impl Write for Captured {
 }
 
 /// A writer whose reader has gone: every write is a broken pipe.
-pub struct Closed;
+pub(crate) struct Closed;
 
 impl Write for Closed {
     fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
@@ -118,10 +118,10 @@ impl Write for Closed {
 }
 
 /// A chat model that answers from a script, then is unreachable.
-pub struct ScriptedChat(Mutex<Vec<Completion>>);
+pub(crate) struct ScriptedChat(Mutex<Vec<Completion>>);
 
 impl ScriptedChat {
-    pub fn new(replies: Vec<Completion>) -> Self {
+    pub(crate) fn new(replies: Vec<Completion>) -> Self {
         Self(Mutex::new(replies.into_iter().rev().collect()))
     }
 }
@@ -137,7 +137,7 @@ impl Chat for ScriptedChat {
 }
 
 /// A decision model that is never there: the tests run without a browser.
-pub struct NoDecider;
+pub(crate) struct NoDecider;
 
 impl Decider for NoDecider {
     fn decide(&self, _: &Value, _: &BTreeMap<String, Question>) -> Result<Decision, DecideError> {
@@ -150,13 +150,13 @@ impl Decider for NoDecider {
 /// The terminal, with a person who types lines from a script, then nothing (a closed terminal);
 /// it remembers each question shown.
 #[derive(Default)]
-pub struct Typed {
+pub(crate) struct Typed {
     lines: Mutex<VecDeque<&'static str>>,
     pub asked: Mutex<Vec<String>>,
 }
 
 impl Typed {
-    pub fn new(lines: &[&'static str]) -> Self {
+    pub(crate) fn new(lines: &[&'static str]) -> Self {
         Self {
             lines: Mutex::new(lines.iter().copied().collect()),
             asked: Mutex::default(),
@@ -172,7 +172,7 @@ impl Prompter for &Typed {
 }
 
 /// `n` answers that end a task well.
-pub fn answers(n: usize) -> Vec<Completion> {
+pub(crate) fn answers(n: usize) -> Vec<Completion> {
     (0..n)
         .map(|_| Completion {
             text: Some("Done.\nRESULT: achieved".into()),
@@ -183,7 +183,7 @@ pub fn answers(n: usize) -> Vec<Completion> {
 
 /// Compose a run that starts in `mode` around a scripted model, in a fresh workspace, and run
 /// `work` with it. No terminal: nothing here may wait on a person.
-pub fn composed(
+pub(crate) fn composed(
     mode: Mode,
     asks: bool,
     replies: Vec<Completion>,
@@ -193,7 +193,12 @@ pub fn composed(
 }
 
 /// [`composed`], around `chat`.
-pub fn composed_with(mode: Mode, asks: bool, chat: &dyn Chat, work: impl FnOnce(&mut Rig) -> i32) {
+pub(crate) fn composed_with(
+    mode: Mode,
+    asks: bool,
+    chat: &dyn Chat,
+    work: impl FnOnce(&mut Rig) -> i32,
+) {
     let scratch = Scratch::new();
     let (shared, seat) = setup(&scratch, mode, asks).split(None);
     let models = Models {
@@ -206,7 +211,7 @@ pub fn composed_with(mode: Mode, asks: bool, chat: &dyn Chat, work: impl FnOnce(
 
 /// A session in `scratch` that starts in `mode`, with no terminal and no interface; its
 /// sessions are kept in `scratch` too.
-pub fn setup(scratch: &Scratch, mode: Mode, asks: bool) -> Setup {
+pub(crate) fn setup(scratch: &Scratch, mode: Mode, asks: bool) -> Setup {
     let history = session::Sessions {
         dir: scratch.path().join("sessions"),
     };
@@ -231,7 +236,7 @@ pub fn setup(scratch: &Scratch, mode: Mode, asks: bool) -> Setup {
 }
 
 /// Output nobody reads.
-pub fn quiet() -> Output {
+pub(crate) fn quiet() -> Output {
     Output::with(
         false,
         false,
@@ -241,7 +246,7 @@ pub fn quiet() -> Output {
 }
 
 /// An answer that says `text` and ends the task well.
-pub fn says(text: &str) -> Completion {
+pub(crate) fn says(text: &str) -> Completion {
     Completion {
         text: Some(format!("{text}\nRESULT: achieved")),
         ..Completion::default()
@@ -250,7 +255,7 @@ pub fn says(text: &str) -> Completion {
 
 /// What the main conversation's calls came back with, in order: whether each failed, and its
 /// report.
-pub fn results(rig: &Rig) -> Vec<(bool, String)> {
+pub(crate) fn results(rig: &Rig) -> Vec<(bool, String)> {
     let conversation = rig.conversation.as_ref().unwrap();
     conversation
         .messages()
@@ -265,7 +270,7 @@ pub fn results(rig: &Rig) -> Vec<(bool, String)> {
 }
 
 /// The user messages of the rig's conversation: the goals and the notes before them.
-pub fn users(rig: &Rig) -> Vec<String> {
+pub(crate) fn users(rig: &Rig) -> Vec<String> {
     let conversation = rig.conversation.as_ref().unwrap();
     conversation
         .messages()
@@ -279,24 +284,24 @@ pub fn users(rig: &Rig) -> Vec<String> {
 
 /// A person who picks from a script, and remembers what each step offered.
 #[derive(Default)]
-pub struct Scripted {
-    picks: std::collections::VecDeque<Option<usize>>,
+pub(crate) struct Scripted {
+    picks: VecDeque<Option<usize>>,
     pub shown: Vec<(String, Vec<crate::picker::Item>)>,
 }
 
 impl Scripted {
-    pub fn new(picks: &[Option<usize>]) -> Self {
+    pub(crate) fn new(picks: &[Option<usize>]) -> Self {
         Self {
             picks: picks.iter().copied().collect(),
             shown: vec![],
         }
     }
 
-    pub fn titles(&self) -> Vec<&str> {
+    pub(crate) fn titles(&self) -> Vec<&str> {
         self.shown.iter().map(|(title, _)| title.as_str()).collect()
     }
 
-    pub fn offered(&self, title: &str) -> Vec<(String, bool)> {
+    pub(crate) fn offered(&self, title: &str) -> Vec<(String, bool)> {
         let (_, items) = self
             .shown
             .iter()
@@ -324,13 +329,13 @@ impl crate::picker::Lines for Scripted {
 
 /// A chat model the test answers one turn at a time (a turn waits until it is sent its reply),
 /// and the conversations it was asked to go on from.
-pub struct Gated {
+pub(crate) struct Gated {
     replies: Mutex<std::sync::mpsc::Receiver<Completion>>,
     pub asked: Mutex<Vec<Vec<Message>>>,
 }
 
 /// A [`Gated`] model, and where its replies are sent.
-pub fn gated() -> (std::sync::mpsc::Sender<Completion>, Gated) {
+pub(crate) fn gated() -> (std::sync::mpsc::Sender<Completion>, Gated) {
     let (replies, received) = std::sync::mpsc::channel();
     let chat = Gated {
         replies: Mutex::new(received),
@@ -341,7 +346,7 @@ pub fn gated() -> (std::sync::mpsc::Sender<Completion>, Gated) {
 
 impl Gated {
     /// How many turns it was asked for.
-    pub fn turns(&self) -> usize {
+    pub(crate) fn turns(&self) -> usize {
         self.asked.lock().unwrap().len()
     }
 }

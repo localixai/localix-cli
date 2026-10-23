@@ -8,49 +8,49 @@ use std::io::IsTerminal;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
 
-pub fn dim() -> Style {
+pub(crate) fn dim() -> Style {
     Style::new().add_modifier(Modifier::DIM)
 }
-pub fn bold() -> Style {
+pub(crate) fn bold() -> Style {
     Style::new().add_modifier(Modifier::BOLD)
 }
-pub fn done() -> Style {
+pub(crate) fn done() -> Style {
     Style::new().fg(Color::Green)
 }
-pub fn failed() -> Style {
+pub(crate) fn failed() -> Style {
     Style::new().fg(Color::Red)
 }
-pub fn waiting() -> Style {
+pub(crate) fn waiting() -> Style {
     Style::new().fg(Color::Yellow)
 }
-pub fn code() -> Style {
+pub(crate) fn code() -> Style {
     Style::new().fg(Color::Cyan)
 }
 
 /// Whether colour goes to a stream: `CLICOLOR_FORCE` wins, then `NO_COLOR` and `TERM=dumb` turn it
 /// off, then a terminal turns it on.
-pub fn colour(terminal: bool, var: &dyn Fn(&str) -> Option<String>) -> bool {
+pub(crate) fn colour(terminal: bool, var: &dyn Fn(&str) -> Option<String>) -> bool {
     let forced = var("CLICOLOR_FORCE").is_some_and(|v| !v.is_empty() && v != "0");
     let off = var("NO_COLOR").is_some() || var("TERM").as_deref() == Some("dumb");
     forced || (terminal && !off)
 }
 
 /// Colour for stderr, where the trace goes.
-pub fn colour_stderr() -> bool {
+pub(crate) fn colour_stderr() -> bool {
     colour(std::io::stderr().is_terminal(), &|name| {
         std::env::var(name).ok()
     })
 }
 
 /// Colour for stdout, where the answer goes.
-pub fn colour_stdout() -> bool {
+pub(crate) fn colour_stdout() -> bool {
     colour(std::io::stdout().is_terminal(), &|name| {
         std::env::var(name).ok()
     })
 }
 
 /// `line` as the terminal draws it: SGR codes around each styled span, or plain text.
-pub fn ansi(line: &Line, colour: bool) -> String {
+pub(crate) fn ansi(line: &Line, colour: bool) -> String {
     let mut out = String::new();
     for span in &line.spans {
         let style = line.style.patch(span.style);
@@ -66,7 +66,7 @@ pub fn ansi(line: &Line, colour: bool) -> String {
 
 /// `line` without its styles.
 #[cfg(test)]
-pub fn plain(line: &Line) -> String {
+pub(crate) fn plain(line: &Line) -> String {
     ansi(line, false)
 }
 

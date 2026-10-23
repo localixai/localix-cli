@@ -69,9 +69,9 @@ fn doing(running: &[(String, Value, Instant)]) -> Option<String> {
 /// How long the agent has worked and the tokens it used: `1m 08s · 54.1k tokens`.
 fn spent(agent: &SessionView, now: Instant) -> String {
     let millis = agent.worked
-        + agent
-            .busy
-            .map_or(0, |since| now.duration_since(since).as_millis() as u64);
+        + agent.busy.map_or(0, |since| {
+            u64::try_from(now.duration_since(since).as_millis()).unwrap_or(u64::MAX)
+        });
     match (millis < 1000, agent.tokens) {
         (true, 0) => String::new(),
         (_, 0) => cells::clock(millis / 1000),

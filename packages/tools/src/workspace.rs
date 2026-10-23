@@ -169,7 +169,7 @@ fn unverbatim(path: &str) -> Option<String> {
             if !lettered {
                 return None;
             }
-            (rest.to_string(), &rest[3..])
+            (rest.to_string(), rest.get(3..).unwrap_or_default())
         }
     };
     let ordinary = names

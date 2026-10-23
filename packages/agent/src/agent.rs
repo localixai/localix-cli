@@ -13,7 +13,7 @@ use serde_json::Value;
 
 use crate::answer;
 use crate::conversation::Conversation;
-use crate::history::Strategy;
+use crate::history::{Strategy, whole};
 use crate::observer::Observer;
 use crate::schema;
 pub use crate::spend::Spend;
@@ -107,7 +107,7 @@ impl Agent<'_> {
 
     /// `run`, with the pictures the person attached to the goal, each with its name.
     pub fn run_with(&self, goal: &str, attached: &[(String, Image)]) -> Run {
-        self.reach(self.attach(self.tell(None, &self.goal(goal)), attached))
+        self.reach(Self::attach(self.tell(None, &self.goal(goal)), attached))
     }
 
     /// `follow_up`, with the pictures the person attached to the goal.
@@ -117,10 +117,13 @@ impl Agent<'_> {
         goal: &str,
         attached: &[(String, Image)],
     ) -> Run {
-        self.reach(self.attach(self.tell(Some(conversation), &self.goal(goal)), attached))
+        self.reach(Self::attach(
+            self.tell(Some(conversation), &self.goal(goal)),
+            attached,
+        ))
     }
 
-    fn attach(&self, mut conversation: Conversation, attached: &[(String, Image)]) -> Conversation {
+    fn attach(mut conversation: Conversation, attached: &[(String, Image)]) -> Conversation {
         for (name, image) in attached {
             conversation.attach(name, image.clone());
         }
@@ -180,10 +183,10 @@ impl Agent<'_> {
             })
             .sum();
         for turn in 0..self.max_turns {
-            self.deliver(&mut run, self.take());
+            Self::deliver(&mut run, self.take());
             // Prepared for the model before each request; the elided stays elided.
             let ceiling =
-                (self.strategy.ceiling(self.window)).saturating_sub((fixed as f64 * ratio) as u64);
+                (self.strategy.ceiling(self.window)).saturating_sub(whole(fixed as f64 * ratio));
             let report = self.strategy.prepare(&mut run.conversation, ceiling, ratio);
             if !report.is_empty() {
                 self.observer.fitted(&report);
@@ -231,7 +234,7 @@ impl Agent<'_> {
                     false => came,
                 };
                 if !came.is_empty() {
-                    self.deliver(&mut run, came);
+                    Self::deliver(&mut run, came);
                     continue;
                 }
                 // With a schema, text alone is not the end: the model is asked once for `result`.
@@ -273,7 +276,7 @@ impl Agent<'_> {
     }
 
     /// Say what came in, after the results of the last turn's calls.
-    fn deliver(&self, run: &mut Run, came: Vec<String>) {
+    fn deliver(run: &mut Run, came: Vec<String>) {
         for message in came {
             run.conversation.push(Message::User(message));
         }

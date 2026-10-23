@@ -48,7 +48,7 @@ pub struct Frame {
 impl Frame {
     /// The conversation's size in real tokens, as far as the estimate and the ratio tell.
     pub fn size(&self, conversation: &Conversation) -> u64 {
-        (conversation.tokens() as f64 * self.ratio) as u64
+        whole(conversation.tokens() as f64 * self.ratio)
     }
 }
 
@@ -117,7 +117,7 @@ impl Strategy for Pipeline {
             target: ceiling * self.low / 100,
             ratio,
             // The tail is counted in real tokens too.
-            tail: tail(conversation, (self.tail as f64 / ratio.max(0.01)) as u64),
+            tail: tail(conversation, whole(self.tail as f64 / ratio.max(0.01))),
         };
         let mut report = Report::new();
         if frame.size(conversation) * 100 < ceiling * self.high {
@@ -247,6 +247,15 @@ fn large(arguments: &Value) -> bool {
     arguments
         .as_object()
         .is_some_and(|map| map.values().any(|v| v.as_str().is_some_and(worth)))
+}
+
+/// An estimate in whole tokens.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "`as` saturates and drops the fraction: whole tokens are meant"
+)]
+pub(crate) fn whole(tokens: f64) -> u64 {
+    tokens as u64
 }
 
 /// A message's tokens, estimated: four characters to a token.

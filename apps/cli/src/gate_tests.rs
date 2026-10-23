@@ -1,5 +1,5 @@
 use contracts::gate::Open;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use super::*;
 use crate::mode::{Mode, ModeCell};
@@ -168,11 +168,8 @@ fn a_waiting_question_ends_when_the_task_is_stopped_and_reads_what_was_typed() {
     let (reader, mut writer) = std::io::pipe().unwrap();
     let input = File::from(std::os::fd::OwnedFd::from(reader));
     assert!(!typed(&input, &|| true), "stopped: no wait");
-    let polls = std::cell::Cell::new(0);
-    let stops_later = || {
-        polls.set(polls.get() + 1);
-        polls.get() > 2
-    };
+    let polls = AtomicUsize::new(0);
+    let stops_later = || polls.fetch_add(1, Ordering::SeqCst) + 1 > 2;
     assert!(!typed(&input, &stops_later), "nothing typed, then the stop");
     writer.write_all(b"y\n").unwrap();
     assert!(typed(&input, &|| false));

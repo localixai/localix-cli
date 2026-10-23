@@ -17,7 +17,7 @@ use crate::output::lock;
 use crate::tui::event::Approval;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum Mode {
+pub(crate) enum Mode {
     /// Each command, file change and browser action is asked at the terminal.
     Default,
     /// Investigate and plan: file changes are refused, each command and browser action is asked.
@@ -29,17 +29,17 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub const ALL: [Self; 4] = [Self::Default, Self::Plan, Self::Bypass, Self::Autonomous];
+    pub(crate) const ALL: [Self; 4] = [Self::Default, Self::Plan, Self::Bypass, Self::Autonomous];
 
     /// `-y` is bypass; otherwise the flag, else default.
-    pub fn choose(flag: Option<Self>, yes: bool) -> Self {
+    pub(crate) fn choose(flag: Option<Self>, yes: bool) -> Self {
         match yes {
             true => Self::Bypass,
             false => flag.unwrap_or(Self::Default),
         }
     }
 
-    pub fn name(self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Default => "default",
             Self::Plan => "plan",
@@ -49,12 +49,12 @@ impl Mode {
     }
 
     /// The mode called `name`, as `--mode` spells it.
-    pub fn named(name: &str) -> Option<Self> {
+    pub(crate) fn named(name: &str) -> Option<Self> {
         Self::from_str(name.trim(), true).ok()
     }
 
     /// One line on what the mode does: its `--help` text.
-    pub fn hint(self) -> String {
+    pub(crate) fn hint(self) -> String {
         self.to_possible_value()
             .and_then(|value| value.get_help().map(ToString::to_string))
             .unwrap_or_default()
@@ -64,28 +64,29 @@ impl Mode {
 /// The mode now, read by the gate and the person on whichever thread asks (an agent's, a call's
 /// running beside others) and set between tasks.
 #[derive(Debug)]
-pub struct ModeCell(AtomicU8);
+pub(crate) struct ModeCell(AtomicU8);
 
 impl ModeCell {
-    pub fn new(mode: Mode) -> Self {
+    pub(crate) fn new(mode: Mode) -> Self {
         Self(AtomicU8::new(Self::index(mode)))
     }
 
-    pub fn get(&self) -> Mode {
+    pub(crate) fn get(&self) -> Mode {
         Mode::ALL[self.0.load(Ordering::SeqCst) as usize]
     }
 
-    pub fn set(&self, mode: Mode) {
+    pub(crate) fn set(&self, mode: Mode) {
         self.0.store(Self::index(mode), Ordering::SeqCst);
     }
 
     fn index(mode: Mode) -> u8 {
-        Mode::ALL.iter().position(|&m| m == mode).unwrap_or(0) as u8
+        let at = Mode::ALL.iter().position(|&m| m == mode);
+        at.and_then(|at| u8::try_from(at).ok()).unwrap_or(0)
     }
 }
 
 /// `/mode`: each mode with what it does, the current one marked.
-pub fn list(current: Mode) -> String {
+pub(crate) fn list(current: Mode) -> String {
     let line = |mode: Mode| {
         let mark = if mode == current { "*" } else { " " };
         format!("{mark} {:<11} {}\n", mode.name(), mode.hint())
@@ -94,22 +95,22 @@ pub fn list(current: Mode) -> String {
 }
 
 /// What the person is told when the mode changes.
-pub fn switched(mode: Mode) -> String {
+pub(crate) fn switched(mode: Mode) -> String {
     format!("Mode: {}. {}\n", mode.name(), mode.hint())
 }
 
 /// Why plan mode refuses a file change.
-pub const PLAN_REFUSAL: &str = "plan mode is read-only: files are not changed in it. Investigate \
+pub(crate) const PLAN_REFUSAL: &str = "plan mode is read-only: files are not changed in it. Investigate \
 with reads and commands that change nothing, then answer with the plan; the person switches the \
 mode to have it carried out.";
 
 /// Why an effect is refused with no one to approve it.
-pub const NO_TERMINAL: &str = "no one is at a terminal to approve it; the person must rerun \
+pub(crate) const NO_TERMINAL: &str = "no one is at a terminal to approve it; the person must rerun \
 llx with --yes (-y) or --mode bypass to allow commands, file changes and browser actions";
 
 /// Why plan mode refuses a command or a browser action with no one to approve it. It never points
 /// to bypass: that would turn a read-only request into one that changes files unasked.
-pub const PLAN_NO_TERMINAL: &str = "no one is at a terminal to approve it, and plan mode runs \
+pub(crate) const PLAN_NO_TERMINAL: &str = "no one is at a terminal to approve it, and plan mode runs \
 nothing unapproved: plan from reading files, and say in the plan which commands to run, or that \
 the person can run llx at a terminal to approve each one";
 
@@ -117,7 +118,7 @@ the person can run llx at a terminal to approve each one";
 const NO_ANSWER: &str = "no answer came from the terminal";
 
 /// Why a question gets no answer in autonomous mode.
-pub const AUTONOMOUS: &str = "nobody answers questions in autonomous mode: decide on your best \
+pub(crate) const AUTONOMOUS: &str = "nobody answers questions in autonomous mode: decide on your best \
 assumption, state it in your answer, and keep going";
 
 /// The tool plan mode refuses outright: the one that changes files.
@@ -125,7 +126,7 @@ const EDIT: &str = "edit";
 
 /// The mode as the agent's context states it. `terminal`: someone can approve at the terminal.
 /// `asks`: the `ask` tool is offered (a session).
-pub fn describe(mode: Mode, terminal: bool, asks: bool) -> String {
+pub(crate) fn describe(mode: Mode, terminal: bool, asks: bool) -> String {
     let asks = asks && terminal;
     let mut text = String::new();
     match mode {
@@ -192,7 +193,7 @@ pub fn describe(mode: Mode, terminal: bool, asks: bool) -> String {
 }
 
 /// The note that tells the model the mode changed mid-session.
-pub fn notice(mode: Mode, terminal: bool, asks: bool) -> String {
+pub(crate) fn notice(mode: Mode, terminal: bool, asks: bool) -> String {
     format!(
         "<mode_change>\nThe mode is now {}\nWhat the context or an earlier note said about the \
          mode no longer holds.\n</mode_change>",
@@ -203,7 +204,7 @@ pub fn notice(mode: Mode, terminal: bool, asks: bool) -> String {
 /// The gate as the current mode answers it: bypass and autonomous allow, plan refuses file changes
 /// and asks for the rest, default asks. Plan keeps its own "always" answers, so an `a` given while
 /// working does not let a command through unasked while planning, nor the reverse.
-pub struct ModeGate<'a> {
+pub(crate) struct ModeGate<'a> {
     mode: &'a ModeCell,
     /// `None`: nobody to ask.
     asker: Option<Box<dyn Asker + 'a>>,
@@ -215,7 +216,7 @@ pub struct ModeGate<'a> {
 
 impl<'a> ModeGate<'a> {
     /// Asking on `terminal`, when there is one.
-    pub fn new<P: Prompter + 'a>(
+    pub(crate) fn new<P: Prompter + 'a>(
         mode: &'a ModeCell,
         terminal: Option<P>,
         waited: &'a (dyn Fn(Duration) + Sync),
@@ -225,7 +226,7 @@ impl<'a> ModeGate<'a> {
     }
 
     /// Asking `asker`, when there is one.
-    pub fn asking(
+    pub(crate) fn asking(
         mode: &'a ModeCell,
         asker: Option<Box<dyn Asker + 'a>>,
         waited: &'a (dyn Fn(Duration) + Sync),

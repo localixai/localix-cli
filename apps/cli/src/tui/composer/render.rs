@@ -10,7 +10,7 @@ use crate::tui::wrap::width as columns;
 impl Composer {
     /// The rows the composer takes at `width`, after `prompt`, and where its cursor is among them.
     /// The text breaks at the width wherever it reaches it, so every character keeps its column.
-    pub fn render(
+    pub(crate) fn render(
         &self,
         prompt: Span<'static>,
         placeholder: &str,
@@ -38,9 +38,9 @@ impl Composer {
             if index == self.at {
                 cursor = (rows.len() - 1, indent + used);
             }
-            rows.last_mut()
-                .unwrap()
-                .push(if self.masked { '•' } else { *c });
+            if let Some(row) = rows.last_mut() {
+                row.push(if self.masked { '•' } else { *c });
+            }
             used += w;
         }
         if self.at == self.text.len() {

@@ -37,8 +37,8 @@ impl Login {
     }
 
     fn listen(app: App, ports: &[u16]) -> Result<Self, String> {
-        let (verifier, challenge) = oauth::pkce();
-        let state = oauth::random(32);
+        let (verifier, challenge) = oauth::pkce()?;
+        let state = oauth::random(32)?;
         let callback = loopback::listen(Listen {
             ports,
             path: CALLBACK,

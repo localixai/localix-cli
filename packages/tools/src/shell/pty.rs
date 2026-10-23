@@ -30,7 +30,7 @@ const KEY_PAUSE: Duration = Duration::from_millis(30);
 /// How often the reader looks whether the session was closed, while the terminal is silent.
 const READ_POLL: Duration = Duration::from_millis(200);
 
-pub struct Pty {
+pub(super) struct Pty {
     pub child: Child,
     writer: File,
     pub shared: Arc<Shared>,
@@ -38,7 +38,12 @@ pub struct Pty {
 
 /// Start `command` in `dir` in a new terminal, without the `hidden` variables, waiting for
 /// `needle` from its first output on.
-pub fn spawn(command: &str, dir: &Path, hidden: &[&str], needle: Option<&str>) -> io::Result<Pty> {
+pub(super) fn spawn(
+    command: &str,
+    dir: &Path,
+    hidden: &[&str],
+    needle: Option<&str>,
+) -> io::Result<Pty> {
     let (master, slave) = open()?;
     let mut shell = process::shell(command);
     process::quiet_env(&mut shell, hidden);
@@ -99,7 +104,7 @@ pub fn spawn(command: &str, dir: &Path, hidden: &[&str], needle: Option<&str>) -
 impl Pty {
     /// Type `input`, then press `keys` one at a time; the bytes sent, of all of them. A program
     /// that stops reading its input stops the typing.
-    pub fn type_in(&self, input: &[u8], keys: &[String]) -> (usize, usize) {
+    pub(super) fn type_in(&self, input: &[u8], keys: &[String]) -> (usize, usize) {
         let cursor = || self.shared.lock().application_cursor();
         let mut total = input.len();
         total += keys
@@ -125,7 +130,7 @@ impl Pty {
 
     /// Whether the shell exited. It is left a zombie, not reaped: its process group stays its
     /// own until the group is killed, so the signal can never reach a recycled pid.
-    pub fn exited(&self) -> bool {
+    pub(super) fn exited(&self) -> bool {
         // SAFETY: waitid only writes into `info`, which is zeroed and lives through the call.
         unsafe {
             let mut info: libc::siginfo_t = std::mem::zeroed();
@@ -139,13 +144,13 @@ impl Pty {
     }
 
     /// Close the session's window at once, even one kept to say the session ended.
-    pub fn dismiss(&self) {
+    pub(super) fn dismiss(&self) {
         self.shared.lock().detach();
         self.shared.wake.notify_all();
     }
 
     /// The session ends: the reader stops at its next look.
-    pub fn shut(&self) {
+    pub(super) fn shut(&self) {
         self.shared.lock().close();
         self.shared.wake.notify_all();
     }
@@ -198,7 +203,7 @@ fn ready(fd: RawFd, events: libc::c_short, wait: Duration) -> bool {
         events,
         revents: 0,
     };
-    let millis = wait.as_millis().clamp(1, i32::MAX as u128) as libc::c_int;
+    let millis = libc::c_int::try_from(wait.as_millis()).map_or(libc::c_int::MAX, |ms| ms.max(1));
     // SAFETY: poll reads and writes one pollfd, which lives through the call.
     unsafe { libc::poll(&mut poll, 1, millis) > 0 }
 }

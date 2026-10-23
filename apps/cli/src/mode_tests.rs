@@ -109,7 +109,7 @@ struct Always<'a>(&'a std::sync::atomic::AtomicUsize);
 
 impl Asker for Always<'_> {
     fn approve(&self, _: &Effect) -> Option<Approval> {
-        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.0.fetch_add(1, Ordering::SeqCst);
         Some(Approval::Always)
     }
 }
@@ -118,7 +118,7 @@ impl Asker for Always<'_> {
 fn always_is_kept_by_the_mode_gate_apart_for_working_and_planning() {
     let mode = ModeCell::new(Mode::Default);
     let asked = std::sync::atomic::AtomicUsize::new(0);
-    let count = || asked.load(std::sync::atomic::Ordering::SeqCst);
+    let count = || asked.load(Ordering::SeqCst);
     let gate = ModeGate::asking(&mode, Some(Box::new(Always(&asked))), &|_| {});
     assert_eq!(gate.check(effect("bash")), Verdict::Allow);
     assert_eq!(gate.check(effect("bash")), Verdict::Allow);

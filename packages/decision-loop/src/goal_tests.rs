@@ -19,7 +19,7 @@ mod covered {
     use super::*;
     use contracts::model::DecideError;
     use contracts::model::{Answer, Decision, Question};
-    use contracts::view::{Element, View, ViewResult};
+    use contracts::view::{Action, Element, View, ViewResult};
 
     /// A view whose first click is refused because a banner came over it after the snapshot.
     struct Banner {

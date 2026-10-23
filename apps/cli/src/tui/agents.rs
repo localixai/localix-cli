@@ -10,12 +10,14 @@ use ratatui::text::{Line, Span};
 use serde_json::Value;
 
 use super::app::{Action, App, SHIFT_TAB};
-use super::cells::{self, End};
+use super::cells;
 use super::event::{Event, Typed};
 use super::style;
 use super::tool_cell::{self, State};
-pub use super::views::{AgentState, LaneState, SessionView, Views};
+pub(crate) use super::views::{AgentState, LaneState, SessionView, Views};
 use crate::printable::printable;
+
+mod ends;
 
 /// A call that took this long says so in its row.
 const TOOK: std::time::Duration = std::time::Duration::from_millis(500);
@@ -26,7 +28,7 @@ const STEPS: usize = 3;
 /// A finished call as a block: the person's refusal when the call failed on it (the gate's
 /// words), which uses up what they said; otherwise its outcome, and what they said waits for the
 /// call they refused (calls of several sessions finish in any order).
-pub fn result_block(
+pub(crate) fn result_block(
     declined: &mut Option<String>,
     name: &str,
     args: &Value,
@@ -93,29 +95,7 @@ impl App {
                 name,
                 args,
                 outcome,
-            } => {
-                let took = (view.running.iter())
-                    .find(|(n, a, _)| *n == name && *a == args)
-                    .map(|(_, _, started)| now.saturating_duration_since(*started));
-                finish_call(&mut view.running, &name, &args);
-                if let Some(lane) = &mut view.lane {
-                    lane.steps.clear();
-                }
-                let lane = self.lane_at(at);
-                let lane = self.views.sessions[lane].lane.as_deref_mut();
-                let mut none = None;
-                let declined = lane.map_or(&mut none, |lane| &mut lane.declined);
-                let mut block = result_block(declined, &name, &args, &outcome, width);
-                // How long it took, where that is worth a glance.
-                if let (Some(took), Some(head)) = (took, block.first_mut())
-                    && took >= TOOK
-                {
-                    let took = cells::duration(took.as_millis() as u64);
-                    head.spans
-                        .push(Span::styled(format!(" · {took}"), style::dim()));
-                }
-                block
-            }
+            } => self.call_ended(at, &name, &args, &outcome, now),
             Event::Answer(text) if !text.trim().is_empty() => cells::agent(&text, width),
             Event::Answer(_) => return None,
             Event::TaskEnded {
@@ -123,44 +103,7 @@ impl App {
                 millis,
                 turns,
                 cost,
-            } => {
-                view.busy = None;
-                view.running.clear();
-                view.worked += millis;
-                if let Some(lane) = &mut view.lane {
-                    // What the task did not get to read is the next thing it is given.
-                    for entry in lane.steered.drain(..).rev() {
-                        lane.queued.push_front(entry);
-                    }
-                    lane.stopping = false;
-                }
-                let end = End {
-                    status: &status,
-                    millis,
-                    turns,
-                    cost,
-                };
-                view.tasks += 1;
-                let block = cells::end(&end, width);
-                // Its lane hears of an agent's end too, and the session shown of a lane's that
-                // is not.
-                let parent = view.parent.clone().and_then(|id| self.views.find(&id));
-                let name = self.views.sessions[at].title().to_string();
-                if let Some(parent) = parent {
-                    let line = finished_line("Agent", &name, &status, millis, "");
-                    self.push(parent, vec![line]);
-                } else if at != self.views.home() {
-                    self.views.sessions[at].unseen = true;
-                    let line = finished_line("Session", &name, &status, millis, " · ← to open");
-                    let shown = self.views.find(&self.views.shown).unwrap_or(0);
-                    self.push(shown, vec![line]);
-                }
-                let view = &mut self.views.sessions[at];
-                if view.state != AgentState::Closed {
-                    view.state = AgentState::Ended(status);
-                }
-                block
-            }
+            } => self.task_ended(at, status, millis, turns, cost),
             Event::Spent(tokens) => {
                 view.tokens += tokens;
                 return None;
@@ -178,7 +121,7 @@ impl App {
                 if let Some(last) = turns.last() {
                     view.state = AgentState::Ended(last.status.clone());
                 }
-                for block in super::cells::earlier(&turns, width) {
+                for block in cells::earlier(&turns, width) {
                     self.push(at, block);
                 }
                 return None;
@@ -262,7 +205,7 @@ impl App {
     }
 
     /// Show the session `id`: its whole transcript, from the top.
-    pub fn show(&mut self, id: &str) {
+    pub(crate) fn show(&mut self, id: &str) {
         let Some(at) = self.views.find(id) else {
             return;
         };
@@ -287,38 +230,26 @@ impl App {
     }
 
     /// Whether the screen must be cleared before the next frame: the view changed.
-    pub fn take_replay(&mut self) -> bool {
+    pub(crate) fn take_replay(&mut self) -> bool {
         std::mem::take(&mut self.views.replay)
     }
 
     /// The session shown.
-    pub fn shown(&self) -> &SessionView {
+    pub(crate) fn shown(&self) -> &SessionView {
         &self.views.sessions[self.views.find(&self.views.shown).unwrap_or(0)]
     }
 
     /// The calls running and when the task started, in the view shown.
-    pub fn shown_work(&self) -> (&[(String, Value, Instant)], Option<Instant>) {
+    pub(crate) fn shown_work(&self) -> (&[(String, Value, Instant)], Option<Instant>) {
         let view = self.shown();
         (&view.running, view.busy)
     }
 
     /// Whether a session works: the spinner turns.
-    pub fn moving(&self) -> bool {
+    pub(crate) fn moving(&self) -> bool {
         let mut sessions = self.views.sessions.iter();
         sessions.any(|view| view.busy.is_some() || !view.running.is_empty())
     }
-}
-
-/// `● Agent "scout" finished · 3m 38s` in its lane's transcript, and `● Session "…" finished ·
-/// 3m 08s · ← to open` in the one shown; `after` ends it.
-fn finished_line(kind: &str, name: &str, status: &str, millis: u64, after: &str) -> Line<'static> {
-    let (dot, _, _, verb) = super::tree::ending(status);
-    let took = cells::clock(millis / 1000);
-    Line::from(vec![
-        Span::styled("● ", dot),
-        Span::raw(format!("{kind} \"{}\" {verb}", printable(name))),
-        Span::styled(format!(" · {took}{after}"), style::dim()),
-    ])
 }
 
 /// The first block of an agent's view: which agent it is, and the session that started it.

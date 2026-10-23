@@ -17,8 +17,8 @@ use super::watch::{self, Watch};
 pub const MAX_SESSIONS: usize = 4;
 const DEFAULT_YIELD_MS: u64 = 2_000;
 const NEEDLE_YIELD_MS: u64 = 15_000;
-pub const MIN_YIELD_MS: u64 = 100;
-pub const MAX_YIELD_MS: u64 = 60_000;
+pub(super) const MIN_YIELD_MS: u64 = 100;
+pub(super) const MAX_YIELD_MS: u64 = 60_000;
 /// Characters of a command that name its session in reports and questions.
 const SHOWN: usize = 60;
 
@@ -324,7 +324,7 @@ fn list(live: &[Session]) -> String {
 fn shown(command: &str) -> String {
     let line = command.split_whitespace().collect::<Vec<_>>().join(" ");
     match line.char_indices().nth(SHOWN) {
-        Some((at, _)) => format!("{}…", &line[..at]),
+        Some((at, _)) => format!("{}…", line.get(..at).unwrap_or_default()),
         None => line,
     }
 }

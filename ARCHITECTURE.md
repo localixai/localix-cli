@@ -10,8 +10,9 @@ _checked_ fails a test (`apps/cli/tests/suite/repo/`) when broken; a rule is che
 test can state it, and the test comes with the rule.
 
 Sources: matklad's ARCHITECTURE.md and "Large Rust Workspaces", rust-analyzer's architecture and
-style guides, sans-IO (quinn-proto, Firezone), ports and adapters, the Rust API Guidelines, LSP
-and JSON-RPC 2.0, Codex (`codex-rs`: its protocol crates, app-server client, TUI boundary check,
+style guides, the Rust Design Patterns' anti-patterns, corrode.dev, BurntSushi on unwrap,
+sans-IO (quinn-proto, Firezone), ports and adapters, the Rust API Guidelines, LSP and JSON-RPC
+2.0, the clippy configurations of ruff, uv, zed, tikv and rust-analyzer, Codex (`codex-rs`: its protocol crates, app-server client, TUI boundary check,
 workspace lints) and Localix (rule ids, ratchets, poke-then-pull sync).
 
 ## Bird's-eye view
@@ -98,6 +99,8 @@ every new file already goes where its target crate will be.
 - **C7**: no task- or site-specific wording in the prompt, tool descriptions or the hands'
   instructions. A rule earns its place by the evals and stays general.
 
+- **C8**: callers decide, functions act: branches go up to the caller, loops down into
+  functions that take the batch.
 ## Port rules (contracts)
 
 - **P1**: a port is a narrow trait, owned by the side that calls it, `Send + Sync`.
@@ -107,7 +110,13 @@ every new file already goes where its target crate will be.
 - **P3**: a value with an invariant keeps its fields private and checks them in its constructor
   (`Selection`); a value any field combination of which is valid has public fields.
 - **P4**: an option is an enum, not a `bool` or an `Option` argument, where a call site would
-  otherwise read `f(true, None)`.
+  otherwise read `f(true, None)`; a struct of several flags is a state enum (_checked_ for
+  parameters and structs).
+- **P5**: a port never returns `Result<_, String>`: its error is its enum (P2). (`History` and
+  the session store still do: debt, paid when they are next touched.)
+- **P6**: `map_err` keeps the cause (a variant's field, or the source); rewording an error never
+  drops it (_checked_: `map_err_ignore`).
+- **P7**: a crate does not re-export another crate's types, and never a glob (`pub use x::*`).
 
 ## Adapter rules (tools, stores, providers)
 
@@ -171,9 +180,20 @@ every new file already goes where its target crate will be.
   that borrows lives in a `thread::scope` a guard ends even on panic; a detached thread is owned
   by something that stops and joins it.
 - **R3**: every queue and channel that a peer fills is bounded, or says what it dropped.
-- **R4**: a panic is a bug. `unwrap`/`expect` only for an invariant the code just established,
-  and an `expect` says which.
+- **R4** _checked_ (S4): a panic is a bug, and one request's panic must not end the server
+  (W8). Working code handles what can fail; where a value exists by construction, the smallest
+  item allows it with the `reason` it cannot fail.
 - **R5**: the app's edge has one error type (`Failure`); libraries return their port's enums.
+- **R6**: a `MutexGuard` is never held across a send, a receive, a join, a sleep, I/O or a
+  callback: copy out what is needed, drop the guard, then act (_checked_ where clippy sees it).
+- **R7**: a check and the act that depends on it are one critical section or one atomic
+  operation; two locks are always taken in one order, and a mutex is never locked twice on a
+  thread.
+- **R8**: every thread is named and started with `thread::Builder` (its failure an error, not a
+  panic: _checked_), and is joined, or owned by what stops it.
+- **R9**: wait on events, not on time: a `Condvar`, `recv_timeout`, a deadline. A `sleep` is a
+  backoff, and says so where it is (_checked_).
+- **R10**: a child process always has a deadline and a way to be stopped.
 
 ## Code rules
 
@@ -185,8 +205,19 @@ every new file already goes where its target crate will be.
   first, and going over needs the owner's approval, asked with the numbers and the alternatives.
 - **S3** _checked_: unit tests live beside the code: `x.rs` ends with
   `#[cfg(test)] #[path = "x_tests.rs"] mod tests;`. The ports are faked, never a network.
-- **S4** _checked_: every crate takes the workspace's lints (`[lints] workspace = true`); a
-  lint is allowed only with a reason, in place.
+- **S4** _checked_: every crate takes the workspace's lints (`[lints] workspace = true`), and
+  they are hard: denied, never turned off in `Cargo.toml`. An exception is an `allow` on the
+  smallest item, with its `reason`. In working code they forbid:
+  - a panic: `unwrap`, `expect`, `panic!`, `unreachable!`, `todo!`, `unimplemented!`, a string
+    sliced inside a character, a number cut by `as` (R4);
+  - output and exits outside their place: `print!`/`eprint!`, `dbg!`, `process::exit` (K6);
+  - shared state that is not `Send + Sync`: `Rc`, `Cell`, `RefCell`; setting the environment (R2);
+  - functions past 100 lines or past a bounded complexity (S1's rule for functions);
+  - a `pub` no other crate reaches (L9), qualifications not needed, wildcard imports, an
+    implicit `Arc` clone.
+
+  Tests may unwrap, panic and print (`clippy.toml`); an integration-test crate says so once, at
+  its root.
 - **S5** _checked_: `unsafe` lives only where the OS is called: `tools` and the apps. The
   vocabulary, the core, the stores and the providers have none.
 - **S6**: one idea per file, named for it; a file's `//!` says what it is. A directory module
@@ -195,6 +226,12 @@ every new file already goes where its target crate will be.
 - **S8**: TDD: a bug's test fails first at the layer a person meets it; a feature's tests are
   written from what a person does and sees. A test that cannot fail is deleted.
 
+- **S9**: a clone has a reason: an `Arc` crossing threads, a value kept while the original goes
+  on. A clone that only quiets the borrow checker means the data's owner is wrong.
+- **S10**: your own enums are matched exhaustively; a `_` arm is for foreign or
+  `#[non_exhaustive]` enums.
+- **S11**: an `unsafe` block says why it is sound (`// SAFETY:`), one unsafe operation each
+  (_checked_).
 ## Adding things
 
 - **A provider:** an entry in the catalog (`providers/models`, from models.dev), a wire in a

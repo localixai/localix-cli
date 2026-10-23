@@ -1,4 +1,13 @@
 //! Opens a page and prints scripts' results: a probe for building the snapshot. `cargo run --example inspect -- <url> <script>...` (each script runs in turn).
+#![allow(
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr,
+    clippy::exit,
+    clippy::disallowed_methods,
+    reason = "a developer's probe: it prints what it finds, and a missing argument ends it"
+)]
+
 use std::time::Duration;
 
 use tools::browser::{self, Driver, Window};

@@ -17,14 +17,14 @@ const BELOW: isize = -1;
 const ABOVE: isize = 1;
 
 /// A window that shows what is behind it, with its titlebar clear over the material.
-pub fn clear(builder: WindowBuilder) -> WindowBuilder {
+pub(super) fn clear(builder: WindowBuilder) -> WindowBuilder {
     builder
         .with_transparent(true)
         .with_titlebar_transparent(true)
 }
 
 /// Whether the person asked for less transparency (Accessibility, Display).
-pub fn reduced() -> bool {
+pub(super) fn reduced() -> bool {
     unsafe {
         let workspace: Retained<AnyObject> = msg_send![class!(NSWorkspace), sharedWorkspace];
         let reduced: Bool = msg_send![&*workspace, accessibilityDisplayShouldReduceTransparency];
@@ -53,14 +53,14 @@ fn frame_view(window: &Window) -> Option<Retained<AnyObject>> {
 
 /// A window's material, and a panel's coat over it. Kept, so a new tint changes these two and
 /// never adds another.
-pub struct Glass {
+pub(super) struct Glass {
     effect: Retained<AnyObject>,
     coat: Option<Retained<AnyObject>>,
 }
 
 impl Glass {
     /// The material under everything in `window`, coated when `coated`.
-    pub fn under(window: &Window, coated: bool) -> Option<Self> {
+    pub(super) fn under(window: &Window, coated: bool) -> Option<Self> {
         let frame = frame_view(window)?;
         unsafe {
             let bounds: CGRect = msg_send![&*frame, bounds];
@@ -93,7 +93,7 @@ impl Glass {
         }
     }
 
-    pub fn tint(&self, material: isize, [red, green, blue]: [u8; 3], alpha: f64) {
+    pub(super) fn tint(&self, material: isize, [red, green, blue]: [u8; 3], alpha: f64) {
         let part = |value: u8| f64::from(value) / 255.0;
         unsafe {
             let _: () = msg_send![&*self.effect, setMaterial: material];
@@ -108,7 +108,7 @@ impl Glass {
 
 /// Our materials in `window`'s frame view, the first one's state, whether it is opaque, the
 /// shape its resizing keeps, and whether a coat is over them.
-pub fn dressed(window: &Window) -> (usize, isize, bool, f64, bool) {
+pub(super) fn dressed(window: &Window) -> (usize, isize, bool, f64, bool) {
     let native = window.ns_window() as *mut AnyObject;
     let opaque: Bool = unsafe { msg_send![native, isOpaque] };
     let shape: CGSize = unsafe { msg_send![native, contentAspectRatio] };

@@ -12,7 +12,7 @@ use ratatui::text::Line;
 use super::style::ansi;
 use super::wrap::fit;
 
-pub struct Screen<W: Write> {
+pub(crate) struct Screen<W: Write> {
     out: W,
     colour: bool,
     /// The live row the cursor was left on.
@@ -24,13 +24,13 @@ pub struct Screen<W: Write> {
 
 /// Where the composer's cursor goes: a row of the live area and a column.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Cursor {
+pub(crate) struct Cursor {
     pub row: usize,
     pub column: usize,
 }
 
 impl<W: Write> Screen<W> {
-    pub fn new(out: W, colour: bool) -> Self {
+    pub(crate) fn new(out: W, colour: bool) -> Self {
         Self {
             out,
             colour,
@@ -42,7 +42,7 @@ impl<W: Write> Screen<W> {
 
     /// Prints `history` for good, then draws `live` below it, at most `height - 1` rows of it
     /// (its last ones), with the cursor at `cursor` or hidden.
-    pub fn frame(
+    pub(crate) fn frame(
         &mut self,
         history: &[Line<'static>],
         live: &[Line<'static>],
@@ -156,7 +156,7 @@ impl<W: Write> Screen<W> {
 
     /// Takes the live area away and leaves the cursor where it started, shown: for leaving the
     /// session, or for handing the terminal to something else for a while.
-    pub fn clear(&mut self) -> io::Result<()> {
+    pub(crate) fn clear(&mut self) -> io::Result<()> {
         let mut out = String::from("\x1b[?2026h");
         self.erase_into(&mut out);
         if self.gap {
@@ -172,7 +172,7 @@ impl<W: Write> Screen<W> {
 
     /// Clears the screen and its scrollback, the cursor at the top: another session's
     /// transcript is drawn from the start.
-    pub fn reset(&mut self) -> io::Result<()> {
+    pub(crate) fn reset(&mut self) -> io::Result<()> {
         self.cursor = 0;
         self.group = None;
         self.gap = false;
@@ -189,7 +189,7 @@ impl<W: Write> Screen<W> {
     }
 
     #[cfg(test)]
-    pub fn output(&self) -> &W {
+    pub(crate) fn output(&self) -> &W {
         &self.out
     }
 }

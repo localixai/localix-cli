@@ -4,7 +4,7 @@
 
 /// One option.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Item {
+pub(crate) struct Item {
     pub label: String,
     /// A short note after the label.
     pub detail: String,
@@ -13,7 +13,7 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn new(label: impl Into<String>, detail: impl Into<String>, marked: bool) -> Self {
+    pub(crate) fn new(label: impl Into<String>, detail: impl Into<String>, marked: bool) -> Self {
         Self {
             label: label.into(),
             detail: detail.into(),
@@ -24,12 +24,12 @@ impl Item {
 
 /// One row's inline values and the value initially selected.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Adjustment {
+pub(crate) struct Adjustment {
     pub values: Vec<String>,
     pub at: usize,
 }
 
-pub trait Picker {
+pub(crate) trait Picker {
     /// The index of the option chosen; `None` when the person cancels.
     fn pick(&mut self, title: &str, items: &[Item]) -> Option<usize>;
 
@@ -48,7 +48,7 @@ pub trait Picker {
     }
 }
 
-pub trait Lines {
+pub(crate) trait Lines {
     /// The line typed after `prompt`, not shown on the screen when `hidden`; `None` at the end
     /// of input.
     fn line(&mut self, prompt: &str, hidden: bool) -> Option<String>;
@@ -62,6 +62,6 @@ pub trait Lines {
 }
 
 /// What a sign-in flow needs at the terminal.
-pub trait Terminal: Picker + Lines {}
+pub(crate) trait Terminal: Picker + Lines {}
 
 impl<T: Picker + Lines> Terminal for T {}

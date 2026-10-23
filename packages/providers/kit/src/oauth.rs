@@ -9,17 +9,17 @@ use sha2::{Digest, Sha256};
 use crate::http::query_value;
 
 /// A PKCE verifier and its S256 challenge.
-pub fn pkce() -> (String, String) {
-    let verifier = random(32);
+pub fn pkce() -> Result<(String, String), String> {
+    let verifier = random(32)?;
     let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-    (verifier, challenge)
+    Ok((verifier, challenge))
 }
 
-/// `bytes` random bytes, URL-safe base64 without padding.
-pub fn random(bytes: usize) -> String {
+/// `bytes` random bytes, URL-safe base64 without padding; an error when the OS has none to give.
+pub fn random(bytes: usize) -> Result<String, String> {
     let mut buffer = vec![0u8; bytes];
-    getrandom::fill(&mut buffer).expect("the OS has randomness");
-    URL_SAFE_NO_PAD.encode(buffer)
+    getrandom::fill(&mut buffer).map_err(|e| format!("the system gave no randomness: {e}"))?;
+    Ok(URL_SAFE_NO_PAD.encode(buffer))
 }
 
 /// What a person pasted when the browser could not reach the callback: the address the browser

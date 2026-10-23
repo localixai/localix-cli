@@ -10,7 +10,7 @@ use crate::tui::wrap::wrap;
 
 impl Select {
     /// The rows at `width`, and the cursor's place among them while typing.
-    pub fn render(&self, width: usize) -> (Vec<Line<'static>>, Option<(usize, usize)>) {
+    pub(crate) fn render(&self, width: usize) -> (Vec<Line<'static>>, Option<(usize, usize)>) {
         let mut out: Vec<Line<'static>> = self
             .title
             .iter()
@@ -99,7 +99,13 @@ impl Select {
             out.extend(rows);
         }
         out.push(Line::default());
-        let hint = match self.typing {
+        out.push(Line::from(Span::styled(self.hint(), style::dim())));
+        (out, cursor)
+    }
+
+    /// The keys' hint under the choice.
+    fn hint(&self) -> String {
+        match self.typing {
             Some(_) if self.direct => format!("  enter to send · {}", self.escape),
             Some(_) => "  enter to send · esc to go back".to_string(),
             None => {
@@ -120,9 +126,7 @@ impl Select {
                 };
                 format!("  {search}↑↓ to choose · {adjust}{check}enter to confirm · {escape}")
             }
-        };
-        out.push(Line::from(Span::styled(hint, style::dim())));
-        (out, cursor)
+        }
     }
 }
 
@@ -133,7 +137,7 @@ fn title_rows(line: &Line<'static>, width: usize) -> Vec<Line<'static>> {
     while let Some(first) = body.spans.first_mut() {
         let text = first.content.to_string();
         let kept = text.trim_start();
-        indent.push_str(&text[..text.len() - kept.len()]);
+        indent.push_str(text.strip_suffix(kept).unwrap_or_default());
         if kept.is_empty() {
             body.spans.remove(0);
         } else {

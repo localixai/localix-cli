@@ -23,7 +23,7 @@ use crate::mode::{Mode, ModeCell};
 use crate::output::Output;
 
 /// The main session's parts an agent works with.
-pub struct Kit<'a> {
+pub(crate) struct Kit<'a> {
     pub chat: &'a dyn Chat,
     pub workspace: &'a Workspace,
     /// The main session's gate (the mode, the person, the stop).
@@ -58,13 +58,13 @@ pub struct Kit<'a> {
 }
 
 impl Kit<'_> {
-    pub fn root(&self) -> PathBuf {
+    pub(crate) fn root(&self) -> PathBuf {
         self.workspace.root().to_path_buf()
     }
 }
 
 /// The parts an agent's tools borrow, made in its thread.
-pub struct Own<'a> {
+pub(crate) struct Own<'a> {
     pub gate: &'a dyn Gate,
     pub stop: &'a (dyn Fn() -> bool + Sync),
     pub seen: Mutex<HashSet<PathBuf>>,
@@ -72,7 +72,7 @@ pub struct Own<'a> {
 
 /// A session's tools: `read`, `edit`, `bash` (commands run to their end), and `window`, whose
 /// tabs are terminal sessions and the browser's pages where there is one.
-pub struct Tools<'a> {
+pub(crate) struct Tools<'a> {
     read: ReadTool<'a>,
     edit: EditTool<'a>,
     bash: BashTool<'a>,
@@ -89,7 +89,7 @@ pub struct Tools<'a> {
 }
 
 impl<'a> Tools<'a> {
-    pub fn new(kit: &'a Kit<'a>, own: &'a Own<'a>) -> Self {
+    pub(crate) fn new(kit: &'a Kit<'a>, own: &'a Own<'a>) -> Self {
         Self {
             read: ReadTool {
                 workspace: kit.workspace,
@@ -119,7 +119,7 @@ impl<'a> Tools<'a> {
     }
 
     /// Run `work` with the tools as the agent offers them.
-    pub fn with<T>(&self, work: impl FnOnce(&[&dyn Tool]) -> T) -> T {
+    pub(crate) fn with<T>(&self, work: impl FnOnce(&[&dyn Tool]) -> T) -> T {
         let read = Instructed {
             inner: &self.read,
             root: self.root.clone(),

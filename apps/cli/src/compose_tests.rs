@@ -6,7 +6,7 @@ use contracts::history::History;
 
 use super::*;
 use crate::choice::Choice;
-use crate::mode::PLAN_REFUSAL;
+use crate::mode::{Mode, PLAN_REFUSAL};
 use crate::testing::{answers, composed, users};
 
 #[test]
@@ -293,6 +293,10 @@ fn the_main_tools_learn_a_subtrees_instructions_once_and_keep_edits() {
 /// A provider chosen with `/login` after the session began has its key kept from commands too:
 /// the variables are read at each command, not fixed when the session starts.
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the key must be in the process's environment, where the commands inherit it"
+)]
 fn a_provider_chosen_later_has_its_key_kept_from_commands_too() {
     // SAFETY: no other test reads or sets this variable.
     unsafe { std::env::set_var("CEREBRAS_API_KEY", "csk-test") };

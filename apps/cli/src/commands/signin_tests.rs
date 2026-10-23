@@ -1,5 +1,6 @@
-use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::*;
 use crate::picker::{Item, Lines, Picker};
@@ -22,16 +23,16 @@ impl Lines for Typed {
 /// `come_back` with lines typed, the callback coming back on the `back`-th wait.
 fn signed(lines: &[&'static str], back: usize) -> (Result<String, String>, String) {
     let mut terminal = Typed(lines.iter().copied().collect());
-    let said = RefCell::new(String::new());
-    let waits = Cell::new(0);
+    let said = Mutex::new(String::new());
+    let waits = AtomicUsize::new(0);
     let wait = |_| {
-        waits.set(waits.get() + 1);
-        (waits.get() == back).then(|| Ok("from-browser".to_string()))
+        let waited = waits.fetch_add(1, Ordering::SeqCst) + 1;
+        (waited == back).then(|| Ok("from-browser".to_string()))
     };
     let pasted = |text: &str| Ok(format!("pasted:{text}"));
-    let say = |text: &str| said.borrow_mut().push_str(text);
+    let say = |text: &str| lock(&said).push_str(text);
     let outcome = come_back(&mut terminal, &say, &wait, &pasted);
-    (outcome, said.into_inner())
+    (outcome, said.into_inner().unwrap())
 }
 
 #[test]
@@ -68,7 +69,7 @@ impl Picker for Open {
 
 impl Lines for Open {
     fn line(&mut self, _: &str, _: bool) -> Option<String> {
-        unreachable!("the line for the address is one that closes")
+        panic!("the line for the address is one that closes")
     }
 
     fn line_until(&mut self, _: &str, done: &dyn Fn() -> bool) -> Option<String> {
@@ -79,15 +80,13 @@ impl Lines for Open {
 
 #[test]
 fn the_browser_coming_back_closes_the_line_with_nothing_pressed() {
-    let waits = Cell::new(0);
-    let wait = |_| {
-        waits.set(waits.get() + 1);
-        (waits.get() == 3).then(|| Ok("from-browser".to_string()))
-    };
+    let waits = AtomicUsize::new(0);
+    let wait =
+        |_| (waits.fetch_add(1, Ordering::SeqCst) + 1 == 3).then(|| Ok("from-browser".to_string()));
     let outcome = come_back(&mut Open, &|_| {}, &wait, &|_| Err("not pasted".into()));
     assert_eq!(outcome, Ok("from-browser".into()));
     assert_eq!(
-        waits.get(),
+        waits.load(Ordering::SeqCst),
         3,
         "the callback is not asked again once it came back"
     );

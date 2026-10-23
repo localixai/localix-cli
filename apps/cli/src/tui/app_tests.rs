@@ -419,7 +419,7 @@ fn a_call_the_person_refused_says_what_they_said_not_an_error() {
 fn at_offers_files_and_enter_puts_the_path_in_without_sending() {
     let now = Instant::now();
     let mut app = app();
-    app.files = crate::tui::mention::Files::with(vec!["src/main.rs".into(), "README.md".into()]);
+    app.files = Files::with(vec!["src/main.rs".into(), "README.md".into()]);
     let (reply, entries) = channel();
     app.event(Event::Ready(reply), now);
     typed(&mut app, "explain @mai", now);

@@ -1,4 +1,5 @@
-//! [`Rig`]: the built agent of a lane and what a task needs around it.
+//! [`Rig`]: the built agent of a lane and what a task needs around it, built by [`drive`] from
+//! what `assemble` and `equip` made, and the work run with it.
 
 use std::sync::Mutex;
 use std::sync::atomic::AtomicU64;
@@ -6,18 +7,19 @@ use std::sync::atomic::AtomicU64;
 use agent::agent::Agent;
 use agent::conversation::Conversation;
 use contracts::history::Session;
+use contracts::tool::Tool;
 use decision_loop::meter::Meter;
 use session::Sessions;
 use tools::workspace::Workspace;
 
-use super::Shared;
-use crate::agents::Delegation;
+use super::{Base, Lane, Seat, Shared};
+use crate::agents::{AgentsTool, Delegation, Registry};
 use crate::brake::Brake;
 use crate::checkpoints::Checkpoints;
 use crate::choice::Choice;
 use crate::cli::RunOptions;
 use crate::interrupt::Interrupt;
-use crate::jobs::{self, Jobs};
+use crate::jobs::{self, Jobs, JobsTool};
 use crate::live::Live;
 use crate::mode::{self, Mode, ModeCell};
 use crate::output::{Output, lock};
@@ -26,7 +28,7 @@ use crate::tui::Ui;
 use crate::tui::event::Event;
 
 /// The built agent and what a task needs around it; one per process, for every task it runs.
-pub struct Rig<'a> {
+pub(crate) struct Rig<'a> {
     pub agent: Agent<'a>,
     /// What the lane shares with the others: the browser's page among them.
     pub shared: &'a Shared,
@@ -78,10 +80,116 @@ pub struct Rig<'a> {
     pub meta: crate::meta::Pending,
 }
 
+/// The agent built from `base` and `lane` with `seat`'s session, and `work` run with it. The
+/// agents' threads end with the session at the latest: each task waits for its own. The guard
+/// ends the jobs and stops the agents even when the session unwinds from a panic, or the scope
+/// would wait for their threads for ever.
+pub(super) fn drive(
+    base: &Base,
+    lane: &Lane,
+    seat: Seat,
+    work: impl FnOnce(&mut Rig) -> i32,
+) -> i32 {
+    let Seat {
+        context,
+        session,
+        ui,
+        choice,
+        mode: started,
+        schema,
+    } = seat;
+    let shared = base.shared;
+    let options = &shared.options;
+    std::thread::scope(|scope| {
+        // Inside the scope: it is dropped while unwinding, before the scope waits for threads.
+        let _ending = Ending {
+            jobs: lane.jobs,
+            registry: lane.registry,
+        };
+        let agents = AgentsTool::new(lane.kit, lane.registry, scope);
+        agents.adopt(&session.id);
+        let jobs_tool = JobsTool::new(lane.jobs_kit, lane.jobs, scope);
+        if shared.asks {
+            scope.spawn(|| lane.jobs.tick(lane.jobs_kit));
+        }
+        lane.tools.with(|own| {
+            let mut tools: Vec<&dyn Tool> = own.to_vec();
+            if shared.asks {
+                tools.push(base.ask);
+            }
+            tools.push(&agents);
+            tools.push(&jobs_tool);
+            let agent = Agent {
+                chat: base.brake,
+                tools: &tools,
+                context: &context,
+                max_turns: options.max_turns,
+                observer: base.output,
+                schema: schema.as_ref(),
+                inbox: Some(lane.inbox),
+                window: 0,
+                strategy: lane.strategy,
+            };
+            let mut rig = Rig {
+                agent,
+                shared,
+                options,
+                workspace: &shared.workspace,
+                output: base.output,
+                brake: base.brake,
+                interrupt: base.interrupt,
+                meter: base.meter,
+                history: &shared.history,
+                sessions: lane.sessions,
+                agents: &agents,
+                jobs: lane.jobs,
+                jobs_kit: lane.jobs_kit,
+                window: lane.window,
+                checkpoints: lane.checkpoints,
+                spent: agent::agent::Spend::default(),
+                begun: std::time::Instant::now(),
+                session,
+                conversation: None,
+                mode: base.mode,
+                terminal: shared.terminal,
+                asks: shared.asks,
+                told: started,
+                // `llx --mode plan`: carrying out the plan goes on in the default mode.
+                before_plan: match started {
+                    Mode::Plan => Mode::Default,
+                    other => other,
+                },
+                ui,
+                attached: vec![],
+                choice,
+                live: base.live,
+                hidden: lane.hidden,
+                meta: crate::meta::Pending::default(),
+            };
+            let code = work(&mut rig);
+            rig.agents.settle();
+            code
+        })
+    })
+}
+
+/// Ends the session's background work when it is dropped.
+struct Ending<'a> {
+    jobs: &'a Jobs,
+    registry: &'a Registry,
+}
+
+impl Drop for Ending<'_> {
+    fn drop(&mut self) {
+        self.jobs.close();
+        self.registry.stop_all();
+    }
+}
+
 impl Rig<'_> {
     /// Keep the variables of `provider`'s key from commands too, from the next command on: a
     /// provider chosen after the session began. Those of the one before stay hidden.
-    pub fn hide_for(&self, provider: &Provider) {
+    pub(crate) fn hide_for(&self, provider: &Provider) {
         let mut hidden = lock(self.hidden);
         for name in provider.hidden() {
             if !hidden.contains(&name) {
@@ -91,7 +199,7 @@ impl Rig<'_> {
     }
 
     /// Work in `mode` from the next question on; entering plan remembers the mode it came from.
-    pub fn switch(&mut self, mode: Mode) {
+    pub(crate) fn switch(&mut self, mode: Mode) {
         let now = self.mode.get();
         if mode == Mode::Plan && now != Mode::Plan {
             self.before_plan = now;
@@ -105,7 +213,7 @@ impl Rig<'_> {
     /// The conversation the next task goes on from, told first when the mode changed since the
     /// model last heard of it (in the context, or in an earlier note). Nothing is said when it
     /// did not change, so the conversation's prefix stays the same for the prompt cache.
-    pub fn told_of_mode(&mut self) -> Option<Conversation> {
+    pub(crate) fn told_of_mode(&mut self) -> Option<Conversation> {
         let conversation = self.conversation.take();
         let mode = self.mode.get();
         if mode == self.told {

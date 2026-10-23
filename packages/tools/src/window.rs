@@ -203,7 +203,7 @@ impl Tool for WindowTool<'_> {
                     return Err(failed("`width` and `height` are needed, in points"));
                 };
                 window
-                    .resize(width as u32, height as u32)
+                    .resize(saturated(width), saturated(height))
                     .map_err(ToolError::Failed)?;
                 Ok(format!("The window is {width}×{height} now.").into())
             }
@@ -216,6 +216,11 @@ impl Tool for WindowTool<'_> {
 
 fn failed(why: &str) -> ToolError {
     ToolError::Failed(why.into())
+}
+
+/// `points` as a size the window takes: one too large for it is as large as it goes.
+fn saturated(points: u64) -> u32 {
+    u32::try_from(points).unwrap_or(u32::MAX)
 }
 
 #[cfg(test)]

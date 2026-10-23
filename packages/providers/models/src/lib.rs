@@ -55,6 +55,10 @@ impl Catalog {
     }
 
     /// models.dev's files built in.
+    #[allow(
+        clippy::expect_used,
+        reason = "build.rs wrote this document in this shape, and the tests parse it"
+    )]
     pub fn built_in() -> Self {
         Self::parse(include_str!(concat!(env!("OUT_DIR"), "/catalog.json")))
             .expect("the built-in catalog is valid")

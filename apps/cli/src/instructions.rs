@@ -19,30 +19,30 @@ use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
 /// The names an instruction file has, the first found in a directory being the one read.
-pub const NAMES: [&str; 3] = ["AGENTS.override.md", "AGENTS.md", "CLAUDE.md"];
+pub(crate) const NAMES: [&str; 3] = ["AGENTS.override.md", "AGENTS.md", "CLAUDE.md"];
 /// Bytes of one instruction file: a huge one must not crowd out the rest.
-pub const FILE_LIMIT: usize = 16 * 1024;
+pub(crate) const FILE_LIMIT: usize = 16 * 1024;
 /// Bytes of all instruction files at the start together.
-pub const TOTAL_LIMIT: usize = 32 * 1024;
+pub(crate) const TOTAL_LIMIT: usize = 32 * 1024;
 /// How deep `@path` imports go.
 const IMPORT_DEPTH: usize = 3;
 
 /// One file's instructions, ready to read.
 #[derive(Debug, PartialEq)]
-pub struct Found {
+pub(crate) struct Found {
     pub path: PathBuf,
     pub text: String,
 }
 
 /// The person's own instructions, for every project.
-pub fn personal(home: Option<&Path>) -> Option<Found> {
+pub(crate) fn personal(home: Option<&Path>) -> Option<Found> {
     let path = home?.join(".llx").join("AGENTS.md");
     read(&path, FILE_LIMIT)
 }
 
 /// The project's instructions for `root`: one file per directory from the repository's root
 /// down, within `budget` bytes all together.
-pub fn project(root: &Path, budget: usize) -> Vec<Found> {
+pub(crate) fn project(root: &Path, budget: usize) -> Vec<Found> {
     let mut left = budget;
     let mut out = vec![];
     for dir in chain(root) {
@@ -61,7 +61,7 @@ pub fn project(root: &Path, budget: usize) -> Vec<Found> {
 
 /// The directories whose instructions apply to `root`: from the repository's root (the nearest
 /// ancestor with `.git`) down to `root`; only `root` outside a repository.
-pub fn chain(root: &Path) -> Vec<PathBuf> {
+pub(crate) fn chain(root: &Path) -> Vec<PathBuf> {
     let mut dirs = vec![];
     for dir in root.ancestors() {
         dirs.push(dir.to_path_buf());
@@ -137,7 +137,7 @@ fn same(path: &Path) -> PathBuf {
 }
 
 /// A file's instructions as the agent reads them.
-pub fn block(found: &Found, applies: Option<&Path>) -> String {
+pub(crate) fn block(found: &Found, applies: Option<&Path>) -> String {
     let scope = applies.map_or(String::new(), |dir| {
         format!(" applies_to=\"{}/\"", dir.display())
     });
@@ -151,7 +151,7 @@ pub fn block(found: &Found, applies: Option<&Path>) -> String {
 /// A tool (`read`, `edit`) that, the first time it touches a file in a directory below the
 /// working directory that has its own instruction file, adds that file to its result: the
 /// agent learns a subtree's rules where it works, and nothing earlier in the conversation changes.
-pub struct Instructed<'a> {
+pub(crate) struct Instructed<'a> {
     pub inner: &'a dyn Tool,
     pub root: PathBuf,
     /// The directories whose instructions the agent has (those of the start among them).

@@ -35,8 +35,8 @@ fn three(now: Instant) -> App {
     app.event(from("A", ended), now);
     app.event(from("B", Event::Note("B's own transcript".into())), now);
     app.event(from("B", Event::TaskStarted("fix it".into())), now);
-    let (reply, picked) = std::sync::mpsc::channel();
-    std::mem::forget(picked);
+    // The receiver is kept for the test's length, so the reply is not refused.
+    let (reply, _picked) = std::sync::mpsc::channel();
     let choose = Event::Choose {
         title: "Implement this plan?".into(),
         options: vec![("Yes".into(), String::new())],
@@ -83,7 +83,10 @@ fn saved_rows_open_the_list_live_first() {
     press(&mut app, KeyCode::Left, now);
     app.event(saved(), now);
     let screen = term.draw(&mut app, now);
-    let list = screen.find("• Sessions").map_or("", |at| &screen[at..]);
+    let list = screen
+        .find("• Sessions")
+        .and_then(|at| screen.get(at..))
+        .unwrap_or("");
     insta::assert_snapshot!(list, @"
     • Sessions in this project
 

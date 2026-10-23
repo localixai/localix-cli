@@ -233,7 +233,7 @@ mod dialogue {
             let estimate: u64 = request.conversation.iter().map(tokens).sum();
             let usage = Usage {
                 // The specs go with every request, and count.
-                input_tokens: ((estimate + specs(request.tools)) as f64 * REAL) as u64,
+                input_tokens: whole((estimate + specs(request.tools)) as f64 * REAL),
                 ..Usage::default()
             };
             if turn >= TURNS {
@@ -329,11 +329,11 @@ mod dialogue {
         let ceiling = pipeline.ceiling(WINDOW);
         let mut breaks = 0;
         let mut peak = 0;
-        let mut ever_elided = std::collections::HashSet::new();
+        let mut ever_elided = HashSet::new();
         let fixed = specs(&[look.spec(), write.spec()]);
         for (at, request) in requests.iter().enumerate() {
             // It fits: the real size is under the model's limit, always.
-            let real = ((request.iter().map(tokens).sum::<u64>() + fixed) as f64 * REAL) as u64;
+            let real = whole((request.iter().map(tokens).sum::<u64>() + fixed) as f64 * REAL);
             assert!(real <= ceiling, "request {at}: {real} > {ceiling}");
             peak = peak.max(real);
             // Nothing is dropped: two messages a turn, after the rules, the context and the goal.

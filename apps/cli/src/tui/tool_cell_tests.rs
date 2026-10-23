@@ -161,19 +161,20 @@ fn diff_backgrounds_fill_changed_rows_including_wraps_but_not_context() {
     let report =
         done("Edited x.\n\nDiff:\n@@ -1,2 +1,2 @@\n context\n-old\n+abcdefghijklmnopqrstuvwxyz");
     let rendered = lines("edit", &json!({"path":"x"}), State::Done(&report), 24);
-    let area = Rect::new(0, 0, 24, rendered.len() as u16);
+    let area = Rect::new(0, 0, 24, u16::try_from(rendered.len()).unwrap());
     let mut buffer = Buffer::empty(area);
     Paragraph::new(rendered.clone()).render(area, &mut buffer);
     let changed = rendered
         .iter()
         .position(|row| style::plain(row).contains("- old"))
         .unwrap();
+    let row = |y: usize| u16::try_from(y).unwrap();
     for x in 0..24 {
-        assert_eq!(buffer[(x, changed as u16)].bg, Color::Red);
+        assert_eq!(buffer[(x, row(changed))].bg, Color::Red);
         for y in changed + 1..rendered.len() {
-            assert_eq!(buffer[(x, y as u16)].bg, Color::Green);
+            assert_eq!(buffer[(x, row(y))].bg, Color::Green);
         }
-        assert_eq!(buffer[(x, changed as u16 - 1)].bg, Color::Reset);
+        assert_eq!(buffer[(x, row(changed) - 1)].bg, Color::Reset);
     }
 }
 

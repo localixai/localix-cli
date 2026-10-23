@@ -12,14 +12,14 @@ use super::spec::{self, Action};
 use super::{Child, MAX_OPEN, Registry, child, unique};
 use crate::tui::event::Event;
 
-pub struct AgentsTool<'scope, 'env> {
+pub(crate) struct AgentsTool<'scope, 'env> {
     pub(super) kit: &'env Kit<'env>,
     pub(super) registry: &'env Registry,
     scope: &'scope Scope<'scope, 'env>,
 }
 
 impl<'scope, 'env> AgentsTool<'scope, 'env> {
-    pub fn new(
+    pub(crate) fn new(
         kit: &'env Kit<'env>,
         registry: &'env Registry,
         scope: &'scope Scope<'scope, 'env>,
@@ -52,7 +52,7 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
                 });
             }
             let stop = Arc::new(AtomicBool::new(false));
-            let known = crate::interrupt::register_flag(&session.id, stop.clone());
+            let known = crate::interrupt::register_flag(&session.id, Arc::clone(&stop));
             let id = session.id.clone();
             state.children.push(Child {
                 session,

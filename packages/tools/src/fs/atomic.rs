@@ -22,7 +22,7 @@ const TRIES: usize = 16;
 ///
 /// Not synced to disk: the rename already makes the change atomic for readers, and a sync per
 /// edit would cost more than a crash at that moment would.
-pub fn write(path: &Path, content: &[u8]) -> io::Result<()> {
+pub(super) fn write(path: &Path, content: &[u8]) -> io::Result<()> {
     let parent = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -106,7 +106,7 @@ fn temporary(path: &Path) -> PathBuf {
     }
     path.with_file_name(format!(
         ".{}.{}-{}.tmp",
-        &name[..end],
+        name.get(..end).unwrap_or_default(),
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ))

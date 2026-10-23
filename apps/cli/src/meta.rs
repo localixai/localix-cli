@@ -5,7 +5,7 @@
 //! the other's. Whatever makes an update (the title's request) runs on a thread of its own: a
 //! task never waits on it.
 
-pub mod title;
+pub(crate) mod title;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -14,12 +14,12 @@ use contracts::history::{History, Session};
 
 /// A change to a session's facts; a field left `None` stays as it is.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct Update {
+pub(crate) struct Update {
     pub title: Option<String>,
 }
 
 impl Update {
-    pub fn apply(&self, session: &mut Session) {
+    pub(crate) fn apply(&self, session: &mut Session) {
         if let Some(title) = &self.title {
             session.title = title.clone();
         }
@@ -35,7 +35,7 @@ impl Update {
 
 /// The updates a lane's session has not saved yet, shared with the threads that make them.
 #[derive(Clone, Default)]
-pub struct Pending(Arc<Shared>);
+pub(crate) struct Pending(Arc<Shared>);
 
 #[derive(Default)]
 struct Shared {
@@ -46,7 +46,7 @@ struct Shared {
 
 impl Pending {
     /// Save `session` with what is pending applied.
-    pub fn save(&self, history: &dyn History, session: &mut Session) -> Result<(), String> {
+    pub(crate) fn save(&self, history: &dyn History, session: &mut Session) -> Result<(), String> {
         let pending = self.lock();
         pending.apply(session);
         history.save(session)
@@ -54,7 +54,7 @@ impl Pending {
 
     /// Keep `update` for the lane's next save, and write it now into session `id` when it is
     /// saved already.
-    pub fn post(&self, history: &dyn History, id: &str, update: Update) {
+    pub(crate) fn post(&self, history: &dyn History, id: &str, update: Update) {
         let mut pending = self.lock();
         if let Ok(mut saved) = history.load(Some(id)) {
             update.apply(&mut saved);
@@ -66,10 +66,10 @@ impl Pending {
     /// Whether `session` should be named now: it has no title, none is made yet, and none is
     /// being asked for. While the [`Naming`] returned lives, no other request starts; a request
     /// that fails lets the next task ask again.
-    pub fn begin(&self, session: &Session) -> Option<Naming> {
+    pub(crate) fn begin(&self, session: &Session) -> Option<Naming> {
         let titled = !session.title.is_empty() || self.lock().title.is_some();
         let free = !titled && !self.0.naming.swap(true, Ordering::SeqCst);
-        free.then(|| Naming(self.0.clone()))
+        free.then(|| Naming(Arc::clone(&self.0)))
     }
 
     fn lock(&self) -> MutexGuard<'_, Update> {
@@ -81,7 +81,7 @@ impl Pending {
 }
 
 /// A title being asked for: when it ends, another may be.
-pub struct Naming(Arc<Shared>);
+pub(crate) struct Naming(Arc<Shared>);
 
 impl Drop for Naming {
     fn drop(&mut self) {

@@ -12,7 +12,7 @@ use serde_json::Value;
 use crate::choice::Choice;
 use crate::providers::{self, Provider};
 
-pub struct Live {
+pub(crate) struct Live {
     pub chat: LiveChat,
     pub decider: LiveDecider,
 }
@@ -20,7 +20,7 @@ pub struct Live {
 impl Live {
     /// The models of `choice` (one that asks to sign in, when there is no sign-in yet) and the
     /// decision model `decision`, where there is a key for it.
-    pub fn of(choice: &Choice, decision: &str) -> Self {
+    pub(crate) fn of(choice: &Choice, decision: &str) -> Self {
         let chat = choice
             .provider
             .chat(&choice.selection)
@@ -32,15 +32,15 @@ impl Live {
     }
 }
 
-pub struct LiveChat(RwLock<Box<dyn Chat>>);
+pub(crate) struct LiveChat(RwLock<Box<dyn Chat>>);
 
 impl LiveChat {
-    pub fn new(chat: Box<dyn Chat>) -> Self {
+    pub(crate) fn new(chat: Box<dyn Chat>) -> Self {
         Self(RwLock::new(chat))
     }
 
     /// Think with `chat` from the next request on.
-    pub fn set(&self, chat: Box<dyn Chat>) {
+    pub(crate) fn set(&self, chat: Box<dyn Chat>) {
         *self.0.write().unwrap_or_else(|poison| poison.into_inner()) = chat;
     }
 }
@@ -52,18 +52,18 @@ impl Chat for LiveChat {
     }
 }
 
-pub struct LiveDecider(RwLock<Option<Box<dyn Decider>>>);
+pub(crate) struct LiveDecider(RwLock<Option<Box<dyn Decider>>>);
 
 /// Why the browser cannot act without an OpenRouter key.
-pub const NO_DECIDER: &str = "the browser's decision model runs on OpenRouter: set \
+pub(crate) const NO_DECIDER: &str = "the browser's decision model runs on OpenRouter: set \
 OPENROUTER_API_KEY, or type /login and add an OpenRouter key";
 
 impl LiveDecider {
-    pub fn new(decider: Option<Box<dyn Decider>>) -> Self {
+    pub(crate) fn new(decider: Option<Box<dyn Decider>>) -> Self {
         Self(RwLock::new(decider))
     }
 
-    pub fn set(&self, decider: Option<Box<dyn Decider>>) {
+    pub(crate) fn set(&self, decider: Option<Box<dyn Decider>>) {
         *self.0.write().unwrap_or_else(|poison| poison.into_inner()) = decider;
     }
 }
@@ -83,7 +83,7 @@ impl Decider for LiveDecider {
 }
 
 /// The chat model of a session not signed in yet: every request says how to sign in.
-pub struct SignedOut(pub Provider);
+pub(crate) struct SignedOut(pub Provider);
 
 impl Chat for SignedOut {
     fn complete(&self, _: Request) -> Result<Completion, ChatError> {

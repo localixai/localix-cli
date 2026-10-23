@@ -71,3 +71,75 @@ fn unsafe_lives_only_where_the_os_is_called() {
     }
     assert!(found.is_empty(), "unsafe outside tools and apps: {found:?}");
 }
+
+/// The lints that hold the rules (S4): removing one, or loosening it, fails here first.
+const HELD: [&str; 12] = [
+    "unwrap_used",
+    "expect_used",
+    "panic",
+    "unreachable",
+    "string_slice",
+    "print_stdout",
+    "print_stderr",
+    "exit",
+    "disallowed_types",
+    "too_many_lines",
+    "allow_attributes_without_reason",
+    "unreachable_pub",
+];
+
+/// S4: the workspace's lints are hard: each is denied, and none of those that hold a rule is gone.
+#[test]
+fn the_workspace_lints_are_denied_and_kept() {
+    let manifest = std::fs::read_to_string(root().join("Cargo.toml")).unwrap();
+    let mut section = "";
+    let mut levels = vec![];
+    for line in manifest.lines() {
+        if line.starts_with('[') {
+            section = line;
+        } else if section.starts_with("[workspace.lints")
+            && let Some((name, level)) = line.split_once('=')
+        {
+            levels.push((name.trim().to_string(), level.trim().to_string()));
+        }
+    }
+    let loose: Vec<_> = (levels.iter())
+        .filter(|(_, level)| !matches!(level.as_str(), "\"deny\"" | "\"forbid\""))
+        .collect();
+    assert!(
+        loose.is_empty(),
+        "a workspace lint is not denied: {loose:?}"
+    );
+    let gone: Vec<_> = (HELD.iter())
+        .filter(|held| !levels.iter().any(|(name, _)| name == *held))
+        .collect();
+    assert!(gone.is_empty(), "lints that hold a rule are gone: {gone:?}");
+}
+
+/// S4: working code is never exempt as a whole: an `allow` sits on the item it is about. Build
+/// scripts fail the build by panicking, and say so once.
+#[test]
+fn no_working_file_turns_a_lint_off_whole() {
+    let mut found = vec![];
+    for dir in crates() {
+        let mut files = vec![];
+        let working = |path: &Path| {
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            name.ends_with(".rs")
+                && !name.ends_with("_tests.rs")
+                && !matches!(name, "testing.rs" | "test_support.rs" | "fakes.rs")
+        };
+        walk(&dir.join("src"), &working, &mut files);
+        for path in files {
+            let text = std::fs::read_to_string(&path).unwrap();
+            let whole = |line: &str| line.starts_with("#![allow") || line.starts_with("#![expect");
+            if text.lines().any(|line| whole(line.trim_start())) {
+                found.push(path.strip_prefix(root()).unwrap().display().to_string());
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "a whole file is exempt from the lints: {found:?}"
+    );
+}

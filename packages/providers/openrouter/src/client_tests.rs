@@ -20,7 +20,7 @@ fn serve(replies: Vec<(u16, &'static str)>) -> (String, Arc<Mutex<Vec<Value>>>) 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let seen = Arc::new(Mutex::new(vec![]));
-    let kept = seen.clone();
+    let kept = Arc::clone(&seen);
     std::thread::spawn(move || {
         let mut replies = replies.into_iter();
         for stream in listener.incoming().flatten() {
@@ -95,9 +95,7 @@ fn a_request_that_times_out_is_not_sent_again() {
 fn openrouter_at_another_address_is_still_sent_openrouters_fields() {
     // The test servers stand in for OpenRouter at a local address: they must see its wire.
     let (base, seen) = serve(vec![(200, r#"{"choices":[{"message":{"content":"hi"}}]}"#)]);
-    // SAFETY: no other test in this crate reads the variable.
-    unsafe { std::env::set_var("OPENROUTER_BASE_URL", &base) };
-    let client = OpenRouter::new("k".into(), APP);
+    let client = OpenRouter::openrouter_at(Some(base.clone()), "k".into(), APP);
     assert!(client.is_openrouter());
     assert!(!OpenRouter::at(&base, "k".into(), APP, "Lab").is_openrouter());
     let model = ModelEntry {

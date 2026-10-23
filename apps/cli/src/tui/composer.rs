@@ -18,7 +18,7 @@ use marks::{cleaned, unpasted};
 
 /// What a key did.
 #[derive(Debug, PartialEq)]
-pub enum Edit {
+pub(crate) enum Edit {
     /// The text changed, or the cursor moved.
     Changed,
     /// The person sent the text.
@@ -28,7 +28,7 @@ pub enum Edit {
 }
 
 #[derive(Default)]
-pub struct Composer {
+pub(crate) struct Composer {
     text: Vec<char>,
     /// An index into `text`.
     at: usize,
@@ -45,27 +45,27 @@ pub struct Composer {
 }
 
 impl Composer {
-    pub fn masked(masked: bool) -> Self {
+    pub(crate) fn masked(masked: bool) -> Self {
         Self {
             masked,
             ..Self::default()
         }
     }
 
-    pub fn text(&self) -> String {
+    pub(crate) fn text(&self) -> String {
         self.text.iter().collect()
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.text.is_empty()
     }
 
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.set("");
     }
 
     /// Clear what is typed, kept among the earlier entries so that ↑ brings it back.
-    pub fn discard(&mut self) {
+    pub(crate) fn discard(&mut self) {
         let remembered = unpasted(&self.text(), &self.pastes);
         if !remembered.trim().is_empty() && self.earlier.last() != Some(&remembered) {
             self.earlier.push(remembered);
@@ -74,13 +74,13 @@ impl Composer {
         self.clear();
     }
 
-    pub fn set(&mut self, text: &str) {
+    pub(crate) fn set(&mut self, text: &str) {
         self.text = text.chars().collect();
         self.at = self.text.len();
     }
 
     /// The `@` word the cursor is at the end of: where it starts, and what follows the `@`.
-    pub fn mention(&self) -> Option<(usize, String)> {
+    pub(crate) fn mention(&self) -> Option<(usize, String)> {
         let start = self.text[..self.at]
             .iter()
             .rposition(|c| c.is_whitespace())
@@ -90,7 +90,7 @@ impl Composer {
     }
 
     /// The text from `from` to the cursor replaced with `with`.
-    pub fn replace(&mut self, from: usize, with: &str) {
+    pub(crate) fn replace(&mut self, from: usize, with: &str) {
         self.delete(from, self.at);
         for c in with.chars() {
             self.insert(c);
@@ -98,11 +98,11 @@ impl Composer {
     }
 
     /// Text that arrived as one paste: its lines are kept, nothing is sent.
-    pub fn paste(&mut self, text: &str) {
+    pub(crate) fn paste(&mut self, text: &str) {
         cleaned(text).for_each(|c| self.insert(c));
     }
 
-    pub fn key(&mut self, key: KeyEvent) -> Edit {
+    pub(crate) fn key(&mut self, key: KeyEvent) -> Edit {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let alt = key.modifiers.contains(KeyModifiers::ALT);
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);

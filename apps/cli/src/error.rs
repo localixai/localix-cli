@@ -7,7 +7,7 @@ use std::io;
 use crate::exit;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Failure {
+pub(crate) enum Failure {
     /// The command line asks for something that cannot be: an empty prompt, a missing directory,
     /// a schema that is not JSON.
     Usage(String),
@@ -22,7 +22,7 @@ pub enum Failure {
 
 impl Failure {
     /// The exit code this failure ends the process with (see [`exit`]).
-    pub fn code(&self) -> i32 {
+    pub(crate) fn code(&self) -> i32 {
         match self {
             Self::Usage(_) | Self::Environment(_) | Self::SignedOut(_) => exit::ENVIRONMENT,
             Self::Closed => exit::OK,
@@ -30,7 +30,7 @@ impl Failure {
     }
 
     /// What the person reads on stderr; `None` when nothing should be said.
-    pub fn message(&self) -> Option<String> {
+    pub(crate) fn message(&self) -> Option<String> {
         match self {
             Self::Closed => None,
             other => Some(format!("llx: {other}")),
@@ -38,7 +38,7 @@ impl Failure {
     }
 
     /// A failed write to stdout: a closed pipe ends quietly, anything else is the environment.
-    pub fn from_write(error: &io::Error) -> Self {
+    pub(crate) fn from_write(error: &io::Error) -> Self {
         match error.kind() {
             io::ErrorKind::BrokenPipe => Self::Closed,
             _ => Self::Environment(format!("could not write the output: {error}")),
@@ -61,7 +61,7 @@ impl std::error::Error for Failure {}
 
 /// Write `text` to stdout and flush it: a closed pipe or another write error is a [`Failure`],
 /// never a panic (`println!` panics on a closed pipe).
-pub fn print(text: &str) -> Result<(), Failure> {
+pub(crate) fn print(text: &str) -> Result<(), Failure> {
     use io::Write;
     let mut out = io::stdout().lock();
     out.write_all(text.as_bytes())
@@ -70,7 +70,7 @@ pub fn print(text: &str) -> Result<(), Failure> {
 }
 
 /// Write `text` to stderr, for the person; if even that fails, no one is left to tell.
-pub fn note(text: &str) {
+pub(crate) fn note(text: &str) {
     use io::Write;
     let mut err = io::stderr();
     let _ = err.write_all(text.as_bytes()).and_then(|()| err.flush());

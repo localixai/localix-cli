@@ -313,9 +313,9 @@ fn a_wait_counts_from_its_own_limits() {
 #[test]
 fn registries_that_share_their_numbers_never_give_the_same_id() {
     let dir = Scratch::new();
-    let numbers = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let numbers = Arc::new(AtomicU32::new(0));
     let (a, b) = (
-        Sessions::default().numbered(numbers.clone()),
+        Sessions::default().numbered(Arc::clone(&numbers)),
         Sessions::default().numbered(numbers),
     );
     let short = Wait {

@@ -1,8 +1,8 @@
 //! One task of an agent, on its own thread: its conversation goes on (or opens with a brief), its
 //! answer is posted to the main agent, and the task is recorded in its session.
 
-use std::sync::Mutex;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use agent::agent::{Agent, Run, Status};
@@ -56,8 +56,8 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
                     child.conversation.take(),
                     std::mem::take(&mut child.seen),
                     child.told,
-                    child.stop.clone(),
-                    child.letters.clone(),
+                    Arc::clone(&child.stop),
+                    Arc::clone(&child.letters),
                 )
             })
     };
@@ -122,7 +122,7 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
     });
     let halt = stop().then_some(crate::brake::Halt::Interrupted);
     let status = crate::commands::run::Ended::of(&run.status, None, halt, 0).status;
-    let millis = started.elapsed().as_millis() as u64;
+    let millis = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     watch.show(Event::Answer(run.answer.clone()));
     watch.show(Event::TaskEnded {
         status: status.to_string(),

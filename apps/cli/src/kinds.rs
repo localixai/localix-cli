@@ -6,7 +6,7 @@
 mod terminal;
 
 #[cfg(unix)]
-pub use terminal::Terminal;
+pub(crate) use terminal::Terminal;
 
 use std::sync::Mutex;
 
@@ -25,7 +25,7 @@ const SEARCH_PAGE: &str = "https://duckduckgo.com/";
 /// The browser's locks: one for what changes its tabs (opening, closing), and one per tab, so
 /// work in one tab never waits on another's.
 #[derive(Default)]
-pub struct BrowserLocks {
+pub(crate) struct BrowserLocks {
     tabs_change: Mutex<()>,
     tabs: [Mutex<()>; tools::browser::MAX_TABS + 1],
     /// Each tab's page as the model last read it whole.
@@ -40,7 +40,7 @@ impl BrowserLocks {
 }
 
 /// Browser tabs: the page's tabs, `w1`, `w2`, each worked in on its own, at once.
-pub struct Browser<'a> {
+pub(crate) struct Browser<'a> {
     pub page: &'a Page,
     pub gate: &'a dyn contracts::gate::Gate,
     pub locks: &'a BrowserLocks,

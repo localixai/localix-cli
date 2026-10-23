@@ -21,7 +21,7 @@ use crate::tui::views::AgentState;
 
 /// The person at the interface: a real [`App`] fed what the lanes send, and the requests its
 /// actions make, as the interface's thread does.
-pub struct Person {
+pub(crate) struct Person {
     pub app: App,
     pub events: Receiver<Event>,
     pub requests: Sender<Request>,
@@ -30,7 +30,7 @@ pub struct Person {
 
 impl Person {
     /// Take what the lanes send until `done` holds.
-    pub fn until(&mut self, what: &str, done: impl Fn(&App) -> bool) {
+    pub(crate) fn until(&mut self, what: &str, done: impl Fn(&App) -> bool) {
         let deadline = Instant::now() + Duration::from_secs(10);
         while !done(&self.app) {
             if Instant::now() >= deadline {
@@ -48,13 +48,13 @@ impl Person {
     }
 
     /// Take what the lanes send for `millis`.
-    pub fn wait(&mut self, millis: u64) {
+    pub(crate) fn wait(&mut self, millis: u64) {
         let until = Instant::now() + Duration::from_millis(millis);
         self.until("time to pass", |_| Instant::now() >= until);
     }
 
     /// Take what the lanes send until the interface is told to end.
-    pub fn until_over(&mut self) {
+    pub(crate) fn until_over(&mut self) {
         let deadline = Instant::now() + Duration::from_secs(10);
         while !self.over {
             assert!(Instant::now() < deadline, "waited too long for the end");
@@ -66,7 +66,7 @@ impl Person {
         }
     }
 
-    pub fn act(&mut self, action: Option<Action>, quit: bool) {
+    pub(crate) fn act(&mut self, action: Option<Action>, quit: bool) {
         match action {
             Some(Action::Open(target)) => self.requests.send(Request::Open(target)).unwrap(),
             Some(Action::Stop(id)) => {
@@ -87,27 +87,27 @@ impl Person {
     }
 
     /// Type `text` and send it.
-    pub fn enter(&mut self, text: &str) {
+    pub(crate) fn enter(&mut self, text: &str) {
         typed(&mut self.app, text, Instant::now());
         let action = self.app.event(key(KeyCode::Enter), Instant::now());
         self.act(action, false);
     }
 
     /// The lanes' ids, the first opened first.
-    pub fn lanes(&self) -> Vec<String> {
+    pub(crate) fn lanes(&self) -> Vec<String> {
         let sessions = &self.app.views.sessions;
         let lanes = sessions.iter().filter(|view| view.lane.is_some());
         lanes.map(|view| view.id.clone()).collect()
     }
 
     /// The first lane's id, once the interface knows it.
-    pub fn first(&mut self) -> String {
+    pub(crate) fn first(&mut self) -> String {
         self.until("the first lane", |app| !app.views.sessions[0].id.is_empty());
         self.app.views.sessions[0].id.clone()
     }
 
     /// `/new`, and the new lane shown, waiting for its first entry; its id.
-    pub fn new_lane(&mut self) -> String {
+    pub(crate) fn new_lane(&mut self) -> String {
         let before = self.app.views.shown.clone();
         self.enter("/new");
         self.until("the new lane", |app| {
@@ -119,16 +119,16 @@ impl Person {
     }
 }
 
-pub fn state(app: &App, id: &str) -> AgentState {
+pub(crate) fn state(app: &App, id: &str) -> AgentState {
     let at = app.views.find(id).expect("a known session");
     app.views.sessions[at].state.clone()
 }
 
-pub fn ended(app: &App, id: &str) -> bool {
+pub(crate) fn ended(app: &App, id: &str) -> bool {
     matches!(state(app, id), AgentState::Ended(_))
 }
 
-pub fn call(name: &str, arguments: Value) -> Completion {
+pub(crate) fn call(name: &str, arguments: Value) -> Completion {
     let call = ToolCall {
         id: format!("c-{name}"),
         name: name.into(),
@@ -143,12 +143,16 @@ pub fn call(name: &str, arguments: Value) -> Completion {
 /// A session at the desk, its first task `task`, its lanes thinking with `chats` in the order
 /// they open (a lane past them panics as it starts); `person` acts, then leaves, and the desk
 /// must end. The session store, for what was recorded.
-pub fn at_desk(chats: &[&Gated], task: Option<&str>, person: impl FnOnce(&mut Person)) -> Scratch {
+pub(crate) fn at_desk(
+    chats: &[&Gated],
+    task: Option<&str>,
+    person: impl FnOnce(&mut Person),
+) -> Scratch {
     at_desk_with(chats, task, &|| panic!("the desk quit hard"), person)
 }
 
 /// [`at_desk`], with `quit` for what ends the process when lanes do not stop in time.
-pub fn at_desk_with(
+pub(crate) fn at_desk_with(
     chats: &[&Gated],
     task: Option<&str>,
     quit: &(dyn Fn() + Sync),
@@ -192,7 +196,7 @@ pub fn at_desk_with(
 }
 
 /// The text of the last call's result in a conversation.
-pub fn last_result(conversation: &[Message]) -> String {
+pub(crate) fn last_result(conversation: &[Message]) -> String {
     let mut results = conversation
         .iter()
         .rev()

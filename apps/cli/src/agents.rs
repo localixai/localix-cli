@@ -7,12 +7,12 @@
 //! agents work, and what they spend is the task's.
 
 mod child;
-pub mod inbox;
-pub mod kit;
-pub mod spec;
+pub(crate) mod inbox;
+pub(crate) mod kit;
+pub(crate) mod spec;
 mod tool;
 mod wait;
-pub mod watch;
+pub(crate) mod watch;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -26,7 +26,7 @@ use contracts::history::Session;
 use queue::Queue;
 
 use self::inbox::Letters;
-pub use self::tool::AgentsTool;
+pub(crate) use self::tool::AgentsTool;
 use crate::mode::Mode;
 use crate::output::lock;
 use crate::tui::event::Event;
@@ -37,7 +37,7 @@ const MAX_OPEN: usize = 6;
 const POLL: Duration = Duration::from_millis(200);
 
 /// What the task does with the agents of its session.
-pub trait Delegation {
+pub(crate) trait Delegation {
     /// Work for session `parent` from now on: the agents of another one are let go.
     fn adopt(&self, parent: &str);
     /// The conversation went back (`/rewind`): its agents are let go.
@@ -49,7 +49,7 @@ pub trait Delegation {
 }
 
 /// What the tool and the agents' threads share.
-pub struct Registry {
+pub(crate) struct Registry {
     state: Mutex<State>,
     /// The lane's queue: an agent's answer is posted there.
     pub queue: Arc<Queue>,
@@ -91,19 +91,19 @@ impl Registry {
     }
 
     /// How many agents work now.
-    pub fn working(&self) -> usize {
+    pub(crate) fn working(&self) -> usize {
         self.lock().children.iter().filter(|c| c.working).count()
     }
 
     /// Stop every agent: the session ends.
-    pub fn stop_all(&self) {
+    pub(crate) fn stop_all(&self) {
         for child in &self.lock().children {
             child.stop.store(true, Ordering::SeqCst);
         }
     }
 
     /// The agents of the lane whose queue is `queue`.
-    pub fn new(queue: Arc<Queue>) -> Self {
+    pub(crate) fn new(queue: Arc<Queue>) -> Self {
         Self {
             state: Mutex::default(),
             queue,
@@ -119,7 +119,7 @@ impl Registry {
     }
 
     /// Wait up to `timeout` for an agent to end a task.
-    pub fn wait_change(&self, timeout: Duration) {
+    pub(crate) fn wait_change(&self, timeout: Duration) {
         let state = self.lock();
         let _ = self.changed.wait_timeout(state, timeout);
     }

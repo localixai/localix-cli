@@ -14,6 +14,7 @@
 
 use contracts::gate::{Effect, Gate, Verdict};
 use contracts::tool::ToolError;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 pub mod ask;
 pub mod browser;
@@ -32,4 +33,10 @@ fn ask(gate: &dyn Gate, tool: &str, summary: &str) -> Result<(), ToolError> {
         Verdict::Allow => Ok(()),
         Verdict::Deny(reason) => Err(ToolError::Failed(format!("not allowed: {reason}"))),
     }
+}
+
+/// `mutex`, locked even if a holder panicked: what it guards is plain data, still usable, and a
+/// tool fails its call rather than the process.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }

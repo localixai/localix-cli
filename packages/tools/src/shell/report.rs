@@ -8,7 +8,7 @@ use super::session::{Turn, Until};
 
 /// What is typed, as the person approves it: the text with each line break as a return sign,
 /// then each key in brackets.
-pub fn typed(input: &str, keys: &[String]) -> String {
+pub(super) fn typed(input: &str, keys: &[String]) -> String {
     let mut text = input.replace("\r\n", "\n").replace('\n', " \u{23ce} ");
     if input.ends_with('\n') {
         text.pop();
@@ -24,7 +24,12 @@ pub fn typed(input: &str, keys: &[String]) -> String {
 
 /// The call as the model reads it: how the wait ended, then the new output. `place` is where
 /// a session was started, for a start's report.
-pub fn report(turn: &Turn, place: Option<&str>, needle: Option<&str>, input: &str) -> String {
+pub(super) fn report(
+    turn: &Turn,
+    place: Option<&str>,
+    needle: Option<&str>,
+    input: &str,
+) -> String {
     let (id, command) = (turn.id, &turn.command);
     let (waited, age) = (seconds(turn.waited), seconds(turn.age));
     let running = format!("session {id} running (`{command}`)");

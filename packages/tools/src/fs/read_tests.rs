@@ -115,10 +115,7 @@ fn a_missing_file_is_named() {
     let dir = Scratch::new();
     assert_eq!(
         failed(read(&dir, json!({"path": "nope/missing.rs"}))),
-        format!(
-            "{} does not exist",
-            std::path::Path::new("nope/missing.rs").display()
-        )
+        format!("{} does not exist", Path::new("nope/missing.rs").display())
     );
 }
 

@@ -17,7 +17,7 @@ use crate::tui::asking::UiTerminal;
 
 /// `/model`: a signed-in provider's model and its level in one list; `None` on cancellation
 /// or when nobody is signed in.
-pub fn pick_model(
+pub(crate) fn pick_model(
     current: &Choice,
     terminal: &mut dyn Terminal,
     signed_in: &dyn Fn(&Provider) -> Option<String>,
@@ -89,7 +89,7 @@ pub(super) fn models(
 }
 
 /// `/model`: the pick, then the choice put in and saved.
-pub fn run_model(rig: &mut Rig, ui: &Ui) {
+pub(crate) fn run_model(rig: &mut Rig, ui: &Ui) {
     let terminal = &mut UiTerminal { ui: ui.clone() };
     match pick_model(&rig.choice, terminal, &Provider::signed_in) {
         Some(choice) => rig.output.note(&now(rig, choice)),
@@ -97,7 +97,7 @@ pub fn run_model(rig: &mut Rig, ui: &Ui) {
     }
 }
 /// Shift+Up or Shift+Down: the model's next level up or down, put in and saved.
-pub fn step_reasoning(rig: &mut Rig, up: bool) -> String {
+pub(crate) fn step_reasoning(rig: &mut Rig, up: bool) -> String {
     let selection = match stepped(&rig.choice.selection, up) {
         Ok(selection) => selection,
         Err(why) => return why,

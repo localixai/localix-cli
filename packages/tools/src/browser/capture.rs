@@ -142,8 +142,8 @@ unsafe fn encode(image: *mut objc2::runtime::AnyObject) -> Result<Shot, String> 
         let height: isize = msg_send![bitmap, pixelsHigh];
         Ok(Shot {
             jpeg: std::slice::from_raw_parts(bytes.cast::<u8>(), length).to_vec(),
-            width: width.max(0) as u32,
-            height: height.max(0) as u32,
+            width: u32::try_from(width.max(0)).unwrap_or(u32::MAX),
+            height: u32::try_from(height.max(0)).unwrap_or(u32::MAX),
         })
     }
 }

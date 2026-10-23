@@ -12,7 +12,7 @@ use crate::live::Live;
 use crate::output::Output;
 
 /// The two models a session thinks with.
-pub struct Models<'a> {
+pub(crate) struct Models<'a> {
     pub chat: &'a dyn Chat,
     /// Behind the browser's hands.
     pub decider: &'a dyn Decider,
@@ -22,14 +22,18 @@ pub struct Models<'a> {
 
 /// Build the agent from `setup` on the chosen provider's chat model and OpenRouter's decision
 /// model, with the browser when `browser` is given, and run `work` with it; its exit code.
-pub fn compose(setup: Setup, browser: Option<Browser>, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
+pub(crate) fn compose(
+    setup: Setup,
+    browser: Option<Browser>,
+    work: impl FnOnce(&mut Rig) -> i32,
+) -> i32 {
     let (shared, seat) = setup.split(browser);
     lane(&shared, seat, work)
 }
 
 /// One lane over `shared`: its models, its stop (found by its session id), its events tagged
 /// with that id (the desk told the interface of it); `work` runs with it.
-pub fn lane(shared: &Shared, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
+pub(crate) fn lane(shared: &Shared, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
     let live = Live::of(&seat.choice, &shared.options.models.decision_model);
     let models = Models {
         chat: &live.chat,
@@ -40,7 +44,7 @@ pub fn lane(shared: &Shared, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> 
 }
 
 /// [`lane`] around `models`.
-pub fn lane_with(
+pub(crate) fn lane_with(
     shared: &Shared,
     mut seat: Seat,
     models: Models,

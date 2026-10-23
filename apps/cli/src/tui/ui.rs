@@ -13,19 +13,19 @@ const POLL: Duration = Duration::from_millis(100);
 
 /// The session's side of the interface: cheap to clone, one per thing that reports or asks.
 #[derive(Clone)]
-pub struct Ui {
+pub(crate) struct Ui {
     events: Sender<Event>,
     /// The session whose events these are: each is sent inside its [`Event::In`].
     lane: Option<Arc<str>>,
 }
 
 impl Ui {
-    pub fn new(events: Sender<Event>) -> Self {
+    pub(crate) fn new(events: Sender<Event>) -> Self {
         Self { events, lane: None }
     }
 
     /// The same interface, for what session `id` sends.
-    pub fn for_lane(&self, id: &str) -> Self {
+    pub(crate) fn for_lane(&self, id: &str) -> Self {
         Self {
             events: self.events.clone(),
             lane: Some(id.into()),
@@ -33,7 +33,7 @@ impl Ui {
     }
 
     /// Send `event`, as the session's unless it names its own (an agent's).
-    pub fn send(&self, event: Event) {
+    pub(crate) fn send(&self, event: Event) {
         let event = match (&self.lane, event) {
             (Some(lane), event) if !matches!(event, Event::In(..)) => {
                 Event::In(lane.to_string(), Box::new(event))
@@ -44,14 +44,19 @@ impl Ui {
     }
 
     /// The person's next entry; `None` when they leave.
-    pub fn next_entry(&self) -> Option<Typed> {
+    pub(crate) fn next_entry(&self) -> Option<Typed> {
         let (reply, answer) = channel();
         self.send(Event::Ready(reply));
         answer.recv().ok().flatten()
     }
 
     /// Whether an effect may happen; a stopped task closes the question with a no.
-    pub fn approve(&self, tool: &str, summary: &str, stopped: &dyn Fn() -> bool) -> Approval {
+    pub(crate) fn approve(
+        &self,
+        tool: &str,
+        summary: &str,
+        stopped: &dyn Fn() -> bool,
+    ) -> Approval {
         let (reply, answer) = channel();
         self.send(Event::Approve {
             tool: tool.into(),
@@ -62,7 +67,7 @@ impl Ui {
     }
 
     /// One of the model's questions; `None` when it was skipped or the task stopped.
-    pub fn ask(
+    pub(crate) fn ask(
         &self,
         question: &Question,
         at: usize,
@@ -80,7 +85,7 @@ impl Ui {
     }
 
     /// One of `options` (a label and a note each), starting on `marked`; `None` when cancelled.
-    pub fn pick(
+    pub(crate) fn pick(
         &self,
         title: &str,
         options: Vec<(String, String)>,
@@ -97,7 +102,7 @@ impl Ui {
     }
 
     /// A row and its inline value, starting on `marked`; `None` when cancelled.
-    pub fn pick_adjustable(
+    pub(crate) fn pick_adjustable(
         &self,
         title: &str,
         options: Vec<(String, String)>,
@@ -117,7 +122,7 @@ impl Ui {
 
     /// A line the person types after `prompt`, shown as dots when `hidden`; `None` when cancelled,
     /// or closed unanswered once `done` says so.
-    pub fn line(
+    pub(crate) fn line(
         &self,
         prompt: &str,
         hidden: bool,
@@ -134,7 +139,7 @@ impl Ui {
 
     /// What the person sent to the task running, taken (and shown as theirs) or, with `peek`,
     /// only looked at.
-    pub fn steered(&self, peek: bool) -> Vec<String> {
+    pub(crate) fn steered(&self, peek: bool) -> Vec<String> {
         let (reply, answer) = channel();
         self.send(Event::TakeSteered { reply, peek });
         answer.recv().unwrap_or_default()

@@ -2,8 +2,8 @@
 //! Keys and tokens are never shown: a key is read with the echo off, and only its masked ends
 //! are printed.
 
-use std::cell::RefCell;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use provider_kit::http::Web;
@@ -12,6 +12,7 @@ use provider_kit::oauth;
 use crate::compose::APP;
 use crate::error::{self, Failure};
 use crate::exit;
+use crate::output::lock;
 use crate::picker::Terminal;
 use crate::providers::{Method, Provider};
 
@@ -19,7 +20,7 @@ use crate::providers::{Method, Provider};
 const TOKEN_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Sign in to `provider` with `method`; what was saved, in words with no secret in them.
-pub fn sign_in(
+pub(crate) fn sign_in(
     provider: Provider,
     method: Method,
     terminal: &mut dyn Terminal,
@@ -89,7 +90,7 @@ fn browser(
 /// on another machine); the authorization code. The line for the address closes by itself once
 /// the browser is back: nothing to press. It is read on this thread only, so
 /// nothing is left reading stdin once the sign-in ends.
-pub fn come_back(
+pub(crate) fn come_back(
     terminal: &mut dyn Terminal,
     say: &dyn Fn(&str),
     wait: &dyn Fn(Duration) -> Option<Result<String, String>>,
@@ -98,16 +99,17 @@ pub fn come_back(
     let prompt = "Finish signing in in the browser; llx goes on by itself. If the browser is \
                   on another machine, paste the address it ended on (Enter checks again, \
                   q cancels) > ";
-    let back = RefCell::new(None);
+    let back = Mutex::new(None);
     let done = || {
-        if back.borrow().is_none() {
-            *back.borrow_mut() = wait(Duration::ZERO);
+        let mut back = lock(&back);
+        if back.is_none() {
+            *back = wait(Duration::ZERO);
         }
-        back.borrow().is_some()
+        back.is_some()
     };
     loop {
         let line = terminal.line_until(prompt, &done);
-        if let Some(outcome) = back.take() {
+        if let Some(outcome) = lock(&back).take() {
             return outcome;
         }
         let line = line.ok_or("cancelled")?;
@@ -123,7 +125,7 @@ pub fn come_back(
 }
 
 /// `llx logout`: forget every saved sign-in.
-pub fn logout() -> Result<i32, Failure> {
+pub(crate) fn logout() -> Result<i32, Failure> {
     let mut any = false;
     let mut in_env = vec![];
     for provider in Provider::all() {
@@ -151,7 +153,7 @@ pub fn logout() -> Result<i32, Failure> {
 }
 
 /// A key as it may be shown: `sk-or-...abcd`, never more of it.
-pub fn mask(key: &str) -> String {
+pub(crate) fn mask(key: &str) -> String {
     let chars: Vec<char> = key.chars().collect();
     if chars.len() < 16 {
         return "...".into();

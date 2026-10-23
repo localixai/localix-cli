@@ -31,14 +31,13 @@ pub(super) fn script_forms(source: &str) -> Vec<String> {
         .collect();
     cuts.sort_unstable_by(|a, b| b.cmp(a));
     cuts.dedup();
-    for at in cuts.into_iter().filter(|at| {
-        !source[*at..].trim().is_empty() && !source[*at..].trim_start().starts_with("return")
-    }) {
-        forms.push(start(&format!(
-            "{}\nreturn ({}\n)",
-            &source[..at],
-            source[at..].trim()
-        )));
+    let splits = cuts
+        .into_iter()
+        .filter_map(|at| source.split_at_checked(at));
+    for (head, last) in splits
+        .filter(|(_, last)| !last.trim().is_empty() && !last.trim_start().starts_with("return"))
+    {
+        forms.push(start(&format!("{head}\nreturn ({}\n)", last.trim())));
     }
     forms.push(start(source));
     forms

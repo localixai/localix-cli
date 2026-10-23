@@ -3,7 +3,7 @@
 //! approve one command and run another; each is shown as an escape instead (`\r`, `\u{1b}`).
 
 /// `text` with every control character and every reordering mark escaped.
-pub fn printable(text: &str) -> String {
+pub(crate) fn printable(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         if c.is_control() || reorders(c) {

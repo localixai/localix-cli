@@ -19,7 +19,7 @@ const LISTED: usize = 30;
 const TASK_CHARS: usize = 60;
 
 /// Where sessions are kept: `LLX_SESSIONS`, else `~/.llx/sessions`.
-pub fn store() -> Sessions {
+pub(crate) fn store() -> Sessions {
     let dir = match std::env::var_os("LLX_SESSIONS").filter(|dir| !dir.is_empty()) {
         Some(dir) => PathBuf::from(dir),
         None => {
@@ -32,7 +32,7 @@ pub fn store() -> Sessions {
     Sessions { dir }
 }
 
-pub fn list() -> Result<i32, Failure> {
+pub(crate) fn list() -> Result<i32, Failure> {
     let all = store().list();
     let (agents, all): (Vec<Session>, Vec<Session>) = all.into_iter().partition(Session::is_agent);
     if all.is_empty() {
@@ -58,7 +58,7 @@ fn children(session: &Session, agents: &[Session]) -> usize {
 
 /// One session as `llx sessions` lists it: its id, when, how many tasks, where, the first one,
 /// and how many agents it started.
-pub fn row(session: &Session, agents: usize) -> String {
+pub(crate) fn row(session: &Session, agents: usize) -> String {
     let shown = first_task(session);
     let place = match session.workspace.as_str() {
         "" => "?".to_string(),
@@ -78,7 +78,7 @@ pub fn row(session: &Session, agents: usize) -> String {
 
 /// A session as the interface's list shows it: its first task, and when it ran and how many tasks
 /// it has (`2 h ago · 4 tasks`).
-pub fn brief(session: &Session) -> (String, String) {
+pub(crate) fn brief(session: &Session) -> (String, String) {
     let ago = session::ago(session.updated);
     let tasks = crate::tui::cells::count(session.turns.len() as u64, "task");
     (first_task(session), format!("{ago} · {tasks}"))
@@ -107,7 +107,7 @@ fn first_task(session: &Session) -> String {
 }
 
 /// The sessions of `list` that ran in `dir`, newest first, without the agents'.
-pub fn here(mut list: Vec<Session>, dir: &str) -> Vec<Session> {
+pub(crate) fn here(mut list: Vec<Session>, dir: &str) -> Vec<Session> {
     list.retain(|session| session.workspace == dir && !session.is_agent());
     list.sort_by_key(|session| std::cmp::Reverse(session.updated));
     list
@@ -130,7 +130,7 @@ pub(crate) fn home_relative(dir: &str) -> String {
 
 /// `llx resume` and `llx exec resume`: the session `id` names, else the newest one that ran in
 /// this workspace (else the newest of all, said so), going on with `prompt` as `kind`.
-pub fn resume(
+pub(crate) fn resume(
     id: Option<&str>,
     prompt: Option<&str>,
     options: RunOptions,

@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::sync::Mutex;
 
 use contracts::catalog::Effort;
 
@@ -10,13 +10,13 @@ type Outcome = (Result<Option<Choice>, String>, Vec<(Provider, Method)>);
 
 /// Runs the steps with OpenAI signed in or not.
 fn steps(current: &Choice, openai_signed_in: bool, terminal: &mut Scripted) -> Outcome {
-    let asked = RefCell::new(vec![]);
+    let asked = Mutex::new(vec![]);
     let signed_in = |provider: &Provider| {
         (*provider == Provider::openai() && openai_signed_in)
             .then(|| "ChatGPT account a".to_string())
     };
     let sign_in = |provider, method, _: &mut dyn Terminal| {
-        asked.borrow_mut().push((provider, method));
+        asked.lock().unwrap().push((provider, method));
         Ok("Signed in.".to_string())
     };
     let world = World {
@@ -25,7 +25,7 @@ fn steps(current: &Choice, openai_signed_in: bool, terminal: &mut Scripted) -> O
         say: &|_| {},
     };
     let chosen = choose(current, terminal, &world);
-    (chosen, asked.into_inner())
+    (chosen, asked.into_inner().unwrap())
 }
 
 fn openrouter() -> Choice {

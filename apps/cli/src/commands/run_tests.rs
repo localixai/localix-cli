@@ -144,7 +144,7 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
     let session = history.start();
     let setup = Setup {
         options,
-        choice: crate::choice::Choice::new(crate::providers::Provider::openrouter(), "test/model"),
+        choice: choice::Choice::new(crate::providers::Provider::openrouter(), "test/model"),
         workspace: Workspace::new(&work).unwrap(),
         context: String::new(),
         fresh: String::new(),

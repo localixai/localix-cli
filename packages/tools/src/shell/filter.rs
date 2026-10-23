@@ -25,7 +25,7 @@ enum State {
 }
 
 #[derive(Debug, Default)]
-pub struct Filter {
+pub(super) struct Filter {
     state: State,
     parameters: Vec<u8>,
     /// The line not yet ended: a prompt waits here.
@@ -46,19 +46,19 @@ pub struct Filter {
 impl Filter {
     /// Take in `bytes`: each ended line goes to `out`, and every character kept (and each line
     /// break) to `seen`, where a wait looks for its text.
-    pub fn feed(&mut self, bytes: &[u8], out: &mut Output, seen: &mut Vec<u8>) {
+    pub(super) fn feed(&mut self, bytes: &[u8], out: &mut Output, seen: &mut Vec<u8>) {
         for &byte in bytes {
             self.byte(byte, out, seen);
         }
     }
 
     /// The line not yet ended, such as a `Name: ` prompt.
-    pub fn pending_line(&self) -> &[u8] {
+    pub(super) fn pending_line(&self) -> &[u8] {
         &self.line
     }
 
     /// The answers queued since the last call, to write to the program.
-    pub fn take_replies(&mut self) -> Vec<u8> {
+    pub(super) fn take_replies(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.replies)
     }
 

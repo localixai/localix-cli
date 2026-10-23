@@ -2,23 +2,23 @@
 //! reports; a run that hosts the browser never returns (its event loop owns the main thread and
 //! exits the process with the run's code, which nothing else decides).
 
-pub mod doctor;
-pub mod ended;
-pub mod entry;
-pub mod extras;
-pub mod login;
-pub mod model;
-pub mod repl;
-pub mod rewind;
-pub mod run;
-pub mod sessions;
-pub mod signin;
+pub(crate) mod doctor;
+pub(crate) mod ended;
+pub(crate) mod entry;
+pub(crate) mod extras;
+pub(crate) mod login;
+pub(crate) mod model;
+pub(crate) mod repl;
+pub(crate) mod rewind;
+pub(crate) mod run;
+pub(crate) mod sessions;
+pub(crate) mod signin;
 
 use crate::cli::{Cli, Command, ExecCommand, joined};
 use crate::error::Failure;
 use run::Kind;
 
-pub fn dispatch(cli: Cli) -> Result<i32, Failure> {
+pub(crate) fn dispatch(cli: Cli) -> Result<i32, Failure> {
     let kind = match cli.print {
         true => Kind::Exec,
         false => Kind::Session,

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use contracts::gate::Open;
 use contracts::inbox::Inbox;
 use tools::workspace::Workspace;
@@ -20,7 +22,7 @@ fn with_inbox(output: &Output, work: impl FnOnce(&MainInbox, &Registry, &Jobs, &
     let scratch = Scratch::new();
     let workspace = Workspace::new(scratch.path()).unwrap();
     let jobs_output = quiet();
-    let queue = std::sync::Arc::new(crate::arrivals::queue(None));
+    let queue = Arc::new(crate::arrivals::queue(None));
     queue.begin();
     let kit = Kit {
         workspace: &workspace,
@@ -30,7 +32,7 @@ fn with_inbox(output: &Output, work: impl FnOnce(&MainInbox, &Registry, &Jobs, &
         session: false,
         queue: &queue,
     };
-    let (registry, jobs) = (Registry::new(queue.clone()), Jobs::default());
+    let (registry, jobs) = (Registry::new(Arc::clone(&queue)), Jobs::default());
     let inbox = MainInbox {
         registry: &registry,
         queue: &queue,

@@ -25,19 +25,19 @@ const POLL_US: libc::suseconds_t = 100_000;
 
 /// Refuses everything once the person stopped the task, and asks `inner` until then: nothing
 /// more runs after Ctrl-C, not even what was approved while the question was open.
-pub struct Stoppable<'a> {
+pub(crate) struct Stoppable<'a> {
     pub inner: &'a dyn Gate,
     pub stopped: &'a (dyn Fn() -> bool + Sync),
 }
 
-pub const STOPPED: &str = "the person stopped the task";
+pub(crate) const STOPPED: &str = "the person stopped the task";
 
 /// One question to the person at a time: an approval or an `ask`, from the main session or from
 /// any agent working beside it, waits here for the one open to be answered.
 static ASKING: Mutex<()> = Mutex::new(());
 
 /// Hold the person's attention for one question.
-pub fn one_question() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn one_question() -> std::sync::MutexGuard<'static, ()> {
     crate::output::lock(&ASKING)
 }
 
@@ -56,19 +56,19 @@ impl Gate for Stoppable<'_> {
 }
 
 /// Where a question is asked and its answer read.
-pub trait Prompter: Send + Sync {
+pub(crate) trait Prompter: Send + Sync {
     /// Show `question` and read one line; `None` when nothing can be read.
     fn ask(&self, question: &str) -> Option<String>;
 }
 
 /// The controlling terminal, opened for each question so nothing holds it between them.
 #[derive(Debug, Clone, Copy)]
-pub struct Tty;
+pub(crate) struct Tty;
 
 impl Tty {
     /// Whether there is a terminal to ask on. Only the terminal itself counts, not where stdin or
     /// stderr go: a process with none (CI, cron, `nohup`) cannot open it.
-    pub fn available() -> bool {
+    pub(crate) fn available() -> bool {
         Self::open().is_some()
     }
 
@@ -215,12 +215,12 @@ fn typed(_: &File, _: &dyn Fn() -> bool) -> bool {
 
 /// Asks the person whether an effect may happen: yes, always for its tool, or no; `None` when no
 /// answer can come. What "always" covers is the mode's (`mode::ModeGate`).
-pub trait Asker: Send + Sync {
+pub(crate) trait Asker: Send + Sync {
     fn approve(&self, effect: &Effect) -> Option<Approval>;
 }
 
 /// Asks at the terminal, on `prompter`.
-pub struct TerminalGate<P: Prompter>(pub P);
+pub(crate) struct TerminalGate<P: Prompter>(pub P);
 
 impl<P: Prompter> Asker for TerminalGate<P> {
     fn approve(&self, effect: &Effect) -> Option<Approval> {
@@ -260,9 +260,9 @@ fn answer(line: &str) -> Option<Approval> {
 }
 
 /// How every refusal of the person starts: the interface knows a declined call by it.
-pub const DECLINED: &str = "the person declined it";
+pub(crate) const DECLINED: &str = "the person declined it";
 
-pub fn declined(why: Option<String>) -> String {
+pub(crate) fn declined(why: Option<String>) -> String {
     match why {
         // What they said is the person speaking now, not a tool's error: it comes first.
         Some(why) => format!(

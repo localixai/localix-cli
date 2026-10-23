@@ -13,7 +13,7 @@ use tools::shell::{Asset, Emulator};
 
 /// A file as it is fetched and checked.
 #[derive(Debug, Clone, Copy)]
-pub struct Pin {
+pub(crate) struct Pin {
     pub name: &'static str,
     pub url: &'static str,
     /// Base64, as a page's policy names a script.
@@ -21,7 +21,7 @@ pub struct Pin {
 }
 
 /// The emulator, its fit addon, and its stylesheet, at exact versions.
-pub const PINS: [Pin; 3] = [
+pub(crate) const PINS: [Pin; 3] = [
     Pin {
         name: "xterm.js",
         url: "https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js",
@@ -43,12 +43,12 @@ pub const PINS: [Pin; 3] = [
 const LIMIT: u64 = 4 << 20;
 const TIMEOUT: Duration = Duration::from_secs(30);
 
-pub fn sha384(bytes: &[u8]) -> String {
+pub(crate) fn sha384(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(Sha384::digest(bytes))
 }
 
 /// Where the files are kept: `~/.llx/cache/xterm`.
-pub fn dir(home: Option<PathBuf>) -> Option<PathBuf> {
+pub(crate) fn dir(home: Option<PathBuf>) -> Option<PathBuf> {
     Some(home?.join(".llx").join("cache").join("xterm"))
 }
 
@@ -59,7 +59,7 @@ fn kept(dir: &Path, pin: &Pin) -> Option<String> {
 }
 
 /// The emulator as kept in `dir`, each file checked against its pin; none unless all are good.
-pub fn load(dir: &Path, [script, fit, css]: &[Pin; 3]) -> Option<Emulator> {
+pub(crate) fn load(dir: &Path, [script, fit, css]: &[Pin; 3]) -> Option<Emulator> {
     let asset = |pin: &Pin| {
         let text = kept(dir, pin)?;
         let sha384 = pin.sha384.to_string();
@@ -74,7 +74,7 @@ pub fn load(dir: &Path, [script, fit, css]: &[Pin; 3]) -> Option<Emulator> {
 
 /// Fetch with `get` the files of `pins` that `dir` does not hold as pinned, and keep each that
 /// matches its pin, whole or not at all; how many were fetched.
-pub fn fetch(
+pub(crate) fn fetch(
     dir: &Path,
     pins: &[Pin; 3],
     get: &dyn Fn(&str) -> Result<Vec<u8>, String>,
@@ -101,17 +101,17 @@ pub fn fetch(
 
 /// Whether to fetch: in a session whose terminal sessions show in windows, unless `LLX_XTERM=0`
 /// (as `var` reads the environment).
-pub fn wanted(session: bool, windowed: bool, var: impl Fn(&str) -> Option<String>) -> bool {
+pub(crate) fn wanted(session: bool, windowed: bool, var: impl Fn(&str) -> Option<String>) -> bool {
     session && windowed && var("LLX_XTERM").as_deref() != Some("0")
 }
 
 /// The emulator kept for this person, if any.
-pub fn installed() -> Option<Emulator> {
+pub(crate) fn installed() -> Option<Emulator> {
     load(&dir(std::env::var_os("HOME").map(PathBuf::from))?, &PINS)
 }
 
 /// Fetch what is missing in the background; nothing waits on it, and a failure changes nothing.
-pub fn prefetch() {
+pub(crate) fn prefetch() {
     let Some(dir) = dir(std::env::var_os("HOME").map(PathBuf::from)) else {
         return;
     };

@@ -28,29 +28,7 @@ impl App {
             self.quitting = None;
         }
         match key.code {
-            KeyCode::Char('c') if ctrl => {
-                // Stopped already, a stop quits: asked first while another session works.
-                if self.busy().is_some() && self.lane().stopping && self.others_work() {
-                    return self.quit();
-                }
-                if self.busy().is_some() {
-                    return Some(self.stop());
-                }
-                // A draft goes, kept for ↑; the next Ctrl-C quits, as at an empty prompt.
-                let draft = !self.composer.is_empty();
-                if draft {
-                    self.composer.discard();
-                }
-                let again = self
-                    .quitting
-                    .is_some_and(|at| now.duration_since(at).as_millis() < QUIT_WINDOW_MS);
-                if again && !draft {
-                    self.quitting = None;
-                    return self.quit();
-                }
-                self.quitting = Some(now);
-                self.discarded = draft;
-            }
+            KeyCode::Char('c') if ctrl => return self.ctrl_c(now),
             // Ctrl-D at an empty prompt quits, asked first while work runs.
             KeyCode::Char('d') if ctrl && self.composer.is_empty() => return self.quit(),
             // In an agent's view Esc goes back to the main one; Ctrl-C still stops the task.
@@ -117,51 +95,89 @@ impl App {
                 };
             }
             KeyCode::Enter if !self.offers().is_empty() && key.modifiers.is_empty() => {
-                // File offers insert a path. A command (or a mode) runs as typed when it is a
-                // whole one, else the one marked.
-                let offers = self.offers();
-                if matches!(offers.first(), Some(Offer::File(_))) {
+                return self.enter_offer(key);
+            }
+            _ => return self.other_key(key),
+        }
+        None
+    }
+
+    /// Ctrl-C: a task running stops, a draft goes, and a second one quits.
+    fn ctrl_c(&mut self, now: Instant) -> Option<Action> {
+        // Stopped already, a stop quits: asked first while another session works.
+        if self.busy().is_some() && self.lane().stopping && self.others_work() {
+            return self.quit();
+        }
+        if self.busy().is_some() {
+            return Some(self.stop());
+        }
+        // A draft goes, kept for ↑; the next Ctrl-C quits, as at an empty prompt.
+        let draft = !self.composer.is_empty();
+        if draft {
+            self.composer.discard();
+        }
+        let again = self
+            .quitting
+            .is_some_and(|at| now.duration_since(at).as_millis() < QUIT_WINDOW_MS);
+        if again && !draft {
+            self.quitting = None;
+            return self.quit();
+        }
+        self.quitting = Some(now);
+        self.discarded = draft;
+        None
+    }
+
+    /// Enter on what `/` or `@` offers.
+    fn enter_offer(&mut self, key: KeyEvent) -> Option<Action> {
+        // File offers insert a path. A command (or a mode) runs as typed when it is a
+        // whole one, else the one marked.
+        let offers = self.offers();
+        if matches!(offers.first(), Some(Offer::File(_))) {
+            self.complete();
+            return None;
+        }
+        let typed = self.composer.text();
+        let typed = typed.trim();
+        let whole = offers.iter().any(|offer| match offer {
+            Offer::Command(name, _) => typed == format!("/{name}"),
+            Offer::Mode(name, _) => typed.ends_with(&format!(" {name}")),
+            Offer::File(_) => false,
+        });
+        if !whole {
+            let marked = offers[self.offered.min(offers.len() - 1)].clone();
+            let entry = match marked {
+                Offer::Command(name, _) => format!("/{name}"),
+                Offer::Mode(name, _) => {
+                    let command = typed.split_whitespace().next().unwrap_or("/mode");
+                    format!("{command} {name}")
+                }
+                // Files are completed, as above.
+                Offer::File(_) => {
                     self.complete();
                     return None;
                 }
-                let typed = self.composer.text();
-                let typed = typed.trim();
-                let whole = offers.iter().any(|offer| match offer {
-                    Offer::Command(name, _) => typed == format!("/{name}"),
-                    Offer::Mode(name, _) => typed.ends_with(&format!(" {name}")),
-                    Offer::File(_) => false,
-                });
-                if !whole {
-                    let marked = offers[self.offered.min(offers.len() - 1)].clone();
-                    let entry = match marked {
-                        Offer::Command(name, _) => format!("/{name}"),
-                        Offer::Mode(name, _) => {
-                            let command = typed.split_whitespace().next().unwrap_or("/mode");
-                            format!("{command} {name}")
-                        }
-                        Offer::File(_) => unreachable!("files are completed above"),
-                    };
-                    self.composer.clear();
-                    self.offered = 0;
-                    return self.submit(Typed::from(entry.as_str()));
-                }
-                self.adopt_paths();
-                return self.typed(key);
-            }
-            _ => {
-                if key.code == KeyCode::Char('@') {
-                    self.files.load();
-                }
-                // A path typed or dropped in without a paste becomes its mark before it is sent.
-                if key.code == KeyCode::Enter && key.modifiers.is_empty() {
-                    self.adopt_paths();
-                }
-                let action = self.typed(key);
-                self.offered = self.offered.min(self.offers().len().saturating_sub(1));
-                return action;
-            }
+            };
+            self.composer.clear();
+            self.offered = 0;
+            return self.submit(Typed::from(entry.as_str()));
         }
-        None
+        self.adopt_paths();
+        self.typed(key)
+    }
+
+    /// Any other key: the composer's.
+    fn other_key(&mut self, key: KeyEvent) -> Option<Action> {
+        if key.code == KeyCode::Char('@') {
+            self.files.load();
+        }
+        // A path typed or dropped in without a paste becomes its mark before it is sent.
+        if key.code == KeyCode::Enter && key.modifiers.is_empty() {
+            self.adopt_paths();
+        }
+        let action = self.typed(key);
+        self.offered = self.offered.min(self.offers().len().saturating_sub(1));
+        action
     }
 
     /// A key for the composer: what it sends goes, with its attachments.
@@ -196,7 +212,7 @@ impl App {
     /// The commands the composer's text could be the start of: only while it is `/` and a name.
     /// What the composer's text offers: the commands its `/` could start, or the files its
     /// `@` word could name.
-    pub fn offers(&self) -> Vec<Offer> {
+    pub(crate) fn offers(&self) -> Vec<Offer> {
         if let Some((_, query)) = self.composer.mention() {
             return self
                 .files
@@ -266,7 +282,7 @@ impl App {
 
 /// One thing the composer offers to put in.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Offer {
+pub(crate) enum Offer {
     /// A command's name and what it does.
     Command(String, String),
     /// A mode's name and its effect.

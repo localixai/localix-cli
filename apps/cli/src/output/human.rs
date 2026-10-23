@@ -6,7 +6,7 @@ use contracts::chat::Usage;
 use super::Summary;
 
 /// One model turn, for `-v`.
-pub fn turn(usage: &Usage) -> String {
+pub(crate) fn turn(usage: &Usage) -> String {
     format!(
         "  · {} · {} in · {} out · ${:.4} · {:.1}s",
         usage.model,
@@ -18,7 +18,7 @@ pub fn turn(usage: &Usage) -> String {
 }
 
 /// Under the closing rule: each model's calls, tokens, money and time, and the session.
-pub fn spend(summary: &Summary) -> String {
+pub(crate) fn spend(summary: &Summary) -> String {
     let (agent, decision) = (summary.agent, summary.decision);
     let seconds = |ms: u64| ms as f64 / 1000.0;
     let mut out = String::new();
@@ -51,7 +51,7 @@ pub fn spend(summary: &Summary) -> String {
 
 /// What goes to stdout and what to stderr at the end: the answer alone on stdout, or with
 /// `--schema` the data alone on stdout (one line, for a pipeline) and the prose on stderr.
-pub fn answer(summary: &Summary) -> (String, String) {
+pub(crate) fn answer(summary: &Summary) -> (String, String) {
     let prose = summary.answer.trim();
     let line = |text: &str| match text.is_empty() {
         true => String::new(),
@@ -65,7 +65,7 @@ pub fn answer(summary: &Summary) -> (String, String) {
 }
 
 /// `12,345 in (2,000 cached)`, or `12,345 in` when nothing was cached: `/usage` says it so too.
-pub fn tokens_in(input: u64, cached: u64) -> String {
+pub(crate) fn tokens_in(input: u64, cached: u64) -> String {
     match cached {
         0 => format!("{} in", thousands(input)),
         cached => format!("{} in ({} cached)", thousands(input), thousands(cached)),
@@ -73,7 +73,7 @@ pub fn tokens_in(input: u64, cached: u64) -> String {
 }
 
 /// `12,345`
-pub fn thousands(n: u64) -> String {
+pub(crate) fn thousands(n: u64) -> String {
     let digits = n.to_string();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {

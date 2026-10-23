@@ -20,7 +20,7 @@ const PAUSE: Duration = Duration::from_millis(10);
 
 /// What one pass found.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct Pass {
+pub(super) struct Pass {
     /// Processes of the session, its leader aside, sent SIGKILL.
     pub signalled: usize,
     /// Processes of the session that refused the signal (another user's, such as `sudo`).
@@ -29,7 +29,7 @@ pub struct Pass {
 
 /// Send SIGKILL to every process of session `sid` but its leader (the caller kills and reaps that
 /// one). Only system calls, so a signal handler may call it.
-pub fn kill_members(sid: libc::pid_t) -> Pass {
+pub(super) fn kill_members(sid: libc::pid_t) -> Pass {
     let mut pass = Pass::default();
     if sid <= 1 {
         return pass;
@@ -51,7 +51,7 @@ pub fn kill_members(sid: libc::pid_t) -> Pass {
 
 /// Kill every process of session `sid` but its leader, again until none is left (a process may
 /// fork while it is killed), for at most `wait`; whether none is left.
-pub fn end(sid: libc::pid_t, wait: Duration) -> bool {
+pub(super) fn end(sid: libc::pid_t, wait: Duration) -> bool {
     let deadline = Instant::now() + wait;
     loop {
         let pass = kill_members(sid);
@@ -72,7 +72,7 @@ pub fn end(sid: libc::pid_t, wait: Duration) -> bool {
 #[cfg(target_vendor = "apple")]
 fn each_pid(mut visit: impl FnMut(libc::pid_t)) {
     let mut pids = [0 as libc::pid_t; MOST];
-    let size = std::mem::size_of_val(&pids) as libc::c_int;
+    let size = libc::c_int::try_from(size_of_val(&pids)).unwrap_or(libc::c_int::MAX);
     // SAFETY: proc_listallpids writes at most `size` bytes into `pids`, which outlives the call.
     let count = unsafe { libc::proc_listallpids(pids.as_mut_ptr().cast(), size) };
     let count = usize::try_from(count).unwrap_or(0).min(MOST);

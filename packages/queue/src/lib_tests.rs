@@ -34,8 +34,8 @@ fn a_running_task_takes_what_joins_in_the_order_it_came() {
 
 #[test]
 fn what_comes_while_idle_opens_a_task_waits_for_the_next_or_is_dropped() {
-    let opened = Arc::new(std::sync::Mutex::new(vec![]));
-    let seen = opened.clone();
+    let opened = Arc::new(Mutex::new(vec![]));
+    let seen = Arc::clone(&opened);
     let queue = Queue::new(16).on_open(move |entry| seen.lock().unwrap().push(entry.body));
     queue.post(entry(MONITOR, "monitor", "m1", "tick"));
     queue.post(entry(NOTICE, "window", "w", "the person closed t2"));
@@ -52,8 +52,8 @@ fn what_comes_while_idle_opens_a_task_waits_for_the_next_or_is_dropped() {
 
 #[test]
 fn the_end_of_a_task_hands_on_what_it_did_not_read() {
-    let opened = Arc::new(std::sync::Mutex::new(vec![]));
-    let seen = opened.clone();
+    let opened = Arc::new(Mutex::new(vec![]));
+    let seen = Arc::clone(&opened);
     let queue = Queue::new(16).on_open(move |entry| seen.lock().unwrap().push(entry.body));
     queue.begin();
     queue.post(entry(MONITOR, "monitor", "m1", "after the last step"));
@@ -125,7 +125,7 @@ fn an_entry_reads_as_tagged_data_its_body_cannot_close() {
 fn a_wait_wakes_when_something_joins() {
     let queue = Arc::new(Queue::new(16));
     queue.begin();
-    let poster = queue.clone();
+    let poster = Arc::clone(&queue);
     let thread = std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(50));
         poster.post(entry(REPORT, "agent_result", "s1", "done"));

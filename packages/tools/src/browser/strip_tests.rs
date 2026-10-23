@@ -41,7 +41,10 @@ fn the_tabs_reach_the_page_as_data() {
         script.starts_with("S(") && script.ends_with(')'),
         "{script}"
     );
-    let json = &script[2..script.len() - 1];
+    let json = script
+        .strip_prefix("S(")
+        .and_then(|s| s.strip_suffix(')'))
+        .unwrap();
     let data: serde_json::Value = serde_json::from_str(json).unwrap();
     assert_eq!(data["shown"], "t2");
     assert_eq!(data["tabs"][0]["key"], "w1");

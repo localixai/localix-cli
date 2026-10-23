@@ -54,7 +54,7 @@ impl Kind for Fake {
     }
     fn open(&self, args: &Value) -> Result<Opened, ToolError> {
         let mut open = self.open.lock().unwrap();
-        let id = open.len() as u32 + 1;
+        let id = u32::try_from(open.len()).unwrap() + 1;
         open.push(id);
         self.did(format!("open {}", args["thing"]));
         Ok(Opened {
@@ -479,22 +479,22 @@ impl Kind for Together {
         }
     }
     fn interact(&self, _: u32, _: &Value) -> Result<ToolOutput, ToolError> {
-        unreachable!()
+        panic!("not called here")
     }
     fn snapshot(&self, _: u32) -> Result<ToolOutput, ToolError> {
-        unreachable!()
+        panic!("not called here")
     }
     fn screenshot(&self, _: u32, _: &Value) -> Result<ToolOutput, ToolError> {
-        unreachable!()
+        panic!("not called here")
     }
     fn close(&self, _: u32) -> Result<String, ToolError> {
-        unreachable!()
+        panic!("not called here")
     }
     fn tabs(&self) -> Vec<(u32, String, String)> {
         vec![]
     }
     fn view(&self, _: u32) -> Result<Box<dyn View + '_>, ToolError> {
-        unreachable!()
+        panic!("not called here")
     }
 }
 

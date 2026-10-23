@@ -7,27 +7,27 @@ use provider_kit::http::{Http, Reply};
 use serde_json::{Value, json};
 
 /// A JWT with `claims` (the signature is not checked by the reader).
-pub fn jwt(claims: Value) -> String {
+pub(crate) fn jwt(claims: Value) -> String {
     use base64::Engine;
     let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string());
     format!("h.{payload}.sig")
 }
 
 /// An access token for `account` that lapses at `exp`.
-pub fn access(account: &str, exp: u64) -> String {
+pub(crate) fn access(account: &str, exp: u64) -> String {
     jwt(json!({"exp": exp, "https://api.openai.com/auth": {"chatgpt_account_id": account}}))
 }
 
 /// One request as the fake saw it.
 #[derive(Debug, Clone)]
-pub struct Sent {
+pub(crate) struct Sent {
     pub address: String,
     pub headers: Vec<(String, String)>,
     pub body: String,
 }
 
 impl Sent {
-    pub fn header(&self, name: &str) -> Option<&str> {
+    pub(crate) fn header(&self, name: &str) -> Option<&str> {
         self.headers
             .iter()
             .find(|(key, _)| key.eq_ignore_ascii_case(name))
@@ -37,13 +37,13 @@ impl Sent {
 
 /// Answers each request with the next reply of its script.
 #[derive(Default)]
-pub struct Scripted {
+pub(crate) struct Scripted {
     pub replies: Mutex<Vec<Reply>>,
     pub sent: Mutex<Vec<Sent>>,
 }
 
 impl Scripted {
-    pub fn new(replies: Vec<(u16, String)>) -> Self {
+    pub(crate) fn new(replies: Vec<(u16, String)>) -> Self {
         let replies = replies
             .into_iter()
             .rev()
@@ -55,7 +55,7 @@ impl Scripted {
         }
     }
 
-    pub fn sent(&self) -> Vec<Sent> {
+    pub(crate) fn sent(&self) -> Vec<Sent> {
         self.sent.lock().unwrap().clone()
     }
 }

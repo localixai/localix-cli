@@ -3,7 +3,7 @@
 use crate::mode::Mode;
 use crate::tui::app::SHIFT_TAB;
 
-pub const HELP: &str = "Type a task and press Enter; each one goes on from the last.
+pub(crate) const HELP: &str = "Type a task and press Enter; each one goes on from the last.
   /model            choose the model and its reasoning level (of the providers signed in to)
   /login            sign in to a provider, then choose its model and reasoning level
   /mode [name]      the modes, or switch to one (also /permissions)
@@ -31,12 +31,12 @@ Keys
   Ctrl-C            stop the task, clear the line, or twice to quit\n";
 
 /// What Shift+Up and Shift+Down send: a level higher or lower.
-pub const MORE_REASONING: &str = "\u{1b}[1;2A";
-pub const LESS_REASONING: &str = "\u{1b}[1;2B";
+pub(crate) const MORE_REASONING: &str = "\u{1b}[1;2A";
+pub(crate) const LESS_REASONING: &str = "\u{1b}[1;2B";
 
 /// One entry at the prompt.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Entry {
+pub(crate) enum Entry {
     Task(String),
     Login,
     /// `/model`: a model of a provider signed in to, and its reasoning level.
@@ -67,7 +67,7 @@ pub enum Entry {
 }
 
 /// What `/` offers in the interface: each command and what it does.
-pub fn commands() -> Vec<(String, String)> {
+pub(crate) fn commands() -> Vec<(String, String)> {
     [
         ("help", "the commands and keys"),
         ("model", "choose the model and its reasoning level"),
@@ -95,7 +95,7 @@ pub fn commands() -> Vec<(String, String)> {
 }
 
 /// What `text` asks for; `None` for a blank line.
-pub fn entry(text: &str) -> Option<Entry> {
+pub(crate) fn entry(text: &str) -> Option<Entry> {
     let text = text.trim();
     if text.is_empty() {
         return None;

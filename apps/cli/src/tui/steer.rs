@@ -11,7 +11,7 @@ use super::event::Typed;
 /// A task as the transcript shows it: what came back from the background reads as where it came
 /// from (`≋ ticks · tick 1`, `◷ hello · say hello`), not as the tags the model reads, and `/init`
 /// as itself.
-pub fn shown(goal: &str) -> String {
+pub(crate) fn shown(goal: &str) -> String {
     // `/init` is sent as its instruction, and reads as what the person typed.
     if goal == crate::commands::extras::INIT {
         return "/init".into();
@@ -33,7 +33,7 @@ pub fn shown(goal: &str) -> String {
 }
 
 /// Whether `entry` may go to the task running: words only.
-pub fn steerable(entry: &Typed) -> bool {
+pub(crate) fn steerable(entry: &Typed) -> bool {
     let text = entry.text.trim_start();
     entry.images.is_empty()
         && !text.is_empty()

@@ -31,7 +31,7 @@ pub const SHELL: &str = "sh -c";
 pub const SHELL: &str = "cmd /C";
 
 /// What to run, and the bounds it runs in.
-pub struct Job<'a> {
+pub(super) struct Job<'a> {
     pub command: &'a str,
     pub dir: &'a Path,
     pub timeout: Duration,
@@ -62,7 +62,7 @@ pub enum Ending {
 }
 
 #[derive(Debug)]
-pub struct Finished {
+pub(super) struct Finished {
     pub ending: Ending,
     pub elapsed: Duration,
     pub stdout: String,
@@ -72,7 +72,7 @@ pub struct Finished {
 }
 
 /// Run `job` in a shell, with no input.
-pub fn run(job: &Job) -> io::Result<Finished> {
+pub(super) fn run(job: &Job) -> io::Result<Finished> {
     let mut shell = shell(job.command);
     quiet_env(&mut shell, job.hidden);
     let mut child = shell

@@ -55,7 +55,7 @@ impl WebviewDriver {
                 left = Some(Instant::now());
             }
         };
-        self.shared.pending.lock().unwrap().remove(&id);
+        crate::lock(&self.shared.pending).remove(&id);
         match reply {
             Ok(Ok(value)) => Ok(value),
             Err(_) if left.is_some() => Ok(json!({"result": SCRIPT_LEFT_PAGE})),
@@ -151,12 +151,13 @@ impl Driver for WebviewDriver {
                     "the page is still loading".into(),
                 ));
             }
-            let guard = self.shared.loads.lock().unwrap();
-            let _ = self
-                .shared
-                .loaded
-                .wait_timeout(guard, Duration::from_millis(50))
-                .unwrap();
+            let guard = crate::lock(&self.shared.loads);
+            // Only the wait matters, not the counts, so a poisoned lock is as good as any.
+            drop(
+                self.shared
+                    .loaded
+                    .wait_timeout(guard, Duration::from_millis(50)),
+            );
         }
     }
 
@@ -167,7 +168,6 @@ impl Driver for WebviewDriver {
     }
 
     fn act(&self, epoch: &str, action: &Action) -> BrowserResult<()> {
-        let debug = std::env::var_os("BROWSER_DEBUG").is_some();
         let started = Instant::now();
         let before = self.loads();
         let args = action_args(epoch, action);
@@ -176,13 +176,12 @@ impl Driver for WebviewDriver {
         let settled = self.call("settle", args, SETTLE_TIMEOUT);
         let settle_time = started.elapsed() - acted;
         self.follow_navigation(before, &settled);
-        if debug {
-            eprintln!("{action:?}");
-            eprintln!(
-                "act {acted:?} settle {settle_time:?} ({settled:?}) total {:?}",
+        super::super::debug(|| {
+            format!(
+                "{action:?}\nact {acted:?} settle {settle_time:?} ({settled:?}) total {:?}",
                 started.elapsed()
-            );
-        }
+            )
+        });
         Ok(())
     }
 

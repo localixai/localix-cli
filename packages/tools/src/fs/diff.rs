@@ -34,13 +34,15 @@ pub(super) fn unified(before: &str, after: &str) -> String {
 
 fn changes<'a>(old: &[&'a str], new: &[&'a str], lines: &mut Vec<Line<'a>>) {
     let width = new.len() + 1;
-    let cells = (old.len() + 1).checked_mul(width);
-    if cells.is_none_or(|cells| cells > MAX_CELLS) {
+    let Some(cells) = (old.len() + 1)
+        .checked_mul(width)
+        .filter(|cells| *cells <= MAX_CELLS)
+    else {
         lines.extend(old.iter().map(|line| ('-', *line)));
         lines.extend(new.iter().map(|line| ('+', *line)));
         return;
-    }
-    let mut lcs = vec![0u32; cells.unwrap()];
+    };
+    let mut lcs = vec![0u32; cells];
     for i in (0..old.len()).rev() {
         for j in (0..new.len()).rev() {
             lcs[i * width + j] = if old[i] == new[j] {

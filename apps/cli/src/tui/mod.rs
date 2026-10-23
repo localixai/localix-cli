@@ -8,34 +8,34 @@
 //! reports what happens, and asks (its next entry, an approval, a question) by sending where the
 //! answer goes and waiting there.
 
-pub mod agents;
-pub mod app;
-pub mod asking;
-pub mod cells;
-pub mod composer;
-pub mod event;
-pub mod keys;
+pub(crate) mod agents;
+pub(crate) mod app;
+pub(crate) mod asking;
+pub(crate) mod cells;
+pub(crate) mod composer;
+pub(crate) mod event;
+pub(crate) mod keys;
 mod list;
-pub mod live;
-pub mod markdown;
-pub mod mention;
+pub(crate) mod live;
+pub(crate) mod markdown;
+pub(crate) mod mention;
 mod opening;
-pub mod questions;
-pub mod queue;
+pub(crate) mod questions;
+pub(crate) mod queue;
 mod quitting;
-pub mod screen;
+pub(crate) mod screen;
 mod search;
-pub mod select;
+pub(crate) mod select;
 mod sessions;
-pub mod steer;
-pub mod style;
+pub(crate) mod steer;
+pub(crate) mod style;
 #[cfg(test)]
-pub mod test_support;
-pub mod tool_cell;
-pub mod tree;
+pub(crate) mod test_support;
+pub(crate) mod tool_cell;
+pub(crate) mod tree;
 mod ui;
-pub mod views;
-pub mod wrap;
+pub(crate) mod views;
+pub(crate) mod wrap;
 
 use std::io::{self, Write};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
@@ -47,7 +47,7 @@ use crossterm::event::{Event as Terminal, KeyEventKind};
 use self::app::{Action, App};
 use self::event::Event;
 use self::screen::Screen;
-pub use self::ui::Ui;
+pub(crate) use self::ui::Ui;
 use crate::interrupt;
 
 /// Bracketed paste on, and keys reported so Shift+Enter differs from Enter where the terminal can.
@@ -57,15 +57,17 @@ const LEAVE: &str = "\x1b[<1u\x1b[?2004l\x1b[?25h";
 const FRAME: Duration = Duration::from_millis(80);
 
 /// The interface running; dropping it gives the terminal back.
-pub struct Running {
+pub(crate) struct Running {
     pub ui: Ui,
-    /// What the person asks of the desk (a new lane), for whoever runs the lanes.
-    pub requests: Option<Receiver<crate::desk::Request>>,
     thread: Option<JoinHandle<()>>,
 }
 
-/// Takes the terminal and starts drawing; `commands` are what `/` offers.
-pub fn start(commands: Vec<(String, String)>, root: &std::path::Path) -> io::Result<Running> {
+/// Takes the terminal and starts drawing; `commands` are what `/` offers. With it, what the
+/// person asks of the desk (a new lane), for whoever runs the lanes.
+pub(crate) fn start(
+    commands: Vec<(String, String)>,
+    root: &std::path::Path,
+) -> io::Result<(Running, Receiver<crate::desk::Request>)> {
     let (width, height) = crossterm::terminal::size()?;
     crossterm::terminal::enable_raw_mode()?;
     let mut out = io::stdout();
@@ -87,11 +89,11 @@ pub fn start(commands: Vec<(String, String)>, root: &std::path::Path) -> io::Res
     app.shells = tools::shell::running_anywhere;
     let (asks, requests) = channel();
     let thread = std::thread::spawn(move || draw(app, &inbox, &asks));
-    Ok(Running {
+    let running = Running {
         ui: Ui::new(events),
-        requests: Some(requests),
         thread: Some(thread),
-    })
+    };
+    Ok((running, requests))
 }
 
 impl Drop for Running {
@@ -105,7 +107,7 @@ impl Drop for Running {
 }
 
 /// The terminal as it was: cooked, the cursor shown, nothing more reported.
-pub fn restore() {
+pub(crate) fn restore() {
     let _ = crossterm::terminal::disable_raw_mode();
     let mut out = io::stdout();
     let _ = out.write_all(LEAVE.as_bytes()).and_then(|()| out.flush());

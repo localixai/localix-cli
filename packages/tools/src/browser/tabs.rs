@@ -35,7 +35,7 @@ pub(super) struct Tabs {
 
 impl Tabs {
     /// The browser in `native`, with its first tab on `window.url`.
-    pub fn open(
+    pub(super) fn open(
         native: &tao::window::Window,
         window: &Window,
         shared: &Arc<Shared>,
@@ -57,12 +57,12 @@ impl Tabs {
     }
 
     /// The tab shown and acted on.
-    pub fn active(&self) -> &WebView {
+    pub(super) fn active(&self) -> &WebView {
         &self.slots[self.active as usize - 1].webview
     }
 
     /// Tab `id` while it is open, else the one acted on.
-    pub fn at(&self, id: Option<u32>) -> &WebView {
+    pub(super) fn at(&self, id: Option<u32>) -> &WebView {
         let open = id.and_then(|id| self.slots.get((id as usize).wrapping_sub(1)));
         match open.filter(|slot| slot.open) {
             Some(slot) => &slot.webview,
@@ -71,13 +71,12 @@ impl Tabs {
     }
 
     fn ids(&self) -> Vec<u32> {
-        (1..=self.slots.len() as u32)
-            .filter(|id| self.slots[*id as usize - 1].open)
-            .collect()
+        let open = self.slots.iter().enumerate().filter(|(_, slot)| slot.open);
+        open.map(|(at, _)| id_of(at)).collect()
     }
 
     /// Open `url` in a new tab and show it; its id, or why there is none.
-    pub fn add(
+    pub(super) fn add(
         &mut self,
         native: &tao::window::Window,
         url: &str,
@@ -89,14 +88,14 @@ impl Tabs {
                 let slot = &mut self.slots[at];
                 slot.open = true;
                 // A tab used again starts its loads over: the last page's are not this one's.
-                shared.loads.lock().unwrap().remove(&(at as u32 + 1));
+                crate::lock(&shared.loads).remove(&id_of(at));
                 slot.webview
                     .load_url(url)
                     .map_err(|error| error.to_string())?;
-                at as u32 + 1
+                id_of(at)
             }
             None if self.slots.len() < MAX_TABS => {
-                let id = self.slots.len() as u32 + 1;
+                let id = id_of(self.slots.len());
                 let webview = self.build(native, id, url, shared, proxy)?;
                 keep_tab_rendering(&webview);
                 self.slots.push(Slot {
@@ -113,7 +112,7 @@ impl Tabs {
     }
 
     /// Show tab `id`.
-    pub fn switch(&mut self, id: u32, shared: &Shared) -> Result<(), String> {
+    pub(super) fn switch(&mut self, id: u32, shared: &Shared) -> Result<(), String> {
         self.check(id)?;
         self.active = id;
         shared.set_tabs(id, &self.ids());
@@ -122,7 +121,7 @@ impl Tabs {
 
     /// Close tab `id`, showing the one before it when it was shown. Returns whether tabs are left:
     /// with none, the window closes.
-    pub fn close(&mut self, id: u32, shared: &Shared) -> Result<bool, String> {
+    pub(super) fn close(&mut self, id: u32, shared: &Shared) -> Result<bool, String> {
         self.check(id)?;
         let slot = &mut self.slots[id as usize - 1];
         slot.open = false;
@@ -151,15 +150,15 @@ impl Tabs {
     }
 
     /// The tabs open now, and the one acted on.
-    pub fn listed(&self) -> (Vec<u32>, u32) {
+    pub(super) fn listed(&self) -> (Vec<u32>, u32) {
         (self.ids(), self.active)
     }
 
     /// The active tab fills `size`, `top` points down, while the browser is `shown`; the others
     /// (and all of them while a terminal is shown) stand beside it, out of sight.
-    pub fn layout(&self, size: LogicalSize<f64>, top: f64, shown: bool) {
+    pub(super) fn layout(&self, size: LogicalSize<f64>, top: f64, shown: bool) {
         for (at, slot) in self.slots.iter().enumerate() {
-            let here = shown && at as u32 + 1 == self.active;
+            let here = shown && id_of(at) == self.active;
             let x = if here { 0.0 } else { -(size.width + 100.0) };
             place(&slot.webview, x, top, size, here);
         }
@@ -200,4 +199,9 @@ pub(super) fn place(webview: &WebView, x: f64, top: f64, size: LogicalSize<f64>,
 #[cfg(target_os = "linux")]
 pub(super) fn place(webview: &WebView, _x: f64, _top: f64, _size: LogicalSize<f64>, shown: bool) {
     let _ = webview.set_visible(shown);
+}
+
+/// The id of the tab in slot `at`: ids count from 1, and there are at most `MAX_TABS`.
+fn id_of(at: usize) -> u32 {
+    u32::try_from(at + 1).unwrap_or(u32::MAX)
 }

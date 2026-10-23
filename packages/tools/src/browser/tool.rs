@@ -75,7 +75,7 @@ impl Tool for BrowserTool<'_> {
             }
         }
         let image = match args.screenshot {
-            true => self.screenshot(&driver, given(&args.selector), &mut report),
+            true => Self::screenshot(&driver, given(&args.selector), &mut report),
             false => None,
         };
         if let Some(id) = args.close_tab {
@@ -129,7 +129,6 @@ impl BrowserTool<'_> {
 
     /// A screenshot for the model, or why there is none.
     fn screenshot(
-        &self,
         driver: &impl Driver,
         selector: Option<&str>,
         report: &mut Vec<String>,
@@ -209,12 +208,9 @@ fn image(shot: Shot) -> Image {
 fn without_refs(outline: &str) -> String {
     let mut out = String::with_capacity(outline.len());
     let mut rest = outline;
-    while let Some(at) = rest.find(" [ref=") {
-        out.push_str(&rest[..at]);
-        rest = match rest[at..].find(']') {
-            Some(end) => &rest[at + end + 1..],
-            None => "",
-        };
+    while let Some((before, marked)) = rest.split_once(" [ref=") {
+        out.push_str(before);
+        rest = marked.split_once(']').map_or("", |(_, after)| after);
     }
     out.push_str(rest);
     out

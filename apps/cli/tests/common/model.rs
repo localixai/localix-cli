@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use serde_json::{Value, json};
 
 /// One answer of the model: text, tool calls, or an HTTP error with its status.
-pub enum Reply {
+pub(crate) enum Reply {
     Text(String),
     Calls(Vec<(String, Value)>),
     Refused(u16),
@@ -21,11 +21,11 @@ pub enum Reply {
 }
 
 impl Reply {
-    pub fn text(text: &str) -> Self {
+    pub(crate) fn text(text: &str) -> Self {
         Self::Text(text.into())
     }
 
-    pub fn call(name: &str, arguments: Value) -> Self {
+    pub(crate) fn call(name: &str, arguments: Value) -> Self {
         Self::Calls(vec![(name.into(), arguments)])
     }
 }
@@ -45,24 +45,24 @@ struct Shared {
 const TITLE: &str = "Generate a concise, single-line task title";
 
 /// The server; it stops with the test process.
-pub struct Model {
+pub(crate) struct Model {
     pub base: String,
     shared: Arc<Mutex<Shared>>,
 }
 
 impl Model {
     /// A model that answers `script` in order, then "Done." to anything more.
-    pub fn start(script: Vec<Reply>) -> Self {
+    pub(crate) fn start(script: Vec<Reply>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let shared = Arc::new(Mutex::new(Shared {
             script: script.into(),
             ..Shared::default()
         }));
-        let serving = shared.clone();
+        let serving = Arc::clone(&shared);
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
-                let shared = serving.clone();
+                let shared = Arc::clone(&serving);
                 std::thread::spawn(move || answer(stream, &shared));
             }
         });
@@ -70,19 +70,19 @@ impl Model {
     }
 
     /// The same, answering a title's request with `title`.
-    pub fn titling(script: Vec<Reply>, title: &str) -> Self {
+    pub(crate) fn titling(script: Vec<Reply>, title: &str) -> Self {
         let model = Self::start(script);
         model.shared.lock().unwrap().title = Some(title.into());
         model
     }
 
     /// The tasks a title was asked for, in order.
-    pub fn titled(&self) -> Vec<String> {
+    pub(crate) fn titled(&self) -> Vec<String> {
         self.shared.lock().unwrap().titled.clone()
     }
 
     /// Every request the model received but the titles', as JSON, in order.
-    pub fn requests(&self) -> Vec<Value> {
+    pub(crate) fn requests(&self) -> Vec<Value> {
         self.shared.lock().unwrap().requests.clone()
     }
 }
@@ -194,7 +194,7 @@ fn completion(reply: Option<Reply>, n: usize, request: &Value) -> Value {
 }
 
 /// What the model was asked in its `at`th request, as one text: its messages' contents.
-pub fn said(model: &Model, at: usize) -> String {
+pub(crate) fn said(model: &Model, at: usize) -> String {
     model.requests()[at]["messages"]
         .as_array()
         .unwrap()

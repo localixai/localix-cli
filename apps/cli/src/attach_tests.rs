@@ -53,7 +53,7 @@ fn a_dropped_path_is_known_however_the_terminal_writes_it() {
         resolve(&format!("'{shown}'")),
         Some(Dropped::Image(picture.clone()))
     );
-    assert_eq!(resolve(&shown), Some(Dropped::Image(picture.clone())));
+    assert_eq!(resolve(&shown), Some(Dropped::Image(picture)));
     let escaped = notes.display().to_string().replace(' ', "\\ ");
     assert_eq!(resolve(&escaped), Some(Dropped::File(notes.clone())));
     let address = format!("file://{}", notes.display()).replace(' ', "%20");

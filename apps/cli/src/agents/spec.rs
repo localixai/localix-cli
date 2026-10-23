@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-pub const NAME: &str = "agents";
+pub(crate) const NAME: &str = "agents";
 /// How long `wait` waits by default, and at most.
 const WAIT_MS: u64 = 30_000;
 const MAX_WAIT_MS: u64 = 600_000;
@@ -36,7 +36,7 @@ default): wait until one of them answers, and get the answers that came.
 
 /// What a call asks.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Action {
+pub(crate) enum Action {
     Spawn {
         task: String,
         name: Option<String>,
@@ -55,16 +55,16 @@ pub enum Action {
     },
 }
 
-pub fn description() -> String {
+pub(crate) fn description() -> String {
     DESCRIPTION.into()
 }
 
 /// A string argument, and what it is for.
-pub fn text(what: &str) -> Value {
+pub(crate) fn text(what: &str) -> Value {
     json!({"type": "string", "description": what})
 }
 
-pub fn parameters() -> Value {
+pub(crate) fn parameters() -> Value {
     json!({
         "type": "object",
         "required": ["action"],
@@ -97,7 +97,7 @@ pub fn parameters() -> Value {
 }
 
 /// The action `arguments` ask for, or what is missing from them.
-pub fn action(arguments: &Value) -> Result<Action, String> {
+pub(crate) fn action(arguments: &Value) -> Result<Action, String> {
     let text = |keys: &[&str]| {
         keys.iter()
             .filter_map(|key| arguments.get(*key).and_then(Value::as_str))
@@ -166,7 +166,7 @@ pub fn action(arguments: &Value) -> Result<Action, String> {
 }
 
 /// What a call does, as its block's head says it while it runs and once it is done.
-pub fn describe(arguments: &Value) -> ((&'static str, &'static str), String) {
+pub(crate) fn describe(arguments: &Value) -> ((&'static str, &'static str), String) {
     let agent = |name: &str| format!("agent {}", tidy(name).unwrap_or_else(|| name.into()));
     match action(arguments) {
         Ok(Action::Spawn { task, name }) => {
@@ -195,7 +195,7 @@ pub fn describe(arguments: &Value) -> ((&'static str, &'static str), String) {
 
 /// `name` as an agent is called: lowercase words joined by `-`, short; `None` when nothing is
 /// left of it.
-pub fn tidy(name: &str) -> Option<String> {
+pub(crate) fn tidy(name: &str) -> Option<String> {
     let words: Vec<String> = name
         .split(|c: char| !c.is_alphanumeric())
         .filter(|word| !word.is_empty())

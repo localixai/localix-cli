@@ -13,14 +13,14 @@ const STDIN_LIMIT: usize = 256 * 1024;
 
 /// The task to run, or none given (stdin a terminal, not read).
 #[derive(Debug, PartialEq, Eq)]
-pub enum Prompt {
+pub(crate) enum Prompt {
     One(String),
     Line,
 }
 
 /// The prompt from `arg` and stdin: `-` is stdin itself; a prompt with piped stdin gets it as a
 /// `<stdin>` block; no prompt reads stdin, unless it is a terminal, which gives none.
-pub fn prompt(arg: Option<&str>) -> Result<Prompt, Failure> {
+pub(crate) fn prompt(arg: Option<&str>) -> Result<Prompt, Failure> {
     let stdin = Stdin::now();
     let piped = match (arg, stdin) {
         (Some("-"), _) | (_, Stdin::Stream | Stdin::File) => {
@@ -36,7 +36,7 @@ pub fn prompt(arg: Option<&str>) -> Result<Prompt, Failure> {
 
 /// What stdin is, as far as waiting on it goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Stdin {
+pub(crate) enum Stdin {
     Terminal,
     /// A pipe or a socket, which another process may hold open: reading it can wait unseen.
     Stream,
@@ -81,7 +81,7 @@ fn ends() -> bool {
 /// What to tell the person before stdin is read to its end, where that could wait unseen: a
 /// prompt given with stdin left open (a harness's pipe, `ssh` without `-n`, a `while read` loop),
 /// or `-` at a terminal.
-pub fn waiting(arg: Option<&str>, stdin: Stdin) -> Option<&'static str> {
+pub(crate) fn waiting(arg: Option<&str>, stdin: Stdin) -> Option<&'static str> {
     match (arg, stdin) {
         (Some("-"), Stdin::Terminal) => {
             Some("llx: reading the prompt from stdin; end it with Ctrl-D\n")
@@ -95,7 +95,7 @@ pub fn waiting(arg: Option<&str>, stdin: Stdin) -> Option<&'static str> {
 }
 
 /// The prompt from `arg` and what was read from stdin (`None`: stdin is a terminal, not read).
-pub fn assemble(arg: Option<&str>, stdin: Option<&str>) -> Result<Prompt, Failure> {
+pub(crate) fn assemble(arg: Option<&str>, stdin: Option<&str>) -> Result<Prompt, Failure> {
     if arg.is_none() && stdin.is_none() {
         return Ok(Prompt::Line);
     }
@@ -136,7 +136,7 @@ fn read_stdin() -> Result<String, Failure> {
 }
 
 /// `--schema`: inline JSON, or `@path` to a file; it must be a JSON Schema object.
-pub fn schema(arg: &str) -> Result<Value, Failure> {
+pub(crate) fn schema(arg: &str) -> Result<Value, Failure> {
     let usage = |message: String| Failure::Usage(message);
     let text = match arg.strip_prefix('@') {
         Some(path) => std::fs::read_to_string(path)

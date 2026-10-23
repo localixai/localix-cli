@@ -14,7 +14,7 @@ use crate::mode::{AUTONOMOUS, Mode, ModeCell};
 use crate::picker::{Adjustment, Item, Lines, Picker};
 
 /// Approvals asked in the interface; a stopped task closes the question with a no.
-pub struct UiGate<'a> {
+pub(crate) struct UiGate<'a> {
     pub ui: Ui,
     pub stopped: &'a (dyn Fn() -> bool + Sync),
 }
@@ -25,7 +25,7 @@ impl Asker for UiGate<'_> {
     }
 }
 
-pub struct UiPerson<'a> {
+pub(crate) struct UiPerson<'a> {
     pub ui: Ui,
     pub mode: &'a ModeCell,
     pub stopped: &'a (dyn Fn() -> bool + Sync),
@@ -62,7 +62,7 @@ impl Person for UiPerson<'_> {
 }
 
 /// `/login`'s steps in the interface: each list a choice, each line typed in place (a key as dots).
-pub struct UiTerminal {
+pub(crate) struct UiTerminal {
     pub ui: Ui,
 }
 

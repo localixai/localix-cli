@@ -77,14 +77,19 @@ pub fn address(url: &str) -> Result<String, ToolError> {
         let local = ["localhost", "0.0.0.0"].contains(&name)
             || name.starts_with("127.")
             || host.starts_with("[::1]");
-        return Ok(format!("{}://{url}", if local { "http" } else { "https" }));
+        let url = format!("{}://{url}", if local { "http" } else { "https" });
+        return address(&url);
     };
-    if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") {
-        return Ok(url.to_string());
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return Err(ToolError::Failed(format!(
+            "only http and https addresses open in the browser, not {scheme}:"
+        )));
     }
-    Err(ToolError::Failed(format!(
-        "only http and https addresses open in the browser, not {scheme}:"
-    )))
+    super::guard::loadable(url).ok_or_else(|| {
+        ToolError::Failed(format!(
+            "`{url}` is not an address: give it whole, with no spaces"
+        ))
+    })
 }
 
 /// What the call does that a page sees, in full, for the gate; `None` when it only reads or

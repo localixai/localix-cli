@@ -114,9 +114,10 @@ fn action_args(epoch: &str, action: &Action) -> Value {
 
 impl Driver for WebviewDriver {
     fn navigate(&self, url: &str) -> BrowserResult<()> {
+        let url = super::loadable(url)?;
         self.open_or_closed()?;
         let before = self.loads();
-        self.send(Cmd::Navigate(url.to_string(), self.tab))?;
+        self.send(Cmd::Navigate(url, self.tab))?;
         self.load_started_since(before, PROBE_READY);
         self.wait_loaded(LOAD_TIMEOUT)
     }

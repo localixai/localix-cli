@@ -46,6 +46,25 @@ fn only_web_addresses_open() {
 }
 
 #[test]
+fn an_address_the_window_cannot_load_goes_back_to_the_model_and_one_it_can_is_spelled_so() {
+    // A space in the host: the system's URL type has no such address, and the window would die.
+    for broken in ["https:// playsnake.org", "https://exa mple.com", "http://"] {
+        let Err(ToolError::Failed(why)) = address(broken) else {
+            panic!("{broken} was let through")
+        };
+        assert!(why.contains("is not an address"), "{why}");
+    }
+    assert_eq!(
+        address("example.com/a b").unwrap(),
+        "https://example.com/a%20b"
+    );
+    assert_eq!(
+        address("https://bücher.example/x").unwrap(),
+        "https://xn--bcher-kva.example/x"
+    );
+}
+
+#[test]
 fn the_gate_reads_everything_a_page_will_see() {
     let call = args(json!({
         "keys": ["Enter"],

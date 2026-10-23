@@ -55,21 +55,29 @@ pub(super) fn on_browser(
         Cmd::Capture { clip, reply, tab } => return capture(tabs.at(tab), clip, reply),
         // What the agent does in the browser is shown: the window goes back to it, unless it
         // works in a tab of its own beside the one shown.
+        // An address the system cannot read never reaches WebKit: its load would panic here.
         Cmd::Navigate(url, tab) => {
-            let _ = tabs.at(tab).load_url(&url);
+            if let Some(url) = crate::browser::guard::loadable(&url) {
+                let _ = tabs.at(tab).load_url(&url);
+            }
             if tab.is_none() {
                 open.show(Shown::Web);
             }
         }
         Cmd::NewTab { url, reply } => {
-            let added = tabs.add(&open.frame.native, &url, shared, proxy);
+            let added = match crate::browser::guard::loadable(&url) {
+                Some(url) => tabs.add(&open.frame.native, &url, shared, proxy),
+                None => Err(format!("`{url}` is not an address")),
+            };
             match reply {
                 Some(reply) => {
                     let _ = reply.send(added);
                 }
                 // A page's window past the tab limit opens where the page is, as before tabs.
                 None if added.is_err() => {
-                    let _ = tabs.active().load_url(&url);
+                    if let Some(url) = crate::browser::guard::loadable(&url) {
+                        let _ = tabs.active().load_url(&url);
+                    }
                 }
                 None => {}
             }

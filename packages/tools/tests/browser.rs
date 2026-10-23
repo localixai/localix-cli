@@ -208,6 +208,11 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
         );
     }
 
+    // An address the system cannot read is refused, and the window lives on: WebKit's load of
+    // one panics on the main thread, which ended the whole process.
+    assert!(driver.navigate("https:// playsnake.org").is_err());
+    assert!(driver.add_tab("https:// playsnake.org").is_err());
+
     // A link inside a heading is a control in the outline, not only the heading's words.
     driver.navigate(&format!("{origin}/results.html")).unwrap();
     let page = driver.observe().unwrap();

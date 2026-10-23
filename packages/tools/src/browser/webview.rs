@@ -164,10 +164,11 @@ impl WebviewDriver {
     /// Open `url` in a new tab, shown, and say its id at once: its document is waited for by a
     /// driver pinned to it (`wait_new`), so several tabs load at the same time.
     pub fn add_tab(&self, url: &str) -> BrowserResult<u32> {
+        let url = loadable(url)?;
         self.open_or_closed()?;
         let (reply, opened) = mpsc::sync_channel(1);
         self.send(Cmd::NewTab {
-            url: url.to_string(),
+            url,
             reply: Some(reply),
         })?;
         answered(opened)
@@ -203,6 +204,12 @@ impl WebviewDriver {
 }
 
 /// What the event loop answered a command with.
+/// `url` as the window can load it, else refused before it reaches the window (`guard`).
+pub(super) fn loadable(url: &str) -> BrowserResult<String> {
+    crate::browser::guard::loadable(url)
+        .ok_or_else(|| BrowserError::Refused(format!("`{url}` is not an address")))
+}
+
 fn answered<T>(answer: mpsc::Receiver<Result<T, String>>) -> BrowserResult<T> {
     match answer.recv_timeout(CALL_TIMEOUT) {
         Ok(Ok(value)) => Ok(value),

@@ -8,6 +8,24 @@ pub(super) fn allowed(url: &str) -> bool {
         .any(|scheme| url.starts_with(scheme))
 }
 
+/// `url` as the window can load it: an address the system's URL type takes, spelled so (a space
+/// or a letter past ASCII encoded); `None` for what is not an address at all. WebKit's load of
+/// an address the system cannot read panics on the main thread, ending the whole process, so
+/// nothing reaches a load without passing here.
+pub(super) fn loadable(url: &str) -> Option<String> {
+    let parsed = url::Url::parse(url.trim()).ok()?;
+    let web = matches!(parsed.scheme(), "http" | "https");
+    if web && parsed.host_str().is_none_or(str::is_empty) {
+        return None;
+    }
+    // What the person or the model wrote stays as written when it needs no spelling out.
+    let plain = url.chars().all(|c| c.is_ascii_graphic());
+    Some(match plain {
+        true => url.to_string(),
+        false => parsed.to_string(),
+    })
+}
+
 /// 32 hex characters from the clock and the address space; unguessable to a page in one run.
 pub(super) fn token() -> String {
     use std::collections::hash_map::RandomState;

@@ -41,6 +41,7 @@ fn a_session_round_trips_and_the_newest_comes_first() {
             answer: "Done.".into(),
             status: "achieved".into(),
             at: now(),
+            steps: vec![],
         },
         Some("https://a.example/"),
     );

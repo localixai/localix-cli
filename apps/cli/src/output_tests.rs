@@ -145,3 +145,32 @@ fn a_turn_tells_the_interface_its_tokens() {
     });
     assert_eq!(spent, Some(("lane".to_string(), 1200)));
 }
+
+#[test]
+fn a_task_keeps_what_it_did_each_call_and_turn_with_its_time() {
+    let output = Output::with(
+        false,
+        false,
+        Box::new(Captured::default()),
+        Box::new(Captured::default()),
+    );
+    run(&output);
+    // A task that just began: what came before was the last one's.
+    output.take_steps();
+    let call = call();
+    output.call(&call);
+    output.result(&call, &Err(ToolError::Failed("no".into())));
+    output.turn(&Usage {
+        millis: 1200,
+        input_tokens: 900,
+        output_tokens: 40,
+        ..Usage::default()
+    });
+    let steps = output.take_steps();
+    assert_eq!(steps.len(), 2, "{steps:?}");
+    assert_eq!((steps[0].what.as_str(), steps[0].failed), ("bash", true));
+    assert!(steps[0].detail.starts_with("Running"), "{steps:?}");
+    assert_eq!((steps[1].what.as_str(), steps[1].ms), ("model", 1200));
+    assert_eq!(steps[1].detail, "900 in · 40 out");
+    assert!(output.take_steps().is_empty(), "taken once");
+}

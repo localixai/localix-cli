@@ -338,6 +338,7 @@ impl Rig<'_> {
             answer: answer.to_string(),
             status: status.to_string(),
             at: session::now(),
+            steps: self.output.take_steps(),
         };
         self.session.record(turn, location.as_deref());
         if let Err(error) = self.meta.save(self.history, &mut self.session) {

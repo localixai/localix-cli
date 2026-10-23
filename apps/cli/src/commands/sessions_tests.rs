@@ -13,6 +13,7 @@ fn session(goals: &[&str]) -> Session {
                 answer: String::new(),
                 status: "achieved".into(),
                 at: 0,
+                steps: vec![],
             })
             .collect(),
         ..Session::default()

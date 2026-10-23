@@ -52,6 +52,7 @@ fn copy_takes_the_last_answer_that_says_something() {
         answer: answer.into(),
         status: "achieved".into(),
         at: 0,
+        steps: vec![],
     };
     // A failed or stopped task leaves no answer: the one before it is copied, never nothing.
     assert_eq!(

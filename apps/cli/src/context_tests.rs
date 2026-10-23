@@ -106,6 +106,7 @@ fn a_resumed_session_tells_what_was_asked_before() {
         answer: answer.into(),
         status: "achieved".into(),
         at: 1,
+        steps: vec![],
     };
     let session = Session {
         id: "1-ab".into(),
@@ -131,6 +132,7 @@ fn turn(goal: &str, answer: &str) -> Turn {
         answer: answer.into(),
         status: "achieved".into(),
         at: 1,
+        steps: vec![],
     }
 }
 
@@ -185,6 +187,7 @@ fn a_saved_session_resumed_from_the_fresh_context_reads_as_gathered() {
             answer: "Fixed it.".into(),
             status: "achieved".into(),
             at: 1,
+            steps: vec![],
         }],
         ..Session::default()
     };

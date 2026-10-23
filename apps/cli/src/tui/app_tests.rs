@@ -885,6 +885,7 @@ fn a_long_history_shows_its_last_tasks_and_counts_the_rest() {
             answer: format!("answer {n}"),
             status: "achieved".into(),
             at: n,
+            steps: vec![],
         })
         .collect();
     app.event(Event::Earlier(turns), now);
@@ -899,4 +900,38 @@ fn a_long_history_shows_its_last_tasks_and_counts_the_rest() {
         "{shown}"
     );
     assert_eq!(app.shown().tasks, 25);
+}
+
+#[test]
+fn a_call_that_took_a_while_says_how_long_and_a_quick_one_says_nothing() {
+    let now = Instant::now();
+    let mut app = app();
+    app.event(Event::TaskStarted("go".into()), now);
+    history(&mut app);
+    let ran = |app: &mut App, command: &str, took: u64| {
+        let args = json!({"command": command});
+        app.event(
+            Event::Call {
+                name: "bash".into(),
+                args: args.clone(),
+            },
+            now,
+        );
+        let outcome = Ok(ToolOutput::from("exit 0 in 0.0s".to_string()));
+        let ended = now + Duration::from_millis(took);
+        app.event(
+            Event::Result {
+                name: "bash".into(),
+                args,
+                outcome,
+            },
+            ended,
+        );
+        history(app).lines().next().unwrap_or("").to_string()
+    };
+    assert_eq!(
+        ran(&mut app, "cargo test", 3_240),
+        "• Ran cargo test · 3.2s"
+    );
+    assert_eq!(ran(&mut app, "ls", 40), "• Ran ls");
 }

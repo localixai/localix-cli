@@ -21,6 +21,7 @@ fn turn(goal: &str) -> Turn {
         answer: String::new(),
         status: "achieved".into(),
         at: 1,
+        steps: vec![],
     }
 }
 

@@ -17,6 +17,9 @@ use super::tool_cell::{self, State};
 pub use super::views::{AgentState, LaneState, SessionView, Views};
 use crate::printable::printable;
 
+/// A call that took this long says so in its row.
+const TOOK: std::time::Duration = std::time::Duration::from_millis(500);
+
 /// Rows of the hands' latest actions shown under their call.
 const STEPS: usize = 3;
 
@@ -91,6 +94,9 @@ impl App {
                 args,
                 outcome,
             } => {
+                let took = (view.running.iter())
+                    .find(|(n, a, _)| *n == name && *a == args)
+                    .map(|(_, _, started)| now.saturating_duration_since(*started));
                 finish_call(&mut view.running, &name, &args);
                 if let Some(lane) = &mut view.lane {
                     lane.steps.clear();
@@ -99,7 +105,16 @@ impl App {
                 let lane = self.views.sessions[lane].lane.as_deref_mut();
                 let mut none = None;
                 let declined = lane.map_or(&mut none, |lane| &mut lane.declined);
-                result_block(declined, &name, &args, &outcome, width)
+                let mut block = result_block(declined, &name, &args, &outcome, width);
+                // How long it took, where that is worth a glance.
+                if let (Some(took), Some(head)) = (took, block.first_mut())
+                    && took >= TOOK
+                {
+                    let took = cells::duration(took.as_millis() as u64);
+                    head.spans
+                        .push(Span::styled(format!(" · {took}"), style::dim()));
+                }
+                block
             }
             Event::Answer(text) if !text.trim().is_empty() => cells::agent(&text, width),
             Event::Answer(_) => return None,

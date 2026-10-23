@@ -39,6 +39,24 @@ pub struct Turn {
     pub status: String,
     /// Unix seconds.
     pub at: u64,
+    /// What the task did, in the order it began: each call and each model turn.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<Step>,
+}
+
+/// One step of a task: a tool call or a model turn, when it began and how long it took.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Step {
+    /// The tool's name, or `model` for a model turn.
+    pub what: String,
+    /// What the call did, in a few words (`open w1 https://…`), or a turn's tokens.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub detail: String,
+    /// Milliseconds from the task's start.
+    pub at_ms: u64,
+    pub ms: u64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub failed: bool,
 }
 
 impl Session {

@@ -90,6 +90,8 @@ pub struct Output {
     blocks: AtomicUsize,
     /// The hands' actions under the call running, printed with it.
     steps: Mutex<Vec<String>>,
+    /// What the task did so far, each call by its id while it runs: for its session.
+    done: Mutex<Vec<(String, contracts::history::Step)>>,
     /// stdout is a terminal: the answer is rendered there.
     answer_terminal: bool,
 }
@@ -119,6 +121,7 @@ impl Output {
             out: Mutex::new(out),
             err: Mutex::new(err),
             started: Mutex::new(Instant::now()),
+            done: Mutex::default(),
             closed: AtomicBool::new(false),
             ui: None,
             colour: false,
@@ -143,6 +146,7 @@ impl Output {
     /// A task starts: the trace's clock restarts.
     pub fn started(&self, start: &Start) {
         *lock(&self.started) = Instant::now();
+        lock(&self.done).clear();
         if let Some(ui) = &self.ui {
             ui.send(Event::TaskStarted(start.goal.to_string()));
             return;
@@ -241,6 +245,13 @@ impl Output {
         let _ = err.write_all(text.as_bytes()).and_then(|()| err.flush());
     }
 
+    /// What the task did since it began, in the order each step began.
+    pub fn take_steps(&self) -> Vec<contracts::history::Step> {
+        let mut steps: Vec<_> = lock(&self.done).drain(..).map(|(_, step)| step).collect();
+        steps.sort_by_key(|step| step.at_ms);
+        steps
+    }
+
     fn millis(&self) -> u64 {
         lock(&self.started).elapsed().as_millis() as u64
     }
@@ -288,6 +299,13 @@ pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Observer for Output {
     fn call(&self, call: &ToolCall) {
+        let step = contracts::history::Step {
+            what: call.name.clone(),
+            detail: wrap::cut(&tool_cell::doing(&call.name, &call.arguments), 120),
+            at_ms: self.millis(),
+            ..Default::default()
+        };
+        lock(&self.done).push((call.id.clone(), step));
         if let Some(ui) = &self.ui {
             return ui.send(Event::Call {
                 name: call.name.clone(),
@@ -304,6 +322,13 @@ impl Observer for Output {
     }
 
     fn result(&self, call: &ToolCall, outcome: &Result<ToolOutput, ToolError>) {
+        let now = self.millis();
+        let mut done = lock(&self.done);
+        if let Some((_, step)) = done.iter_mut().rev().find(|(id, _)| *id == call.id) {
+            step.ms = now.saturating_sub(step.at_ms);
+            step.failed = outcome.is_err();
+        }
+        drop(done);
         if let Some(ui) = &self.ui {
             return ui.send(Event::Result {
                 name: call.name.clone(),
@@ -353,6 +378,14 @@ impl Observer for Output {
     }
 
     fn turn(&self, usage: &Usage) {
+        let step = contracts::history::Step {
+            what: "model".into(),
+            detail: format!("{} in · {} out", usage.input_tokens, usage.output_tokens),
+            at_ms: self.millis().saturating_sub(usage.millis),
+            ms: usage.millis,
+            failed: false,
+        };
+        lock(&self.done).push((String::new(), step));
         // A lane's tokens: its agents' turns come here too.
         if let Some(ui) = &self.ui {
             ui.send(Event::Spent(usage.input_tokens + usage.output_tokens));

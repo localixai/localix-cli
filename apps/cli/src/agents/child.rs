@@ -168,6 +168,7 @@ fn keep(
             answer: run.answer.clone(),
             status: status.to_string(),
             at: session::now(),
+            steps: vec![],
         },
         None,
     );

@@ -28,3 +28,15 @@ fn slash_down_enter_opens_model_which_applies_the_one_chosen() {
     let settings = std::fs::read_to_string(term.file("../config/llx/settings.json")).unwrap();
     assert!(settings.contains(&used), "{used} is not in {settings}");
 }
+
+#[test]
+fn slash_mode_offers_the_modes_the_server_says() {
+    let model = Model::start(vec![]);
+    let mut term = Term::start(&model, &[]);
+    term.type_text("/mode au");
+    let screen = term.wait_for("autonomous", LONG);
+    assert!(
+        screen.contains("Everything runs without asking"),
+        "{screen}"
+    );
+}

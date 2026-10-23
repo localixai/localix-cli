@@ -1,8 +1,8 @@
-//! Pictures the person attaches to a message: a file dragged in or pasted as its path, the
-//! clipboard's image (Ctrl+V), or `--image`. Each goes to the model after the message, as the
-//! person's own; any other file is mentioned by its path (`@`), and the agent reads it.
+//! Pictures attached to a message, read for the model: what the interface sent as paths (a file
+//! dragged in, the clipboard's image: `tui::attach`) or `--image`. Each goes to the model after
+//! the message, as the person's own.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use base64::Engine;
 use contracts::tool::Image;
@@ -96,122 +96,6 @@ pub(crate) fn kind(bytes: &[u8]) -> Option<(&'static str, (u32, u32))> {
         }
     }
     None
-}
-
-/// A file named in what the person typed or dropped in.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Dropped {
-    /// A picture: sent to the model as one.
-    Image(PathBuf),
-    /// Any other file or folder: named by its path, for the agent to read.
-    File(PathBuf),
-}
-
-/// What `token` names, when it is a path that exists: as a terminal writes a dropped file
-/// (quoted, its spaces escaped, or as a `file://` address) or as typed (`~/x`).
-pub(crate) fn resolve(token: &str) -> Option<Dropped> {
-    let token = token.trim();
-    let unquoted = token
-        .strip_prefix('\'')
-        .and_then(|t| t.strip_suffix('\''))
-        .or_else(|| token.strip_prefix('"').and_then(|t| t.strip_suffix('"')));
-    let path = match unquoted {
-        Some(path) => path.to_string(),
-        None => unescape(token),
-    };
-    let path = path
-        .strip_prefix("file://")
-        .map_or(path.clone(), |p| p.replace("%20", " "));
-    let path = match path.strip_prefix("~/") {
-        Some(rest) => PathBuf::from(std::env::var_os("HOME")?).join(rest),
-        None => PathBuf::from(&path),
-    };
-    if !path.is_absolute() || !path.exists() {
-        return None;
-    }
-    let lower = path.to_string_lossy().to_ascii_lowercase();
-    let picture = [".png", ".jpg", ".jpeg", ".gif", ".webp"]
-        .iter()
-        .any(|ext| lower.ends_with(ext));
-    Some(if picture && path.is_file() {
-        Dropped::Image(path)
-    } else {
-        Dropped::File(path)
-    })
-}
-
-/// A shell word's backslash escapes undone: `a\ b` is `a b`.
-fn unescape(word: &str) -> String {
-    let mut out = String::new();
-    let mut chars = word.chars();
-    while let Some(c) = chars.next() {
-        match c {
-            '\\' => out.extend(chars.next()),
-            c => out.push(c),
-        }
-    }
-    out
-}
-
-/// A copy of the picture at `path` under `dir`, so a file the system removes soon (a screenshot's
-/// temporary file) is still there when the message is sent; the original when it cannot be made.
-pub(crate) fn keep(path: &Path, dir: &Path) -> PathBuf {
-    let name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| since.as_millis());
-    let copy = dir.join(format!("{stamp}-{name}"));
-    match std::fs::create_dir_all(dir).and_then(|()| std::fs::copy(path, &copy)) {
-        Ok(_) => copy,
-        Err(_) => path.to_path_buf(),
-    }
-}
-
-/// Where pictures the person pasted or dropped in are kept: beside the sessions, so they outlive
-/// the files they came from.
-pub(crate) fn pasted_dir() -> PathBuf {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    home.join(".llx").join("pasted")
-}
-
-/// The clipboard's picture, saved as a PNG under `dir`; why not when there is none.
-#[cfg(target_os = "macos")]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "R10 debt: osascript writes one file and ends, with no deadline or stop yet"
-)]
-pub(crate) fn clipboard(dir: &Path) -> Result<PathBuf, String> {
-    std::fs::create_dir_all(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| since.as_millis());
-    let path = dir.join(format!("pasted-{stamp}.png"));
-    // AppleScript writes the clipboard's PNG data to the file; it fails when there is none.
-    let script = format!(
-        "set f to open for access POSIX file \"{}\" with write permission\n\
-         write (the clipboard as «class PNGf») to f\nclose access f",
-        path.display()
-    );
-    let ran = std::process::Command::new("osascript")
-        .args(["-e", &script])
-        .output();
-    match ran {
-        Ok(out) if out.status.success() && path.metadata().is_ok_and(|m| m.len() > 0) => Ok(path),
-        _ => {
-            let _ = std::fs::remove_file(&path);
-            Err("the clipboard holds no picture".into())
-        }
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn clipboard(_: &Path) -> Result<PathBuf, String> {
-    Err("pasting a picture is not supported here yet: drag the file in instead".into())
 }
 
 #[cfg(test)]

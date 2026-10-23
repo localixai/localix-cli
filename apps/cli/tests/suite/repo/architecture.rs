@@ -138,6 +138,63 @@ fn l8_the_client_knows_only_the_protocol() {
     assert_eq!(uses, &[WIRE], "the client depends on {uses:?}");
 }
 
+/// What the interface must not name (L7): the app's other modules, and every workspace package
+/// but the protocol and the client.
+const BEYOND_THE_INTERFACE: &[&str] = &[
+    "crate::",
+    "contracts::",
+    "tools::",
+    "agent::",
+    "decision_loop::",
+    "session::",
+    "queue::",
+    "provider_kit::",
+    "models::",
+    "openai::",
+    "openrouter::",
+];
+
+/// L7: the interface (`apps/cli/src/tui`, its tests too) speaks only through the protocol and the
+/// client: what it shows and what it may do, the server says.
+#[test]
+fn l7_the_interface_knows_only_the_protocol_and_the_client() {
+    let files = sources_in(&root().join("apps/cli/src/tui"));
+    assert!(!files.is_empty(), "no interface sources");
+    for path in files
+        .iter()
+        .filter(|p| p.extension().is_some_and(|e| e == "rs"))
+    {
+        let text = std::fs::read_to_string(path).unwrap();
+        let code = text.lines().filter(|l| !l.trim_start().starts_with("//"));
+        for line in code {
+            let named = named_beyond(line);
+            assert!(
+                named.is_none(),
+                "{} names `{}` in `{}`: the interface knows only `crate::tui`, `protocol` and \
+                 `client` (L7); have the server say it through the protocol (an `Event`, a \
+                 `Done`), or move the presentation into `tui`",
+                path.strip_prefix(root()).unwrap().display(),
+                named.unwrap_or_default(),
+                line.trim()
+            );
+        }
+    }
+}
+
+/// The first path in `line` that leaves the interface: one of [`BEYOND_THE_INTERFACE`] at the
+/// start of a path (not a module of the interface's own, `super::queue::`), but `crate::tui::`.
+fn named_beyond(line: &str) -> Option<&'static str> {
+    BEYOND_THE_INTERFACE.iter().copied().find(|word| {
+        line.match_indices(word).any(|(at, _)| {
+            let before = &line[..at];
+            let segment = |s: &str| s.ends_with(|c: char| c.is_alphanumeric() || c == '_');
+            let inner = segment(before) || before.strip_suffix("::").is_some_and(segment);
+            let own = *word == "crate::" && line[at..].starts_with("crate::tui");
+            !(inner || own)
+        })
+    })
+}
+
 #[test]
 fn l4_only_apps_compose_packages() {
     let packages = packages();

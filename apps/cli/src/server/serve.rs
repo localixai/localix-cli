@@ -15,6 +15,9 @@ pub(crate) struct Info {
     pub max_lanes: usize,
     /// Terminal sessions running, in every lane.
     pub shells: fn() -> usize,
+    /// What `/` offers, and the modes, each with what it does.
+    pub commands: Vec<(String, String)>,
+    pub modes: Vec<(String, String)>,
 }
 
 /// Serve `incoming` until the interface is gone: replies to their questions, lanes' commands to
@@ -49,6 +52,8 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
         Command::Initialize { .. } => Done::Initialized {
             version: protocol::VERSION,
             max_lanes: info.max_lanes,
+            commands: info.commands.clone(),
+            modes: info.modes.clone(),
         },
         Command::Input(input) => {
             peer.inputs.input(input);

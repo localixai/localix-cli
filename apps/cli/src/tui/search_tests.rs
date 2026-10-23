@@ -74,7 +74,7 @@ fn screen(app: &mut App) -> String {
 
 fn adjustable(
     options: Vec<(String, String)>,
-    adjustments: Vec<crate::picker::Adjustment>,
+    adjustments: Vec<protocol::Adjustment>,
     marked: Option<usize>,
 ) -> App {
     let mut app = App::new(80, 40, vec![]);
@@ -88,8 +88,8 @@ fn adjustable(
     app
 }
 
-fn levels(values: &[&str], at: usize) -> crate::picker::Adjustment {
-    crate::picker::Adjustment {
+fn levels(values: &[&str], at: usize) -> protocol::Adjustment {
+    protocol::Adjustment {
         values: values.iter().map(|value| value.to_string()).collect(),
         at,
     }

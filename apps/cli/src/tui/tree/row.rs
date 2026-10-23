@@ -7,8 +7,8 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::{cells, ending, tokens};
-use crate::printable::printable;
 use crate::tui::agents::{AgentState, Running, SessionView};
+use crate::tui::printable::printable;
 use crate::tui::style;
 use crate::tui::tool_cell;
 use crate::tui::wrap::{cut, width as text_width};

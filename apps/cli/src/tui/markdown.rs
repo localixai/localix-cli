@@ -11,7 +11,7 @@ use ratatui::text::{Line, Span};
 
 use super::style;
 use super::wrap::{hard, line_width, wrap};
-use crate::printable::printable;
+use crate::tui::printable::printable;
 
 /// `text` as rows of at most `width` columns.
 pub(crate) fn render(text: &str, width: usize) -> Vec<Line<'static>> {

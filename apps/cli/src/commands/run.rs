@@ -246,7 +246,6 @@ fn interface(setup: &mut Setup, windowed: bool) -> Result<Attached, Failure> {
     let running = tui::start(tui::Start {
         to_server,
         from_server,
-        commands: repl::commands(),
         root: setup.workspace.root(),
         quit_now: interrupt::quit_now,
     });
@@ -276,6 +275,10 @@ fn serving() -> std::io::Result<Serving> {
     let info = serve::Info {
         max_lanes: desk::MAX_LANES,
         shells: tools::shell::running_anywhere,
+        commands: repl::commands(),
+        modes: Mode::ALL
+            .map(|mode| (mode.name().into(), mode.hint()))
+            .to_vec(),
     };
     let server = std::thread::Builder::new().name("llx-serve".into());
     server.spawn(move || serve::serve(&incoming, &served, &desk, &info))?;

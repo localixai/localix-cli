@@ -20,7 +20,7 @@ use super::style;
 #[path = "edit_diff.rs"]
 mod edit_diff;
 use super::wrap::{cut, wrap};
-use crate::printable::printable;
+use crate::tui::printable::printable;
 
 /// Rows of output a finished call keeps: the first and the last, with how many were left out.
 const HEAD: usize = 2;

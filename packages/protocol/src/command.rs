@@ -56,10 +56,13 @@ pub enum Target {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Done {
     Ok,
-    /// The server and what it allows.
+    /// The server and what it allows: the commands `/` offers and the modes `/mode` does, each
+    /// with what it does.
     Initialized {
         version: u32,
         max_lanes: usize,
+        commands: Vec<(String, String)>,
+        modes: Vec<(String, String)>,
     },
     /// The task was stopped; `again` when it was asked a second time in a row.
     Interrupted {

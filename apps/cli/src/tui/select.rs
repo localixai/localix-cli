@@ -82,7 +82,7 @@ pub(crate) struct Select {
     checked: Vec<bool>,
     /// Letters filter the list: a long one.
     search: Option<Search>,
-    adjustments: Option<Vec<crate::picker::Adjustment>>,
+    adjustments: Option<Vec<protocol::Adjustment>>,
 }
 
 impl Select {
@@ -105,7 +105,7 @@ impl Select {
     }
 
     /// Each original row owns its value even when the search changes its position.
-    pub(crate) fn adjustable(mut self, mut adjustments: Vec<crate::picker::Adjustment>) -> Self {
+    pub(crate) fn adjustable(mut self, mut adjustments: Vec<protocol::Adjustment>) -> Self {
         adjustments.resize_with(self.choices.len(), Default::default);
         for adjustment in &mut adjustments {
             adjustment.at = adjustment.at.min(adjustment.values.len().saturating_sub(1));

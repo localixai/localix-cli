@@ -8,7 +8,6 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::app::{Action, App, QUIT_WINDOW_MS, SHIFT_TAB};
 use super::composer::Edit;
 use super::event::Typed;
-use crate::mode::Mode;
 
 impl App {
     pub(super) fn key(&mut self, key: KeyEvent, now: Instant) -> Option<Action> {
@@ -77,8 +76,8 @@ impl App {
             // The level up or down without a menu; it waits for a task running.
             KeyCode::Up | KeyCode::Down if key.modifiers == KeyModifiers::SHIFT => {
                 let step = match key.code {
-                    KeyCode::Up => crate::commands::entry::MORE_REASONING,
-                    _ => crate::commands::entry::LESS_REASONING,
+                    KeyCode::Up => protocol::MORE_REASONING,
+                    _ => protocol::LESS_REASONING,
                 };
                 self.send(step.into());
             }
@@ -194,11 +193,13 @@ impl App {
     /// What the person sent: `/exit` leaves the interface, every lane with it, and `/new` opens
     /// a lane; anything else is the shown lane's.
     fn submit(&mut self, entry: Typed) -> Option<Action> {
-        use crate::commands::entry::{Entry, entry as parse};
-        match parse(&entry.text) {
-            Some(Entry::Exit) => return self.quit(),
+        let command = entry.text.trim().strip_prefix('/').map(str::trim);
+        match command {
+            Some(name) if protocol::EXIT.contains(&name) => return self.quit(),
             // A new lane opens now: the lane shown goes on in the background.
-            Some(Entry::New) => return self.opening(protocol::Target::New),
+            Some(name) if protocol::NEW.contains(&name) => {
+                return self.opening(protocol::Target::New);
+            }
             _ => self.send(entry),
         }
         None
@@ -229,10 +230,9 @@ impl App {
             if typed.contains(char::is_whitespace) {
                 return vec![];
             }
-            return Mode::ALL
-                .into_iter()
-                .filter(|mode| mode.name().starts_with(typed))
-                .map(|mode| Offer::Mode(mode.name().into(), mode.hint()))
+            return (self.modes.iter())
+                .filter(|(name, _)| name.starts_with(typed))
+                .map(|(name, what)| Offer::Mode(name.clone(), what.clone()))
                 .collect();
         }
         let Some(typed) = text.strip_prefix('/') else {

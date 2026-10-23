@@ -10,14 +10,16 @@ use crate::tui::test_support::{
 };
 
 fn app() -> App {
-    App::new(
+    let mut app = App::new(
         60,
         20,
         vec![
             ("mode".into(), "show or switch the mode".into()),
             ("model".into(), "pick the model".into()),
         ],
-    )
+    );
+    app.modes = crate::tui::test_support::modes();
+    app
 }
 
 #[test]
@@ -77,11 +79,11 @@ fn mode_stays_visible_while_typing_and_updates_for_every_mode() {
     let mut app = app();
     app.event(Event::TaskStarted("work".into()), now);
     typed(&mut app, "follow up", now);
-    for mode in crate::mode::Mode::ALL {
-        app.event(Event::Mode(mode.name().into()), now);
+    for mode in ["default", "plan", "bypass", "autonomous"] {
+        app.event(Event::Mode(mode.into()), now);
         let screen = shown(&app, now);
         assert!(
-            screen.contains(&format!("{} mode · shift+tab to cycle", mode.name())),
+            screen.contains(&format!("{mode} mode · shift+tab to cycle")),
             "{screen}"
         );
         assert!(screen.contains("❯ follow up"), "{screen}");

@@ -54,7 +54,7 @@ impl Inbox for MainInbox<'_> {
             0 => "✻ Waiting for the monitors to report\n".to_string(),
             n => format!(
                 "✻ Waiting for {} to finish\n",
-                crate::tui::cells::count(n as u64, "background agent")
+                crate::output::count(n, "background agent")
             ),
         };
         let last = std::mem::replace(&mut *crate::output::lock(&self.registry.said), said.clone());

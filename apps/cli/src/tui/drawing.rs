@@ -16,7 +16,7 @@ use super::{live, style, terminal};
 /// How often the live area is redrawn while something runs (the spinner's frame).
 const FRAME: Duration = Duration::from_millis(80);
 /// How long a command the person waits on may take.
-const ANSWER: Duration = Duration::from_secs(5);
+pub(super) const ANSWER: Duration = Duration::from_secs(5);
 
 /// What the interface needs beside its state: the server, and how to end at once.
 pub(super) struct Seat {
@@ -102,7 +102,7 @@ fn act(
             app.composer.set(text.trim_end_matches('\n'));
             *shown = None;
         }
-        Some(Action::Clipboard) => match crate::attach::clipboard(&crate::attach::pasted_dir()) {
+        Some(Action::Clipboard) => match super::attach::clipboard(&super::attach::pasted_dir()) {
             Ok(path) => app.composer.attach(path),
             Err(why) => {
                 app.event(Event::Note(why), Instant::now());

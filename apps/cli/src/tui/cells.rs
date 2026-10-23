@@ -15,7 +15,7 @@ use ratatui::text::{Line, Span};
 use super::markdown;
 use super::style;
 use super::wrap::{line_width, wrap};
-use crate::printable::printable;
+use crate::tui::printable::printable;
 
 /// What the person typed.
 pub(crate) fn user(text: &str, width: usize) -> Vec<Line<'static>> {

@@ -34,7 +34,7 @@ fn steps(rig: &mut Rig, terminal: &mut dyn Terminal) -> String {
             }
             let files = match task.changed() {
                 0 => "no file changed".to_string(),
-                n => format!("{} changed", crate::tui::cells::count(n as u64, "file")),
+                n => format!("{} changed", crate::output::count(n, "file")),
             };
             Item::new(label, files, false)
         })

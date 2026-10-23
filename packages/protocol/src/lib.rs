@@ -21,3 +21,6 @@ pub const SHIFT_TAB: &str = "\u{1b}[Z";
 /// The inputs that raise and lower the reasoning level (Shift+Up, Shift+Down).
 pub const MORE_REASONING: &str = "\u{1b}[1;2A";
 pub const LESS_REASONING: &str = "\u{1b}[1;2B";
+/// The commands the interface does itself: quitting it, and opening a session beside the others.
+pub const EXIT: [&str; 2] = ["exit", "quit"];
+pub const NEW: [&str; 2] = ["new", "clear"];

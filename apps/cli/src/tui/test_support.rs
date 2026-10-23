@@ -117,6 +117,27 @@ pub(crate) fn replies(app: &mut App) -> Vec<(u64, protocol::Reply)> {
     replies
 }
 
+/// The modes, each with what it does, as the server says them.
+pub(crate) fn modes() -> Vec<(String, String)> {
+    [
+        (
+            "default",
+            "Each command, file change and browser action asks first",
+        ),
+        ("plan", "Investigate and plan: file changes are refused"),
+        (
+            "bypass",
+            "Everything runs without asking (-y); questions are asked",
+        ),
+        (
+            "autonomous",
+            "Everything runs without asking, and no question is asked",
+        ),
+    ]
+    .map(|(n, w)| (n.to_string(), w.to_string()))
+    .to_vec()
+}
+
 /// The commands the interface sent so far other than entries, taken.
 pub(crate) fn commands(app: &mut App) -> Vec<Command> {
     let mut commands = vec![];
@@ -254,5 +275,29 @@ pub(crate) fn in_session(id: &str, event: Event) -> protocol::ToClient {
     protocol::ToClient::Event {
         session: Some(id.into()),
         event,
+    }
+}
+
+/// A directory of a test's own, removed when it is dropped.
+pub(crate) struct Scratch(std::path::PathBuf);
+
+impl Scratch {
+    pub(crate) fn new() -> Self {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let name = format!("llx-tui-{}-{n}", std::process::id());
+        let dir = std::env::temp_dir().join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        Self(dir)
+    }
+
+    pub(crate) fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
     }
 }

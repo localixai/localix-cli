@@ -133,7 +133,7 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
                         format!("idle, the last task {}", child.status.replace('_', " "))
                     }
                 };
-                let tasks = crate::tui::cells::count(tasks as u64, "task");
+                let tasks = crate::output::count(tasks, "task");
                 format!(
                     "- `{}` (session {}): {now}, {tasks}",
                     child.session.name, child.session.id

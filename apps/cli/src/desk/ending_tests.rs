@@ -84,6 +84,8 @@ fn a_panicking_lane_ends_the_other_lanes() {
             let info = Info {
                 max_lanes: crate::desk::MAX_LANES,
                 shells: || 0,
+                commands: vec![],
+                modes: vec![],
             };
             scope.spawn(move || serve(&incoming, &peer, &to_desk, &info));
             let mut person = Person {

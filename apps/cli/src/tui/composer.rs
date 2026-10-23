@@ -9,7 +9,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::attach::Dropped;
+use crate::tui::attach::Dropped;
 
 mod marks;
 mod render;

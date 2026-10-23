@@ -80,6 +80,8 @@ fn an_answer_is_cleaned_to_one_short_line() {
             "Speed up the build",
         ),
         ("`Rename the picker?`", "Rename the picker"),
+        // What could redraw the screen is shown, not obeyed.
+        ("Fix \u{1b}[2K \u{202e}txt", "Fix \\u{1b}[2K \\u{202e}txt"),
     ] {
         assert_eq!(clean(said).as_deref(), Some(title), "{said:?}");
     }

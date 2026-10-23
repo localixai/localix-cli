@@ -30,7 +30,6 @@ mod meta;
 mod mode;
 mod output;
 mod picker;
-mod printable;
 mod providers;
 mod server;
 #[cfg(test)]

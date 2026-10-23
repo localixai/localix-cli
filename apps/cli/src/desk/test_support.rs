@@ -224,6 +224,8 @@ pub(crate) fn at_desk_with(
         let info = Info {
             max_lanes: super::MAX_LANES,
             shells: || 0,
+            commands: vec![],
+            modes: vec![],
         };
         scope.spawn(move || serve(&incoming, &peer, &to_desk, &info));
         let mut at = Person {

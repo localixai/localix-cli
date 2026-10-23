@@ -11,7 +11,7 @@ use crate::cli::RunOptions;
 use crate::commands::run::{self, Kind};
 use crate::error::{self, Failure};
 use crate::exit;
-use crate::printable::printable;
+use crate::tui::printable::printable;
 
 /// Sessions listed at most.
 const LISTED: usize = 30;
@@ -67,7 +67,7 @@ pub(crate) fn row(session: &Session, agents: usize) -> String {
     let tasks = tasks(session);
     let agents = match agents {
         0 => String::new(),
-        n => format!("  ({})", crate::tui::cells::count(n as u64, "agent")),
+        n => format!("  ({})", crate::output::count(n, "agent")),
     };
     format!(
         "{}  {:>10}  {tasks:>8}  {place}  {shown}{agents}\n",
@@ -80,7 +80,7 @@ pub(crate) fn row(session: &Session, agents: usize) -> String {
 /// it has (`2 h ago · 4 tasks`).
 pub(crate) fn brief(session: &Session) -> (String, String) {
     let ago = session::ago(session.updated);
-    let tasks = crate::tui::cells::count(session.turns.len() as u64, "task");
+    let tasks = crate::output::count(session.turns.len(), "task");
     (first_task(session), format!("{ago} · {tasks}"))
 }
 

@@ -6,9 +6,9 @@ use protocol::{Label, Outcome};
 use ratatui::text::{Line, Span};
 
 use super::{AgentState, TOOK, finish_call, result_block};
-use crate::printable::printable;
 use crate::tui::app::App;
 use crate::tui::cells::{self, End};
+use crate::tui::printable::printable;
 use crate::tui::style;
 
 impl App {

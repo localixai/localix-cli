@@ -6,7 +6,7 @@ use super::super::{
     style,
     wrap::{hard, width as columns},
 };
-use crate::printable::printable;
+use crate::tui::printable::printable;
 
 pub(super) fn render(diff: &str, width: usize) -> Vec<Line<'static>> {
     let (mut old, mut new) = (0, 0);

@@ -30,6 +30,8 @@ fn served() -> Served {
         let info = Info {
             max_lanes: 3,
             shells: || 2,
+            commands: vec![("help".into(), "the commands".into())],
+            modes: vec![("plan".into(), "plan first".into())],
         };
         serve(&incoming, &theirs, &desk, &info);
     });
@@ -70,7 +72,9 @@ fn an_interface_that_attaches_is_told_what_the_server_allows() {
         served.done(1),
         Done::Initialized {
             version: protocol::VERSION,
-            max_lanes: 3
+            max_lanes: 3,
+            commands: vec![("help".into(), "the commands".into())],
+            modes: vec![("plan".into(), "plan first".into())],
         }
     );
     served.call(2, Command::Work);

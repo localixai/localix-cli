@@ -101,7 +101,7 @@ fn clean(said: &str) -> Option<String> {
     if words.is_empty() {
         return None;
     }
-    let shown = crate::printable::printable(&words);
+    let shown = printable(&words);
     Some(match shown.chars().count() > MAX {
         true => {
             shown
@@ -114,6 +114,25 @@ fn clean(said: &str) -> Option<String> {
         }
         false => shown,
     })
+}
+
+/// `text` with its control characters and reordering marks escaped, as the interface shows text
+/// (`tui::printable`): the server keeps its own, for it knows nothing of the interface (L7).
+fn printable(text: &str) -> String {
+    fn reorders(c: char) -> bool {
+        matches!(
+            c,
+            '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
+        )
+    }
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c.is_control() || reorders(c) {
+            true => out.extend(c.escape_default()),
+            false => out.push(c),
+        }
+    }
+    out
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ use super::*;
 use crate::tui::style;
 use crate::tui::test_support::{
     approve as approve_asked, call, commands, ctrl, done, failed, history, in_session as from, key,
-    live_area, queue, ran, render, replies, result, sent, sent_texts, typed,
+    live_area, modes, queue, ran, render, replies, result, sent, sent_texts, typed,
 };
 
 fn app() -> App {
@@ -17,14 +17,16 @@ fn app() -> App {
         ("mode", "show or switch the mode"),
         ("new", "start over"),
     ];
-    App::new(
+    let mut app = App::new(
         60,
         20,
         commands
             .iter()
             .map(|(n, w)| (n.to_string(), w.to_string()))
             .collect(),
-    )
+    );
+    app.modes = modes();
+    app
 }
 
 /// When a question was opened that takes keys at `now`: an approval ignores them at first.
@@ -338,7 +340,7 @@ fn pasted_text_is_shown_as_a_mark_but_sent_as_text() {
 #[test]
 fn dropped_files_become_marks_and_go_with_the_message() {
     let now = Instant::now();
-    let dir = crate::testing::Scratch::new();
+    let dir = crate::tui::test_support::Scratch::new();
     let picture = dir.path().join("Screenshot at 2.26.05\u{202f}AM.png");
     std::fs::write(&picture, b"\x89PNG\r\n\x1a\n").unwrap();
     let notes = dir.path().join("notes.md");

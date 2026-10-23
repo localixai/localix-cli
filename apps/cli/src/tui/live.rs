@@ -24,7 +24,7 @@ use super::style;
 use super::tool_cell::{self, State};
 use super::tree;
 use super::wrap::cut;
-use crate::printable::printable;
+use crate::tui::printable::printable;
 
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const FRAME_MS: u128 = 80;

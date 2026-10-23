@@ -41,7 +41,7 @@ fn monitor() -> JobRow {
 fn second_ctrl_c_with_others_busy_asks_to_quit() {
     let now = Instant::now();
     let mut app = two(true, now);
-    app.shells = || 3;
+    app.shells = Box::new(|| 3);
     app.frame(from("A", Event::Jobs(vec![monitor()])), now);
     assert_eq!(app.input(ctrl('c'), now), None);
     assert_eq!(app.input(ctrl('c'), now), None, "asked first");
@@ -76,7 +76,7 @@ fn ctrl_d_with_nothing_busy_quits() {
 fn ctrl_d_with_a_shell_running_asks() {
     let now = Instant::now();
     let mut app = two(false, now);
-    app.shells = || 1;
+    app.shells = Box::new(|| 1);
     assert_eq!(app.input(ctrl('d'), now), None);
     let shown = render(&mut app, now);
     assert!(

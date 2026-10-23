@@ -69,8 +69,9 @@ every new file already goes where its target crate will be.
   context.
 - **L6** _checked_: `protocol` depends on no workspace crate. Its types are wire
   DTOs; domain types never derive its serde shapes, and it never re-exports one.
-- **L7** (_checked_ with the crate): the interface depends only on `client` and `protocol`: never
-  on the agent, tools, providers, the session store or the server. What it needs to show, the
+- **L7** _checked_ on the sources (and with the crate, once it is one): the interface depends only
+  on `client` and `protocol`: never on the agent, tools, providers, the session store or the
+  server, nor on the app's other modules. What it needs to show, the
   protocol carries (Codex's `verify_tui_core_boundary`).
 - **L8** _checked_ for the client: the server is the only crate that serves the protocol and
   the only one that knows every package; the client knows only the protocol, and is the only
@@ -253,8 +254,8 @@ every new file already goes where its target crate will be.
 
 ## The daemon's steps (docs/daemon.md)
 
-- **D1**: the seam as the protocol, in process: `protocol` and `client` exist; the interface
-  speaks only through them. L6-L8 become checked.
+- **D1** (done): the seam as the protocol, in process: `protocol` and `client` exist; the
+  interface speaks only through them. L6-L8 are checked.
 - **D2**: sessions carry their place (directory, environment, theme).
 - **D3**: the socket and `llx serve`.
 - **D4**: attach and detach: the ring, replayed questions, the quit question.

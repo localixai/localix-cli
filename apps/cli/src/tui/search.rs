@@ -14,7 +14,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::text::{Line, Span};
 
 use super::style;
-use crate::printable::printable;
+use crate::tui::printable::printable;
 
 /// What a row is found by, lower-cased: its label, and its detail's lead.
 pub(super) fn keys(label: &str, detail: &str) -> [String; 2] {

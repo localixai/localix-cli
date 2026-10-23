@@ -14,7 +14,7 @@ use super::event::Event;
 use super::style;
 use super::tool_cell::{self, State};
 pub(crate) use super::views::{AgentState, LaneState, Running, SessionView, Views};
-use crate::printable::printable;
+use crate::tui::printable::printable;
 
 mod ends;
 

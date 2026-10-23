@@ -10,13 +10,13 @@ use protocol::{Command, Input as Sent, ToClient};
 use ratatui::text::Line;
 
 use super::agents::{LaneState, Views};
+use super::attach;
 use super::composer::Composer;
 use super::event::{Event, Input, JobRow, Out, Typed};
 use super::mention::Files;
 use super::questions;
 use super::queue::Asked;
-use crate::attach;
-use crate::printable::printable;
+use crate::tui::printable::printable;
 
 /// What the person asked for that the interface cannot do itself.
 #[derive(Debug, PartialEq)]
@@ -103,8 +103,10 @@ pub(crate) struct App {
     pub(super) saved: Vec<(String, String, String)>,
     /// A lane closed to make room, said in the next lane that opens.
     pub(super) closed: Option<String>,
-    /// How many shells run, in every session: quitting stops them.
-    pub shells: fn() -> usize,
+    /// How many shells run, in every session (asked of the server): quitting stops them.
+    pub shells: Box<dyn Fn() -> usize + Send>,
+    /// The modes `/mode` offers, each with what it does, as the server says them.
+    pub modes: Vec<(String, String)>,
     /// Lanes the server keeps open at most.
     pub max_lanes: usize,
     /// What the interface sends next: commands and replies, in order.
@@ -134,7 +136,8 @@ impl App {
             listing: None,
             saved: vec![],
             closed: None,
-            shells: || 0,
+            shells: Box::new(|| 0),
+            modes: vec![],
             max_lanes: 8,
             outbox: vec![],
         }

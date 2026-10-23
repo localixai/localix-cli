@@ -4,7 +4,7 @@
 use ratatui::text::{Line, Span};
 
 use super::{Select, WINDOW};
-use crate::printable::printable;
+use crate::tui::printable::printable;
 use crate::tui::style;
 use crate::tui::wrap::wrap;
 

@@ -9,6 +9,7 @@
 
 pub(crate) mod agents;
 pub(crate) mod app;
+pub(crate) mod attach;
 pub(crate) mod cells;
 pub(crate) mod composer;
 mod drawing;
@@ -19,6 +20,7 @@ pub(crate) mod live;
 pub(crate) mod markdown;
 pub(crate) mod mention;
 mod opening;
+pub(crate) mod printable;
 pub(crate) mod questions;
 pub(crate) mod queue;
 mod quitting;
@@ -40,7 +42,6 @@ pub(crate) mod wrap;
 use std::io::{self, Write};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread::JoinHandle;
-use std::time::Duration;
 
 use client::Client;
 use protocol::{Command, Done, Event, ToClient, ToServer};
@@ -56,12 +57,11 @@ pub(crate) struct Running {
     thread: Option<JoinHandle<()>>,
 }
 
-/// What the interface is given: the server's ends of the frames, what `/` offers, the
-/// directory for `@`, and how to end the process at once.
+/// What the interface is given: the server's ends of the frames, the directory for `@`, and how
+/// to end the process at once.
 pub(crate) struct Start<'a> {
     pub to_server: Sender<ToServer>,
     pub from_server: Receiver<ToClient>,
-    pub commands: Vec<(String, String)>,
     pub root: &'a std::path::Path,
     pub quit_now: fn() -> !,
 }
@@ -111,13 +111,25 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
     let hello = Command::Initialize {
         version: protocol::VERSION,
     };
-    let Ok(Done::Initialized { max_lanes, .. }) = client.call(hello, Duration::from_secs(5)) else {
+    let Ok(Done::Initialized {
+        max_lanes,
+        commands,
+        modes,
+        ..
+    }) = client.call(hello, drawing::ANSWER)
+    else {
         return Err(io::Error::other("the server did not attach the interface"));
     };
-    let mut app = App::new(usize::from(width), usize::from(height), start.commands);
+    let mut app = App::new(usize::from(width), usize::from(height), commands);
     app.files = mention::Files::new(Some(start.root.to_path_buf()));
-    app.shells = tools::shell::running_anywhere;
+    let asking = client.clone();
+    // Asked only when the quit question needs it.
+    app.shells = Box::new(move || match asking.call(Command::Work, drawing::ANSWER) {
+        Ok(Done::Work { shells }) => shells,
+        _ => 0,
+    });
     app.max_lanes = max_lanes;
+    app.modes = modes;
     let seat = drawing::Seat {
         client,
         quit_now: start.quit_now,

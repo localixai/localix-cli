@@ -303,6 +303,14 @@ pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poison| poison.into_inner())
 }
 
+/// `n` of `noun`, as the server says it (the interface counts its own): `1 task`, `3 tasks`.
+pub(crate) fn count(n: usize, noun: &str) -> String {
+    match n {
+        1 => format!("1 {noun}"),
+        n => format!("{n} {noun}s"),
+    }
+}
+
 #[cfg(test)]
 #[path = "output_tests.rs"]
 mod tests;

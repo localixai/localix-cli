@@ -183,23 +183,15 @@ fn every_frame_is_one_synchronized_update() {
 fn successful_edit_displays_the_actual_before_and_after_in_the_terminal() {
     use crate::tui::app::App;
     use crate::tui::test_support::{Term, done, label, result};
-    use contracts::{gate::Open, tool::Tool};
-    use serde_json::json;
-
-    let dir = crate::testing::Scratch::new();
-    dir.file("config.rs", "target: 'bun',\nthrow: true,\nend\n");
-    let workspace = tools::workspace::Workspace::new(dir.path()).unwrap();
-    let tool = tools::fs::EditTool {
-        workspace: &workspace,
-        gate: &Open,
-    };
-    let args = json!({"path":"config.rs", "old_string":"throw: true", "new_string":"throw: false"});
-    let report = tool.call(&args).unwrap().report;
+    // What `edit` reports of `throw: true` made `throw: false` in a file of three lines.
+    let report = "Edited config.rs: replaced 1 occurrence (+1 -1 lines).\n     1\ttarget: 'bun',\n     \
+                  2\tthrow: false,\n     3\tend\n\nDiff:\n@@ -1,3 +1,3 @@\n target: 'bun',\n\
+                  -throw: true,\n+throw: false,\n end\n";
     let now = std::time::Instant::now();
     let mut app = App::new(80, 30, vec![]);
     let mut term = Term::new(&app);
     let edited = label("Editing", "Edited", "config.rs");
-    app.event(result("c1", "edit", &edited, done(&report)), now);
+    app.event(result("c1", "edit", &edited, done(report)), now);
     let shown = term.draw(&mut app, now);
     assert!(shown.contains("• Edited config.rs"), "{shown}");
     assert!(shown.contains("- throw: true,"), "{shown}");

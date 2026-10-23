@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use super::Composer;
-use crate::attach::Dropped;
+use crate::tui::attach::Dropped;
 
 impl Composer {
     /// Hide clipboard text behind a numbered mark; restore it when the entry is sent.

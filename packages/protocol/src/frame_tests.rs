@@ -127,6 +127,8 @@ fn every_question_to_the_person_comes_back_the_same_through_json() {
             done: Done::Initialized {
                 version: crate::VERSION,
                 max_lanes: 8,
+                commands: vec![("help".into(), "the commands".into())],
+                modes: vec![("plan".into(), "plan first".into())],
             },
         },
     ];

@@ -56,3 +56,20 @@ fn a_terminal_tab_opens_takes_input_reads_and_closes_as_its_session() {
     let ended = terminal.open(&json!({"command": "echo done"}));
     assert!(matches!(ended, Err(ToolError::Failed(why)) if why.contains("done")));
 }
+
+#[test]
+fn a_page_that_moved_a_little_reads_as_its_changes() {
+    let before = "### Page (untrusted content)\nShop — https://x/\n- heading \"Cart\"\n- text \"0 items\"\n- button \"Buy\"";
+    let after = "### Page (untrusted content)\nShop — https://x/\n- heading \"Cart\"\n- text \"1 item\"\n- button \"Buy\"";
+    assert_eq!(
+        changes(before, after).as_deref(),
+        Some("### Page changes since the last snapshot\n- - text \"0 items\"\n+ - text \"1 item\"")
+    );
+    assert_eq!(
+        changes(after, after).as_deref(),
+        Some("### Page changes since the last snapshot\n(no visible change)")
+    );
+    // A new page is read whole.
+    let other: String = (0..60).map(|n| format!("- link \"{n}\"\n")).collect();
+    assert_eq!(changes(before, &other), None);
+}

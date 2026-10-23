@@ -12,7 +12,7 @@ use super::session::{Turn, Until, Wait};
 use super::sweep;
 
 /// How long the output must stay quiet for the program to be taken as waiting.
-const QUIET: Duration = Duration::from_millis(300);
+const QUIET: Duration = Duration::from_millis(120);
 /// The longest sleep of a wait: only so a stop and an exit are noticed, output wakes it at once.
 const POLL: Duration = Duration::from_millis(50);
 /// How long the end of the output is waited for once the program exited, or was killed: a

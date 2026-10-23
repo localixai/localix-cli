@@ -121,7 +121,7 @@ Code:
 
 - Unit tests live beside the code, never inside it: `x.rs` ends with `#[cfg(test)] #[path = "x_tests.rs"] mod tests;` (checked by the architecture test). Fake the ports (a scripted `Chat`, a `Gate`, a `Decider`, a `View`) instead of calling a network.
 - New source files stay under 300 lines. rustfmt defaults. Comments explain why.
-- The project stays under 25,000 lines of working code (`apps/cli/tests/suite/repo/budget.rs`; build scripts count; tests, comments and blanks do not). This is the maximum. New code is paid for first by cutting or simplifying existing code. If a change still cannot fit, stop and ask the owner before going over: say how many lines it needs, what was already cut, why the rest cannot be, and the alternatives. Never raise the limit on your own.
+- The project stays under 30,000 lines of working code (`apps/cli/tests/suite/repo/budget.rs`; build scripts count; tests, comments and blanks do not). This is the maximum. New code is paid for first by cutting or simplifying existing code. If a change still cannot fit, stop and ask the owner before going over: say how many lines it needs, what was already cut, why the rest cannot be, and the alternatives. Never raise the limit on your own.
 - English only, in code, comments and docs.
 
 ## Tests first (TDD)

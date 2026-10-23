@@ -10,6 +10,9 @@ use serde_json::{Map, Value, json};
 use tools::browser::{BrowserTool, Page};
 use tools::window::{Kind, Opened};
 
+/// Lines of a page's changes at most; past them, the page is read whole.
+const CHANGES: usize = 30;
+
 /// Where a browser tab opens when no address is given.
 const SEARCH_PAGE: &str = "https://duckduckgo.com/";
 
@@ -19,6 +22,8 @@ const SEARCH_PAGE: &str = "https://duckduckgo.com/";
 pub struct BrowserLocks {
     tabs_change: Mutex<()>,
     tabs: [Mutex<()>; tools::browser::MAX_TABS + 1],
+    /// Each tab's page as the model last read it whole.
+    seen: Mutex<std::collections::HashMap<u32, String>>,
 }
 
 impl BrowserLocks {
@@ -56,6 +61,31 @@ impl Browser<'_> {
             gate: self.gate,
         };
         tool.call(&arguments)
+    }
+
+    /// What acting in tab `id` left: the page's changes since the model last read it whole, when
+    /// they are few; else the whole page, read from now on.
+    fn after(&self, id: u32, mut done: ToolOutput) -> ToolOutput {
+        let Some(page) = done.state.take() else {
+            return done;
+        };
+        let mut seen = crate::output::lock(&self.locks.seen);
+        match seen.get(&id).and_then(|before| changes(before, &page)) {
+            Some(changed) => done.report = format!("{}\n\n{changed}", done.report),
+            None => {
+                seen.insert(id, page.clone());
+                done.state = Some(page);
+            }
+        }
+        done
+    }
+
+    /// Tab `id` read whole: what later changes are told against.
+    fn read_whole(&self, id: u32, done: ToolOutput) -> ToolOutput {
+        if let Some(page) = &done.state {
+            crate::output::lock(&self.locks.seen).insert(id, page.clone());
+        }
+        done
     }
 
     /// `arguments` that change the tabs (open one, close one), one such call at a time.
@@ -137,6 +167,7 @@ impl Kind for Browser<'_> {
         let id = self
             .active()
             .ok_or_else(|| ToolError::Failed(output.report.clone()))?;
+        let output = self.read_whole(id, output);
         Ok(Opened { id, output })
     }
 
@@ -150,11 +181,13 @@ impl Kind for Browser<'_> {
             "offset",
             "size",
         ];
-        self.in_tab(id, Self::picked(args, &fields))
+        let done = self.in_tab(id, Self::picked(args, &fields))?;
+        Ok(self.after(id, done))
     }
 
     fn snapshot(&self, id: u32) -> Result<ToolOutput, ToolError> {
-        self.in_tab(id, json!({}))
+        let done = self.in_tab(id, json!({}))?;
+        Ok(self.read_whole(id, done))
     }
 
     fn screenshot(&self, id: u32, args: &Value) -> Result<ToolOutput, ToolError> {
@@ -186,6 +219,29 @@ impl Kind for Browser<'_> {
             _tab: self.locks.tab(id),
         }))
     }
+}
+
+/// The lines of `after` not in `before` (`+`) and of `before` not in `after` (`-`), when there
+/// are at most `CHANGES` of them.
+fn changes(before: &str, after: &str) -> Option<String> {
+    let (old, new): (Vec<&str>, Vec<&str>) = (before.lines().collect(), after.lines().collect());
+    let gone = old
+        .iter()
+        .filter(|line| !new.contains(line))
+        .map(|line| format!("- {line}"));
+    let came = new
+        .iter()
+        .filter(|line| !old.contains(line))
+        .map(|line| format!("+ {line}"));
+    let changed: Vec<String> = gone.chain(came).collect();
+    if changed.len() > CHANGES {
+        return None;
+    }
+    let lines = match changed.is_empty() {
+        true => "(no visible change)".to_string(),
+        false => changed.join("\n"),
+    };
+    Some(format!("### Page changes since the last snapshot\n{lines}"))
 }
 
 /// A tab's page, worked in alone while the helper acts on it.

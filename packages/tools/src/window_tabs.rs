@@ -7,6 +7,10 @@ use super::{Kind, Opened, WindowTab, WindowTool, failed};
 
 impl WindowTool<'_> {
     /// Open each tab asked for; one that fails says why, and the others still open.
+    #[allow(
+        clippy::needless_collect,
+        reason = "every tab's thread starts before the first is joined: a lazy iterator would open them one by one"
+    )]
     pub(super) fn open(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
         let asked: Vec<&Value> = match arguments.get("tabs").and_then(Value::as_array) {
             Some(tabs) => tabs.iter().collect(),

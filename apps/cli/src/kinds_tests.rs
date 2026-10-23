@@ -70,6 +70,8 @@ fn a_page_that_moved_a_little_reads_as_its_changes() {
         Some("### Page changes since the last snapshot\n(no visible change)")
     );
     // A new page is read whole.
-    let other: String = (0..60).map(|n| format!("- link \"{n}\"\n")).collect();
+    let other = (0..60).fold(String::new(), |other, n| {
+        other + &format!("- link \"{n}\"\n")
+    });
     assert_eq!(changes(before, &other), None);
 }

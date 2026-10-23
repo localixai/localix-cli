@@ -29,6 +29,10 @@ impl Scripted {
 }
 
 impl Chat for Scripted {
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         self.may_call.lock().unwrap().push(request.may_call);
         let user = request
@@ -119,11 +123,19 @@ impl Tool for Echo {
             parameters: json!({"type": "object"}),
         }
     }
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: an unexpected call fails the test"
+    )]
     fn call(&self, _: &Value) -> Result<ToolOutput, ToolError> {
         self.0.lock().unwrap().pop().expect("an unexpected call")
     }
 }
 
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "a scripted tool reply, which is a call's result"
+)]
 pub(crate) fn ok(report: &str) -> Result<ToolOutput, ToolError> {
     Ok(ToolOutput {
         report: report.into(),

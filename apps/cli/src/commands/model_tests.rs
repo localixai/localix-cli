@@ -15,8 +15,8 @@ fn model_offers_signed_in_models_and_confirms_without_a_second_menu() {
     let mut terminal = Scripted::new(&[None]);
     assert_eq!(pick_model(&current, &mut terminal, &openai_only), None);
     let offered = terminal.offered("Model");
-    let marked: Vec<&String> = offered.iter().filter(|(_, m)| *m).map(|(l, _)| l).collect();
-    assert_eq!(marked.len(), 1, "the current model is marked: {offered:?}");
+    let marked = offered.iter().filter(|(_, m)| *m).count();
+    assert_eq!(marked, 1, "the current model is marked: {offered:?}");
     let openai_models = Provider::openai().models().len();
     let openrouter_models = Provider::openrouter().models().len();
     assert_eq!(

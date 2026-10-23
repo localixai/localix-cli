@@ -94,7 +94,7 @@ impl Deck {
         let size = LogicalSize::new(width, height);
         // Coated in the system's appearance: the titlebar and the strip are not the bare
         // material's grey. The browser's pages paint their own ground over it, opaque.
-        let mut frame = Frame::build(target, (title, size, None), look, Some(None))?;
+        let mut frame = Frame::build(target, (title, size, None), look, None)?;
         let strip = match headless {
             true => None,
             false => {

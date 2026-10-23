@@ -6,6 +6,11 @@ use crate::common::model::Model;
 use crate::common::term::Term;
 
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test looks at the screen again until it is so, for a bounded time, then gives a \
+              late row the time to be drawn: there is no event to wait on"
+)]
 fn quitting_leaves_no_prompt_row_on_the_screen() {
     for keys in [&["\x04"][..], &["\x03", "\x03"]] {
         let model = Model::start(vec![]);

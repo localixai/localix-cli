@@ -84,9 +84,9 @@ impl Jobs {
     }
 
     /// Know `stop` as job `id`'s stop, under the session's id.
-    fn known(&self, id: &str, stop: &Arc<AtomicBool>) -> Option<crate::interrupt::Known> {
+    fn known(&self, id: &str, stop: &Arc<AtomicBool>) -> crate::interrupt::Known {
         let key = crate::interrupt::job_key(&self.owner, id);
-        Some(crate::interrupt::register_flag(&key, Arc::clone(stop)))
+        crate::interrupt::register_flag(&key, Arc::clone(stop))
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
@@ -130,6 +130,11 @@ impl Jobs {
     }
 
     /// The scheduler: each second, the schedules that are due give their prompt.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a clock: schedules fall due by the second, and the session's end is looked at \
+                  each tick"
+    )]
     pub(crate) fn tick(&self, kit: &Kit) {
         while !self.over.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_secs(1));

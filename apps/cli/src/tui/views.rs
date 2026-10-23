@@ -2,7 +2,7 @@
 //! it started, each with its transcript, and which one is shown.
 
 use std::collections::VecDeque;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 use std::time::Instant;
 
 use ratatui::text::Line;
@@ -117,7 +117,7 @@ impl SessionView {
 #[derive(Default)]
 pub(crate) struct LaneState {
     /// The session waits for its next entry here.
-    pub waiting: Option<Sender<Option<Typed>>>,
+    pub waiting: Option<SyncSender<Option<Typed>>>,
     /// Entries for after the task running (Tab, or a command), oldest first.
     pub queued: VecDeque<Typed>,
     /// What the person said to the task running, not yet read by it (Enter while it works).

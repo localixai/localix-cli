@@ -13,13 +13,16 @@ use crate::common::model::{Model, Reply, said};
 /// session of its own, so not even `/dev/tty` is there to ask on).
 fn exec(home: &Home, model: &Model, args: &[&str], stdin: &str) -> Output {
     let mut command = home.with_model(model, args);
-    // SAFETY: setsid is async-signal-safe and touches only the child.
     #[cfg(unix)]
-    unsafe {
-        std::os::unix::process::CommandExt::pre_exec(&mut command, || {
-            libc::setsid();
+    {
+        let lead = || {
+            // SAFETY: setsid takes nothing and only makes the child a session's leader.
+            unsafe { libc::setsid() };
             Ok(())
-        });
+        };
+        // SAFETY: between fork and exec the closure only calls setsid, which is async-signal-safe
+        // and touches only the child.
+        unsafe { std::os::unix::process::CommandExt::pre_exec(&mut command, lead) };
     }
     let mut child = command
         .current_dir(home.path())

@@ -38,12 +38,12 @@ fn a_program_that_reads_nothing_stalls_the_typing() {
     );
     assert!(sent > 0, "nothing was typed");
     // The poll's wait is whole milliseconds, so the typing may give up a little before its time.
-    let early = WRITE_WAIT - Duration::from_millis(50);
+    let early = WRITE_WAIT.saturating_sub(Duration::from_millis(50));
     assert!(took >= early, "gave up after {took:?}");
     // Not a second wait for the key: it is not pressed once the input stalled. A second wait
     // would take at least as long as the first did.
     assert!(
-        took < WRITE_WAIT * 2 - Duration::from_millis(100),
+        took < (WRITE_WAIT * 2).saturating_sub(Duration::from_millis(100)),
         "{took:?}"
     );
 }
@@ -67,6 +67,10 @@ fn input_a_program_reads_does_not_stall() {
     assert_eq!(typed.stalled, None, "{typed:?}");
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test's copy of itself runs one test, which ends by itself"
+)]
 #[test]
 fn ctrl_c_reaches_a_program_whose_parent_ignored_it() {
     if std::env::var_os(IGNORING).is_some() {
@@ -96,13 +100,13 @@ fn ctrl_c_reaches_a_program_whose_parent_ignored_it() {
     let mut copy = std::process::Command::new(std::env::current_exe().unwrap());
     copy.args(["--exact", &name, "--test-threads=1"])
         .env(IGNORING, "1");
-    // SAFETY: signal is async-signal-safe, and only changes the child's own disposition.
-    unsafe {
-        copy.pre_exec(|| {
-            libc::signal(libc::SIGINT, libc::SIG_IGN);
-            Ok(())
-        });
-    }
+    let ignore = || {
+        // SAFETY: signal is async-signal-safe, and only changes the child's own disposition.
+        unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) };
+        Ok(())
+    };
+    // SAFETY: between fork and exec the closure only calls signal, which is async-signal-safe.
+    unsafe { copy.pre_exec(ignore) };
     let output = copy.output().unwrap();
     let report = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "{report}");

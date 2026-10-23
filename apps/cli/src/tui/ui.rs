@@ -1,7 +1,7 @@
 //! The session's side of the interface: what it reports, and how it asks and waits.
 
 use std::sync::Arc;
-use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, sync_channel};
 use std::time::Duration;
 
 use contracts::person::{Answer, Question};
@@ -43,9 +43,12 @@ impl Ui {
         let _ = self.events.send(event);
     }
 
+    // Each question's reply is one send, taken out of the interface's state as it is made: a
+    // channel of one never makes the interface wait.
+
     /// The person's next entry; `None` when they leave.
     pub(crate) fn next_entry(&self) -> Option<Typed> {
-        let (reply, answer) = channel();
+        let (reply, answer) = sync_channel(1);
         self.send(Event::Ready(reply));
         answer.recv().ok().flatten()
     }
@@ -57,7 +60,7 @@ impl Ui {
         summary: &str,
         stopped: &dyn Fn() -> bool,
     ) -> Approval {
-        let (reply, answer) = channel();
+        let (reply, answer) = sync_channel(1);
         self.send(Event::Approve {
             tool: tool.into(),
             summary: summary.into(),
@@ -74,7 +77,7 @@ impl Ui {
         of: usize,
         stopped: &dyn Fn() -> bool,
     ) -> Option<Answer> {
-        let (reply, answer) = channel();
+        let (reply, answer) = sync_channel(1);
         self.send(Event::Ask {
             question: question.clone(),
             at,
@@ -91,7 +94,7 @@ impl Ui {
         options: Vec<(String, String)>,
         marked: Option<usize>,
     ) -> Option<usize> {
-        let (reply, answer) = channel();
+        let (reply, answer) = sync_channel(1);
         self.send(Event::Choose {
             title: title.into(),
             options,
@@ -109,7 +112,7 @@ impl Ui {
         marked: Option<usize>,
         adjustments: Vec<crate::picker::Adjustment>,
     ) -> Option<(usize, usize)> {
-        let (reply, answer) = channel();
+        let (reply, answer) = sync_channel(1);
         self.send(Event::ChooseAdjustable {
             title: title.into(),
             options,
@@ -128,7 +131,7 @@ impl Ui {
         hidden: bool,
         done: Option<&dyn Fn() -> bool>,
     ) -> Option<String> {
-        let (reply, answer) = channel();
+        let (reply, answer) = sync_channel(1);
         self.send(Event::Line {
             prompt: prompt.into(),
             hidden,
@@ -140,7 +143,7 @@ impl Ui {
     /// What the person sent to the task running, taken (and shown as theirs) or, with `peek`,
     /// only looked at.
     pub(crate) fn steered(&self, peek: bool) -> Vec<String> {
-        let (reply, answer) = channel();
+        let (reply, answer) = sync_channel(1);
         self.send(Event::TakeSteered { reply, peek });
         answer.recv().unwrap_or_default()
     }

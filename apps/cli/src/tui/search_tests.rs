@@ -1,4 +1,4 @@
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::{Receiver, sync_channel};
 use std::time::Instant;
 
 use crossterm::event::KeyCode;
@@ -27,7 +27,7 @@ fn providers() -> Vec<(String, String)> {
 /// `options` put to the person under `title`; the app, and where the pick goes.
 fn choose(title: &str, options: Vec<(String, String)>) -> (App, Receiver<Option<usize>>) {
     let mut app = App::new(80, 40, vec![]);
-    let (reply, picked) = channel();
+    let (reply, picked) = sync_channel(1);
     let event = Event::Choose {
         title: title.into(),
         options,
@@ -54,7 +54,7 @@ fn adjustable(
     marked: Option<usize>,
 ) -> (App, Receiver<Option<(usize, usize)>>) {
     let mut app = App::new(80, 40, vec![]);
-    let (reply, picked) = channel();
+    let (reply, picked) = sync_channel(1);
     app.event(
         Event::ChooseAdjustable {
             title: "Model".into(),

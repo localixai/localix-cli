@@ -123,7 +123,7 @@ pub(crate) fn delay(text: &str) -> Result<u64, String> {
     let count: u64 = number
         .trim()
         .parse()
-        .map_err(|_| format!("`{text}` is not a delay such as 45m or 2h"))?;
+        .map_err(|error| format!("`{text}` is not a delay such as 45m or 2h: {error}"))?;
     let seconds = match unit.trim() {
         "s" | "sec" => count.div_ceil(60) * 60,
         "m" | "min" | "" => count * 60,
@@ -138,16 +138,21 @@ pub(crate) fn delay(text: &str) -> Result<u64, String> {
 pub(crate) fn local(at: u64) -> Local {
     #[cfg(unix)]
     {
-        let time = at as libc::time_t;
-        // SAFETY: localtime_r fills `tm` from `time`; both live through the call.
+        let Ok(time) = libc::time_t::try_from(at) else {
+            return utc(at);
+        };
+        // SAFETY: a tm is integers and a pointer localtime_r sets: all zero is one.
         let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-        if !unsafe { libc::localtime_r(&time, &mut tm) }.is_null() {
+        // SAFETY: localtime_r fills `tm` from `time`; both live through the call.
+        let filled = unsafe { libc::localtime_r(&time, &mut tm) };
+        if !filled.is_null() {
+            // localtime_r gives each field in its range: none is negative.
             return Local {
-                minute: tm.tm_min as u32,
-                hour: tm.tm_hour as u32,
-                day: tm.tm_mday as u32,
-                month: tm.tm_mon as u32 + 1,
-                weekday: tm.tm_wday as u32,
+                minute: tm.tm_min.cast_unsigned(),
+                hour: tm.tm_hour.cast_unsigned(),
+                day: tm.tm_mday.cast_unsigned(),
+                month: tm.tm_mon.cast_unsigned() + 1,
+                weekday: tm.tm_wday.cast_unsigned(),
             };
         }
     }
@@ -159,7 +164,8 @@ pub(crate) fn utc(at: u64) -> Local {
     let days = at / 86_400;
     let seconds = at % 86_400;
     // Days to a civil date (Howard Hinnant's algorithm).
-    let z = days as i64 + 719_468;
+    // A count of days is far below i64::MAX: the cast keeps it.
+    let z = days.cast_signed() + 719_468;
     let era = z / 146_097;
     let doe = z - era * 146_097;
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;

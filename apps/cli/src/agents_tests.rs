@@ -98,6 +98,10 @@ impl Router {
 
 impl Router {
     /// What the person and the agents do around the main agent's turn.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test's fake waits, bounded, for the agent to begin: there is no event to wait on"
+    )]
     fn main_turn(&self, request: &Request) {
         let results = request
             .conversation
@@ -126,6 +130,11 @@ impl Router {
 }
 
 impl Chat for Router {
+    #[allow(
+        clippy::unwrap_in_result,
+        clippy::disallowed_methods,
+        reason = "a test's fake: a poisoned lock fails the test, and a slow agent is slow on purpose"
+    )]
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let key = Self::key(&request);
         let names = request.tools.iter().map(|tool| tool.name.clone()).collect();

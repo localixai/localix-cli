@@ -53,13 +53,14 @@ fn a_session_whose_interface_cannot_start_points_to_exec() {
     let (master, slave) = crate::common::term::pty();
     let mut command = home.llx(&["fix the tests"]);
     command.current_dir(home.path());
-    // SAFETY: setsid is async-signal-safe and touches only the child.
-    unsafe {
-        std::os::unix::process::CommandExt::pre_exec(&mut command, || {
-            libc::setsid();
-            Ok(())
-        });
-    }
+    let lead = || {
+        // SAFETY: setsid takes nothing and only makes the child a session's leader.
+        unsafe { libc::setsid() };
+        Ok(())
+    };
+    // SAFETY: between fork and exec the closure only calls setsid, which is async-signal-safe and
+    // touches only the child.
+    unsafe { std::os::unix::process::CommandExt::pre_exec(&mut command, lead) };
     let child = command
         .env("OPENROUTER_API_KEY", FAKE_KEY)
         .stdin(Stdio::from(slave))
@@ -79,6 +80,10 @@ fn a_session_whose_interface_cannot_start_points_to_exec() {
 /// only the home it is given, so no test depends on the machine or calls a real model.
 #[cfg(unix)]
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test's fixture: `env` ends by itself"
+)]
 fn the_binary_sees_nothing_of_the_shell_that_runs_the_tests() {
     let home = Home::new();
     let out = home.command("env").output().unwrap();
@@ -110,6 +115,10 @@ fn the_binary_sees_nothing_of_the_shell_that_runs_the_tests() {
 /// usage error leaves the terminal as it found it, not in raw mode.
 #[cfg(unix)]
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test runs the binary to its end, against a scripted model"
+)]
 fn an_interface_that_cannot_draw_gives_the_terminal_back() {
     use std::os::fd::AsRawFd;
     use std::process::Stdio;
@@ -119,14 +128,16 @@ fn an_interface_that_cannot_draw_gives_the_terminal_back() {
     drop(reader);
     let mut command = home.llx(&["fix the tests"]);
     command.current_dir(home.path());
-    // SAFETY: setsid and the ioctl are async-signal-safe and touch only the child.
-    unsafe {
-        std::os::unix::process::CommandExt::pre_exec(&mut command, || {
-            libc::setsid();
-            libc::ioctl(0, libc::TIOCSCTTY as _, 0);
-            Ok(())
-        });
-    }
+    let lead = || {
+        // SAFETY: setsid takes nothing and only makes the child a session's leader.
+        unsafe { libc::setsid() };
+        // SAFETY: TIOCSCTTY takes no argument; it only sets the session's terminal.
+        unsafe { libc::ioctl(0, libc::TIOCSCTTY as _, 0) };
+        Ok(())
+    };
+    // SAFETY: between fork and exec the closure only calls setsid and ioctl, which are
+    // async-signal-safe and touch only the child.
+    unsafe { std::os::unix::process::CommandExt::pre_exec(&mut command, lead) };
     let out = command
         .env("OPENROUTER_API_KEY", FAKE_KEY)
         .stdin(Stdio::from(slave))
@@ -137,6 +148,7 @@ fn an_interface_that_cannot_draw_gives_the_terminal_back() {
     let stderr = text(&out.stderr);
     assert_eq!(out.status.code(), Some(3), "{stderr}");
     // The child's session ended with it, which revokes the slave here: the master reads its modes.
+    // SAFETY: a termios is integers and flags: all zero is one.
     let mut termios: libc::termios = unsafe { std::mem::zeroed() };
     // SAFETY: tcgetattr fills a termios the call owns, from a descriptor that is open.
     let read = unsafe { libc::tcgetattr(master.as_raw_fd(), &mut termios) };
@@ -150,6 +162,10 @@ fn an_interface_that_cannot_draw_gives_the_terminal_back() {
 }
 
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test runs the binary to its end, against a scripted model"
+)]
 fn what_is_refused_points_to_the_command_that_would_do_it() {
     let home = Home::new();
     let here = home.path().display().to_string();

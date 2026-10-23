@@ -81,14 +81,35 @@ pub(crate) fn start(
         restore();
         previous(info);
     }));
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the interface must never make a task or the keys wait: it takes everything \
+                  that came before each frame it draws"
+    )]
     let (events, inbox) = channel();
     let keys = events.clone();
-    std::thread::spawn(move || read_keys(&keys));
+    let reader = std::thread::Builder::new().name("llx-keys".into());
+    if let Err(error) = reader.spawn(move || read_keys(&keys)) {
+        restore();
+        return Err(error);
+    }
     let mut app = App::new(width as usize, height as usize, commands);
     app.files = mention::Files::new(Some(root.to_path_buf()));
     app.shells = tools::shell::running_anywhere;
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the interface must never wait on the desk: one request per key the person \
+                  presses, each taken as it comes"
+    )]
     let (asks, requests) = channel();
-    let thread = std::thread::spawn(move || draw(app, &inbox, &asks));
+    let drawing = std::thread::Builder::new().name("llx-interface".into());
+    let thread = match drawing.spawn(move || draw(app, &inbox, &asks)) {
+        Ok(thread) => thread,
+        Err(error) => {
+            restore();
+            return Err(error);
+        }
+    };
     let running = Running {
         ui: Ui::new(events),
         thread: Some(thread),
@@ -116,6 +137,10 @@ pub(crate) fn restore() {
 /// The editor has the terminal: the keys are its, not the interface's.
 static PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a poll: while the editor holds the terminal no event says it gave it back"
+)]
 fn read_keys(events: &Sender<Event>) {
     use std::sync::atomic::Ordering;
     loop {
@@ -226,6 +251,11 @@ fn draw(mut app: App, inbox: &Receiver<Event>, requests: &Sender<crate::desk::Re
 
 /// The composer's `text` written in `$VISUAL` or `$EDITOR` (else `vi`), the terminal handed over
 /// meanwhile; the text as saved, or as it was when the editor could not run.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the person's own editor, with no deadline by design: it ends when they leave it; \
+              and the reader's pause has no event to wait on"
+)]
 fn editor(text: &str) -> String {
     let path = std::env::temp_dir().join(format!("llx-prompt-{}.md", std::process::id()));
     if std::fs::write(&path, text).is_err() {

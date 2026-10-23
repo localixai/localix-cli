@@ -198,6 +198,10 @@ fn a_schedule_stopped_from_its_row_leaves_the_list() {
         });
         std::thread::scope(|scope| {
             scope.spawn(|| jobs.tick(kit));
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "the scheduler's clock passes: its tick is what is tested"
+            )]
             std::thread::sleep(Duration::from_millis(1600));
             jobs.close();
         });

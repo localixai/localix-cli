@@ -9,7 +9,7 @@ use crate::attach::Dropped;
 impl Composer {
     /// Hide clipboard text behind a numbered mark; restore it when the entry is sent.
     pub(crate) fn paste_marked(&mut self, text: &str) {
-        let cleaned: String = cleaned(text).collect();
+        let cleaned = cleaned(text);
         if cleaned.is_empty() {
             return;
         }
@@ -70,12 +70,13 @@ impl Composer {
                 file @ Dropped::File(_) => file,
             };
             let at_end = self.at >= end;
-            let shift = mark.chars().count() as isize - (end - start) as isize;
+            let width = mark.chars().count();
             self.text.splice(start..end, mark.chars());
             if at_end {
-                self.at = (self.at as isize + shift) as usize;
+                // The cursor is past the word: it moves by what the mark adds or takes.
+                self.at = self.at.saturating_sub(end - start) + width;
             } else if self.at > start {
-                self.at = start + mark.chars().count();
+                self.at = start + width;
             }
             self.attached.push((mark, dropped));
         }
@@ -121,13 +122,11 @@ impl Composer {
 }
 
 /// Pasted text as it is typed: one kind of line ending, tabs as spaces, no control characters.
-pub(super) fn cleaned(text: &str) -> impl Iterator<Item = char> {
-    let text = text.replace("\r\n", "\n").replace('\r', "\n");
-    let kept: Vec<char> = text
-        .chars()
+pub(super) fn cleaned(text: &str) -> String {
+    (text.replace("\r\n", "\n").replace('\r', "\n").chars())
         .filter(|c| *c == '\n' || *c == '\t' || !c.is_control())
-        .collect();
-    kept.into_iter().map(|c| if c == '\t' { ' ' } else { c })
+        .map(|c| if c == '\t' { ' ' } else { c })
+        .collect()
 }
 
 /// `text` with each paste's mark turned back into what was pasted.

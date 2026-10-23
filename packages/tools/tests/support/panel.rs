@@ -135,7 +135,7 @@ pub(crate) fn scenario(browser: &Browser, driver: &WebviewDriver) {
             std::thread::sleep(Duration::from_millis(20));
         }
     };
-    driver.navigate("about:blank").ok();
+    let _ = driver.navigate("about:blank");
     until_shown("w1");
     browser.click(&format!("show {tab}"));
     until_shown(&tab);

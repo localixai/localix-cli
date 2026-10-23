@@ -28,6 +28,11 @@ impl Shared {
     }
 }
 
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each says something of its own, set by its own side: the terminal's end, the \
+              needle, the session's end, a paint due, the window closed by a call"
+)]
 pub(super) struct Stream {
     filter: Filter,
     /// The ended lines since the output was last taken.

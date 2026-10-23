@@ -113,22 +113,22 @@ pub(super) fn dress(page: &str, look: Look) -> String {
 pub(super) struct Frame {
     pub native: Window,
     look: Look,
-    /// Whether the glass is coated, and in the page's own ground when it has one.
-    coat: Option<Option<Rgb>>,
+    /// The page's own ground the glass is coated in, when it has one; else the system's.
+    ground: Option<Rgb>,
     #[cfg(target_os = "macos")]
     glass: Option<native::Glass>,
 }
 
 impl Frame {
-    /// A window titled `title` with pages of `size`, at `at` when given. A coated one (`coat`)
-    /// is a panel's, in its page's ground or the system's.
+    /// A window titled `title` with pages of `size`, at `at` when given, its glass coated in
+    /// `ground` (a panel's page's), else in the system's appearance.
     pub(super) fn build(
         target: &EventLoopWindowTarget<Cmd>,
         (title, size, at): (&str, LogicalSize<f64>, Option<LogicalPosition<f64>>),
         look: Look,
-        coat: Option<Option<Rgb>>,
+        ground: Option<Rgb>,
     ) -> Result<Self, String> {
-        let theme = coat.flatten().map(|ground| match dark(ground) {
+        let theme = ground.map(|ground| match dark(ground) {
             true => Theme::Dark,
             false => Theme::Light,
         });
@@ -150,7 +150,7 @@ impl Frame {
         Ok(Self {
             native,
             look,
-            coat,
+            ground,
             #[cfg(target_os = "macos")]
             glass: None,
         })
@@ -165,7 +165,7 @@ impl Frame {
         }
         #[cfg(target_os = "macos")]
         if self.look == Look::Glass {
-            self.glass = native::Glass::under(&self.native, self.coat.is_some());
+            self.glass = native::Glass::under(&self.native);
             self.retint();
         }
     }
@@ -175,7 +175,7 @@ impl Frame {
         #[cfg(target_os = "macos")]
         if let Some(glass) = &self.glass {
             let system = self.native.theme() == Theme::Dark;
-            let ground = self.coat.flatten();
+            let ground = self.ground;
             let (colour, alpha) = coat(ground, system);
             glass.tint(material(ground.map_or(system, dark)), colour, alpha);
         }
@@ -183,7 +183,7 @@ impl Frame {
 
     /// Take `ground` as the window's own (a terminal's colours), its appearance with it.
     pub(super) fn ground(&mut self, ground: Rgb) {
-        self.coat = Some(Some(ground));
+        self.ground = Some(ground);
         let theme = if dark(ground) {
             Theme::Dark
         } else {

@@ -72,7 +72,7 @@ impl WebviewDriver {
         failed: &'static str,
     ) -> BrowserResult<(u64, mpsc::Receiver<Reply>)> {
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::sync_channel(1);
         crate::lock(&self.shared.pending).insert(id, sender);
         let script = form(id);
         let sent = self.send(Cmd::Eval {
@@ -107,6 +107,10 @@ impl WebviewDriver {
     }
 
     /// Retry `name` while the page is between documents (no probe yet, or no body).
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a backoff: the page between documents says nothing when its probe is ready"
+    )]
     fn call_ready(&self, name: &'static str, args: Value) -> BrowserResult<Value> {
         let deadline = Instant::now() + PROBE_READY;
         loop {
@@ -161,7 +165,7 @@ impl WebviewDriver {
     /// driver pinned to it (`wait_new`), so several tabs load at the same time.
     pub fn add_tab(&self, url: &str) -> BrowserResult<u32> {
         self.open_or_closed()?;
-        let (reply, opened) = mpsc::channel();
+        let (reply, opened) = mpsc::sync_channel(1);
         self.send(Cmd::NewTab {
             url: url.to_string(),
             reply: Some(reply),
@@ -178,7 +182,7 @@ impl WebviewDriver {
     /// Show tab `id` and act on it from now on.
     pub fn switch_tab(&self, id: u32) -> BrowserResult<()> {
         self.open_or_closed()?;
-        let (reply, switched) = mpsc::channel();
+        let (reply, switched) = mpsc::sync_channel(1);
         self.send(Cmd::SwitchTab { id, reply })?;
         answered(switched)
     }
@@ -186,15 +190,15 @@ impl WebviewDriver {
     /// Close tab `id`; returns whether tabs are left (with none, the window is closed).
     pub fn close_tab(&self, id: u32) -> BrowserResult<bool> {
         self.open_or_closed()?;
-        let (reply, closed) = mpsc::channel();
+        let (reply, closed) = mpsc::sync_channel(1);
         self.send(Cmd::CloseTab { id, reply })?;
         answered(closed)
     }
 
     fn send(&self, command: Cmd) -> BrowserResult<()> {
-        self.proxy
-            .send_event(command)
-            .map_err(|_| BrowserError::Unavailable("the browser window is gone".into()))
+        self.proxy.send_event(command).map_err(|error| {
+            BrowserError::Unavailable(format!("the browser window is gone: {error}"))
+        })
     }
 }
 

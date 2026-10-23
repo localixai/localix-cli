@@ -4,7 +4,7 @@
 //! Nothing here touches the terminal, so the tests drive it as the person would.
 
 use std::collections::VecDeque;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 use std::time::Instant;
 
 use contracts::person::Answer;
@@ -46,11 +46,11 @@ pub(crate) const SHIFT_TAB: &str = "\u{1b}[Z";
 
 /// A question open, and where its answer goes.
 pub(crate) enum Open {
-    Approval(Sender<Approval>),
-    Question(Sender<Option<Answer>>),
-    Choice(Sender<Option<usize>>),
-    Adjustable(Sender<Option<(usize, usize)>>),
-    Line(Sender<Option<String>>),
+    Approval(SyncSender<Approval>),
+    Question(SyncSender<Option<Answer>>),
+    Choice(SyncSender<Option<usize>>),
+    Adjustable(SyncSender<Option<(usize, usize)>>),
+    Line(SyncSender<Option<String>>),
     /// Whether to quit while work runs: the interface's own, nobody waits for it.
     Quit,
 }

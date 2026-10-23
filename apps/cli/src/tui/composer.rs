@@ -99,7 +99,7 @@ impl Composer {
 
     /// Text that arrived as one paste: its lines are kept, nothing is sent.
     pub(crate) fn paste(&mut self, text: &str) {
-        cleaned(text).for_each(|c| self.insert(c));
+        cleaned(text).chars().for_each(|c| self.insert(c));
     }
 
     pub(crate) fn key(&mut self, key: KeyEvent) -> Edit {

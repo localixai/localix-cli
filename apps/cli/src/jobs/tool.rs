@@ -83,7 +83,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                 },
                 stop: Arc::clone(&stop),
                 events: 0,
-                _known: self.jobs.known(&id, &stop),
+                _known: Some(self.jobs.known(&id, &stop)),
             });
             (id, name)
         };
@@ -185,7 +185,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
             }
             let (id, name) = new_job(&mut state, name);
             let stop = Arc::new(AtomicBool::new(false));
-            let known = self.jobs.known(&id, &stop);
+            let known = Some(self.jobs.known(&id, &stop));
             state.jobs.push(Job {
                 id: id.clone(),
                 name: name.clone(),

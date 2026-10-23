@@ -2,7 +2,7 @@
 //! and from the terminal (a key, a paste, a new size). Questions carry where their answer goes.
 
 use std::path::PathBuf;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 
 use contracts::person::{Answer, Question};
 use contracts::tool::{ToolError, ToolOutput};
@@ -61,7 +61,7 @@ pub(crate) enum Event {
     /// The mode changed: its name, `default` included.
     Mode(String),
     /// The session takes its next entry; `None` goes back when the person quits.
-    Ready(Sender<Option<Typed>>),
+    Ready(SyncSender<Option<Typed>>),
     TaskStarted(String),
     Call {
         name: String,
@@ -85,14 +85,14 @@ pub(crate) enum Event {
     Approve {
         tool: String,
         summary: String,
-        reply: Sender<Approval>,
+        reply: SyncSender<Approval>,
     },
     /// One question of the `ask` tool: the `at`th of `of`.
     Ask {
         question: Question,
         at: usize,
         of: usize,
-        reply: Sender<Option<Answer>>,
+        reply: SyncSender<Option<Answer>>,
     },
     /// A choice of llx's own (carry out the plan?): a title and its options, and the one picked.
     Choose {
@@ -101,7 +101,7 @@ pub(crate) enum Event {
         options: Vec<(String, String)>,
         /// The option in effect now, where the marker starts.
         marked: Option<usize>,
-        reply: Sender<Option<usize>>,
+        reply: SyncSender<Option<usize>>,
     },
     /// A choice with a value adjusted inline for each row.
     ChooseAdjustable {
@@ -109,13 +109,13 @@ pub(crate) enum Event {
         options: Vec<(String, String)>,
         marked: Option<usize>,
         adjustments: Vec<crate::picker::Adjustment>,
-        reply: Sender<Option<(usize, usize)>>,
+        reply: SyncSender<Option<(usize, usize)>>,
     },
     /// A line to type (a key, a pasted address), hidden when it is a secret.
     Line {
         prompt: String,
         hidden: bool,
-        reply: Sender<Option<String>>,
+        reply: SyncSender<Option<String>>,
     },
     /// The question open no longer waits (the task was stopped): it closes unanswered.
     Dismiss,
@@ -158,7 +158,7 @@ pub(crate) enum Event {
     /// The task running reads what the person said to it meanwhile (taken from the interface,
     /// and shown as theirs), or only looks whether there is any (`peek`).
     TakeSteered {
-        reply: Sender<Vec<String>>,
+        reply: SyncSender<Vec<String>>,
         peek: bool,
     },
     Key(KeyEvent),

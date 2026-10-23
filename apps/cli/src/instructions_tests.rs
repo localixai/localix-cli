@@ -16,7 +16,7 @@ fn write(path: &Path, text: &str) {
 fn each_directory_gives_its_first_file_from_the_root_down() {
     let repo = Scratch::new();
     let root = repo.path();
-    std::fs::create_dir(root.join(".git")).unwrap();
+    std::fs::create_dir_all(root.join(".git")).unwrap();
     write(&root.join("AGENTS.md"), "root rules");
     write(&root.join("CLAUDE.md"), "@AGENTS.md");
     write(&root.join("app/CLAUDE.md"), "app rules");

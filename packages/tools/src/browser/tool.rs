@@ -40,7 +40,7 @@ impl Tool for BrowserTool<'_> {
         let args: Args = serde_json::from_value(arguments.clone())
             .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
         let url = given(&args.url).map(address).transpose()?;
-        if let Some(effects) = effects(url.as_deref(), &args)? {
+        if let Some(effects) = effects(url.as_deref(), &args) {
             ask(self.gate, NAME, &effects)?;
         }
         let mut report = vec![];

@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use serde_json::Value;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
@@ -59,11 +59,16 @@ where
         proxy: proxy.clone(),
         shared: Arc::clone(&shared),
     };
-    let exit = proxy.clone();
-    std::thread::spawn(move || {
+    let (exit, refused) = (proxy.clone(), proxy.clone());
+    let worker = std::thread::Builder::new().name("llx-work".into());
+    let started = worker.spawn(move || {
         let code = work(browser);
         let _ = exit.send_event(Cmd::Exit(code));
     });
+    if started.is_err() {
+        // No thread for the work: the process ends at once, as a failure (1, as anywhere).
+        let _ = refused.send_event(Cmd::Exit(1));
+    }
 
     let mut deck: Option<Deck> = None;
     event_loop.run(move |event, target, control_flow| {
@@ -210,7 +215,7 @@ impl On<'_> {
         }
     }
 
-    fn open(&mut self, window: &Window, reply: &Sender<Result<(), String>>) {
+    fn open(&mut self, window: &Window, reply: &SyncSender<Result<(), String>>) {
         let (shared, proxy) = (self.shared, self.proxy);
         let opened = match self.deck.as_mut() {
             Some(open) if open.web.is_some() => Err("the window is already open".into()),

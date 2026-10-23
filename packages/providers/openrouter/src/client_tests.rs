@@ -16,12 +16,17 @@ const APP: crate::App = crate::App {
 
 /// A server on 127.0.0.1 that answers each request with the next of `replies` (status, body),
 /// or never when they run out; it keeps every request body, and counts the connections.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test's server: a connection held open says nothing for 30 s, longer than any timeout tested"
+)]
 fn serve(replies: Vec<(u16, &'static str)>) -> (String, Arc<Mutex<Vec<Value>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let seen = Arc::new(Mutex::new(vec![]));
     let kept = Arc::clone(&seen);
-    std::thread::spawn(move || {
+    let server = std::thread::Builder::new().name("llx-test-server".into());
+    server.spawn(move || {
         let mut replies = replies.into_iter();
         for stream in listener.incoming().flatten() {
             let mut reader = BufReader::new(stream.try_clone().unwrap());
@@ -42,10 +47,13 @@ fn serve(replies: Vec<(u16, &'static str)>) -> (String, Arc<Mutex<Vec<Value>>>) 
                 .push(serde_json::from_slice(&body).unwrap_or(Value::Null));
             let Some((status, text)) = replies.next() else {
                 // Hold the connection open and say nothing.
-                std::thread::spawn(move || {
-                    let _keep = stream;
-                    std::thread::sleep(Duration::from_secs(30));
-                });
+                let holder = std::thread::Builder::new().name("llx-test-silent".into());
+                holder
+                    .spawn(move || {
+                        let _keep = stream;
+                        std::thread::sleep(Duration::from_secs(30));
+                    })
+                    .unwrap();
                 continue;
             };
             let mut stream = stream;
@@ -55,7 +63,8 @@ fn serve(replies: Vec<(u16, &'static str)>) -> (String, Arc<Mutex<Vec<Value>>>) 
                 text.len()
             );
         }
-    });
+    })
+    .unwrap();
     (base, seen)
 }
 

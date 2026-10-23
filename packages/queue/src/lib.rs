@@ -9,6 +9,7 @@
 //! forgotten with the source.
 
 use std::collections::VecDeque;
+use std::fmt::Write as _;
 use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -78,9 +79,15 @@ impl Entry {
         if self.tag.is_empty() {
             return self.body.clone();
         }
-        let attrs: String = (self.attrs.iter())
-            .map(|(name, value)| format!(" {name}=\"{}\"", value.replace('"', "&quot;")))
-            .collect();
+        let attrs = self
+            .attrs
+            .iter()
+            .fold(String::new(), |mut attrs, (name, value)| {
+                let value = value.replace('"', "&quot;");
+                // Writing to a String cannot fail.
+                let _ = write!(attrs, " {name}=\"{value}\"");
+                attrs
+            });
         let close = format!("</{}", self.tag);
         let body = self.body.replace(&close, &format!("<\\/{}", self.tag));
         let tagged = format!("<{}{attrs}>\n{body}\n</{}>", self.tag, self.tag);

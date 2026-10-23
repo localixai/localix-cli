@@ -51,6 +51,10 @@ pub(super) fn kill_members(sid: libc::pid_t) -> Pass {
 
 /// Kill every process of session `sid` but its leader, again until none is left (a process may
 /// fork while it is killed), for at most `wait`; whether none is left.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a backoff between kill passes: a process killed has no event to wait on, and this runs in a signal handler too"
+)]
 pub(super) fn end(sid: libc::pid_t, wait: Duration) -> bool {
     let deadline = Instant::now() + wait;
     loop {

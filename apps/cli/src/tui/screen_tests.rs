@@ -304,7 +304,7 @@ fn grouped_calls_keep_outputs_and_failures_and_approvals_break_the_chain() {
         );
         term.draw(&mut app, now);
     }
-    let (reply, _answer) = std::sync::mpsc::channel();
+    let (reply, _answer) = std::sync::mpsc::sync_channel(1);
     app.event(
         Event::Approve {
             tool: "bash".into(),

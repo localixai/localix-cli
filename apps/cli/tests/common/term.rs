@@ -92,14 +92,16 @@ impl Term {
         let mut command = Command::new(env!("CARGO_BIN_EXE_llx"));
         // The child leads a session of its own with the pseudo-terminal as its terminal, so
         // `/dev/tty` is this one and never the terminal the tests run in.
-        // SAFETY: setsid and the ioctl are async-signal-safe and touch only the child.
-        unsafe {
-            std::os::unix::process::CommandExt::pre_exec(&mut command, || {
-                libc::setsid();
-                libc::ioctl(0, libc::TIOCSCTTY as _, 0);
-                Ok(())
-            });
-        }
+        let lead = || {
+            // SAFETY: setsid takes nothing and only makes the child a session's leader.
+            unsafe { libc::setsid() };
+            // SAFETY: TIOCSCTTY takes no argument; it only sets the session's terminal.
+            unsafe { libc::ioctl(0, libc::TIOCSCTTY as _, 0) };
+            Ok(())
+        };
+        // SAFETY: between fork and exec the closure only calls setsid and ioctl, which are
+        // async-signal-safe and touch only the child.
+        unsafe { std::os::unix::process::CommandExt::pre_exec(&mut command, lead) };
         super::home::isolate(&mut command, &home);
         let child = command
             .args(args)
@@ -121,16 +123,19 @@ impl Term {
         let raw = Arc::new(Mutex::new(vec![]));
         let written = Arc::clone(&raw);
         let mut output = File::from(master.try_clone().unwrap());
-        std::thread::spawn(move || {
-            let mut buffer = [0u8; 65536];
-            while let Ok(n) = output.read(&mut buffer) {
-                if n == 0 {
-                    break;
+        let reader = std::thread::Builder::new().name("term-reader".into());
+        reader
+            .spawn(move || {
+                let mut buffer = [0u8; 65536];
+                while let Ok(n) = output.read(&mut buffer) {
+                    if n == 0 {
+                        break;
+                    }
+                    reading.lock().unwrap().process(&buffer[..n]);
+                    written.lock().unwrap().extend_from_slice(&buffer[..n]);
                 }
-                reading.lock().unwrap().process(&buffer[..n]);
-                written.lock().unwrap().extend_from_slice(&buffer[..n]);
-            }
-        });
+            })
+            .unwrap();
         Self {
             child,
             input: File::from(master),
@@ -161,6 +166,10 @@ impl Term {
     }
 
     /// Wait until the cursor's row reads `row`; the screen, or a panic that prints it.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test looks at the screen again until it is so, for a bounded time: there is no event to wait on"
+    )]
     pub(crate) fn wait_for_cursor_row(&self, row: &str, timeout: Duration) -> String {
         let end = Instant::now() + timeout;
         loop {
@@ -177,6 +186,10 @@ impl Term {
 
     /// Press keys, or type text, as a terminal sends them, then wait 60 ms: keys sent back to
     /// back can arrive in one read and parse as one key (two Escs as Alt+Esc).
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a pause after the keys: sent back to back they arrive as one"
+    )]
     pub(crate) fn press(&mut self, keys: &str) -> &mut Self {
         self.input.write_all(keys.as_bytes()).unwrap();
         self.input.flush().unwrap();
@@ -185,6 +198,10 @@ impl Term {
     }
 
     /// Type `text` a character at a time, as a person does.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a pause between keys, as a person's: text followed at once by Enter is taken for a paste"
+    )]
     pub(crate) fn type_text(&mut self, text: &str) -> &mut Self {
         for c in text.chars() {
             self.input.write_all(c.to_string().as_bytes()).unwrap();
@@ -201,6 +218,10 @@ impl Term {
 
     /// Wait until the screen shows one of `needles`; the first one shown and the screen, or a
     /// panic that prints it.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test looks at the screen again until it is so, for a bounded time: there is no event to wait on"
+    )]
     pub(crate) fn wait_for_any<'a>(
         &self,
         needles: &[&'a str],
@@ -220,6 +241,10 @@ impl Term {
     }
 
     /// Wait up to `timeout` for llx to exit; its exit code, `None` if it did not.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "an exit status has no event to wait on: it is looked at every 20 ms, for a bounded time"
+    )]
     pub(crate) fn exited(&mut self, timeout: Duration) -> Option<i32> {
         let end = Instant::now() + timeout;
         while Instant::now() < end {
@@ -263,6 +288,10 @@ fn place() -> (PathBuf, PathBuf) {
 impl Drop for Term {
     /// The session is ended as a person ends it, so that it exits on its own (an instrumented
     /// binary writes its coverage then); one that does not within 3 s is killed.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "an exit status has no event to wait on: it is looked at every 100 ms, for at most 3 s"
+    )]
     fn drop(&mut self) {
         // Ctrl-C stops a task or clears the prompt; Ctrl-D on an empty prompt then quits.
         let _ = self.input.write_all(b"\x03");
@@ -300,6 +329,9 @@ pub(crate) fn pty() -> (OwnedFd, OwnedFd) {
         // SAFETY: fcntl sets a flag on a descriptor just opened.
         unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) };
     }
-    // SAFETY: the descriptors were just opened and are owned by nobody else.
-    unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) }
+    // SAFETY: a descriptor just opened, owned by nobody else.
+    let master = unsafe { OwnedFd::from_raw_fd(master) };
+    // SAFETY: a descriptor just opened, owned by nobody else.
+    let slave = unsafe { OwnedFd::from_raw_fd(slave) };
+    (master, slave)
 }

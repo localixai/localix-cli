@@ -79,6 +79,10 @@ fn spent(agent: &SessionView, now: Instant) -> String {
     }
 }
 
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "a row's marks, each drawn on its own: any of them may hold with the others"
+)]
 pub(super) struct Row<'a> {
     /// The row the list's keys are on.
     pub(super) chosen: bool,

@@ -208,6 +208,15 @@ pub(crate) fn cycling(seen: &[u64], now: u64) -> bool {
     seen.iter().filter(|state| **state == now).count() >= 2
 }
 
+/// Wait `time` before the view is looked at again: a view has no change event.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a poll: a view has no change event"
+)]
+pub(crate) fn pause(time: std::time::Duration) {
+    std::thread::sleep(time);
+}
+
 /// Whether the view differs in what the model can see: address, words or controls.
 pub(crate) fn changed(before: &Observation, after: &Observation) -> bool {
     before.location != after.location

@@ -15,6 +15,10 @@ struct Quiz {
 }
 
 impl View for Quiz {
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn observe(&self) -> ViewResult<Observation> {
         let question = *self.question.lock().unwrap();
         Ok(Observation {
@@ -38,6 +42,10 @@ impl View for Quiz {
             busy: false,
         })
     }
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn act(&self, _: &str, _: &Action) -> ViewResult<()> {
         if !self.stuck {
             *self.question.lock().unwrap() += 1;
@@ -143,6 +151,10 @@ fn the_hands_report_each_step_and_how_the_task_ended() {
 struct Toggle(Mutex<bool>);
 
 impl View for Toggle {
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn observe(&self) -> ViewResult<Observation> {
         let open = *self.0.lock().unwrap();
         let mut view = Quiz {
@@ -158,6 +170,10 @@ impl View for Toggle {
         .into();
         Ok(view)
     }
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn act(&self, _: &str, _: &Action) -> ViewResult<()> {
         let mut open = self.0.lock().unwrap();
         *open = !*open;

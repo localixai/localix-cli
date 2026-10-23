@@ -96,6 +96,8 @@ pub(super) fn share<'a>(
         return builder;
     };
     let view = first.webview();
+    // SAFETY: the first tab's WKWebView is alive (borrowed); `configuration` answers a copy of
+    // its WKWebViewConfiguration, retained.
     let configuration: Retained<WKWebViewConfiguration> =
         unsafe { msg_send![&*view, configuration] };
     builder.with_webview_configuration(configuration)

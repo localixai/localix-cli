@@ -193,7 +193,7 @@ impl Kind for Browser<'_> {
         };
         let (id, output) = match added {
             Some(id) => {
-                self.page.pinned(id).driver().map(|tab| tab.wait_new()).ok();
+                let _ = self.page.pinned(id).driver().map(|tab| tab.wait_new());
                 let read = self.in_tab(id, json!({}))?;
                 let report = format!("Opened {url}.");
                 (id, ToolOutput { report, ..read })

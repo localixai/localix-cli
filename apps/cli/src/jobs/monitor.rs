@@ -46,7 +46,8 @@ pub(super) fn watch(
     let mut child = shell
         .spawn()
         .map_err(|error| format!("the command could not start: {error}"))?;
-    let (sent, received) = mpsc::channel();
+    // The loop below takes each line as it comes; a burst beyond this waits in the pipe.
+    let (sent, received) = mpsc::sync_channel(LINES);
     for stream in [
         child
             .stdout
@@ -61,13 +62,17 @@ pub(super) fn watch(
     .flatten()
     {
         let sent = sent.clone();
-        std::thread::spawn(move || {
+        let reader = std::thread::Builder::new().name("llx-monitor".into());
+        let started = reader.spawn(move || {
             for line in BufReader::new(stream).lines().map_while(Result::ok) {
                 if sent.send(line).is_err() {
                     return;
                 }
             }
         });
+        // No thread to read it: the stream is dropped with the closure, and the command sees
+        // it closed.
+        drop(started);
     }
     drop(sent);
     let mut batch: Vec<String> = vec![];
@@ -121,7 +126,7 @@ fn kill(child: &mut std::process::Child) {
     #[cfg(unix)]
     // SAFETY: a negative pid signals the process group the child leads; it is ours.
     unsafe {
-        libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL);
+        libc::kill(-child.id().cast_signed(), libc::SIGKILL);
     }
     let _ = child.kill();
     let _ = child.wait();

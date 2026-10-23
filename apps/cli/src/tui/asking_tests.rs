@@ -18,26 +18,29 @@ fn question(id: &str) -> Question {
 /// An interface whose person answers each question with its place, `at of`; what it was asked.
 fn answering() -> (Ui, std::thread::JoinHandle<Vec<String>>) {
     let (ui, events) = fake_ui();
-    let person = std::thread::spawn(move || {
-        let mut asked = vec![];
-        for event in events {
-            if let Event::Ask {
-                question,
-                at,
-                of,
-                reply,
-            } = event
-            {
-                asked.push(question.id);
-                let note = Some(format!("{at} of {of}"));
-                let _ = reply.send(Some(Answer {
-                    choices: vec![],
-                    note,
-                }));
+    let person = std::thread::Builder::new().name("person".into());
+    let person = person
+        .spawn(move || {
+            let mut asked = vec![];
+            for event in events {
+                if let Event::Ask {
+                    question,
+                    at,
+                    of,
+                    reply,
+                } = event
+                {
+                    asked.push(question.id);
+                    let note = Some(format!("{at} of {of}"));
+                    let _ = reply.send(Some(Answer {
+                        choices: vec![],
+                        note,
+                    }));
+                }
             }
-        }
-        asked
-    });
+            asked
+        })
+        .unwrap();
     (ui, person)
 }
 

@@ -103,6 +103,10 @@ impl OpenRouter {
     }
 
     /// POST `body` to `path`, retrying overload answers with backoff.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a backoff between attempts, which no event ends sooner"
+    )]
     pub fn post(&self, path: &str, body: &Value) -> Result<(Value, Timing), ApiError> {
         let started = Instant::now();
         let url = format!("{}{path}", self.base);

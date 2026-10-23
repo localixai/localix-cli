@@ -33,7 +33,8 @@ pub(crate) fn start(rig: &Rig, goal: &str) {
     let history = session::Sessions {
         dir: rig.history.dir.clone(),
     };
-    std::thread::spawn(move || {
+    let naming_thread = std::thread::Builder::new().name("llx-title".into());
+    let started = naming_thread.spawn(move || {
         let _naming = naming;
         let Some(chat) = provider.chat(&selection) else {
             return;
@@ -45,6 +46,9 @@ pub(crate) fn start(rig: &Rig, goal: &str) {
         pending.post(&history, &id, update.clone());
         ui.send(Event::Updated(update));
     });
+    // No thread: the session stays untitled, and the naming ends with the closure, as on a
+    // failed request.
+    drop(started);
 }
 
 /// The same model at the lowest level it offers: a title needs no thought.

@@ -31,8 +31,13 @@ impl Fake {
         self.done.lock().unwrap().push(what);
     }
 
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn check(&self, id: u32) -> Result<(), ToolError> {
-        match self.open.lock().unwrap().contains(&id) {
+        let open = self.open.lock().unwrap().contains(&id);
+        match open {
             true => Ok(()),
             false => Err(ToolError::Failed(format!("no {} tab {id}", self.name))),
         }
@@ -52,6 +57,10 @@ impl Kind for Fake {
     fn fields(&self) -> Vec<(&'static str, Value)> {
         vec![("thing", json!({"type": "string"}))]
     }
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn open(&self, args: &Value) -> Result<Opened, ToolError> {
         let mut open = self.open.lock().unwrap();
         let id = u32::try_from(open.len()).unwrap() + 1;
@@ -88,6 +97,10 @@ impl Kind for Fake {
         self.did(format!("screenshot {id}"));
         Ok("a picture".to_string().into())
     }
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn close(&self, id: u32) -> Result<String, ToolError> {
         self.check(id)?;
         self.open.lock().unwrap().retain(|open| *open != id);
@@ -161,10 +174,18 @@ impl Windowed for Shown {
             acted_on: true,
         }])
     }
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn act(&self, act: Act, tab: &str) -> Result<(), String> {
         self.asked.lock().unwrap().push(format!("{act:?} {tab}"));
         Ok(())
     }
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn resize(&self, width: u32, height: u32) -> Result<(), String> {
         self.asked
             .lock()
@@ -463,6 +484,10 @@ impl Kind for Together {
     fn fields(&self) -> Vec<(&'static str, Value)> {
         vec![]
     }
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test's fake waits, bounded, for the other tab to open beside it"
+    )]
     fn open(&self, _: &Value) -> Result<Opened, ToolError> {
         use std::sync::atomic::Ordering;
         self.0.fetch_add(1, Ordering::SeqCst);
@@ -478,21 +503,41 @@ impl Kind for Together {
             false => Err(ToolError::Failed("opened alone".into())),
         }
     }
+    #[allow(
+        clippy::panic_in_result_fn,
+        reason = "a test's fake: a call it should not get fails the test"
+    )]
     fn interact(&self, _: u32, _: &Value) -> Result<ToolOutput, ToolError> {
         panic!("not called here")
     }
+    #[allow(
+        clippy::panic_in_result_fn,
+        reason = "a test's fake: a call it should not get fails the test"
+    )]
     fn snapshot(&self, _: u32) -> Result<ToolOutput, ToolError> {
         panic!("not called here")
     }
+    #[allow(
+        clippy::panic_in_result_fn,
+        reason = "a test's fake: a call it should not get fails the test"
+    )]
     fn screenshot(&self, _: u32, _: &Value) -> Result<ToolOutput, ToolError> {
         panic!("not called here")
     }
+    #[allow(
+        clippy::panic_in_result_fn,
+        reason = "a test's fake: a call it should not get fails the test"
+    )]
     fn close(&self, _: u32) -> Result<String, ToolError> {
         panic!("not called here")
     }
     fn tabs(&self) -> Vec<(u32, String, String)> {
         vec![]
     }
+    #[allow(
+        clippy::panic_in_result_fn,
+        reason = "a test's fake: a call it should not get fails the test"
+    )]
     fn view(&self, _: u32) -> Result<Box<dyn View + '_>, ToolError> {
         panic!("not called here")
     }

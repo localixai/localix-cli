@@ -10,6 +10,10 @@ use crate::shell::{Sessions, Until, Wait};
 use crate::testing::Scratch;
 
 /// Whether `pid` is gone within two seconds (a killed orphan is reaped by init).
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test looks again until it is so, for a bounded time: there is no event to wait on"
+)]
 fn gone(pid: libc::pid_t) -> bool {
     let deadline = Instant::now() + Duration::from_secs(2);
     // SAFETY: signal 0 only asks whether the process exists.
@@ -63,7 +67,7 @@ fn no_session_is_swept_for_init_or_nothing() {
 fn the_sweep_kills_the_members_and_spares_the_leader() {
     // The shell waits on its stdin, so it outlives the sleep the sweep kills.
     let (mut shell, sleep) = spawn("sleep 300 & echo $!; read line");
-    let leader = shell.id() as libc::pid_t;
+    let leader = shell.id().cast_signed();
     assert!(end(leader, Duration::from_secs(2)));
     assert!(gone(sleep), "the sleep still runs");
     assert_eq!(shell.try_wait().unwrap(), None, "the leader was killed");
@@ -75,7 +79,7 @@ fn the_sweep_kills_the_members_and_spares_the_leader() {
 fn a_job_in_a_group_of_its_own_dies_with_its_command() {
     // `set -m`: job control, so the sleep gets a group of its own, as in an interactive shell.
     let (mut shell, sleep) = spawn("set -m; sleep 300 & echo $!; wait");
-    let leader = shell.id() as libc::pid_t;
+    let leader = shell.id().cast_signed();
     if group(sleep) == leader {
         eprintln!("this sh has no job control without a terminal: the group kill alone covers it");
     }
@@ -85,6 +89,10 @@ fn a_job_in_a_group_of_its_own_dies_with_its_command() {
 
 /// The finding this module fixes: an interactive bash in a session, a job started in the
 /// background, then the session closed.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test's fixture: the command ends by itself"
+)]
 #[test]
 fn a_background_job_of_an_interactive_shell_dies_with_its_session() {
     let bash = process::shell("command -v bash")
@@ -137,13 +145,13 @@ fn a_background_job_of_an_interactive_shell_dies_with_its_session() {
 #[test]
 fn the_listing_holds_this_process_and_its_child() {
     let (mut shell, _) = spawn("echo $$; read line");
-    let child = shell.id() as libc::pid_t;
+    let child = shell.id().cast_signed();
     let mut listed = vec![];
     each_pid(|pid| listed.push(pid));
     shell.stdin.as_mut().unwrap().write_all(b"\n").unwrap();
     shell.wait().unwrap();
     assert!(
-        listed.contains(&(std::process::id() as libc::pid_t)),
+        listed.contains(&(std::process::id().cast_signed())),
         "this process"
     );
     assert!(listed.contains(&child), "its child");

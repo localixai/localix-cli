@@ -98,6 +98,10 @@ impl ChatModel {
 }
 
 impl Chat for ChatModel {
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a backoff between attempts, which no event ends sooner"
+    )]
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let body = body(&self.selection, &self.session, request).to_string();
         let address = format!("{}/responses", self.base);

@@ -58,6 +58,11 @@ impl Tool for Meet<'_> {
         }
     }
 
+    #[allow(
+        clippy::unwrap_in_result,
+        clippy::disallowed_methods,
+        reason = "a test's fake tool: a poisoned lock fails the test, and a call alone works 20 ms so that calls could overlap"
+    )]
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
         let id = arguments["id"].as_str().unwrap_or("").to_string();
         let room = self.room;
@@ -304,6 +309,10 @@ struct Interrupted<'a> {
 }
 
 impl contracts::chat::Chat for Interrupted<'_> {
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn complete(
         &self,
         request: contracts::chat::Request,

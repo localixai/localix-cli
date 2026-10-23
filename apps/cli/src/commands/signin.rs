@@ -109,7 +109,8 @@ pub(crate) fn come_back(
     };
     loop {
         let line = terminal.line_until(prompt, &done);
-        if let Some(outcome) = lock(&back).take() {
+        let came = lock(&back).take();
+        if let Some(outcome) = came {
             return outcome;
         }
         let line = line.ok_or("cancelled")?;

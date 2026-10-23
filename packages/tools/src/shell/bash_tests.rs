@@ -8,6 +8,11 @@ fn bash(dir: &Scratch, gate: &dyn Gate, arguments: Value) -> Result<String, Tool
 }
 
 /// A call with the sessions of earlier calls.
+#[allow(
+    clippy::unwrap_in_result,
+    clippy::panic_in_result_fn,
+    reason = "a test's helper: a setup that fails, fails the test"
+)]
 fn in_session(
     sessions: &Sessions,
     dir: &Scratch,
@@ -237,6 +242,10 @@ fn a_command_runs_in_the_root_on_windows() {
     assert!(report.ends_with(&format!("### stdout\n{root}")), "{report}");
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test's fixture: the command ends by itself"
+)]
 #[cfg(unix)]
 #[test]
 fn without_tty_there_is_still_no_terminal() {

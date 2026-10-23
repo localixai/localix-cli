@@ -94,6 +94,10 @@ impl Captured {
 }
 
 impl Write for Captured {
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         self.0.lock().unwrap().extend_from_slice(bytes);
         Ok(bytes.len())
@@ -127,6 +131,10 @@ impl ScriptedChat {
 }
 
 impl Chat for ScriptedChat {
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn complete(&self, _: Request) -> Result<Completion, ChatError> {
         self.0
             .lock()
@@ -317,7 +325,10 @@ impl Scripted {
 impl crate::picker::Picker for Scripted {
     fn pick(&mut self, title: &str, items: &[crate::picker::Item]) -> Option<usize> {
         self.shown.push((title.to_string(), items.to_vec()));
-        self.picks.pop_front().expect("a pick was scripted")
+        let Some(pick) = self.picks.pop_front() else {
+            panic!("no pick was scripted")
+        };
+        pick
     }
 }
 
@@ -336,6 +347,10 @@ pub(crate) struct Gated {
 
 /// A [`Gated`] model, and where its replies are sent.
 pub(crate) fn gated() -> (std::sync::mpsc::Sender<Completion>, Gated) {
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test's script: it sends the turns it means the model to take, then ends"
+    )]
     let (replies, received) = std::sync::mpsc::channel();
     let chat = Gated {
         replies: Mutex::new(received),
@@ -352,6 +367,10 @@ impl Gated {
 }
 
 impl Chat for Gated {
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         self.asked
             .lock()
@@ -360,6 +379,6 @@ impl Chat for Gated {
         let replies = self.replies.lock().unwrap();
         // A test that went wrong ends instead of waiting for ever.
         let waited = replies.recv_timeout(std::time::Duration::from_secs(20));
-        waited.map_err(|_| ChatError::Unavailable("the test sent no reply".into()))
+        waited.map_err(|error| ChatError::Unavailable(format!("the test sent no reply: {error}")))
     }
 }

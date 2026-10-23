@@ -36,7 +36,7 @@ fn three(now: Instant) -> App {
     app.event(from("B", Event::Note("B's own transcript".into())), now);
     app.event(from("B", Event::TaskStarted("fix it".into())), now);
     // The receiver is kept for the test's length, so the reply is not refused.
-    let (reply, _picked) = std::sync::mpsc::channel();
+    let (reply, _picked) = std::sync::mpsc::sync_channel(1);
     let choose = Event::Choose {
         title: "Implement this plan?".into(),
         options: vec![("Yes".into(), String::new())],

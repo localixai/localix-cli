@@ -185,15 +185,16 @@ fn select_in(fd: libc::c_int) -> Readiness {
         tv_sec: 0,
         tv_usec: POLL_US,
     };
-    // SAFETY: the set is zeroed, then holds one descriptor below FD_SETSIZE; select reads and
-    // writes only it and the timeout, both of which outlive the call.
-    let ready = unsafe {
-        let mut wanted: libc::fd_set = std::mem::zeroed();
-        libc::FD_ZERO(&mut wanted);
-        libc::FD_SET(fd, &mut wanted);
-        let none = std::ptr::null_mut();
-        libc::select(fd + 1, &mut wanted, none, none, &mut timeout)
-    };
+    // SAFETY: an fd_set is plain bits: all zero is a set.
+    let mut wanted: libc::fd_set = unsafe { std::mem::zeroed() };
+    // SAFETY: FD_ZERO writes only the set, which lives here.
+    unsafe { libc::FD_ZERO(&mut wanted) };
+    // SAFETY: `fd` is below FD_SETSIZE, checked above.
+    unsafe { libc::FD_SET(fd, &mut wanted) };
+    let none = std::ptr::null_mut();
+    // SAFETY: select reads and writes only the set and the timeout, both of which outlive the
+    // call.
+    let ready = unsafe { libc::select(fd + 1, &mut wanted, none, none, &mut timeout) };
     readiness(ready)
 }
 

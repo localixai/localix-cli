@@ -52,8 +52,18 @@ fn a_panicking_lane_ends_the_other_lanes() {
     let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let scratch = Scratch::new();
         let (shared, seat) = setup(&scratch, Mode::Bypass, true).split(None);
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "the interface's events and the desk's requests are unbounded, as `tui::start` \
+                          makes them"
+        )]
         let (events, inbox) = channel();
         let ui = Ui::new(events);
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "the interface's events and the desk's requests are unbounded, as `tui::start` \
+                          makes them"
+        )]
         let (requests, asked) = channel();
         let seat = Seat {
             ui: Some(ui.clone()),

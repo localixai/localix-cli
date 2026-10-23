@@ -2,7 +2,7 @@
 //! a slash command, a picture, or Tab waits for the task to end instead. The task
 //! takes what was sent from here between its turns, and only then is it shown as the person's.
 
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 
 use super::app::App;
 use super::cells;
@@ -44,7 +44,7 @@ pub(crate) fn steerable(entry: &Typed) -> bool {
 impl App {
     /// Give the task what was sent to it (shown now as the person's), or say whether there is
     /// any (`peek`: the texts, left in place).
-    pub(super) fn take_steered(&mut self, at: usize, reply: &Sender<Vec<String>>, peek: bool) {
+    pub(super) fn take_steered(&mut self, at: usize, reply: &SyncSender<Vec<String>>, peek: bool) {
         let Some(lane) = self.views.sessions[at].lane.as_deref_mut() else {
             return;
         };

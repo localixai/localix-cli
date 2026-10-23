@@ -17,13 +17,17 @@ impl Browser {
     /// Open the window on `window.url` and wait for its document. One window per process: the
     /// browser shows one page.
     pub fn open(&self, window: Window) -> BrowserResult<WebviewDriver> {
-        let (reply, opened) = mpsc::channel();
+        let (reply, opened) = mpsc::sync_channel(1);
         self.proxy
             .send_event(Cmd::Open { window, reply })
-            .map_err(|_| BrowserError::Unavailable("the browser host is gone".into()))?;
+            .map_err(|error| {
+                BrowserError::Unavailable(format!("the browser host is gone: {error}"))
+            })?;
         opened
             .recv()
-            .map_err(|_| BrowserError::Unavailable("the browser host is gone".into()))?
+            .map_err(|error| {
+                BrowserError::Unavailable(format!("the browser host is gone: {error}"))
+            })?
             .map_err(|error| {
                 BrowserError::Unavailable(format!("could not open the browser window: {error}"))
             })?;
@@ -52,7 +56,7 @@ impl Browser {
     /// whether it is coated. `None` while it is closed.
     #[doc(hidden)]
     pub fn dressed(&self) -> Option<Dressing> {
-        let (reply, answer) = mpsc::channel();
+        let (reply, answer) = mpsc::sync_channel(1);
         self.proxy.send_event(Cmd::Dressed(reply)).ok()?;
         answer
             .recv_timeout(std::time::Duration::from_secs(5))
@@ -67,7 +71,7 @@ impl Browser {
 
     /// The window's tabs, in the strip's order; `None` while it is closed.
     pub fn listing(&self) -> Option<Vec<Listed>> {
-        let (reply, answer) = mpsc::channel();
+        let (reply, answer) = mpsc::sync_channel(1);
         self.proxy.send_event(Cmd::Listing(reply)).ok()?;
         answer
             .recv_timeout(std::time::Duration::from_secs(5))
@@ -76,13 +80,12 @@ impl Browser {
 
     /// Size the whole window to `width` by `height` points, as the person would.
     pub fn resize_window(&self, width: f64, height: f64) -> Result<(), String> {
-        let (reply, answer) = mpsc::channel();
-        let gone = || "the window is not open".to_string();
+        let (reply, answer) = mpsc::sync_channel(1);
         let ask = Cmd::Sized(width, height, reply);
-        self.proxy.send_event(ask).map_err(|_| gone())?;
+        self.proxy.send_event(ask).map_err(gone)?;
         answer
             .recv_timeout(std::time::Duration::from_secs(5))
-            .map_err(|_| gone())?
+            .map_err(gone)?
     }
 
     /// Show the tab `id` (`w1`, `t2`), or take it out of the window (`close`).
@@ -93,14 +96,13 @@ impl Browser {
         } else {
             Click::Show(key)
         };
-        let (reply, answer) = mpsc::channel();
-        let gone = || "the window is not open".to_string();
+        let (reply, answer) = mpsc::sync_channel(1);
         self.proxy
             .send_event(Cmd::Act(click, reply))
-            .map_err(|_| gone())?;
+            .map_err(gone)?;
         answer
             .recv_timeout(std::time::Duration::from_secs(5))
-            .map_err(|_| gone())?
+            .map_err(gone)?
     }
 
     /// For checks: what the person's click on the strip says (`show t1`, `close w2`).
@@ -112,7 +114,7 @@ impl Browser {
     /// What `script` evaluates to in `panel`'s page, as JSON.
     pub fn peek(&self, panel: &Panel, script: &str) -> Result<Value, String> {
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::sync_channel(1);
         crate::lock(&self.shared.pending).insert(id, sender);
         let script = script.to_string();
         let panel = Some(panel.id());
@@ -125,6 +127,11 @@ impl Browser {
         });
         let reply = receiver.recv_timeout(std::time::Duration::from_secs(5));
         crate::lock(&self.shared.pending).remove(&id);
-        reply.unwrap_or_else(|_| Err("no answer".into()))
+        reply.unwrap_or_else(|error| Err(format!("no answer: {error}")))
     }
+}
+
+/// Why the window could not be asked: it is not open, and how that showed.
+fn gone(error: impl std::fmt::Display) -> String {
+    format!("the window is not open: {error}")
 }

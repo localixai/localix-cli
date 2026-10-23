@@ -115,7 +115,9 @@ pub(crate) fn prefetch() {
     let Some(dir) = dir(std::env::var_os("HOME").map(PathBuf::from)) else {
         return;
     };
-    std::thread::spawn(move || {
+    let fetching = std::thread::Builder::new().name("llx-xterm".into());
+    // No thread: nothing is fetched, as when the network fails.
+    let _ = fetching.spawn(move || {
         let _ = fetch(&dir, &PINS, &web);
     });
 }

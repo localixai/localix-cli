@@ -7,7 +7,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::time::Duration;
 
 use crate::http::query_value;
@@ -57,7 +57,8 @@ impl Drop for Callback {
 pub fn listen(spec: Listen) -> Result<Callback, String> {
     let listener = bind(spec.ports)?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    let (sender, codes) = mpsc::channel();
+    // One redirect, one send: the server ends after it.
+    let (sender, codes) = mpsc::sync_channel(1);
     let stop = Arc::new(AtomicBool::new(false));
     let serve = Served {
         path: spec.path.to_string(),
@@ -66,7 +67,10 @@ pub fn listen(spec: Listen) -> Result<Callback, String> {
         app: spec.app.to_string(),
     };
     let stopped = Arc::clone(&stop);
-    std::thread::spawn(move || serve.run(listener, &sender, &stopped));
+    std::thread::Builder::new()
+        .name("llx-sign-in".into())
+        .spawn(move || serve.run(listener, &sender, &stopped))
+        .map_err(|error| format!("cannot wait for the sign-in: {error}"))?;
     Ok(Callback {
         redirect: format!("http://127.0.0.1:{port}{}", spec.path),
         codes,
@@ -75,6 +79,10 @@ pub fn listen(spec: Listen) -> Result<Callback, String> {
     })
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a backoff: the sign-in asked to give the port up has no event to wait on"
+)]
 fn bind(ports: &[u16]) -> Result<TcpListener, String> {
     let mut last = String::from("no port to listen on");
     for &port in ports {
@@ -118,7 +126,7 @@ impl Served {
     fn run(
         self,
         listener: TcpListener,
-        sender: &Sender<Result<String, String>>,
+        sender: &SyncSender<Result<String, String>>,
         stop: &AtomicBool,
     ) {
         for stream in listener.incoming() {

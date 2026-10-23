@@ -6,6 +6,10 @@ use serde_json::json;
 use super::*;
 use crate::testing::{Recorder, Scratch};
 
+#[allow(
+    clippy::unwrap_in_result,
+    reason = "a test's helper: a setup that fails, fails the test"
+)]
 fn edit(dir: &Scratch, gate: &dyn Gate, arguments: Value) -> Result<String, ToolError> {
     let workspace = Workspace::new(dir.path()).unwrap();
     let tool = EditTool {
@@ -289,6 +293,10 @@ fn a_file_changed_while_waiting_for_approval_is_not_overwritten() {
     assert_eq!(fs::read_to_string(&created).unwrap(), "written meanwhile\n");
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test's fixture: the command ends by itself"
+)]
 #[cfg(unix)]
 #[test]
 fn a_fifo_is_refused_before_it_is_opened() {

@@ -3,6 +3,11 @@ use serde_json::json;
 use super::*;
 use crate::testing::Scratch;
 
+#[allow(
+    clippy::unwrap_in_result,
+    clippy::panic_in_result_fn,
+    reason = "a test's helper: a setup that fails, fails the test"
+)]
 fn read(dir: &Scratch, arguments: Value) -> Result<String, ToolError> {
     let workspace = Workspace::new(dir.path()).unwrap();
     let tool = ReadTool {
@@ -31,6 +36,7 @@ fn a_file_comes_back_numbered_with_a_header() {
     );
 }
 
+#[allow(clippy::format_collect, reason = "a test's fixture, built once")]
 #[test]
 fn offset_and_limit_pick_a_window_and_say_how_to_go_on() {
     let dir = Scratch::new();
@@ -61,6 +67,7 @@ fn the_default_window_is_two_thousand_lines() {
     assert!(report.ends_with("read again with offset 2001 to continue)"));
 }
 
+#[allow(clippy::format_collect, reason = "a test's fixture, built once")]
 #[test]
 fn a_window_stays_within_its_byte_budget() {
     let dir = Scratch::new();
@@ -167,6 +174,10 @@ fn next_line_keeps_only_the_start_of_a_line() {
     assert_eq!(next_line(&mut reader, &mut line, 3).unwrap(), None);
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test's fixture: the command ends by itself"
+)]
 #[cfg(unix)]
 #[test]
 fn what_is_not_a_regular_file_is_refused_before_it_is_opened() {

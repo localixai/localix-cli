@@ -1,4 +1,4 @@
-use std::sync::mpsc::channel;
+use std::sync::mpsc::sync_channel;
 use std::time::{Duration, Instant};
 
 use crossterm::event::KeyCode;
@@ -115,7 +115,7 @@ fn a_long_command_in_an_approval_wraps_under_its_indent() {
     let now = Instant::now();
     let mut app = App::new(50, 20, vec![]);
     app.event(Event::TaskStarted("x".into()), now);
-    let (reply, _answer) = channel();
+    let (reply, _answer) = sync_channel(1);
     let summary = "cd /Users/me/site && wc -l index.html v2.html style.css && grep -n -i 'viewport' index.html";
     app.event(
         Event::Approve {

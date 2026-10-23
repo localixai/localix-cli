@@ -60,12 +60,16 @@ impl Model {
             ..Shared::default()
         }));
         let serving = Arc::clone(&shared);
-        std::thread::spawn(move || {
-            for stream in listener.incoming().flatten() {
-                let shared = Arc::clone(&serving);
-                std::thread::spawn(move || answer(stream, &shared));
-            }
-        });
+        let server = std::thread::Builder::new().name("model".into());
+        server
+            .spawn(move || {
+                for stream in listener.incoming().flatten() {
+                    let shared = Arc::clone(&serving);
+                    let answering = std::thread::Builder::new().name("model-answer".into());
+                    answering.spawn(move || answer(stream, &shared)).unwrap();
+                }
+            })
+            .unwrap();
         Self { base, shared }
     }
 
@@ -87,6 +91,10 @@ impl Model {
     }
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test's server waits, bounded, for the file the test makes: there is no event to wait on"
+)]
 fn answer(stream: TcpStream, shared: &Mutex<Shared>) {
     let mut reader = BufReader::new(stream.try_clone().unwrap());
     let mut line = String::new();

@@ -4,6 +4,10 @@ use serde_json::{Value, json};
 use super::*;
 use crate::tui::style;
 
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "a scripted tool reply, which is a call's result"
+)]
 fn done(report: &str) -> Result<ToolOutput, ToolError> {
     Ok(ToolOutput {
         report: report.into(),

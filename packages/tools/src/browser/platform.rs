@@ -40,23 +40,28 @@ pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
     const FULL_SCREEN_AUXILIARY: usize = 1 << 8;
     keep_tab_rendering(webview);
     let window = webview.ns_window();
-    unsafe {
-        // It never takes focus.
-        let behavior = if headless {
-            CAN_JOIN_ALL_SPACES | TRANSIENT | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY
-        } else {
-            MOVE_TO_ACTIVE_SPACE | FULL_SCREEN_AUXILIARY
-        };
-        let _: () = msg_send![&*window, setCollectionBehavior: behavior];
-        // NSWindow levels: only an invisible window floats (3), above every ordinary one (0).
-        let level: isize = if headless { 3 } else { 0 };
-        let _: () = msg_send![&*window, setLevel: level];
-        let _: () = msg_send![&*window, orderFrontRegardless];
-        if headless {
-            let _: () = msg_send![&*window, setAlphaValue: 0.0f64];
-            let _: () = msg_send![&*window, setIgnoresMouseEvents: Bool::YES];
-            let _: () = msg_send![&*window, setHasShadow: Bool::NO];
-        }
+    // It never takes focus.
+    let behavior = if headless {
+        CAN_JOIN_ALL_SPACES | TRANSIENT | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY
+    } else {
+        MOVE_TO_ACTIVE_SPACE | FULL_SCREEN_AUXILIARY
+    };
+    // SAFETY: wry's NSWindow is alive while its WebView is; it takes an
+    // NSWindowCollectionBehavior (an NSUInteger).
+    let _: () = unsafe { msg_send![&*window, setCollectionBehavior: behavior] };
+    // NSWindow levels: only an invisible window floats (3), above every ordinary one (0).
+    let level: isize = if headless { 3 } else { 0 };
+    // SAFETY: as above; an NSWindowLevel is an NSInteger.
+    let _: () = unsafe { msg_send![&*window, setLevel: level] };
+    // SAFETY: as above; it takes no argument and returns nothing.
+    let _: () = unsafe { msg_send![&*window, orderFrontRegardless] };
+    if headless {
+        // SAFETY: as above; it takes a CGFloat.
+        let _: () = unsafe { msg_send![&*window, setAlphaValue: 0.0f64] };
+        // SAFETY: as above; it takes a BOOL.
+        let _: () = unsafe { msg_send![&*window, setIgnoresMouseEvents: Bool::YES] };
+        // SAFETY: as above; it takes a BOOL.
+        let _: () = unsafe { msg_send![&*window, setHasShadow: Bool::NO] };
     }
 }
 
@@ -67,18 +72,21 @@ pub(super) fn keep_tab_rendering(webview: &wry::WebView) {
     use objc2::{msg_send, sel};
     use wry::WebViewExtMacOS;
     let view = webview.webview();
-    unsafe {
-        let switch = sel!(_setWindowOcclusionDetectionEnabled:);
-        let available: bool = msg_send![&*view, respondsToSelector: switch];
-        if available {
-            let _: () = msg_send![&*view, _setWindowOcclusionDetectionEnabled: Bool::NO];
-        }
-        // WebKit decides whether the page is shown when the view joins its window, with the
-        // switch still on: a window that opened unseen (the screen asleep, another Space) stayed
-        // hidden, its animation frames stopped. Hidden and shown again, it looks once more.
-        let _: () = msg_send![&*view, setHidden: Bool::YES];
-        let _: () = msg_send![&*view, setHidden: Bool::NO];
+    let switch = sel!(_setWindowOcclusionDetectionEnabled:);
+    // SAFETY: the WKWebView is a live NSObject; `respondsToSelector:` takes a selector and
+    // answers a BOOL.
+    let available: bool = unsafe { msg_send![&*view, respondsToSelector: switch] };
+    if available {
+        // SAFETY: the view answers this private selector (checked just above); it takes a BOOL.
+        let _: () = unsafe { msg_send![&*view, _setWindowOcclusionDetectionEnabled: Bool::NO] };
     }
+    // WebKit decides whether the page is shown when the view joins its window, with the switch
+    // still on: a window that opened unseen (the screen asleep, another Space) stayed hidden,
+    // its animation frames stopped. Hidden and shown again, it looks once more.
+    // SAFETY: an NSView takes a BOOL `hidden`.
+    let _: () = unsafe { msg_send![&*view, setHidden: Bool::YES] };
+    // SAFETY: as above.
+    let _: () = unsafe { msg_send![&*view, setHidden: Bool::NO] };
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -90,6 +98,10 @@ pub(super) fn keep_rendering(_webview: &wry::WebView, _headless: bool) {}
 /// The installed Safari's user agent. A plain WKWebView omits the `Version/… Safari/…` tokens,
 /// and sites such as Google then serve a legacy page.
 #[cfg(target_os = "macos")]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "one signature on every system: elsewhere there is none"
+)]
 pub(super) fn user_agent() -> Option<String> {
     let plist = std::fs::read_to_string("/Applications/Safari.app/Contents/Info.plist").ok();
     let version = plist

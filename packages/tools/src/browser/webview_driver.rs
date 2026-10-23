@@ -174,7 +174,7 @@ impl Driver for WebviewDriver {
         self.call("act", args.clone(), CALL_TIMEOUT)?;
         let acted = started.elapsed();
         let settled = self.call("settle", args, SETTLE_TIMEOUT);
-        let settle_time = started.elapsed() - acted;
+        let settle_time = started.elapsed().saturating_sub(acted);
         self.follow_navigation(before, &settled);
         super::super::debug(|| {
             format!(
@@ -247,7 +247,7 @@ impl Driver for WebviewDriver {
             }
             None => None,
         };
-        let (reply, shot) = mpsc::channel();
+        let (reply, shot) = mpsc::sync_channel(1);
         self.send(Cmd::Capture {
             clip,
             reply,

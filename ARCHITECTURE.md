@@ -193,7 +193,9 @@ every new file already goes where its target crate will be.
   panic: _checked_), and is joined, or owned by what stops it.
 - **R9**: wait on events, not on time: a `Condvar`, `recv_timeout`, a deadline. A `sleep` is a
   backoff, and says so where it is (_checked_).
-- **R10**: a child process always has a deadline and a way to be stopped.
+- **R10** _checked_: a child process always has a deadline and a way to be stopped. (Debt: the
+  app's short local queries, `git`, `osascript`, wait without one; they go through a runner with
+  a deadline when `tools` exposes one.)
 
 ## Code rules
 

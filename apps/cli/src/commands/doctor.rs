@@ -82,6 +82,10 @@ pub(crate) fn doctor(models: &ModelOptions) -> Result<i32, Failure> {
 }
 
 /// The shell `bash` runs commands with, as the tool names it.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "R10 debt: `echo ok` ends at once, with no deadline or stop yet"
+)]
 fn shell() -> Result<bool, Failure> {
     let name = tools::shell::SHELL;
     let (program, flag) = name.split_once(' ').unwrap_or((name, ""));

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use crate::ask::{AskInput, GoalStep, Operation, Pick, ask};
 pub use crate::step::Stop;
-use crate::step::{action_of, actions_of, changed, cycling, fingerprint};
+use crate::step::{action_of, actions_of, changed, cycling, fingerprint, pause};
 use contracts::model::{DecideError, Decider};
 use contracts::view::{Observation, View, ViewError};
 
@@ -63,7 +63,7 @@ impl GoalRun<'_> {
         let most = most.unwrap_or(if view.busy { WAIT_BUSY } else { WAIT_IDLE });
         let deadline = std::time::Instant::now() + most;
         loop {
-            std::thread::sleep(WAIT_POLL);
+            pause(WAIT_POLL);
             let now = self.view.observe().ok();
             let done = now.as_ref().is_some_and(|now| changed(view, now));
             if done || std::time::Instant::now() >= deadline {
@@ -79,7 +79,7 @@ impl GoalRun<'_> {
         let deadline = std::time::Instant::now() + SETTLE_MAX;
         let mut previous = last.map(Ok).unwrap_or_else(|| self.view.observe()).ok()?;
         loop {
-            std::thread::sleep(WAIT_POLL);
+            pause(WAIT_POLL);
             let Ok(now) = self.view.observe() else {
                 return Some(previous);
             };

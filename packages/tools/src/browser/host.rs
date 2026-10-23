@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 use std::sync::{Arc, Condvar, Mutex};
 
 use serde_json::Value;
@@ -54,7 +54,7 @@ pub(super) enum Cmd {
     /// Open the window (once); the reply says whether it opened.
     Open {
         window: Window,
-        reply: Sender<Result<(), String>>,
+        reply: SyncSender<Result<(), String>>,
     },
     /// A script built by the driver that hands a probe call or its promise to the probe; `false`
     /// or a parse error answers the call at once with `failed` (`probe_not_ready`,
@@ -74,16 +74,16 @@ pub(super) enum Cmd {
     /// comes here with no reply.
     NewTab {
         url: String,
-        reply: Option<Sender<Result<u32, String>>>,
+        reply: Option<SyncSender<Result<u32, String>>>,
     },
     SwitchTab {
         id: u32,
-        reply: Sender<Result<(), String>>,
+        reply: SyncSender<Result<(), String>>,
     },
     /// Close a tab; the reply says whether tabs are left (with none, the window closed).
     CloseTab {
         id: u32,
-        reply: Sender<Result<bool, String>>,
+        reply: SyncSender<Result<bool, String>>,
     },
     /// Close the window, as the person would but without stopping the task: it opens again,
     /// shown or hidden, on its next use.
@@ -93,7 +93,7 @@ pub(super) enum Cmd {
     /// A screenshot of the page, or of a part of it; the reply comes once WebKit has drawn it.
     Capture {
         clip: Option<Clip>,
-        reply: Sender<Result<Shot, String>>,
+        reply: SyncSender<Result<Shot, String>>,
         tab: Option<u32>,
     },
     /// Open a panel as a tab: its id, title and page, and what it shares with its caller.
@@ -109,13 +109,13 @@ pub(super) enum Cmd {
     /// Tell the strip what the window holds (a tab's title changed, its page loaded).
     Strip,
     /// For checks: how the window is dressed, once tinted again.
-    Dressed(Sender<Option<Dressing>>),
+    Dressed(SyncSender<Option<Dressing>>),
     /// The window's tabs; `None` while it is closed.
-    Listing(Sender<Option<Vec<Listed>>>),
+    Listing(SyncSender<Option<Vec<Listed>>>),
     /// Size the whole window, in points.
-    Sized(f64, f64, Sender<Result<(), String>>),
+    Sized(f64, f64, SyncSender<Result<(), String>>),
     /// Show or close a tab by its key, for the agent: the task goes on whatever closes.
-    Act(Click, Sender<Result<(), String>>),
+    Act(Click, SyncSender<Result<(), String>>),
     Exit(i32),
 }
 
@@ -143,7 +143,7 @@ pub(super) struct Shared {
     /// Whether the window is open now: the person may close it, and it opens again when needed.
     pub open: AtomicBool,
     pub next_id: AtomicU64,
-    pub pending: Mutex<HashMap<u64, Sender<Reply>>>,
+    pub pending: Mutex<HashMap<u64, SyncSender<Reply>>>,
     /// Each tab's loads, by tab id.
     pub loads: Mutex<HashMap<u32, Loads>>,
     pub loaded: Condvar,
@@ -192,7 +192,8 @@ impl Shared {
     }
 
     fn answer(&self, id: u64, reply: Reply) {
-        if let Some(sender) = crate::lock(&self.pending).remove(&id) {
+        let waiting = crate::lock(&self.pending).remove(&id);
+        if let Some(sender) = waiting {
             let _ = sender.send(reply);
         }
     }
@@ -201,7 +202,12 @@ impl Shared {
     /// the load counts start over, so a window opened again waits for its own first document.
     pub(super) fn closed(&self) {
         self.open.store(false, Ordering::SeqCst);
-        for (_, sender) in crate::lock(&self.pending).drain() {
+        let waiting = std::mem::take(&mut *crate::lock(&self.pending));
+        #[allow(
+            clippy::iter_over_hash_type,
+            reason = "each waiting call is told on its own channel: the order is no one's"
+        )]
+        for sender in waiting.into_values() {
             let _ = sender.send(Err(WINDOW_CLOSED.into()));
         }
         crate::lock(&self.loads).clear();

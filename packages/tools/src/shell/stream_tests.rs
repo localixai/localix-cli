@@ -139,6 +139,10 @@ fn a_window_attached_shows_what_was_printed_before() {
     assert!(window.last().contains("before"), "{}", window.last());
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the frame's time passes: the paint's clock is what is tested"
+)]
 #[test]
 fn output_in_a_burst_is_painted_once_its_time_comes() {
     let (mut stream, window) = (Stream::default(), Window::default());
@@ -162,6 +166,10 @@ fn output_in_a_burst_is_painted_once_its_time_comes() {
     assert_eq!(window.paints(), 3);
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the frame's time passes: the paint's clock is what is tested"
+)]
 #[test]
 fn a_window_the_person_closed_is_painted_no_more() {
     let (mut stream, window) = (Stream::default(), Window::default());

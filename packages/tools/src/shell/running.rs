@@ -80,7 +80,7 @@ impl Session {
             }
             let mut pause = POLL.min(deadline - now);
             if settling {
-                pause = pause.min(QUIET - quiet);
+                pause = pause.min(QUIET.saturating_sub(quiet));
             }
             stream = match shared.wake.wait_timeout(stream, pause) {
                 Ok((stream, _)) => stream,
@@ -118,7 +118,8 @@ impl Session {
         }
         // Unmirrored first: once the shell is reaped, its pid may be given to another process.
         if let Some(slot) = self.slot.take() {
-            let group = self.pty.child.id() as i32;
+            // A pid the system gave: it is a pid_t, which `id` widened.
+            let group = self.pty.child.id().cast_signed();
             let _ = GROUPS[slot].compare_exchange(group, 0, Ordering::SeqCst, Ordering::SeqCst);
         }
         let killed = process::kill(&mut self.pty.child);
@@ -177,7 +178,8 @@ pub fn running_anywhere() -> usize {
 
 /// Mirror `group` in a free slot of [`GROUPS`]; with none free, only the normal ending kills it.
 fn mirror(group: u32) -> Option<usize> {
-    let group = group as i32;
+    // A pid the system gave: it is a pid_t, which `id` widened.
+    let group = group.cast_signed();
     GROUPS.iter().position(|slot| {
         slot.compare_exchange(0, group, Ordering::SeqCst, Ordering::SeqCst)
             .is_ok()

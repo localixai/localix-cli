@@ -45,7 +45,8 @@ pub(crate) fn together(
         observer.call(call);
     }
     let mut outcomes: Vec<Option<Outcome>> = calls.iter().map(|_| None).collect();
-    let (done, ended) = mpsc::channel();
+    // One send per call: room for all, so no call waits on the reader.
+    let (done, ended) = mpsc::sync_channel(calls.len());
     std::thread::scope(|scope| {
         for (at, call) in calls.iter().enumerate() {
             let done = done.clone();

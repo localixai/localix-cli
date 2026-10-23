@@ -42,16 +42,18 @@ pub(super) fn linger(shared: &Shared, status: Option<i32>, painter: Painter, scr
 }
 
 /// How `pid` ended: its exit code, or 128 and the signal that killed it. It is not reaped.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "an exit status has no event to wait on: it is looked at every 5 ms, for at most STATUS_WAIT"
+)]
 pub(super) fn status(pid: u32) -> Option<i32> {
     let deadline = Instant::now() + STATUS_WAIT;
     loop {
-        // SAFETY: waitid only writes into `info`, which is zeroed and lives through the call.
-        let (done, info) = unsafe {
-            let mut info: libc::siginfo_t = std::mem::zeroed();
-            let flags = libc::WEXITED | libc::WNOHANG | libc::WNOWAIT;
-            let done = libc::waitid(libc::P_PID, pid as libc::id_t, &mut info, flags);
-            (done, info)
-        };
+        // SAFETY: siginfo_t is a plain C struct, for which all zeros is a valid value.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        let flags = libc::WEXITED | libc::WNOHANG | libc::WNOWAIT;
+        // SAFETY: waitid only writes into `info`, which lives through the call.
+        let done = unsafe { libc::waitid(libc::P_PID, libc::id_t::from(pid), &mut info, flags) };
         if done != 0 {
             return None;
         }

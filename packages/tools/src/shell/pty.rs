@@ -58,29 +58,30 @@ pub(super) fn spawn(
         .stdin(Stdio::from(slave.try_clone()?))
         .stdout(Stdio::from(slave.try_clone()?))
         .stderr(Stdio::from(slave.try_clone()?));
-    // SAFETY: signal and ioctl are async-signal-safe. This runs after `process::shell`'s setsid,
-    // so the shell leads a session with no terminal yet, and the PTY on its stdin becomes that
-    // terminal.
-    unsafe {
-        shell.pre_exec(|| {
-            // A terminal's signals, whatever this process inherited: a shell starts a background
-            // job (`llx exec … &`, `cargo test &`) with SIGINT and SIGQUIT ignored, an ignored
-            // signal stays ignored across exec, and Ctrl-C would then do nothing.
-            for signal in [libc::SIGINT, libc::SIGQUIT] {
-                libc::signal(signal, libc::SIG_DFL);
-            }
-            match libc::ioctl(0, libc::TIOCSCTTY as _, 0) {
-                -1 => Err(io::Error::last_os_error()),
-                _ => Ok(()),
-            }
-        });
-    }
+    let take_terminal = || {
+        // A terminal's signals, whatever this process inherited: a shell starts a background job
+        // (`llx exec … &`, `cargo test &`) with SIGINT and SIGQUIT ignored, an ignored signal
+        // stays ignored across exec, and Ctrl-C would then do nothing.
+        for signal in [libc::SIGINT, libc::SIGQUIT] {
+            // SAFETY: signal is async-signal-safe; it resets one disposition of the forked child.
+            unsafe { libc::signal(signal, libc::SIG_DFL) };
+        }
+        // SAFETY: ioctl is async-signal-safe and only reads its arguments: the PTY on stdin
+        // becomes the terminal of the session `process::shell`'s setsid made, which has none.
+        match unsafe { libc::ioctl(0, libc::TIOCSCTTY as _, 0) } {
+            -1 => Err(io::Error::last_os_error()),
+            _ => Ok(()),
+        }
+    };
+    // SAFETY: between fork and exec the closure calls only async-signal-safe functions and
+    // allocates nothing; it runs after `process::shell`'s setsid.
+    unsafe { shell.pre_exec(take_terminal) };
     let child = shell.spawn();
     // Every copy of the terminal's other end is dropped here: while one is open in this process,
     // the reader would never see the end of the output.
     drop(shell);
     drop(slave);
-    let child = child?;
+    let mut child = child?;
     set_flag(
         master.as_raw_fd(),
         libc::F_GETFL,
@@ -93,7 +94,12 @@ pub(super) fn spawn(
     shared.lock().expect(needle, true);
     let stream = Arc::clone(&shared);
     let pid = child.id();
-    thread::spawn(move || read(reader, &stream, pid));
+    let reading = thread::Builder::new().name("llx-terminal".into());
+    if let Err(error) = reading.spawn(move || read(reader, &stream, pid)) {
+        // No one would read it: the session ends before it is ever shown.
+        process::kill(&mut child);
+        return Err(error);
+    }
     Ok(Pty {
         child,
         writer,
@@ -104,6 +110,10 @@ pub(super) fn spawn(
 impl Pty {
     /// Type `input`, then press `keys` one at a time; the bytes sent, of all of them. A program
     /// that stops reading its input stops the typing.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a pause between keys, as a person's: text followed at once by Enter is taken for a paste"
+    )]
     pub(super) fn type_in(&self, input: &[u8], keys: &[String]) -> (usize, usize) {
         let cursor = || self.shared.lock().application_cursor();
         let mut total = input.len();
@@ -131,15 +141,15 @@ impl Pty {
     /// Whether the shell exited. It is left a zombie, not reaped: its process group stays its
     /// own until the group is killed, so the signal can never reach a recycled pid.
     pub(super) fn exited(&self) -> bool {
-        // SAFETY: waitid only writes into `info`, which is zeroed and lives through the call.
-        unsafe {
-            let mut info: libc::siginfo_t = std::mem::zeroed();
-            let flags = libc::WEXITED | libc::WNOHANG | libc::WNOWAIT;
-            match libc::waitid(libc::P_PID, self.child.id() as libc::id_t, &mut info, flags) {
-                0 => info.si_signo == libc::SIGCHLD,
-                // Already reaped, or not waitable: it is not running.
-                _ => true,
-            }
+        // SAFETY: siginfo_t is a plain C struct, for which all zeros is a valid value.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        let flags = libc::WEXITED | libc::WNOHANG | libc::WNOWAIT;
+        let pid = libc::id_t::from(self.child.id());
+        // SAFETY: waitid only writes into `info`, which lives through the call.
+        match unsafe { libc::waitid(libc::P_PID, pid, &mut info, flags) } {
+            0 => info.si_signo == libc::SIGCHLD,
+            // Already reaped, or not waitable: it is not running.
+            _ => true,
         }
     }
 
@@ -179,8 +189,10 @@ fn open() -> io::Result<(OwnedFd, OwnedFd)> {
     if opened == -1 {
         return Err(io::Error::last_os_error());
     }
-    // SAFETY: openpty succeeded, so both are open descriptors that nothing else owns.
-    let (master, slave) = unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) };
+    // SAFETY: openpty succeeded, so it is an open descriptor that nothing else owns.
+    let master = unsafe { OwnedFd::from_raw_fd(master) };
+    // SAFETY: as above.
+    let slave = unsafe { OwnedFd::from_raw_fd(slave) };
     for fd in [master.as_raw_fd(), slave.as_raw_fd()] {
         set_flag(fd, libc::F_GETFD, libc::F_SETFD, libc::FD_CLOEXEC)?;
     }
@@ -188,8 +200,10 @@ fn open() -> io::Result<(OwnedFd, OwnedFd)> {
 }
 
 fn set_flag(fd: RawFd, get: libc::c_int, set: libc::c_int, flag: libc::c_int) -> io::Result<()> {
-    // SAFETY: fcntl reads and sets flags of a descriptor this process owns.
-    let done = unsafe { libc::fcntl(fd, set, libc::fcntl(fd, get) | flag) };
+    // SAFETY: fcntl only reads the flags of a descriptor this process owns.
+    let flags = unsafe { libc::fcntl(fd, get) };
+    // SAFETY: fcntl only sets the flags of a descriptor this process owns.
+    let done = unsafe { libc::fcntl(fd, set, flags | flag) };
     match done {
         -1 => Err(io::Error::last_os_error()),
         _ => Ok(()),

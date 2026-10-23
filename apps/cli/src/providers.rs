@@ -308,7 +308,9 @@ pub(crate) fn refresh_catalog() {
     if std::env::var("LLX_MODELS_REFRESH").is_ok_and(|v| v == "0") {
         return;
     }
-    std::thread::spawn(|| {
+    let refreshing = std::thread::Builder::new().name("llx-catalog".into());
+    // No thread: the catalog kept is read again, as when the network fails.
+    let _ = refreshing.spawn(|| {
         let _ = models::source::refresh(APP);
     });
 }

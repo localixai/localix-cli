@@ -196,16 +196,20 @@ pub(crate) fn install() {
         // SAFETY: write is async-signal-safe, and NOTE outlives the call.
         unsafe { libc::write(2, NOTE.as_ptr().cast(), NOTE.len()) };
     }
-    // SAFETY: the action is fully initialized before it is installed, and the handler does only
-    // what a signal handler may (atomics, kill, write, _exit). SA_RESTART keeps a model request or a
-    // read in progress from failing half-way: the task stops at its next turn instead.
-    unsafe {
-        let mut action: libc::sigaction = std::mem::zeroed();
-        action.sa_sigaction = on_signal as extern "C" fn(libc::c_int) as libc::sighandler_t;
-        action.sa_flags = libc::SA_RESTART;
-        libc::sigemptyset(&mut action.sa_mask);
-        libc::sigaction(libc::SIGINT, &action, std::ptr::null_mut());
-        libc::sigaction(libc::SIGTERM, &action, std::ptr::null_mut());
+    // SAFETY: a sigaction is integers, a mask and a handler's address: all zero is one, with
+    // no handler, until it is set below.
+    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+    action.sa_sigaction = on_signal as extern "C" fn(libc::c_int) as libc::sighandler_t;
+    // SA_RESTART keeps a model request or a read in progress from failing half-way: the task
+    // stops at its next turn instead.
+    action.sa_flags = libc::SA_RESTART;
+    // SAFETY: sigemptyset writes only the mask, which lives here.
+    unsafe { libc::sigemptyset(&mut action.sa_mask) };
+    // The action is fully initialized before it is installed, and the handler does only what a
+    // signal handler may (atomics, kill, write, _exit).
+    for signal in [libc::SIGINT, libc::SIGTERM] {
+        // SAFETY: as said above; the action outlives the call, which copies it.
+        unsafe { libc::sigaction(signal, &action, std::ptr::null_mut()) };
     }
 }
 

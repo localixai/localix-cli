@@ -2,7 +2,7 @@
 //! video included), not the DOM drawn again. JPEG, at most `MAX_EDGE` pixels on its long side, so
 //! a screenshot costs the model about as much as a long page outline.
 
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 
 /// The long side of a picture, in pixels.
 pub(super) const MAX_EDGE: f64 = 1280.0;
@@ -42,7 +42,7 @@ pub(super) fn fitted(width: f64, height: f64) -> (f64, f64) {
 pub(super) fn capture(
     webview: &wry::WebView,
     clip: Option<Clip>,
-    reply: Sender<Result<Shot, String>>,
+    reply: SyncSender<Result<Shot, String>>,
 ) {
     use block2::RcBlock;
     use objc2::rc::Retained;
@@ -52,7 +52,9 @@ pub(super) fn capture(
 
     let view = webview.webview();
     let window = webview.ns_window();
+    // SAFETY: the WKWebView is an NSView; `bounds` answers an NSRect, which `CGRect` lays out.
     let bounds: CGRect = unsafe { msg_send![&*view, bounds] };
+    // SAFETY: wry's NSWindow is alive while its WebView is; it answers a CGFloat.
     let scale: f64 = unsafe { msg_send![&*window, backingScaleFactor] };
     let rect = match clip {
         Some(clip) => CGRect {
@@ -69,37 +71,48 @@ pub(super) fn capture(
     };
     // The snapshot's width is in points; the bitmap has the screen's scale on top of it.
     let (width, _) = fitted(rect.size.width * scale, rect.size.height * scale);
-    unsafe {
-        let configuration: Retained<AnyObject> = msg_send![class!(WKSnapshotConfiguration), new];
-        let _: () = msg_send![&*configuration, setRect: rect];
-        let points: Retained<AnyObject> =
-            msg_send![class!(NSNumber), numberWithDouble: width / scale.max(1.0)];
-        let _: () = msg_send![&*configuration, setSnapshotWidth: &*points];
-        let _: () = msg_send![&*configuration, setAfterScreenUpdates: Bool::YES];
-        let done = RcBlock::new(move |image: *mut AnyObject, error: *mut AnyObject| {
-            let shot = if image.is_null() {
-                Err(match error.is_null() {
-                    true => "WebKit returned no picture".to_string(),
-                    false => describe(error),
-                })
-            } else {
-                objc2::rc::autoreleasepool(|_| encode(image))
-            };
-            let _ = reply.send(shot);
-        });
-        let _: () = msg_send![
+    // SAFETY: `new` on WKSnapshotConfiguration returns a retained instance.
+    let configuration: Retained<AnyObject> =
+        unsafe { msg_send![class!(WKSnapshotConfiguration), new] };
+    // SAFETY: a snapshot configuration takes an NSRect, which `CGRect` lays out.
+    let _: () = unsafe { msg_send![&*configuration, setRect: rect] };
+    // SAFETY: NSNumber's class method takes a double and returns a number.
+    let points: Retained<AnyObject> =
+        unsafe { msg_send![class!(NSNumber), numberWithDouble: width / scale.max(1.0)] };
+    // SAFETY: a snapshot configuration takes an NSNumber width, which it retains.
+    let _: () = unsafe { msg_send![&*configuration, setSnapshotWidth: &*points] };
+    // SAFETY: a snapshot configuration takes a BOOL.
+    let _: () = unsafe { msg_send![&*configuration, setAfterScreenUpdates: Bool::YES] };
+    let done = RcBlock::new(move |image: *mut AnyObject, error: *mut AnyObject| {
+        let shot = if image.is_null() {
+            Err(match error.is_null() {
+                true => "WebKit returned no picture".to_string(),
+                // SAFETY: WebKit hands a live NSError for the length of the callback.
+                false => unsafe { describe(error) },
+            })
+        } else {
+            // SAFETY: WebKit hands a live NSImage for the length of the callback, and what
+            // `encode` reads of it is autoreleased into this pool.
+            objc2::rc::autoreleasepool(|_| unsafe { encode(image) })
+        };
+        let _ = reply.send(shot);
+    });
+    // SAFETY: a WKWebView takes a configuration and a block of (NSImage, NSError), which it
+    // copies and calls once on the main thread.
+    let _: () = unsafe {
+        msg_send![
             &*view,
             takeSnapshotWithConfiguration: &*configuration,
             completionHandler: &*done
-        ];
-    }
+        ]
+    };
 }
 
 #[cfg(not(target_os = "macos"))]
 pub(super) fn capture(
     _webview: &wry::WebView,
     _clip: Option<Clip>,
-    reply: Sender<Result<Shot, String>>,
+    reply: SyncSender<Result<Shot, String>>,
 ) {
     let _ = reply.send(Err(
         "screenshots are not supported on this system yet (macOS only); use `read` or `script`"
@@ -108,6 +121,9 @@ pub(super) fn capture(
 }
 
 /// The NSImage WebKit drew, as JPEG.
+///
+/// # Safety
+/// `image` is a live NSImage, and an autorelease pool is in place.
 #[cfg(target_os = "macos")]
 unsafe fn encode(image: *mut objc2::runtime::AnyObject) -> Result<Shot, String> {
     use objc2::runtime::AnyObject;
@@ -115,54 +131,72 @@ unsafe fn encode(image: *mut objc2::runtime::AnyObject) -> Result<Shot, String> 
 
     /// NSBitmapImageFileTypeJPEG.
     const JPEG: usize = 3;
-    unsafe {
-        let tiff: *mut AnyObject = msg_send![image, TIFFRepresentation];
-        if tiff.is_null() {
-            return Err("the picture has no bitmap".into());
-        }
-        let bitmap: *mut AnyObject = msg_send![class!(NSBitmapImageRep), imageRepWithData: tiff];
-        if bitmap.is_null() {
-            return Err("the picture could not be decoded".into());
-        }
-        let key: *mut AnyObject = msg_send![
+    // SAFETY: `image` is a live NSImage (the caller's contract); the data is autoreleased.
+    let tiff: *mut AnyObject = unsafe { msg_send![image, TIFFRepresentation] };
+    if tiff.is_null() {
+        return Err("the picture has no bitmap".into());
+    }
+    // SAFETY: `tiff` is a live NSData, checked non-null above.
+    let bitmap: *mut AnyObject =
+        unsafe { msg_send![class!(NSBitmapImageRep), imageRepWithData: tiff] };
+    if bitmap.is_null() {
+        return Err("the picture could not be decoded".into());
+    }
+    // SAFETY: the argument is a NUL-terminated UTF-8 literal, alive for the whole program.
+    let key: *mut AnyObject = unsafe {
+        msg_send![
             class!(NSString),
             stringWithUTF8String: c"NSImageCompressionFactor".as_ptr()
-        ];
-        let quality: *mut AnyObject = msg_send![class!(NSNumber), numberWithDouble: QUALITY];
-        let properties: *mut AnyObject =
-            msg_send![class!(NSDictionary), dictionaryWithObject: quality, forKey: key];
-        let data: *mut AnyObject =
-            msg_send![bitmap, representationUsingType: JPEG, properties: properties];
-        if data.is_null() {
-            return Err("the picture could not be encoded as JPEG".into());
-        }
-        let bytes: *const std::ffi::c_void = msg_send![data, bytes];
-        let length: usize = msg_send![data, length];
-        let width: isize = msg_send![bitmap, pixelsWide];
-        let height: isize = msg_send![bitmap, pixelsHigh];
-        Ok(Shot {
-            jpeg: std::slice::from_raw_parts(bytes.cast::<u8>(), length).to_vec(),
-            width: u32::try_from(width.max(0)).unwrap_or(u32::MAX),
-            height: u32::try_from(height.max(0)).unwrap_or(u32::MAX),
-        })
+        ]
+    };
+    // SAFETY: NSNumber's class method takes a double and returns a number.
+    let quality: *mut AnyObject = unsafe { msg_send![class!(NSNumber), numberWithDouble: QUALITY] };
+    // SAFETY: `quality` and `key` are live objects, made just above in this pool.
+    let properties: *mut AnyObject =
+        unsafe { msg_send![class!(NSDictionary), dictionaryWithObject: quality, forKey: key] };
+    // SAFETY: `bitmap` is a live NSBitmapImageRep (non-null above), `properties` a dictionary.
+    let data: *mut AnyObject =
+        unsafe { msg_send![bitmap, representationUsingType: JPEG, properties: properties] };
+    if data.is_null() {
+        return Err("the picture could not be encoded as JPEG".into());
     }
+    // SAFETY: `data` is a live NSData, checked non-null above.
+    let bytes: *const std::ffi::c_void = unsafe { msg_send![data, bytes] };
+    // SAFETY: as above; an NSData answers its length as an NSUInteger.
+    let length: usize = unsafe { msg_send![data, length] };
+    // SAFETY: `bitmap` is a live NSBitmapImageRep; it answers an NSInteger.
+    let width: isize = unsafe { msg_send![bitmap, pixelsWide] };
+    // SAFETY: as above.
+    let height: isize = unsafe { msg_send![bitmap, pixelsHigh] };
+    // SAFETY: `bytes` points at `length` bytes the NSData owns, alive while the pool is; they
+    // are copied out before it drains.
+    let jpeg = unsafe { std::slice::from_raw_parts(bytes.cast::<u8>(), length) }.to_vec();
+    Ok(Shot {
+        jpeg,
+        width: u32::try_from(width.max(0)).unwrap_or(u32::MAX),
+        height: u32::try_from(height.max(0)).unwrap_or(u32::MAX),
+    })
 }
 
 /// An NSError's description.
+///
+/// # Safety
+/// `error` is a live NSError.
 #[cfg(target_os = "macos")]
 unsafe fn describe(error: *mut objc2::runtime::AnyObject) -> String {
     use objc2::msg_send;
     use objc2::runtime::AnyObject;
-    unsafe {
-        let text: *mut AnyObject = msg_send![error, localizedDescription];
-        let utf8: *const std::ffi::c_char = msg_send![text, UTF8String];
-        if utf8.is_null() {
-            return "WebKit could not take the picture".into();
-        }
-        std::ffi::CStr::from_ptr(utf8)
-            .to_string_lossy()
-            .into_owned()
+    // SAFETY: `error` is a live NSError (the caller's contract); it answers an NSString.
+    let text: *mut AnyObject = unsafe { msg_send![error, localizedDescription] };
+    // SAFETY: `text` is a live NSString; its UTF-8 lives as long as it does, or is null.
+    let utf8: *const std::ffi::c_char = unsafe { msg_send![text, UTF8String] };
+    if utf8.is_null() {
+        return "WebKit could not take the picture".into();
     }
+    // SAFETY: `utf8` is non-null and NUL-terminated, alive while `text` is, and copied out here.
+    unsafe { std::ffi::CStr::from_ptr(utf8) }
+        .to_string_lossy()
+        .into_owned()
 }
 
 #[cfg(target_os = "macos")]
@@ -195,12 +229,15 @@ mod encoding {
 
     use super::{CGPoint, CGRect, CGSize};
 
+    // SAFETY: `CGPoint` is `repr(C)`, two f64s, as the encoding says.
     unsafe impl Encode for CGPoint {
         const ENCODING: Encoding = Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]);
     }
+    // SAFETY: `CGSize` is `repr(C)`, two f64s, as the encoding says.
     unsafe impl Encode for CGSize {
         const ENCODING: Encoding = Encoding::Struct("CGSize", &[f64::ENCODING, f64::ENCODING]);
     }
+    // SAFETY: `CGRect` is `repr(C)`, a `CGPoint` then a `CGSize`, as the encoding says.
     unsafe impl Encode for CGRect {
         const ENCODING: Encoding =
             Encoding::Struct("CGRect", &[CGPoint::ENCODING, CGSize::ENCODING]);

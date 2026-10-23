@@ -252,7 +252,8 @@ fn large(arguments: &Value) -> bool {
 /// An estimate in whole tokens.
 #[allow(
     clippy::cast_possible_truncation,
-    reason = "`as` saturates and drops the fraction: whole tokens are meant"
+    clippy::cast_sign_loss,
+    reason = "`as` saturates and drops the fraction: whole tokens are meant, and none below zero"
 )]
 pub(crate) fn whole(tokens: f64) -> u64 {
     tokens as u64

@@ -1,4 +1,4 @@
-use std::sync::mpsc::channel;
+use std::sync::mpsc::sync_channel;
 use std::time::{Duration, Instant};
 
 use contracts::tool::ToolOutput;
@@ -34,7 +34,7 @@ fn opened(now: Instant) -> Instant {
 fn an_entry_goes_to_the_session_when_it_waits_steers_it_while_it_works_or_waits_with_tab() {
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(Event::Ready(reply), now);
     typed(&mut app, "first", now);
     app.event(key(KeyCode::Enter), now);
@@ -51,7 +51,7 @@ fn an_entry_goes_to_the_session_when_it_waits_steers_it_while_it_works_or_waits_
         app.lane().queued,
         [Typed::from("/status"), Typed::from("second")]
     );
-    let (reply, taken) = channel();
+    let (reply, taken) = sync_channel(1);
     app.event(Event::TakeSteered { reply, peek: false }, now);
     assert_eq!(taken.try_recv(), Ok(vec!["now".to_string()]));
     assert!(app.lane().steered.is_empty());
@@ -64,10 +64,10 @@ fn an_entry_goes_to_the_session_when_it_waits_steers_it_while_it_works_or_waits_
         },
         now,
     );
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(Event::Ready(reply), now);
     assert_eq!(entries.try_recv(), Ok(Some("/status".into())));
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(Event::Ready(reply), now);
     assert_eq!(entries.try_recv(), Ok(Some("second".into())));
     assert!(app.lane().queued.is_empty());
@@ -197,7 +197,7 @@ fn an_approval_is_answered_with_a_key() {
     let mut app = app();
     // Approvals come while a task works.
     app.event(Event::TaskStarted("a task".into()), now);
-    let (reply, answer) = channel();
+    let (reply, answer) = sync_channel(1);
     app.event(
         Event::Approve {
             tool: "bash".into(),
@@ -211,7 +211,7 @@ fn an_approval_is_answered_with_a_key() {
     app.event(key(KeyCode::Enter), now);
     assert_eq!(answer.try_recv(), Ok(Approval::No(Some("use make".into()))));
     assert!(app.questions.is_empty());
-    let (reply, answer) = channel();
+    let (reply, answer) = sync_channel(1);
     app.event(
         Event::Approve {
             tool: "bash".into(),
@@ -230,7 +230,7 @@ fn keys_typed_ahead_as_an_approval_opens_do_not_answer_it() {
     let mut app = app();
     // Approvals come while a task works.
     app.event(Event::TaskStarted("a task".into()), now);
-    let (reply, answer) = channel();
+    let (reply, answer) = sync_channel(1);
     let approve = Event::Approve {
         tool: "bash".into(),
         summary: "rm -rf build".into(),
@@ -248,7 +248,7 @@ fn keys_typed_ahead_as_an_approval_opens_do_not_answer_it() {
     typed(&mut app, "use make", later);
     app.event(key(KeyCode::Enter), later);
     assert_eq!(answer.try_recv(), Ok(Approval::No(Some("use make".into()))));
-    let (reply, answer) = channel();
+    let (reply, answer) = sync_channel(1);
     let approve = Event::Approve {
         tool: "bash".into(),
         summary: "rm -rf build".into(),
@@ -267,7 +267,7 @@ fn keys_typed_ahead_as_an_approval_opens_do_not_answer_it() {
 fn slash_offers_the_commands_and_enter_takes_the_marked_one() {
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(Event::Ready(reply), now);
     typed(&mut app, "/", now);
     insta::assert_snapshot!(render(&mut app, now), @"
@@ -310,7 +310,7 @@ fn slash_offers_the_commands_and_enter_takes_the_marked_one() {
 fn command_drill_down_shows_modes_and_preserves_argument_entry() {
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(Event::Ready(reply), now);
     typed(&mut app, "/mo", now);
     app.event(key(KeyCode::Enter), now);
@@ -350,7 +350,7 @@ fn command_drill_down_shows_modes_and_preserves_argument_entry() {
 fn freeform_plan_task_and_unknown_mode_are_not_replaced_by_suggestions() {
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(Event::Ready(reply), now);
     typed(&mut app, "/plan fix the tests", now);
     assert!(app.offers().is_empty());
@@ -366,7 +366,7 @@ fn freeform_plan_task_and_unknown_mode_are_not_replaced_by_suggestions() {
 fn leaving_ends_every_wait() {
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(Event::Ready(reply), now);
     app.leave();
     assert_eq!(entries.try_recv(), Ok(None));
@@ -384,7 +384,7 @@ fn a_call_the_person_refused_says_what_they_said_not_an_error() {
         },
         now,
     );
-    let (reply, _answer) = channel();
+    let (reply, _answer) = sync_channel(1);
     app.event(
         Event::Approve {
             tool: "bash".into(),
@@ -420,7 +420,7 @@ fn at_offers_files_and_enter_puts_the_path_in_without_sending() {
     let now = Instant::now();
     let mut app = app();
     app.files = Files::with(vec!["src/main.rs".into(), "README.md".into()]);
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(Event::Ready(reply), now);
     typed(&mut app, "explain @mai", now);
     assert_eq!(
@@ -436,7 +436,7 @@ fn at_offers_files_and_enter_puts_the_path_in_without_sending() {
 fn pasted_text_is_shown_as_a_mark_but_sent_as_text() {
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(Event::Ready(reply), now);
     typed(&mut app, "review ", now);
     app.event(Event::Paste("first\r\nsecond".into()), now);
@@ -458,7 +458,7 @@ fn dropped_files_become_marks_and_go_with_the_message() {
     std::fs::write(&notes, "# notes").unwrap();
     let mut app = app();
     app.pasted = dir.path().join("kept");
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(Event::Ready(reply), now);
     typed(&mut app, "compare ", now);
     let dropped = format!(
@@ -492,7 +492,7 @@ fn slash_then_arrows_then_enter_runs_the_command_chosen() {
     // The bug: "/" alone, Down to a command, Enter sent "/" and the session said it was unknown.
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(Event::Ready(reply), now);
     typed(&mut app, "/", now);
     app.event(key(KeyCode::Down), now);
@@ -510,7 +510,7 @@ fn a_refusal_is_drawn_on_the_call_refused_not_on_another_that_failed_meanwhile()
         let (name, args) = ("bash".to_string(), args.clone());
         app.event(Event::Call { name, args }, now);
     }
-    let (reply, _answer) = channel();
+    let (reply, _answer) = sync_channel(1);
     app.event(
         Event::Approve {
             tool: "bash".into(),
@@ -561,7 +561,7 @@ fn from(id: &str, event: Event) -> Event {
 
 /// Lane `id` asks for its next entry; where it arrives.
 fn ready(app: &mut App, id: &str, now: Instant) -> std::sync::mpsc::Receiver<Option<Typed>> {
-    let (reply, entries) = channel();
+    let (reply, entries) = sync_channel(1);
     app.event(from(id, Event::Ready(reply)), now);
     entries
 }
@@ -588,7 +588,7 @@ fn steered_is_per_lane() {
     typed(&mut app, "steer b", now);
     app.event(key(KeyCode::Enter), now);
     let take = |app: &mut App, id: &str| {
-        let (reply, taken) = channel();
+        let (reply, taken) = sync_channel(1);
         app.event(from(id, Event::TakeSteered { reply, peek: false }), now);
         taken.try_recv().unwrap()
     };
@@ -614,7 +614,7 @@ fn background_mail_goes_to_its_lane() {
 fn dismiss_closes_only_its_own_lanes_question() {
     let now = Instant::now();
     let mut app = lanes(now);
-    let (reply, answer) = channel();
+    let (reply, answer) = sync_channel(1);
     let approve = Event::Approve {
         tool: "bash".into(),
         summary: "cargo test".into(),
@@ -632,7 +632,7 @@ fn leave_answers_every_lane() {
     let now = Instant::now();
     let mut app = lanes(now);
     let (a, b) = (ready(&mut app, "A", now), ready(&mut app, "B", now));
-    let (reply, picked) = channel();
+    let (reply, picked) = sync_channel(1);
     let choose = Event::Choose {
         title: "Implement this plan?".into(),
         options: vec![("Yes".into(), String::new())],
@@ -677,7 +677,7 @@ fn approve(
     summary: &str,
     at: Instant,
 ) -> std::sync::mpsc::Receiver<Approval> {
-    let (reply, answer) = channel();
+    let (reply, answer) = sync_channel(1);
     let event = Event::Approve {
         tool: "bash".into(),
         summary: summary.into(),
@@ -689,7 +689,7 @@ fn approve(
 
 /// A choice of llx's own from lane `id`; where its pick goes.
 fn choose(app: &mut App, id: &str, now: Instant) -> std::sync::mpsc::Receiver<Option<usize>> {
-    let (reply, picked) = channel();
+    let (reply, picked) = sync_channel(1);
     let event = Event::Choose {
         title: "Implement this plan?".into(),
         options: vec![("Yes".into(), String::new()), ("No".into(), String::new())],
@@ -774,7 +774,7 @@ fn held_choice_does_not_block_other_lanes() {
 fn keys_within_300ms_of_a_hidden_question_are_ignored() {
     let now = Instant::now();
     let mut app = lanes(now);
-    let (reply, answer) = channel();
+    let (reply, answer) = sync_channel(1);
     let question = contracts::person::Question {
         id: "file".into(),
         text: "Which file?".into(),

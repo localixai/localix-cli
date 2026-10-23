@@ -140,6 +140,10 @@ impl Page {
 }
 
 /// Close `open` and wait, briefly, until it is.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the event loop closes the window on its own thread: its flag is looked at every 10 ms, for at most 2 s"
+)]
 fn closed(open: &WebviewDriver) {
     open.close();
     let gone = std::time::Instant::now();

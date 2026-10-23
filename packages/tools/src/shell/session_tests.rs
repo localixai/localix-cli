@@ -38,6 +38,10 @@ fn send(sessions: &Sessions, id: u32, input: &str, keys: &[&str], wait: Wait) ->
         .unwrap()
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test's fixture: the command ends by itself"
+)]
 fn python() -> bool {
     let found = Command::new("python3").arg("-c").arg("").status().is_ok();
     if !found {
@@ -54,10 +58,14 @@ fn pid(sessions: &Sessions, id: u32) -> i32 {
         .iter()
         .find(|session| session.id == id)
         .unwrap();
-    session.pty.child.id() as i32
+    session.pty.child.id().cast_signed()
 }
 
 /// Whether `pid` (or with a minus, a process group) is gone, within two seconds.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test looks again until it is so, for a bounded time: there is no event to wait on"
+)]
 fn gone(pid: i32) -> bool {
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
@@ -209,6 +217,7 @@ fn a_stop_ends_the_wait_and_leaves_the_program_running() {
     assert_eq!(stopped.until, Until::Stopped);
     // Ctrl-C stops the task, not a REPL or a program the person is watching.
     assert_eq!(
+        // SAFETY: signal 0 only asks whether the group exists.
         unsafe { libc::kill(-group, 0) },
         0,
         "group {group} was killed"
@@ -220,6 +229,10 @@ fn a_stop_ends_the_wait_and_leaves_the_program_running() {
 }
 
 /// Session 1 waited on for `millis` on another thread while `then` runs.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the other thread's wait is under way before `then` runs"
+)]
 fn while_busy(sessions: &Sessions, millis: u64, then: impl FnOnce()) {
     thread::scope(|scope| {
         scope.spawn(|| {

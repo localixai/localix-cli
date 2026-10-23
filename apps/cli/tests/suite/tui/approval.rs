@@ -7,6 +7,10 @@ use crate::common::model::{Model, Reply, said};
 use crate::common::term::{Term, key};
 
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the test waits for what must not happen: no event says it did not"
+)]
 fn a_command_is_asked_about_and_runs_once_approved() {
     let model = Model::start(vec![
         Reply::call("bash", json!({"command": "echo approved-and-ran"})),

@@ -153,7 +153,8 @@ pub(crate) fn cut(text: &str, limit: usize) -> &str {
 
 /// `2026-10-22` for Unix seconds, in UTC (the civil-from-days algorithm: no date crate needed).
 pub(crate) fn date(unix: u64) -> String {
-    let days = (unix / 86_400) as i64 + 719_468;
+    // A count of days is far below i64::MAX: the cast keeps it.
+    let days = (unix / 86_400).cast_signed() + 719_468;
     let era = days.div_euclid(146_097);
     let day_of_era = days.rem_euclid(146_097);
     let year_of_era =

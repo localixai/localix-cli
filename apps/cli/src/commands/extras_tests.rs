@@ -3,6 +3,10 @@ use std::process::Command;
 use super::*;
 use crate::testing::Scratch;
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test's fixture: the command ends by itself"
+)]
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
         .args(args)

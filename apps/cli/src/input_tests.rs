@@ -1,6 +1,10 @@
 use super::*;
 use crate::testing::Scratch;
 
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "it stands for what reading the prompt returns"
+)]
 fn one(text: &str) -> Result<Prompt, Failure> {
     Ok(Prompt::One(text.into()))
 }

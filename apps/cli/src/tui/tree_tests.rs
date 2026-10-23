@@ -203,7 +203,7 @@ fn waiting_for_you_detail_when_held() {
     let now = Instant::now();
     let mut app = App::new(60, 20, vec![]);
     lanes(&mut app, &[("A", "first"), ("B", "add tabs")]);
-    let (reply, _picked) = std::sync::mpsc::channel();
+    let (reply, _picked) = std::sync::mpsc::sync_channel(1);
     let choose = Event::Choose {
         title: "Implement this plan?".into(),
         options: vec![("Yes".into(), String::new())],

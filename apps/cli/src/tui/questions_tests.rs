@@ -1,4 +1,4 @@
-use std::sync::mpsc::channel;
+use std::sync::mpsc::sync_channel;
 use std::time::Instant;
 
 use contracts::person::Choice as Offered;
@@ -34,7 +34,7 @@ fn press(app: &mut App, codes: &[KeyCode], now: Instant) {
 fn a_question_with_several_answers_is_checked_then_sent() {
     let now = Instant::now();
     let mut app = App::new(60, 20, vec![]);
-    let (reply, answer) = channel();
+    let (reply, answer) = sync_channel(1);
     let question = asked(&["Tests", "Lint"], true);
     app.event(
         Event::Ask {
@@ -68,7 +68,7 @@ fn a_question_with_several_answers_is_checked_then_sent() {
 fn an_open_question_is_a_line_to_type_at_once() {
     let now = Instant::now();
     let mut app = App::new(60, 20, vec![]);
-    let (reply, answer) = channel();
+    let (reply, answer) = sync_channel(1);
     app.event(
         Event::Ask {
             question: asked(&[], false),
@@ -88,7 +88,7 @@ fn an_open_question_is_a_line_to_type_at_once() {
 fn the_plan_handoff_starts_on_the_option_marked() {
     let now = Instant::now();
     let mut app = App::new(60, 20, vec![]);
-    let (reply, picked) = channel();
+    let (reply, picked) = sync_channel(1);
     let options = vec![
         ("Yes, in default mode".to_string(), String::new()),
         ("No, stay in plan mode".to_string(), String::new()),
@@ -119,7 +119,7 @@ fn the_plan_handoff_starts_on_the_option_marked() {
 fn a_hidden_line_never_shows_the_secret() {
     let now = Instant::now();
     let mut app = App::new(60, 20, vec![]);
-    let (reply, line) = channel();
+    let (reply, line) = sync_channel(1);
     let prompt = "Paste the key:".to_string();
     app.event(
         Event::Line {
@@ -143,7 +143,7 @@ fn a_hidden_line_never_shows_the_secret() {
 fn a_dismissed_question_closes_unanswered_and_the_prompt_comes_back() {
     let now = Instant::now();
     let mut app = App::new(60, 20, vec![]);
-    let (reply, answer) = channel();
+    let (reply, answer) = sync_channel(1);
     app.event(
         Event::Ask {
             question: asked(&["Tests"], false),
@@ -163,22 +163,22 @@ fn a_dismissed_question_closes_unanswered_and_the_prompt_comes_back() {
 
 #[test]
 fn each_pick_sends_what_it_means() {
-    let (reply, approval) = channel();
+    let (reply, approval) = sync_channel(1);
     assert_eq!(answer(Open::Approval(reply), Picked::Option(1)), None);
     assert_eq!(approval.try_recv(), Ok(Approval::Always));
-    let (reply, approval) = channel();
+    let (reply, approval) = sync_channel(1);
     let said = answer(Open::Approval(reply), Picked::Typed(2, String::new()));
     assert_eq!(
         (said.as_deref(), approval.try_recv()),
         (Some(""), Ok(Approval::No(None)))
     );
-    let (reply, asked) = channel();
+    let (reply, asked) = sync_channel(1);
     answer(Open::Question(reply), Picked::Typed(0, String::new()));
     assert_eq!(asked.try_recv(), Ok(Some(Answer::default())));
-    let (reply, asked) = channel();
+    let (reply, asked) = sync_channel(1);
     answer(Open::Question(reply), Picked::Cancelled);
     assert_eq!(asked.try_recv(), Ok(None));
-    let (reply, chosen) = channel();
+    let (reply, chosen) = sync_channel(1);
     answer(Open::Choice(reply), Picked::Cancelled);
     assert_eq!(chosen.try_recv(), Ok(None));
 }

@@ -91,9 +91,10 @@ impl Tool for EditTool<'_> {
                      whole content as new_string"
                 )));
             };
-            let content = String::from_utf8(bytes).map_err(|_| {
+            let content = String::from_utf8(bytes).map_err(|error| {
                 ToolError::Failed(format!(
-                    "{shown} is not UTF-8 text: it cannot be edited here"
+                    "{shown} is not UTF-8 text ({}): it cannot be edited here",
+                    error.utf8_error()
                 ))
             })?;
             let change = replace(&content, &args, &shown)?;

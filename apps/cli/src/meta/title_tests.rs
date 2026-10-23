@@ -20,6 +20,10 @@ impl Namer {
 }
 
 impl Chat for Namer {
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let asked = (
             request.conversation.to_vec(),

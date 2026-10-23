@@ -55,7 +55,7 @@ fn absolute_paths_are_readable_anywhere_but_writable_only_inside() {
 fn a_symlink_out_of_the_root_is_not_writable() {
     let dir = Scratch::new();
     let elsewhere = Scratch::new();
-    std::fs::create_dir(dir.path().join("root")).unwrap();
+    std::fs::create_dir_all(dir.path().join("root")).unwrap();
     std::os::unix::fs::symlink(elsewhere.path(), dir.path().join("root/out")).unwrap();
     let workspace = Workspace::new(dir.path().join("root")).unwrap();
     assert!(failed(workspace.writable("out/file.txt")).contains("outside the workspace"));

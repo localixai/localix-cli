@@ -32,8 +32,9 @@ const TRACE_WIDTH: usize = 100;
 fn stderr_width() -> Option<usize> {
     #[cfg(unix)]
     {
-        // SAFETY: TIOCGWINSZ only fills the struct, which outlives the call.
+        // SAFETY: a winsize is four integers: all zero is one.
         let mut size: libc::winsize = unsafe { std::mem::zeroed() };
+        // SAFETY: TIOCGWINSZ only fills the struct, which outlives the call.
         let ok = unsafe { libc::ioctl(2, libc::TIOCGWINSZ, &mut size) } == 0;
         (ok && size.ws_col > 0).then_some(size.ws_col as usize)
     }
@@ -69,6 +70,10 @@ pub(crate) struct Summary<'a> {
     pub session: &'a str,
 }
 
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "independent facts of the run: its options and where stdout and stderr go"
+)]
 pub(crate) struct Output {
     /// JSON lines on stdout.
     json: bool,

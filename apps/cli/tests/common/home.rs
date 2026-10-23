@@ -46,11 +46,19 @@ impl Home {
     }
 
     /// `llx args…` run to its end.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test runs the binary to its end, against a scripted model"
+    )]
     pub(crate) fn run(&self, args: &[&str]) -> Output {
         self.llx(args).output().unwrap()
     }
 
     /// `llx args…` run to its end with [`FAKE_KEY`] in the environment.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test runs the binary to its end, against a scripted model"
+    )]
     pub(crate) fn run_with_key(&self, args: &[&str]) -> Output {
         self.llx(args)
             .env("OPENROUTER_API_KEY", FAKE_KEY)

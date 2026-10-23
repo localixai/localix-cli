@@ -16,6 +16,10 @@ fn sessions_and_resume_with_none_saved() {
 }
 
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test runs the binary to its end, against a scripted model"
+)]
 fn a_saved_session_is_listed_and_resumed() {
     let home = Home::new();
     home.save_session("1700000000-ab12", "", 1700000000);
@@ -42,6 +46,10 @@ fn a_saved_session_is_listed_and_resumed() {
 }
 
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test runs the binary to its end, against a scripted model"
+)]
 fn last_goes_on_with_the_newest_session_here_over_a_newer_one_elsewhere() {
     let home = Home::new();
     let here = home.path().canonicalize().unwrap();

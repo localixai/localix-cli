@@ -50,11 +50,19 @@ mod covered {
     }
 
     impl View for Banner {
+        #[allow(
+            clippy::unwrap_in_result,
+            reason = "a test's fake: a poisoned lock fails the test"
+        )]
         fn observe(&self) -> ViewResult<Observation> {
             // The click that went through moved on to the next question.
             let acts = *self.acts.lock().unwrap();
             Ok(view(if acts >= 2 { 2 } else { 1 }))
         }
+        #[allow(
+            clippy::unwrap_in_result,
+            reason = "a test's fake: a poisoned lock fails the test"
+        )]
         fn act(&self, _: &str, _: &Action) -> ViewResult<()> {
             let mut acts = self.acts.lock().unwrap();
             *acts += 1;
@@ -81,6 +89,10 @@ mod covered {
     }
 
     impl Decider for Model {
+        #[allow(
+            clippy::unwrap_in_result,
+            reason = "a test's fake: a poisoned lock fails the test"
+        )]
         fn decide(
             &self,
             state: &Value,
@@ -143,6 +155,10 @@ mod covered {
     }
 
     impl Decider for Unsure {
+        #[allow(
+            clippy::unwrap_in_result,
+            reason = "a test's fake: a poisoned lock fails the test"
+        )]
         fn decide(
             &self,
             _: &Value,

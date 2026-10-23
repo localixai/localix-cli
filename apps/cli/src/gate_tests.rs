@@ -190,6 +190,10 @@ mod terminal {
     const CHILD: &str = "LLX_TEST_TERMINAL_CHILD";
     const NAME: &str = "gate::tests::terminal::a_stop_ends_a_wait_on_the_controlling_terminal";
 
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test's copy of itself runs one test, which ends by itself"
+    )]
     #[test]
     fn a_stop_ends_a_wait_on_the_controlling_terminal() {
         if std::env::var_os(CHILD).is_some() {
@@ -212,24 +216,29 @@ mod terminal {
         let opened =
             unsafe { libc::openpty(&mut master, &mut slave, none, none.cast(), none.cast()) };
         assert_eq!(opened, 0, "{}", std::io::Error::last_os_error());
-        // SAFETY: both are open descriptors that nothing else owns.
-        let (_master, slave) =
-            unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) };
+        // SAFETY: an open descriptor that nothing else owns.
+        let _master = unsafe { OwnedFd::from_raw_fd(master) };
+        // SAFETY: an open descriptor that nothing else owns.
+        let slave = unsafe { OwnedFd::from_raw_fd(slave) };
         let mut child = Command::new(std::env::current_exe().unwrap());
         child
             .args(["--exact", NAME, "--test-threads=1"])
             .env(CHILD, "1")
             .stdin(Stdio::from(slave));
-        // SAFETY: setsid and ioctl are async-signal-safe: the child leads a new session, and the
-        // terminal on its stdin becomes its controlling terminal, so /dev/tty opens it.
-        unsafe {
-            child.pre_exec(|| {
-                if libc::setsid() == -1 || libc::ioctl(0, libc::TIOCSCTTY as _, 0) == -1 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
+        // The child leads a new session, and the terminal on its stdin becomes its controlling
+        // terminal, so /dev/tty opens it.
+        let lead = || {
+            // SAFETY: setsid takes nothing and only makes the child a session's leader.
+            let led = unsafe { libc::setsid() } != -1;
+            // SAFETY: TIOCSCTTY takes no argument; it only sets the session's terminal.
+            if !led || unsafe { libc::ioctl(0, libc::TIOCSCTTY as _, 0) } == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        };
+        // SAFETY: between fork and exec the closure only calls setsid and ioctl, which are
+        // async-signal-safe.
+        unsafe { child.pre_exec(lead) };
         let ran = child.output().unwrap();
         let said = String::from_utf8_lossy(&ran.stdout);
         assert!(ran.status.success(), "{said}");

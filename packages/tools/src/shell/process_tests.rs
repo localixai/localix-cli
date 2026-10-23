@@ -109,6 +109,10 @@ fn a_timeout_kills_the_command_on_windows_too() {
     assert!(!finished.open);
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test looks again until it is so, for a bounded time: there is no event to wait on; kill -0 ends by itself"
+)]
 #[cfg(unix)]
 #[test]
 fn a_stop_kills_the_command_and_what_it_started() {

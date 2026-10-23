@@ -8,7 +8,7 @@
 use std::io::{self, Read};
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -82,7 +82,8 @@ pub(super) fn run(job: &Job) -> io::Result<Finished> {
         .stderr(Stdio::piped())
         .spawn()?;
     let started = Instant::now();
-    let (closed, readers) = mpsc::channel();
+    // Two readers, one send each: room for both, so neither waits.
+    let (closed, readers) = mpsc::sync_channel(2);
     let stdout = drain(child.stdout.take(), closed.clone());
     let stderr = drain(child.stderr.take(), closed);
     let (ending, elapsed) = watch(&mut child, job, started)?;
@@ -109,6 +110,10 @@ pub(super) fn quiet_env(shell: &mut Command, hidden: &[&str]) {
 }
 
 /// Wait for `child` to exit, killing it at its deadline or when the person stops the task.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a child's exit has no event in std: a backoff up to POLL, bounded by the deadline and the stop"
+)]
 fn watch(child: &mut Child, job: &Job, started: Instant) -> io::Result<(Ending, Duration)> {
     let deadline = started + job.timeout;
     let mut pause = Duration::from_millis(1);
@@ -141,14 +146,14 @@ pub(super) fn shell(command: &str) -> Command {
     use std::os::unix::process::CommandExt;
     let mut shell = Command::new("sh");
     shell.arg("-c").arg(command);
+    // SAFETY: setsid takes nothing and only makes the forked child a session's leader.
+    let lead = || match unsafe { libc::setsid() } {
+        -1 => Err(io::Error::last_os_error()),
+        _ => Ok(()),
+    };
     // SAFETY: setsid is async-signal-safe, and nothing else runs between fork and exec. The new
     // session's process group has the shell's pid, which `kill` signals.
-    unsafe {
-        shell.pre_exec(|| match libc::setsid() {
-            -1 => Err(io::Error::last_os_error()),
-            _ => Ok(()),
-        });
-    }
+    unsafe { shell.pre_exec(lead) };
     shell
 }
 
@@ -166,7 +171,8 @@ fn shell(command: &str) -> Command {
 /// known to be gone. `child` must not be reaped yet: its pid is the session's id until it is.
 #[cfg(unix)]
 pub(super) fn kill(child: &mut Child) -> bool {
-    let leader = child.id() as libc::pid_t;
+    // A pid the system gave: it is a pid_t, which `id` widened.
+    let leader = child.id().cast_signed();
     // SAFETY: kill only sends a signal; it touches nothing in this process.
     let signalled = unsafe { libc::kill(-leader, libc::SIGKILL) } == 0;
     // No process left in the group: everything it started is gone already.
@@ -181,6 +187,10 @@ pub(super) fn kill(child: &mut Child) -> bool {
 
 /// Kill the command and everything it started (the process tree); whether all of it is known to
 /// be gone.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "taskkill signals the tree and returns: it has no wait of its own"
+)]
 #[cfg(windows)]
 fn kill(child: &mut Child) -> bool {
     let tree = Command::new("taskkill")
@@ -197,6 +207,10 @@ fn kill(child: &mut Child) -> bool {
 }
 
 /// Whether `child` exited within [`KILL_WAIT`] of being killed.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a child's exit has no event in std: it is looked at every 10 ms, for at most KILL_WAIT"
+)]
 fn reaped(child: &mut Child) -> bool {
     let deadline = Instant::now() + KILL_WAIT;
     loop {
@@ -209,14 +223,15 @@ fn reaped(child: &mut Child) -> bool {
 }
 
 /// Read `pipe` to its end into an [`Output`] on a thread; say so on `closed` when it ends.
-fn drain(pipe: Option<impl Read + Send + 'static>, closed: Sender<()>) -> Arc<Mutex<Output>> {
+fn drain(pipe: Option<impl Read + Send + 'static>, closed: SyncSender<()>) -> Arc<Mutex<Output>> {
     let output = Arc::new(Mutex::new(Output::default()));
     let Some(mut pipe) = pipe else {
         let _ = closed.send(());
         return output;
     };
     let shared = Arc::clone(&output);
-    thread::spawn(move || {
+    let reader = thread::Builder::new().name("llx-pipe".into());
+    let started = reader.spawn(move || {
         let mut buffer = [0; 8192];
         loop {
             match pipe.read(&mut buffer) {
@@ -231,6 +246,9 @@ fn drain(pipe: Option<impl Read + Send + 'static>, closed: Sender<()>) -> Arc<Mu
         }
         let _ = closed.send(());
     });
+    // No thread to read it: the pipe is dropped with the closure, the command sees it closed,
+    // and its output is told as empty.
+    drop(started);
     output
 }
 

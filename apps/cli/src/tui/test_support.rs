@@ -39,7 +39,7 @@ pub(crate) fn typed(app: &mut App, text: &str, now: Instant) {
 /// was queued, or `None` when nothing waits (the app then holds the question open, and an entry
 /// that finds it already answered is queued instead).
 pub(crate) fn next_entry(app: &mut App, now: Instant) -> Option<String> {
-    let (reply, entries) = std::sync::mpsc::channel();
+    let (reply, entries) = std::sync::mpsc::sync_channel(1);
     app.event(Event::Ready(reply), now);
     entries.try_recv().ok().flatten().map(|entry| entry.text)
 }
@@ -145,6 +145,10 @@ pub(crate) fn normalize(text: &str) -> String {
 
 /// The session's side of an interface no one draws: the test reads the events it is sent.
 pub(crate) fn fake_ui() -> (super::Ui, std::sync::mpsc::Receiver<Event>) {
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the interface's events are unbounded, as `tui::start` makes them"
+    )]
     let (events, received) = std::sync::mpsc::channel();
     (super::Ui::new(events), received)
 }

@@ -105,12 +105,11 @@ pub(crate) fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cur
         )));
     }
     out.extend(offer_rows(app, &offers, width));
-    if let Some(footer) = footer(app, now) {
-        out.push(Line::from(Span::styled(
-            format!("  {}", cut(&footer, width.saturating_sub(2))),
-            style::dim(),
-        )));
-    }
+    let footer = footer(app, now);
+    out.push(Line::from(Span::styled(
+        format!("  {}", cut(&footer, width.saturating_sub(2))),
+        style::dim(),
+    )));
     if offers.is_empty() {
         let tree = tree::render(app, now, &spinner);
         if !tree.is_empty() {
@@ -243,7 +242,7 @@ fn waiting(text: &str) -> String {
     }
 }
 
-fn footer(app: &App, now: Instant) -> Option<String> {
+fn footer(app: &App, now: Instant) -> String {
     let window = |at: Instant| now.duration_since(at).as_millis() < super::app::QUIT_WINDOW_MS;
     let mode = format!("{} mode · shift+tab to cycle", app.lane().mode);
     if app.quitting.is_some_and(window) {
@@ -253,15 +252,13 @@ fn footer(app: &App, now: Instant) -> Option<String> {
             ""
         };
         // In place of the mode's line while it lasts: a short window to read it in.
-        return Some(format!("{back}ctrl-c again to quit"));
+        return format!("{back}ctrl-c again to quit");
     }
     if app.escaped.is_some_and(window) && app.composer.is_empty() && app.busy().is_none() {
-        return Some("esc again to rewind".into());
+        return "esc again to rewind".into();
     }
     if app.busy().is_some() && !app.composer.is_empty() {
-        return Some(format!(
-            "{mode} · enter tells the task now · tab keeps it for after"
-        ));
+        return format!("{mode} · enter tells the task now · tab keeps it for after");
     }
     // How full the context is, once it matters: below half left.
     let context = app
@@ -269,10 +266,10 @@ fn footer(app: &App, now: Instant) -> Option<String> {
         .context
         .filter(|&left| left < 50)
         .map(|left| format!("{left}% context left"));
-    Some(match context {
+    match context {
         Some(context) => format!("{mode} · {context}"),
         None => mode,
-    })
+    }
 }
 
 #[cfg(test)]

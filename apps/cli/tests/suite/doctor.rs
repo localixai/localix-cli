@@ -16,6 +16,10 @@ fn doctor_without_a_key_checks_the_rest_then_exits_three() {
 }
 
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test runs the binary to its end, against a scripted model"
+)]
 fn a_decision_model_that_answers_nothing_fails_the_check() {
     let home = Home::new();
     // Every request gets a chat completion: right for the agent model, no answers for the other.

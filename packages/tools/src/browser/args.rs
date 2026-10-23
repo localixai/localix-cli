@@ -88,9 +88,8 @@ pub fn address(url: &str) -> Result<String, ToolError> {
 }
 
 /// What the call does that a page sees, in full, for the gate; `None` when it only reads or
-/// resizes (opening the search page with nothing else sends nothing). A wrong `tab` is refused
-/// here, before the person is asked about a call that cannot run.
-pub(super) fn effects(url: Option<&str>, args: &Args) -> Result<Option<String>, ToolError> {
+/// resizes (opening the search page with nothing else sends nothing).
+pub(super) fn effects(url: Option<&str>, args: &Args) -> Option<String> {
     let new_tab = args.new_tab;
     let mut parts = vec![];
     if let Some(url) = url {
@@ -105,7 +104,7 @@ pub(super) fn effects(url: Option<&str>, args: &Args) -> Result<Option<String>, 
     if let Some(script) = given(&args.script) {
         parts.push(format!("script: {}", one_line(script)));
     }
-    Ok((!parts.is_empty()).then(|| parts.join(", then ")))
+    (!parts.is_empty()).then(|| parts.join(", then "))
 }
 
 /// `text` on one line, its line breaks shown as a return sign and nothing left out.

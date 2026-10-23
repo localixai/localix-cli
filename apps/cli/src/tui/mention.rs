@@ -80,6 +80,10 @@ fn score(path: &str, query: &str) -> Option<usize> {
 
 /// The workspace's files: what git tracks and would track, else a walk that skips hidden
 /// folders and build output.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "R10 debt: a local git query, with no deadline or stop yet"
+)]
 fn list(root: &Path) -> Vec<String> {
     let git = std::process::Command::new("git")
         .args(["ls-files", "-co", "--exclude-standard"])

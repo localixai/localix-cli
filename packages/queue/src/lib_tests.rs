@@ -121,15 +121,26 @@ fn an_entry_reads_as_tagged_data_its_body_cannot_close() {
     );
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the poster comes late on purpose: the queue's wait is what is tested"
+)]
+fn late() {
+    std::thread::sleep(Duration::from_millis(50));
+}
+
 #[test]
 fn a_wait_wakes_when_something_joins() {
     let queue = Arc::new(Queue::new(16));
     queue.begin();
     let poster = Arc::clone(&queue);
-    let thread = std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(50));
-        poster.post(entry(REPORT, "agent_result", "s1", "done"));
-    });
+    let thread = std::thread::Builder::new()
+        .name("llx-test-poster".into())
+        .spawn(move || {
+            late();
+            poster.post(entry(REPORT, "agent_result", "s1", "done"));
+        })
+        .unwrap();
     let started = std::time::Instant::now();
     queue.wait(Duration::from_secs(5));
     assert!(started.elapsed() < Duration::from_secs(2));

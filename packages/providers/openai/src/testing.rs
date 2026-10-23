@@ -61,6 +61,10 @@ impl Scripted {
 }
 
 impl Http for Scripted {
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
     fn post(&self, address: &str, headers: &[(&str, &str)], body: &str) -> Result<Reply, String> {
         self.sent.lock().unwrap().push(Sent {
             address: address.into(),

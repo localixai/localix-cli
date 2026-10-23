@@ -68,6 +68,10 @@ impl Windows {
     }
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test looks again until it is so, for a bounded time: there is no event to wait on"
+)]
 fn eventually(within: Duration, done: impl Fn() -> bool) -> bool {
     let deadline = Instant::now() + within;
     while !done() {
@@ -169,7 +173,10 @@ fn a_program_that_ends_alone_says_so_then_its_window_closes() {
     let ended = Instant::now();
     assert!(eventually(Duration::from_secs(5), || windows.drops() == 1));
     let kept = ended.elapsed();
-    assert!(kept >= LINGER - Duration::from_millis(300), "{kept:?}");
+    assert!(
+        kept >= LINGER.saturating_sub(Duration::from_millis(300)),
+        "{kept:?}"
+    );
 }
 
 #[test]

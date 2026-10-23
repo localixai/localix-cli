@@ -226,6 +226,10 @@ mod dialogue {
     }
 
     impl Chat for Model {
+        #[allow(
+            clippy::unwrap_in_result,
+            reason = "a test's fake: a poisoned lock fails the test"
+        )]
         fn complete(&self, request: Request) -> Result<Completion, ChatError> {
             let mut requests = self.requests.lock().unwrap();
             let turn = requests.len();

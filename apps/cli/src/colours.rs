@@ -123,23 +123,19 @@ impl Terminal for Tty {
         // ready at once, so the read would block until the person typed.
         let fd = self.0.as_raw_fd();
         let mut timeout = libc::timeval {
-            tv_sec: wait.as_secs() as libc::time_t,
-            tv_usec: wait.subsec_micros() as libc::suseconds_t,
+            tv_sec: libc::time_t::try_from(wait.as_secs()).unwrap_or(libc::time_t::MAX),
+            // Below a million: it fits every suseconds_t.
+            tv_usec: libc::suseconds_t::try_from(wait.subsec_micros()).unwrap_or(0),
         };
-        // SAFETY: the set and the timeout live through the call, and `fd` is open and below
-        // FD_SETSIZE (a process this young has few descriptors).
-        let ready = unsafe {
-            let mut set: libc::fd_set = std::mem::zeroed();
-            libc::FD_SET(fd, &mut set);
-            libc::select(
-                fd + 1,
-                &mut set,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                &mut timeout,
-            ) > 0
-                && libc::FD_ISSET(fd, &set)
-        };
+        // SAFETY: an fd_set is plain bits: all zero is the empty set.
+        let mut set: libc::fd_set = unsafe { std::mem::zeroed() };
+        // SAFETY: `fd` is open and below FD_SETSIZE (a process this young has few descriptors).
+        unsafe { libc::FD_SET(fd, &mut set) };
+        let none = std::ptr::null_mut();
+        // SAFETY: the set and the timeout live through the call.
+        let selected = unsafe { libc::select(fd + 1, &mut set, none, none, &mut timeout) };
+        // SAFETY: the same set, as select left it.
+        let ready = selected > 0 && unsafe { libc::FD_ISSET(fd, &set) };
         if !ready {
             return None;
         }

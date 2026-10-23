@@ -52,7 +52,7 @@ llx doctor       # checks the sign-ins, both models, the WebView and the shell
 
 `/login` asks for a provider, signs you in to it, then asks for one of its models and a reasoning level that model takes:
 
-- **OpenAI**, with a ChatGPT sign-in: your browser opens OpenAI's sign-in page and comes back to llx on `127.0.0.1:1455` (or 1457); requests are billed to your ChatGPT plan. On a machine without a browser, open the address shown elsewhere and paste the address the browser ends on.
+- **OpenAI**, with a ChatGPT sign-in: your browser opens OpenAI's sign-in page and comes back to llx on `127.0.0.1:1455` (or 1457), and llx goes on by itself, with nothing to paste; requests are billed to your ChatGPT plan. On a machine without a browser, open the address shown elsewhere and paste the address the browser ends on.
 - **OpenRouter**, with a key: paste it (it is not shown), or sign in in the browser for a new one. `OPENROUTER_API_KEY` works too, and wins over a saved key.
 
 The choice is put in at once, in the same conversation, and saved as the default for later sessions and for `exec`. The browser tool's decision model runs on OpenRouter, so browser actions need an OpenRouter key whichever provider the agent thinks with.

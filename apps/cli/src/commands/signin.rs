@@ -2,6 +2,7 @@
 //! Keys and tokens are never shown: a key is read with the echo off, and only its masked ends
 //! are printed.
 
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -82,7 +83,8 @@ fn browser(
 }
 
 /// Wait for the browser to come back, or for the address it ended on to be pasted (when it is
-/// on another machine); the authorization code. The prompt line is read on this thread only, so
+/// on another machine); the authorization code. The line for the address closes by itself once
+/// the browser is back, as in Codex: nothing to press. It is read on this thread only, so
 /// nothing is left reading stdin once the sign-in ends.
 pub fn come_back(
     terminal: &mut dyn Terminal,
@@ -90,10 +92,22 @@ pub fn come_back(
     wait: &dyn Fn(Duration) -> Option<Result<String, String>>,
     pasted: &dyn Fn(&str) -> Result<String, String>,
 ) -> Result<String, String> {
-    let prompt = "Press Enter once the browser says you are signed in, or paste the address \
-                  it ended on (q to cancel) > ";
+    let prompt = "Finish signing in in the browser; llx goes on by itself. If the browser is \
+                  on another machine, paste the address it ended on (Enter checks again, \
+                  q cancels) > ";
+    let back = RefCell::new(None);
+    let done = || {
+        if back.borrow().is_none() {
+            *back.borrow_mut() = wait(Duration::ZERO);
+        }
+        back.borrow().is_some()
+    };
     loop {
-        let line = terminal.line(prompt, false).ok_or("cancelled")?;
+        let line = terminal.line_until(prompt, &done);
+        if let Some(outcome) = back.take() {
+            return outcome;
+        }
+        let line = line.ok_or("cancelled")?;
         match line.as_str() {
             "q" | "Q" => return Err("cancelled".into()),
             "" => match wait(Duration::from_secs(3)) {

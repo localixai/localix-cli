@@ -56,3 +56,39 @@ fn a_key_shows_only_its_prefix_and_its_last_four() {
     assert_eq!(mask("sk-or-v1-0123456789abcdef"), "sk-or-...cdef");
     assert_eq!(mask("sk-or-abc"), "...");
 }
+
+/// An interface whose line stays open, untouched, until `done` closes it.
+struct Open;
+
+impl Picker for Open {
+    fn pick(&mut self, _: &str, _: &[Item]) -> Option<usize> {
+        None
+    }
+}
+
+impl Lines for Open {
+    fn line(&mut self, _: &str, _: bool) -> Option<String> {
+        unreachable!("the line for the address is one that closes")
+    }
+
+    fn line_until(&mut self, _: &str, done: &dyn Fn() -> bool) -> Option<String> {
+        while !done() {}
+        None
+    }
+}
+
+#[test]
+fn the_browser_coming_back_closes_the_line_with_nothing_pressed() {
+    let waits = Cell::new(0);
+    let wait = |_| {
+        waits.set(waits.get() + 1);
+        (waits.get() == 3).then(|| Ok("from-browser".to_string()))
+    };
+    let outcome = come_back(&mut Open, &|_| {}, &wait, &|_| Err("not pasted".into()));
+    assert_eq!(outcome, Ok("from-browser".into()));
+    assert_eq!(
+        waits.get(),
+        3,
+        "the callback is not asked again once it came back"
+    );
+}

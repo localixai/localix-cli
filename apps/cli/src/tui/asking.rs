@@ -102,4 +102,8 @@ impl Lines for UiTerminal {
     fn line(&mut self, prompt: &str, hidden: bool) -> Option<String> {
         self.ui.line(prompt, hidden)
     }
+
+    fn line_until(&mut self, prompt: &str, done: &dyn Fn() -> bool) -> Option<String> {
+        self.ui.line_until(prompt, done)
+    }
 }

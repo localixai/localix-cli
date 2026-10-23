@@ -34,6 +34,14 @@ pub trait Lines {
     /// The line typed after `prompt`, not shown on the screen when `hidden`; `None` at the end
     /// of input.
     fn line(&mut self, prompt: &str, hidden: bool) -> Option<String>;
+
+    /// [`Lines::line`], closed unanswered (`None`) once `done` says so: a sign-in's callback
+    /// came back while the person could still paste. A plain prompt line cannot be closed, and
+    /// waits for its line.
+    fn line_until(&mut self, prompt: &str, done: &dyn Fn() -> bool) -> Option<String> {
+        let _ = done;
+        self.line(prompt, false)
+    }
 }
 
 /// What a sign-in flow needs at the terminal.

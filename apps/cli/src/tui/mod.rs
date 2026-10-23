@@ -262,6 +262,17 @@ impl Ui {
         answer.recv().ok().flatten()
     }
 
+    /// A line as [`Ui::line`], closed unanswered once `done` says so.
+    pub fn line_until(&self, prompt: &str, done: &dyn Fn() -> bool) -> Option<String> {
+        let (reply, answer) = channel();
+        self.send(Event::Line {
+            prompt: prompt.into(),
+            hidden: false,
+            reply,
+        });
+        self.wait(&answer, done).flatten()
+    }
+
     fn wait<T>(&self, answer: &Receiver<T>, stopped: &dyn Fn() -> bool) -> Option<T> {
         loop {
             match answer.recv_timeout(POLL) {

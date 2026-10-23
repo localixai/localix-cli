@@ -9,3 +9,6 @@ license.workspace = true
 
 # No workspace package: a primitive the app composes (rule L3).
 [dependencies]
+
+[lints]
+workspace = true

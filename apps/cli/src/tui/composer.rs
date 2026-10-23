@@ -7,15 +7,14 @@
 //! first or the last one walk the earlier entries. Ctrl+U, Ctrl+K and Ctrl+W delete to the
 //! start, to the end and the word before.
 
-use std::path::{Path, PathBuf};
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::text::{Line, Span};
-use unicode_width::UnicodeWidthChar;
 
-use super::style;
-use super::wrap::width as columns;
 use crate::attach::Dropped;
+
+mod marks;
+mod render;
+
+use marks::{cleaned, unpasted};
 
 /// What a key did.
 #[derive(Debug, PartialEq)]
@@ -75,121 +74,9 @@ impl Composer {
         self.clear();
     }
 
-    /// Hide clipboard text behind a numbered mark; restore it when the entry is sent.
-    pub fn paste_marked(&mut self, text: &str) {
-        let cleaned: String = cleaned(text).collect();
-        if cleaned.is_empty() {
-            return;
-        }
-        let mut mark = "[Paste]".to_string();
-        let mut n = 2;
-        while self.text().contains(&mark) || self.pastes.iter().any(|(taken, _)| *taken == mark) {
-            mark = format!("[Paste #{n}]");
-            n += 1;
-        }
-        self.insert_mark(&mark);
-        self.pastes.push((mark, cleaned));
-    }
-
-    /// `mark` at the cursor, a word of its own.
-    fn insert_mark(&mut self, mark: &str) {
-        if self.at > 0 && !self.text[self.at - 1].is_whitespace() {
-            self.insert(' ');
-        }
-        mark.chars().chain([' ']).for_each(|c| self.insert(c));
-    }
-
     pub fn set(&mut self, text: &str) {
         self.text = text.chars().collect();
         self.at = self.text.len();
-    }
-
-    /// Attach the picture at `path`: a mark for it goes in the text where the cursor is.
-    pub fn attach(&mut self, path: PathBuf) {
-        let mark = self.mark(&Dropped::Image(path.clone()));
-        self.insert_mark(&mark);
-        self.attached.push((mark, Dropped::Image(path)));
-    }
-
-    /// Whether a paste consists entirely of file paths (including shell-escaped spaces).
-    pub fn is_path_list(text: &str, resolve: &dyn Fn(&str) -> Option<Dropped>) -> bool {
-        let chars: Vec<char> = text.chars().collect();
-        let parts = words(&chars);
-        !parts.is_empty()
-            && parts.iter().all(|(from, to)| {
-                let word: String = chars[*from..*to].iter().collect();
-                resolve(&word).is_some()
-            })
-    }
-
-    /// Every path in the text that names a file (dropped in, pasted, typed whole) turned into a
-    /// mark: `[image: shot.png]` for a picture, `[file: notes.md]` for anything else. `resolve`
-    /// says what a word names; `keep` keeps a picture somewhere lasting.
-    pub fn adopt(
-        &mut self,
-        resolve: &dyn Fn(&str) -> Option<Dropped>,
-        keep: &dyn Fn(&Path) -> PathBuf,
-    ) {
-        for (start, end) in words(&self.text).into_iter().rev() {
-            let word: String = self.text[start..end].iter().collect();
-            let looks = word.contains('/') || word.starts_with('~');
-            let Some(dropped) = looks.then(|| resolve(&word)).flatten() else {
-                continue;
-            };
-            // The mark has the name as the person knows it; a picture is sent from its copy.
-            let mark = self.mark(&dropped);
-            let dropped = match dropped {
-                Dropped::Image(path) => Dropped::Image(keep(&path)),
-                file => file,
-            };
-            let at_end = self.at >= end;
-            let shift = mark.chars().count() as isize - (end - start) as isize;
-            self.text.splice(start..end, mark.chars());
-            if at_end {
-                self.at = (self.at as isize + shift) as usize;
-            } else if self.at > start {
-                self.at = start + mark.chars().count();
-            }
-            self.attached.push((mark, dropped));
-        }
-    }
-
-    /// The mark for `dropped`, numbered when its name is already taken.
-    fn mark(&self, dropped: &Dropped) -> String {
-        let (kind, path) = match dropped {
-            Dropped::Image(path) => ("image", path),
-            Dropped::File(path) => ("file", path),
-        };
-        let name = path.file_name().map_or_else(
-            || path.display().to_string(),
-            |n| n.to_string_lossy().to_string(),
-        );
-        let mut mark = format!("[{kind}: {name}]");
-        let mut n = 2;
-        while self.attached.iter().any(|(taken, _)| *taken == mark) {
-            mark = format!("[{kind}: {name} #{n}]");
-            n += 1;
-        }
-        mark
-    }
-
-    /// What is sent for `sent`: its text with each file's mark turned back into the file's path
-    /// (the agent reads it), and the pictures whose marks are still there. A mark deleted from
-    /// the text takes its attachment with it.
-    pub fn take_attached(&mut self, sent: &str) -> (String, Vec<PathBuf>) {
-        let mut text = sent.to_string();
-        let mut images = vec![];
-        for (mark, dropped) in std::mem::take(&mut self.attached) {
-            if !text.contains(mark.as_str()) {
-                continue;
-            }
-            match dropped {
-                Dropped::Image(path) => images.push(path),
-                Dropped::File(path) => text = text.replace(&mark, &path.display().to_string()),
-            }
-        }
-        let text = unpasted(&text, &std::mem::take(&mut self.pastes));
-        (text, images)
     }
 
     /// The `@` word the cursor is at the end of: where it starts, and what follows the `@`.
@@ -247,70 +134,6 @@ impl Composer {
             _ => return Edit::Ignored,
         }
         Edit::Changed
-    }
-
-    /// The rows the composer takes at `width`, after `prompt`, and where its cursor is among them.
-    /// The text breaks at the width wherever it reaches it, so every character keeps its column.
-    pub fn render(
-        &self,
-        prompt: Span<'static>,
-        placeholder: &str,
-        width: usize,
-    ) -> (Vec<Line<'static>>, (usize, usize)) {
-        let indent = columns(&prompt.content);
-        let room = width.saturating_sub(indent).max(1);
-        let mut rows: Vec<String> = vec![String::new()];
-        let mut used = 0;
-        let mut cursor = (0, indent);
-        for (index, c) in self.text.iter().enumerate() {
-            if *c == '\n' {
-                if index == self.at {
-                    cursor = (rows.len() - 1, indent + used);
-                }
-                rows.push(String::new());
-                used = 0;
-                continue;
-            }
-            let w = c.width().unwrap_or(0);
-            if used + w > room {
-                rows.push(String::new());
-                used = 0;
-            }
-            if index == self.at {
-                cursor = (rows.len() - 1, indent + used);
-            }
-            rows.last_mut()
-                .unwrap()
-                .push(if self.masked { '•' } else { *c });
-            used += w;
-        }
-        if self.at == self.text.len() {
-            if used >= room {
-                rows.push(String::new());
-                used = 0;
-            }
-            cursor = (rows.len() - 1, indent + used);
-        }
-        let pad = " ".repeat(indent);
-        let lines = rows
-            .into_iter()
-            .enumerate()
-            .map(|(at, row)| {
-                let lead = if at == 0 {
-                    prompt.clone()
-                } else {
-                    Span::raw(pad.clone())
-                };
-                match (self.text.is_empty(), at) {
-                    (true, 0) => Line::from(vec![
-                        lead,
-                        Span::styled(placeholder.to_string(), style::dim()),
-                    ]),
-                    _ => Line::from(vec![lead, Span::raw(row)]),
-                }
-            })
-            .collect();
-        (lines, cursor)
     }
 
     fn send(&mut self) -> Edit {
@@ -445,67 +268,6 @@ impl Composer {
             None => {}
         }
     }
-}
-
-/// Pasted text as it is typed: one kind of line ending, tabs as spaces, no control characters.
-fn cleaned(text: &str) -> impl Iterator<Item = char> {
-    let text = text.replace("\r\n", "\n").replace('\r', "\n");
-    let kept: Vec<char> = text
-        .chars()
-        .filter(|c| *c == '\n' || *c == '\t' || !c.is_control())
-        .collect();
-    kept.into_iter().map(|c| if c == '\t' { ' ' } else { c })
-}
-
-/// `text` with each paste's mark turned back into what was pasted.
-fn unpasted(text: &str, pastes: &[(String, String)]) -> String {
-    let mut text = text.to_string();
-    let mut replacements = vec![];
-    for (mark, pasted) in pastes {
-        replacements.extend(
-            text.match_indices(mark.as_str())
-                .map(|(at, _)| (at, mark, pasted)),
-        );
-    }
-    replacements.sort_by_key(|item| std::cmp::Reverse(item.0));
-    for (at, mark, pasted) in replacements {
-        text.replace_range(at..at + mark.len(), pasted);
-    }
-    text
-}
-
-/// The words of `text` as ranges: split at whitespace, except inside quotes or after a
-/// backslash, as a shell (and a terminal writing a dropped file) splits them.
-fn words(text: &[char]) -> Vec<(usize, usize)> {
-    let mut out = vec![];
-    let mut start = None;
-    let mut quote: Option<char> = None;
-    let mut escaped = false;
-    for (at, c) in text.iter().enumerate() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match (*c, quote) {
-            ('\\', _) => escaped = true,
-            (q, None) if q == '\'' || q == '"' => quote = Some(q),
-            (q, Some(open)) if q == open => quote = None,
-            // Only the whitespace a shell splits at: a name may hold others (U+202F in a
-            // screenshot's name).
-            (c, None) if c.is_ascii_whitespace() => {
-                if let Some(from) = start.take() {
-                    out.push((from, at));
-                }
-                continue;
-            }
-            _ => {}
-        }
-        start.get_or_insert(at);
-    }
-    if let Some(from) = start {
-        out.push((from, text.len()));
-    }
-    out
 }
 
 #[cfg(test)]

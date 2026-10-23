@@ -154,7 +154,7 @@ fn plain(path: &Path) -> PathBuf {
 /// `\\?\C:\rest` as `C:\rest`, and `\\?\UNC\server\share` as `\\server\share`, when the plain
 /// form names the same file: shorter than MAX_PATH, and with no name Windows reads otherwise (a
 /// device such as `NUL`, a trailing dot or space). `None` keeps the verbatim form.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(not(windows), allow(dead_code, reason = "used only on Windows"))]
 fn unverbatim(path: &str) -> Option<String> {
     const MAX_PATH: usize = 260;
     let rest = path.strip_prefix(r"\\?\")?;
@@ -180,7 +180,7 @@ fn unverbatim(path: &str) -> Option<String> {
 }
 
 /// A file name that means itself outside a verbatim path.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(not(windows), allow(dead_code, reason = "used only on Windows"))]
 fn ordinary(name: &str) -> bool {
     if name.ends_with(['.', ' ']) || name.contains(['/', ':', '*', '?', '"', '<', '>', '|']) {
         return false;

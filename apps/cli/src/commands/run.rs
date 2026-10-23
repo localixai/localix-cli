@@ -4,30 +4,26 @@
 //! and its terminal sessions closed; Ctrl-C or closing the window stops it (see `interrupt`), not
 //! the process.
 
+mod task;
+
 use std::io::IsTerminal;
 use std::path::Path;
-use std::time::{Duration, Instant};
 
-use contracts::history::{History, Session, Turn};
-use contracts::tool::Image;
-use contracts::view::View;
-use serde_json::Value;
+use contracts::history::{History, Session};
 use tools::workspace::Workspace;
 
 use crate::attach;
 use crate::choice;
 use crate::cli::RunOptions;
 use crate::commands::{repl, sessions};
-use crate::compose::{APP, Rig, Seat, Setup, Shared, compose, lane};
+use crate::compose::{APP, Seat, Setup, Shared, compose, lane};
 use crate::context::{self, Environment};
 use crate::desk;
 use crate::error::Failure;
-use crate::exit;
 use crate::gate::Tty;
 use crate::input::{self, Prompt};
 use crate::interrupt;
 use crate::mode::{self, Mode};
-use crate::output::{Start, Summary};
 use crate::tui;
 use crate::windows;
 
@@ -218,150 +214,6 @@ pub fn run(
         return Ok(work(None));
     }
     tools::browser::host(interrupt::window_closed, move |b| work(Some(b)))
-}
-
-impl Rig<'_> {
-    /// Run one task in the session: report it, record it, and return its exit code.
-    pub fn task(&mut self, goal: &str) -> i32 {
-        let started = Instant::now();
-        let before = self.meter.spend();
-        let workspace = self.workspace.root().display().to_string();
-        self.output.started(&Start {
-            goal,
-            session: &self.session.id,
-            model: self.choice.model(),
-            decision_model: &self.options.models.decision_model,
-            workspace: &workspace,
-        });
-        let attached = self.pictures();
-        crate::meta::title::start(self, goal);
-        self.brake.arm(Duration::from_secs(self.options.timeout));
-        let _working = Working::of(&self.shared.working);
-        self.interrupt.begin();
-        self.jobs_kit.queue.begin();
-        let at = self.conversation.as_ref().map_or(0, |c| c.messages().len());
-        self.checkpoints.begin(goal, at);
-        // The model may have changed since the last task: its window decides when to compact.
-        self.agent.window = self.choice.selection.model().context;
-        self.window
-            .store(self.agent.window, std::sync::atomic::Ordering::SeqCst);
-        let mut run = match self.told_of_mode() {
-            Some(before) => self.agent.follow_up_with(before, goal, &attached),
-            None => self.agent.run_with(goal, &attached),
-        };
-        self.agents.settle();
-        self.jobs.end(self.jobs_kit);
-        self.jobs_kit.queue.end();
-        run.spend.absorb(&self.agents.take_spent());
-        self.spent.absorb(&run.spend);
-        self.context_left(run.used);
-        let halt = self.brake.halted();
-        // In a session the terminals stay for the next task (a REPL, a server's log): they end
-        // when closed, with the session, or on quitting. One task of `exec` takes them with it.
-        if !self.asks {
-            self.sessions.close_all();
-        }
-        self.interrupt.end();
-        self.conversation = Some(run.conversation);
-        let ended = Ended::of(&run.status, run.data.as_ref(), halt, self.options.timeout);
-        let decision = since(&self.meter.spend(), &before);
-        self.record(goal, &run.answer, ended.status);
-        // `-o` first, so `exit_code` in the report is the code the process ends with.
-        let (code, error) = match self.write_last(&run.answer, run.data.as_ref()) {
-            Ok(()) => (ended.code, ended.error),
-            Err(written) => {
-                let error = match ended.error {
-                    Some(error) => format!("{error}; {written}"),
-                    None => written,
-                };
-                (exit::ENVIRONMENT, Some(error))
-            }
-        };
-        let summary = Summary {
-            status: ended.status,
-            code,
-            answer: &run.answer,
-            data: run.data.as_ref(),
-            error: error.as_deref(),
-            agent: &run.spend,
-            decision: &decision,
-            millis: started.elapsed().as_millis() as u64,
-            session: &self.session.id,
-        };
-        self.output.completed(&summary);
-        if self.output.closed() { exit::OK } else { code }
-    }
-
-    /// The pictures attached to this task, read; one that cannot be is left out, and said.
-    fn pictures(&mut self) -> Vec<(String, Image)> {
-        let mut out = vec![];
-        for path in std::mem::take(&mut self.attached) {
-            match attach::read(&path) {
-                Ok(picture) => out.push((picture.name, picture.image)),
-                Err(why) => self.output.note(&format!("llx: not attached: {why}\n")),
-            }
-        }
-        out
-    }
-
-    /// `-o FILE`: the final answer, or with `--schema` the data. With `--schema` and no data that
-    /// matched, the file is left empty: prose where data is expected would break the reader.
-    fn write_last(&self, answer: &str, data: Option<&Result<Value, String>>) -> Result<(), String> {
-        let Some(path) = &self.options.output_last_message else {
-            return Ok(());
-        };
-        let last = match (data, self.agent.schema.is_some()) {
-            (Some(Ok(data)), _) => format!("{data}\n"),
-            (_, true) => String::new(),
-            (_, false) => format!("{}\n", answer.trim()),
-        };
-        std::fs::write(path, last).map_err(|error| format!("-o {}: {error}", path.display()))
-    }
-
-    /// Add the task to the session, with where the browser was left, and save it.
-    /// How much of the model's context window is left, for the interface: `used` tokens of it.
-    fn context_left(&self, used: u64) {
-        let ceiling = self.agent.strategy.ceiling(self.agent.window);
-        if let (Some(ui), true) = (&self.ui, self.agent.window > 0) {
-            let left = 100u64.saturating_sub(used * 100 / ceiling.max(1));
-            ui.send(crate::tui::event::Event::Context(left as u8));
-        }
-    }
-
-    fn record(&mut self, goal: &str, answer: &str, status: &str) {
-        let location = (self.shared.page.as_ref())
-            .filter(|page| page.is_open())
-            .and_then(|page| page.observe().ok())
-            .map(|view| view.location);
-        let turn = Turn {
-            goal: goal.to_string(),
-            answer: answer.to_string(),
-            status: status.to_string(),
-            at: session::now(),
-            steps: self.output.take_steps(),
-        };
-        self.session.record(turn, location.as_deref());
-        if let Err(error) = self.meta.save(self.history, &mut self.session) {
-            self.output
-                .note(&format!("llx: the session was not saved: {error}\n"));
-        }
-    }
-}
-
-/// A lane in a task, counted while it lasts (and even if it unwinds), for `/rewind`'s warning.
-struct Working<'a>(&'a std::sync::atomic::AtomicUsize);
-
-impl<'a> Working<'a> {
-    fn of(count: &'a std::sync::atomic::AtomicUsize) -> Self {
-        count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        Self(count)
-    }
-}
-
-impl Drop for Working<'_> {
-    fn drop(&mut self) {
-        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
-    }
 }
 
 #[cfg(test)]

@@ -1,4 +1,6 @@
-use contracts::tool::ToolOutput;
+use agent::observer::Observer;
+use contracts::chat::{ToolCall, Usage};
+use contracts::tool::{ToolError, ToolOutput};
 use serde_json::json;
 
 use super::*;

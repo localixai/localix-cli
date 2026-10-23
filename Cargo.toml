@@ -34,6 +34,16 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT"
 
+# The workspace's lints, taken by every crate (ARCHITECTURE.md S4): an allowed lint says why.
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+allow_attributes_without_reason = "deny"
+
 [workspace.dependencies]
 agent = { path = "packages/agent" }
 contracts = { path = "packages/contracts" }

@@ -128,7 +128,13 @@ fn each_pid(mut visit: impl FnMut(libc::pid_t)) {
 fn each_pid(_: impl FnMut(libc::pid_t)) {}
 
 /// The pid a `/proc` entry's NUL-terminated name spells, or `None` for any other entry.
-#[cfg_attr(not(any(target_os = "linux", target_os = "android")), allow(dead_code))]
+#[cfg_attr(
+    not(any(target_os = "linux", target_os = "android")),
+    allow(
+        dead_code,
+        reason = "used only where /proc lists a session's processes"
+    )
+)]
 fn number(name: &[u8]) -> Option<libc::pid_t> {
     let digits = name.split(|&byte| byte == 0).next()?;
     if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {

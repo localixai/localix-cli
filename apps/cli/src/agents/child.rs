@@ -138,7 +138,10 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
 }
 
 /// Put the agent's conversation back, record its task, count its spend and post its answer.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the parts of a finished task, each used once; a struct would only rename them"
+)]
 fn keep(
     kit: &Kit,
     registry: &Registry,

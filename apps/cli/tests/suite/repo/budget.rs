@@ -83,6 +83,28 @@ fn the_project_stays_under_its_size_limit() {
     );
 }
 
+/// Lines of working code in one file, at most: a file is one idea, read whole. Hard, as the total
+/// is: a file that grows past it is split along what it does, never let through.
+const FILE_LIMIT: usize = 300;
+
+#[test]
+fn no_file_is_longer_than_its_limit() {
+    let (_, files) = measure();
+    let over: Vec<String> = files
+        .iter()
+        .filter(|(lines, _)| *lines > FILE_LIMIT)
+        .map(|(lines, path)| {
+            let shown = path.strip_prefix(root()).unwrap_or(path);
+            format!("  {lines:>6}  {}", shown.display())
+        })
+        .collect();
+    assert!(
+        over.is_empty(),
+        "files over {FILE_LIMIT} lines of working code; split each by what it does:\n{}",
+        over.join("\n")
+    );
+}
+
 #[test]
 fn comments_blanks_and_tests_do_not_count() {
     let dir = std::env::temp_dir().join(format!("llx-budget-{}", std::process::id()));

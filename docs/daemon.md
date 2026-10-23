@@ -98,8 +98,9 @@ process environment): commands run in the environment of the client that opened 
 
 ## Steps, each shipped green
 
-1. **The seam as a protocol, in process.** Message types with serde, the client interface with
-   an in-process transport over channels; the TUI and the desk speak only through it. Reply
+1. **The seam as a protocol, in process.** Message types with serde in `packages/protocol`, the
+   client interface in `packages/client` with an in-process transport over channels
+   (ARCHITECTURE.md L6-L8, W1-W8); the TUI and the desk speak only through it. Reply
    channels become requests with ids and the daemon-side input queue. No behaviour changes; every
    test stays.
 2. **Sessions carry their place.** Directory, environment, hidden variables and theme per

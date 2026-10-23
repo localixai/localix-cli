@@ -1,9 +1,11 @@
 use contracts::chat::{Completion, Message, ToolCall};
 use serde_json::json;
+use tools::workspace::Workspace;
 
 use contracts::history::History;
 
 use super::*;
+use crate::choice::Choice;
 use crate::mode::PLAN_REFUSAL;
 use crate::testing::{answers, composed, users};
 

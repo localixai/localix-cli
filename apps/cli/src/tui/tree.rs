@@ -21,15 +21,15 @@ use std::time::Instant;
 
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use serde_json::Value;
 
-use super::agents::{AgentState, SessionView};
 use super::app::App;
 use super::cells;
 use super::style;
-use super::tool_cell;
 use super::wrap::{cut, width as text_width};
-use crate::printable::printable;
+
+mod row;
+
+use row::{Row, row, session_row};
 
 /// Agents' rows shown at most; the rest are counted.
 pub(super) const ROWS: usize = 5;
@@ -168,48 +168,6 @@ fn hint(text: &str, width: usize) -> Line<'static> {
     ))
 }
 
-/// A session's row: a lane by what its task does or how its last one ended, an agent by its
-/// state too (indented under its lane); on the right, how long it worked and its tokens (a
-/// lane's count its agents').
-fn session_row<'a>(
-    view: &'a SessionView,
-    chosen: bool,
-    shown: bool,
-    now: Instant,
-    spinner: &dyn Fn(Instant) -> Span<'static>,
-) -> Row<'a> {
-    let (glyph, detail) = match (&view.parent, &view.state) {
-        (None, _) if view.busy.is_some() => (
-            view.busy.map_or(Span::raw("●"), spinner),
-            doing(&view.running).unwrap_or_else(|| "working".into()),
-        ),
-        (None, AgentState::Ended(status)) => {
-            let (glyph, word) = ended(status);
-            let unseen = if view.unseen { " · unseen" } else { "" };
-            (glyph, format!("{word}{unseen}"))
-        }
-        (None, _) => (Span::styled("●", style::code()), "idle".into()),
-        (_, AgentState::Idle) => (Span::styled("○", style::dim()), "starting".to_string()),
-        (_, AgentState::Working) => (
-            view.busy.map_or(Span::raw("○"), spinner),
-            doing(&view.running).unwrap_or_else(|| "thinking".into()),
-        ),
-        (_, AgentState::Ended(status)) => ended(status),
-        (_, AgentState::Closed) => (Span::styled("○", style::dim()), "closed".into()),
-    };
-    Row {
-        chosen,
-        shown,
-        branch: view.parent.is_some(),
-        branch_last: false,
-        glyph,
-        name: view.title(),
-        detail,
-        right: spent(view, now),
-        dimmed: view.state == AgentState::Closed,
-    }
-}
-
 /// The jobs' rows: a monitor (`≋`, its command, how much is left) or a schedule (`◷`, when).
 fn jobs(app: &App, first: usize, names: usize, width: usize) -> Vec<Line<'static>> {
     let mut out = vec![];
@@ -248,29 +206,6 @@ fn jobs(app: &App, first: usize, names: usize, width: usize) -> Vec<Line<'static
     out
 }
 
-/// What the calls running do: the first, and how many more.
-fn doing(running: &[(String, Value, Instant)]) -> Option<String> {
-    let (name, args, _) = running.first()?;
-    let first = tool_cell::doing(name, args);
-    Some(match running.len() {
-        1 => first,
-        n => format!("{first} +{} more", n - 1),
-    })
-}
-
-/// How long the agent has worked and the tokens it used: `1m 08s · 54.1k tokens`.
-fn spent(agent: &SessionView, now: Instant) -> String {
-    let millis = agent.worked
-        + agent
-            .busy
-            .map_or(0, |since| now.duration_since(since).as_millis() as u64);
-    match (millis < 1000, agent.tokens) {
-        (true, 0) => String::new(),
-        (_, 0) => cells::clock(millis / 1000),
-        (_, count) => format!("{} · {} tokens", cells::clock(millis / 1000), tokens(count)),
-    }
-}
-
 /// `950`, `54.1k`, `1.2M`.
 pub(super) fn tokens(count: u64) -> String {
     match count {
@@ -278,56 +213,6 @@ pub(super) fn tokens(count: u64) -> String {
         1000..1_000_000 => format!("{:.1}k", count as f64 / 1000.0),
         _ => format!("{:.1}M", count as f64 / 1_000_000.0),
     }
-}
-
-struct Row<'a> {
-    /// The row the list's keys are on.
-    chosen: bool,
-    /// An agent's, under its lane; the last of its lane's closes the branch.
-    branch: bool,
-    branch_last: bool,
-    /// The session on the screen.
-    shown: bool,
-    glyph: Span<'static>,
-    name: &'a str,
-    detail: String,
-    /// Time and tokens, after what it does.
-    right: String,
-    dimmed: bool,
-}
-
-fn row(row: Row, names: usize, width: usize) -> Line<'static> {
-    let pointer = match row.chosen {
-        true => Span::styled("❯ ", style::code()),
-        false => Span::raw("  "),
-    };
-    let name_style = match (row.shown, row.dimmed) {
-        (true, _) => style::bold(),
-        (false, true) => style::dim(),
-        (false, false) => Style::default(),
-    };
-    let branch = match (row.branch, row.branch_last) {
-        (false, _) => "",
-        (true, false) => "  ├ ",
-        (true, true) => "  └ ",
-    };
-    let name = cut(&printable(row.name), names);
-    let pad = names.saturating_sub(text_width(&name));
-    let detail = printable(&row.detail.replace('\n', " "));
-    let said = match row.right.is_empty() {
-        true => detail,
-        false => format!("{detail} · {}", row.right),
-    };
-    let room = width.saturating_sub(2 + text_width(branch) + 2 + names + 2);
-    Line::from(vec![
-        pointer,
-        Span::styled(branch, style::dim()),
-        row.glyph,
-        Span::raw(" "),
-        Span::styled(name, name_style),
-        Span::raw(" ".repeat(pad + 2)),
-        Span::styled(cut(&said, room), style::dim()),
-    ])
 }
 
 /// How an agent's task ended, as the interface says it: a style, a mark and a word for its row,
@@ -345,12 +230,6 @@ pub fn ending(status: &str) -> (Style, &'static str, &'static str, &'static str)
         "interrupted" => (style::waiting(), "■", "stopped", "was stopped"),
         _ => (style::failed(), "✗", "failed", "failed"),
     }
-}
-
-/// How an agent's last task ended, as a mark and a word.
-fn ended(status: &str) -> (Span<'static>, String) {
-    let (style, mark, word, _) = ending(status);
-    (Span::styled(mark, style), word.into())
 }
 
 fn more(count: usize, arrow: &str) -> Line<'static> {

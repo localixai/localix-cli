@@ -7,7 +7,10 @@ use std::sync::mpsc::Sender;
 /// The long side of a picture, in pixels.
 pub(super) const MAX_EDGE: f64 = 1280.0;
 /// JPEG quality: text stays legible, a full page stays near 150 KB.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "the compositor's picture is taken only on macOS")
+)]
 const QUALITY: f64 = 0.7;
 
 /// A part of the page, in CSS pixels from the viewport's top left.

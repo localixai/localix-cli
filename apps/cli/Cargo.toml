@@ -45,3 +45,6 @@ vt100.workspace = true
 # Signals, the terminal's pending input and its echo: calls std has no wrapper for.
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
+
+[lints]
+workspace = true

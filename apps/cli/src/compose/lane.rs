@@ -1,0 +1,55 @@
+//! A lane's models, its stop and its output, made before [`assemble`] builds the rest.
+
+use std::sync::Arc;
+
+use contracts::chat::Chat;
+use contracts::model::Decider;
+use tools::browser::Browser;
+
+use super::{Rig, Seat, Setup, Shared, assemble};
+use crate::interrupt::{self, Interrupt};
+use crate::live::Live;
+use crate::output::Output;
+
+/// The two models a session thinks with.
+pub struct Models<'a> {
+    pub chat: &'a dyn Chat,
+    /// Behind the browser's hands.
+    pub decider: &'a dyn Decider,
+    /// Where `/login` puts the models it chose; `None` when they cannot change.
+    pub live: Option<&'a Live>,
+}
+
+/// Build the agent from `setup` on the chosen provider's chat model and OpenRouter's decision
+/// model, with the browser when `browser` is given, and run `work` with it; its exit code.
+pub fn compose(setup: Setup, browser: Option<Browser>, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
+    let (shared, seat) = setup.split(browser);
+    lane(&shared, seat, work)
+}
+
+/// One lane over `shared`: its models, its stop (found by its session id), its events tagged
+/// with that id (the desk told the interface of it); `work` runs with it.
+pub fn lane(shared: &Shared, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
+    let live = Live::of(&seat.choice, &shared.options.models.decision_model);
+    let models = Models {
+        chat: &live.chat,
+        decider: &live.decider,
+        live: Some(&live),
+    };
+    lane_with(shared, seat, models, work)
+}
+
+/// [`lane`] around `models`.
+pub fn lane_with(
+    shared: &Shared,
+    mut seat: Seat,
+    models: Models,
+    work: impl FnOnce(&mut Rig) -> i32,
+) -> i32 {
+    let interrupt = Arc::new(Interrupt::new());
+    let lane = Arc::clone(&interrupt);
+    let _known = interrupt::register(&seat.session.id, move || lane.stop());
+    seat.ui = seat.ui.map(|ui| ui.for_lane(&seat.session.id));
+    let output = Output::new(shared.options.json, shared.options.verbose).in_ui(seat.ui.clone());
+    assemble(shared, seat, models, &output, &interrupt, work)
+}

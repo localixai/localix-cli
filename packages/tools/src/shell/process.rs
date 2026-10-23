@@ -47,7 +47,7 @@ pub struct Job<'a> {
 pub enum Ending {
     Exit(i32),
     /// Ended by a signal it did not handle; only unix has them.
-    #[cfg_attr(not(unix), allow(dead_code))]
+    #[cfg_attr(not(unix), allow(dead_code, reason = "used only on unix"))]
     Signal(i32),
     /// Past its deadline; `killed` once it and everything it started are known to be gone.
     TimedOut {

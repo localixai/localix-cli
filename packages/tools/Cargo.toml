@@ -39,3 +39,6 @@ objc2-web-kit.workspace = true
 [dev-dependencies]
 # The terminal page's own script is allowed by its hash: a test checks the one written down.
 sha2.workspace = true
+
+[lints]
+workspace = true

@@ -9,4 +9,5 @@ pub mod choice;
 pub mod decision_loop;
 pub mod goal;
 pub mod meter;
+mod offer;
 pub mod step;

@@ -7,6 +7,15 @@ pub(crate) mod asking;
 pub(crate) mod inputs;
 pub(crate) mod label;
 pub(crate) mod serve;
+#[cfg(unix)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "D3 part 1: the socket, hosted by `llx serve` next"
+    )
+)]
+pub(crate) mod socket;
 pub(crate) mod ui;
 pub(crate) mod wire;
 

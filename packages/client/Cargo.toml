@@ -10,6 +10,7 @@ license.workspace = true
 # Only the wire (ARCHITECTURE.md L8): the client knows no session, tool or model.
 [dependencies]
 protocol = { workspace = true }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

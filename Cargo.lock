@@ -2654,7 +2654,7 @@ name = "provider-kit"
 version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "serde_json",
  "sha2 0.11.1",
  "ureq",
@@ -3058,7 +3058,7 @@ name = "session"
 version = "0.1.0"
 dependencies = [
  "contracts",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "serde_json",
 ]
 
@@ -3657,7 +3657,7 @@ dependencies = [
  "base64 0.23.1",
  "block2",
  "contracts",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "libc",
  "objc2",
  "objc2-web-kit",

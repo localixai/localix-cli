@@ -43,7 +43,7 @@ session = { path = "packages/session" }
 tools = { path = "packages/tools" }
 base64 = "0.23.1"
 clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
-getrandom = "0.3"
+getrandom = "0.4"
 # Already in the tree through tao and wry: the few unix calls std has no wrapper for.
 libc = "0.2"
 # The terminal UI: crossterm and ratatui, with only the features it uses.

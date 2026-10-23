@@ -1,17 +1,20 @@
-use std::sync::Arc;
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::*;
-use crate::tui::test_support::{Term, call, done, label, press, result, typed};
+use crate::tui::event::Input;
+use crate::tui::test_support::{
+    Term, call, commands, done, in_session, label, press, result, sent, typed,
+};
+use protocol::Command;
 
 fn app() -> App {
     App::new(60, 20, vec![])
 }
 
 fn in_agent(app: &mut App, id: &str, event: Event, now: Instant) {
-    app.event(Event::In(id.into(), Box::new(event)), now);
+    app.frame(in_session(id, event), now);
 }
 
 /// A main session that started `scout` (session `id`), which ran one call.
@@ -187,17 +190,16 @@ fn the_list_takes_the_keys_only_from_an_empty_prompt_and_gives_them_back() {
 #[test]
 fn x_stops_the_agent_chosen() {
     let now = Instant::now();
-    // The stops are known process-wide: an id no other test uses.
-    let id = "tui-x-stops-the-agent-chosen";
-    let mut app = with_scout_as(id, now);
-    let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let _known = crate::interrupt::register_flag(id, Arc::clone(&flag));
+    let mut app = with_scout_as("scout-1", now);
     keys(
         &mut app,
         &[KeyCode::Down, KeyCode::Down, KeyCode::Char('x')],
         now,
     );
-    assert!(flag.load(std::sync::atomic::Ordering::SeqCst));
+    let halt = Command::Halt {
+        id: "scout-1".into(),
+    };
+    assert_eq!(commands(&mut app), [halt]);
 }
 
 #[test]
@@ -227,9 +229,13 @@ fn esc_and_a_sent_entry_go_back_to_main() {
     let screen = term.draw(&mut app, now);
     assert!(!screen.contains("◆ agent scout"), "{screen}");
     assert!(screen.contains("main says hi"), "{screen}");
-    assert!(
-        screen.contains("  ⏎ y"),
-        "the entry waits for the session:\n{screen}"
+    let sent: Vec<(String, String)> = (sent(&mut app).into_iter())
+        .map(|input| (input.session, input.text))
+        .collect();
+    assert_eq!(
+        sent,
+        [(String::new(), "y".into())],
+        "the entry is the main session's"
     );
 }
 
@@ -253,7 +259,7 @@ fn an_agent_ends_is_closed_and_is_cleared_with_its_conversation() {
     assert!(screen.contains("● Agent \"scout\" finished"), "{screen}");
     assert!(screen.contains("└ ✓ scout  done"), "{screen}");
     assert!(!app.moving());
-    app.event(Event::In("s1".into(), Box::new(Event::Closed)), now);
+    app.frame(in_session("s1", Event::Closed), now);
     let screen = term.draw(&mut app, now);
     assert!(screen.contains("└ ○ scout  closed"), "{screen}");
     keys(
@@ -278,10 +284,10 @@ fn esc_in_an_agents_view_goes_back_before_it_stops_anything() {
     let mut app = with_scout(now);
     app.event(Event::TaskStarted("main task".into()), now);
     app.show("s1");
-    let esc = || Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(app.event(esc(), now), None);
+    let esc = || Input::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(app.input(esc(), now), None);
     assert!(app.shown().parent.is_none());
-    assert_eq!(app.event(esc(), now), Some(Action::Stop(String::new())));
+    assert_eq!(app.input(esc(), now), Some(Action::Stop(String::new())));
 }
 
 fn job(id: &str, name: &str) -> super::super::event::JobRow {
@@ -309,15 +315,16 @@ fn the_list_chooses_only_job_rows_it_draws_and_keeps_a_row_chosen_when_rows_go()
         .map(|(n, id)| job(id, &format!("job{}", n + 1)))
         .collect();
     app.event(Event::Jobs(rows), now);
-    let hidden = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let key = crate::interrupt::job_key("", &ids[5]);
-    let _known = crate::interrupt::register_flag(&key, Arc::clone(&hidden));
     // Into the list, then past its last drawn row.
     keys(&mut app, &[KeyCode::Down; 10], now);
     let screen = Term::new(&app).draw(&mut app, now);
     assert_eq!(chosen(&screen), Some("job5"), "{screen}");
     press(&mut app, KeyCode::Char('x'), now);
-    assert!(!hidden.load(std::sync::atomic::Ordering::SeqCst));
+    let stop = Command::StopJob {
+        lane: String::new(),
+        job: ids[4].clone(),
+    };
+    assert_eq!(commands(&mut app), [stop], "the row chosen, not one hidden");
     // The chosen job ends: the row chosen is one that is still there.
     app.event(Event::Jobs(vec![job(&ids[0], "job1")]), now);
     let screen = Term::new(&app).draw(&mut app, now);
@@ -328,7 +335,7 @@ fn the_list_chooses_only_job_rows_it_draws_and_keeps_a_row_chosen_when_rows_go()
 fn an_agent_started_in_a_lane_gets_its_events() {
     let now = Instant::now();
     let mut app = app();
-    let lane = |event| Event::In("lane".into(), Box::new(event));
+    let lane = |event| in_session("lane", event);
     app.event(
         Event::LaneStarted {
             id: "lane".into(),
@@ -340,9 +347,9 @@ fn an_agent_started_in_a_lane_gets_its_events() {
         id: "s1".into(),
         name: "scout".into(),
     };
-    app.event(lane(started), now);
-    let found = Event::In("s1".into(), Box::new(Event::TaskStarted("look".into())));
-    app.event(lane(found), now);
+    app.frame(lane(started), now);
+    // The agent's own events are in its own name.
+    app.frame(in_session("s1", Event::TaskStarted("look".into())), now);
     let mut term = Term::new(&app);
     let screen = term.draw(&mut app, now);
     assert!(screen.contains("scout  thinking"), "{screen}");
@@ -369,10 +376,10 @@ fn tagged_events_reach_their_own_view() {
             now,
         );
     }
-    let lane = |id: &str, event| Event::In(id.into(), Box::new(event));
+    let lane = |id: &str, event| in_session(id, event);
     let read = call("c1", "read", &label("Reading", "Read", "a.rs"));
-    app.event(lane("A", read), now);
-    app.event(lane("B", Event::Answer("from b".into())), now);
+    app.frame(lane("A", read), now);
+    app.frame(lane("B", Event::Answer("from b".into())), now);
     let (a, b) = (app.views.find("A").unwrap(), app.views.find("B").unwrap());
     let (a, b) = (&app.views.sessions[a], &app.views.sessions[b]);
     assert_eq!((a.running.len(), a.blocks.len()), (1, 0));
@@ -401,10 +408,10 @@ fn clearing_a_hidden_lanes_agents_leaves_the_lane_shown() {
         id: "scout".into(),
         name: "scout".into(),
     };
-    app.event(Event::In("A".into(), Box::new(started)), now);
+    app.frame(in_session("A", started), now);
     app.show("B");
     app.take_replay();
-    app.event(Event::In("A".into(), Box::new(Event::AgentsCleared)), now);
+    app.frame(in_session("A", Event::AgentsCleared), now);
     assert_eq!(app.views.shown, "B", "the person stays where they are");
     assert!(!app.take_replay());
     assert!(app.views.find("scout").is_none(), "A's agent is gone");
@@ -418,9 +425,9 @@ fn each_sessions_jobs_are_kept_apart_and_stopped_by_their_lane() {
         let (id, name) = (id.to_string(), id.to_string());
         app.event(Event::LaneStarted { id, name }, now);
     }
-    let from = |id: &str, rows| Event::In(id.into(), Box::new(Event::Jobs(rows)));
-    app.event(from("jobs-lane-a", vec![job("job-1", "a-watch")]), now);
-    app.event(from("jobs-lane-b", vec![job("job-1", "b-watch")]), now);
+    let from = |id: &str, rows| in_session(id, Event::Jobs(rows));
+    app.frame(from("jobs-lane-a", vec![job("job-1", "a-watch")]), now);
+    app.frame(from("jobs-lane-b", vec![job("job-1", "b-watch")]), now);
     let names =
         |app: &App| -> Vec<String> { app.views.jobs.iter().map(|j| j.name.clone()).collect() };
     assert_eq!(
@@ -428,13 +435,6 @@ fn each_sessions_jobs_are_kept_apart_and_stopped_by_their_lane() {
         ["a-watch", "b-watch"],
         "the last to report does not win"
     );
-    let (a, b) = (
-        Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        Arc::new(std::sync::atomic::AtomicBool::new(false)),
-    );
-    let key = |lane| crate::interrupt::job_key(lane, "job-1");
-    let _a = crate::interrupt::register_flag(&key("jobs-lane-a"), Arc::clone(&a));
-    let _b = crate::interrupt::register_flag(&key("jobs-lane-b"), Arc::clone(&b));
     // Into the list: two lanes, then B's job.
     keys(
         &mut app,
@@ -442,12 +442,12 @@ fn each_sessions_jobs_are_kept_apart_and_stopped_by_their_lane() {
         now,
     );
     press(&mut app, KeyCode::Char('x'), now);
-    assert!(b.load(std::sync::atomic::Ordering::SeqCst), "B's job-1");
-    assert!(
-        !a.load(std::sync::atomic::Ordering::SeqCst),
-        "not A's job-1"
-    );
-    app.event(from("jobs-lane-a", vec![]), now);
+    let stop = Command::StopJob {
+        lane: "jobs-lane-b".into(),
+        job: "job-1".into(),
+    };
+    assert_eq!(commands(&mut app), [stop], "B's job-1, not A's");
+    app.frame(from("jobs-lane-a", vec![]), now);
     assert_eq!(names(&app), ["b-watch"]);
 }
 
@@ -463,7 +463,7 @@ fn an_agents_view_names_the_session_that_started_it() {
         id: "s9".into(),
         name: "scout".into(),
     };
-    app.event(Event::In("lane-b".into(), Box::new(started)), now);
+    app.frame(in_session("lane-b", started), now);
     app.show("s9");
     let shown = crate::tui::test_support::history(&mut app);
     assert!(
@@ -478,9 +478,9 @@ fn a_lane_is_named_by_its_first_task() {
     let mut app = App::new(80, 20, vec![]);
     let (id, name) = ("lane-n".to_string(), String::new());
     app.event(Event::LaneStarted { id, name }, now);
-    let task = |goal: &str| Event::In("lane-n".into(), Box::new(Event::TaskStarted(goal.into())));
-    app.event(task("fix the flaky jobs test\nand more"), now);
-    app.event(task("something else"), now);
+    let task = |goal: &str| in_session("lane-n", Event::TaskStarted(goal.into()));
+    app.frame(task("fix the flaky jobs test\nand more"), now);
+    app.frame(task("something else"), now);
     assert_eq!(app.shown().name, "fix the flaky jobs test");
 }
 
@@ -493,15 +493,15 @@ fn hidden_lane_done_sets_unseen_and_notes_it() {
         app.event(Event::LaneStarted { id, name }, now);
     }
     crate::tui::test_support::history(&mut app);
-    let from = |event| Event::In("B".into(), Box::new(event));
-    app.event(from(Event::TaskStarted("fix it".into())), now);
+    let from = |event| in_session("B", event);
+    app.frame(from(Event::TaskStarted("fix it".into())), now);
     let ended = Event::TaskEnded {
         status: "achieved".into(),
         millis: 188_000,
         turns: 3,
         cost: 0.0,
     };
-    app.event(from(ended), now);
+    app.frame(from(ended), now);
     let shown = crate::tui::test_support::history(&mut app);
     assert!(
         shown.contains("● Session \"fix the flaky jobs test\" finished · 3m 08s · ← to open"),

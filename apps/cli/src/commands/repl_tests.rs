@@ -88,21 +88,20 @@ fn shift_tab_leaves_plan_for_bypass_not_the_previous_mode() {
 
 /// An interface whose person picks `picked` in every list; the titles of the lists shown.
 fn picking(picked: Option<usize>) -> (Ui, std::thread::JoinHandle<Vec<String>>) {
-    let (ui, events) = crate::tui::test_support::fake_ui();
-    let person = std::thread::Builder::new().name("person".into());
-    let person = person
-        .spawn(move || {
-            let mut titles = vec![];
-            for event in events {
-                if let Event::Choose { title, reply, .. } = event {
-                    titles.push(title);
-                    let _ = reply.send(picked);
-                }
-            }
-            titles
-        })
-        .unwrap();
-    (ui, person)
+    let (ui, person) = crate::testing::answering(move |asked| match asked {
+        protocol::Asked::Choose { .. } => Some(protocol::Reply::Choice(picked)),
+        _ => None,
+    });
+    let titles = std::thread::Builder::new().name("titles".into());
+    let titles = titles.spawn(move || {
+        let asked = person.join().unwrap();
+        let titles = asked.into_iter().filter_map(|(_, asked)| match asked {
+            protocol::Asked::Choose { title, .. } => Some(title),
+            _ => None,
+        });
+        titles.collect()
+    });
+    (ui, titles.unwrap())
 }
 
 /// The plan handoff as a session runs it: plan mode entered from bypass, a plan task that ends

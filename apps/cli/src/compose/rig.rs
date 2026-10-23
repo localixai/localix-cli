@@ -24,8 +24,8 @@ use crate::live::Live;
 use crate::mode::{self, Mode, ModeCell};
 use crate::output::{Output, lock};
 use crate::providers::Provider;
-use crate::tui::Ui;
-use crate::tui::event::Event;
+use crate::server::Ui;
+use protocol::Event;
 
 /// The built agent and what a task needs around it; one per process, for every task it runs.
 pub(crate) struct Rig<'a> {

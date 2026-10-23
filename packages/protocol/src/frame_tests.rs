@@ -47,6 +47,12 @@ fn every_frame_to_the_interface_comes_back_the_same_through_json() {
             turns: 2,
             cost: 0.01,
         }),
+        event(Event::Total(crate::Total {
+            input_tokens: 24_100,
+            cached_tokens: 21_000,
+            output_tokens: 1_200,
+            cost: 0.042,
+        })),
         event(Event::Earlier(vec![Turn {
             goal: "a".into(),
             answer: "b".into(),
@@ -79,6 +85,15 @@ fn every_frame_to_the_interface_comes_back_the_same_through_json() {
             session: None,
             event: Event::Quit,
         },
+    ];
+    for frame in &frames {
+        assert_eq!(&through_json(frame), frame);
+    }
+}
+
+#[test]
+fn every_question_to_the_person_comes_back_the_same_through_json() {
+    let frames = [
         ToClient::Ask {
             id: 7,
             session: "s1".into(),

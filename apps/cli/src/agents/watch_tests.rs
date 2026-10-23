@@ -5,10 +5,10 @@ use crossterm::event::KeyCode;
 
 use super::Watch;
 use crate::output::Output;
-use crate::testing::Captured;
+use crate::testing::{Captured, fake_ui};
 use crate::tui::app::App;
-use crate::tui::event::Event;
-use crate::tui::test_support::{Term, fake_ui, press};
+use crate::tui::test_support::{Term, press};
+use protocol::Event;
 
 #[test]
 fn what_an_agent_says_beside_its_calls_shows_in_its_own_view() {
@@ -33,8 +33,8 @@ fn what_an_agent_says_beside_its_calls_shows_in_its_own_view() {
     };
     app.event(started, now);
     watch.said("Checking the lockfile first.");
-    for event in events.try_iter() {
-        app.event(event, now);
+    for frame in events.try_iter() {
+        app.frame(frame, now);
     }
     let mut term = Term::new(&app);
     let main = term.draw(&mut app, now);

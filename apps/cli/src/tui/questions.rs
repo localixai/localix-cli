@@ -1,7 +1,7 @@
 //! The questions the session puts to the person, as choices: an approval, one of the model's
 //! questions, a choice of llx's own; and the answer each pick sends back.
 
-use protocol::{Answer, Question};
+use protocol::{Answer, Question, Reply};
 use ratatui::text::{Line, Span};
 
 use super::app::Open;
@@ -90,11 +90,12 @@ fn heading(title: &str, after: &str) -> Line<'static> {
     ])
 }
 
-/// Sends what `picked` means to whoever asked. A refused approval returns what the person said
-/// (empty for nothing), for the call's block.
-pub(crate) fn answer(open: Open, picked: Picked) -> Option<String> {
-    match open {
-        Open::Approval(reply) => {
+/// What `picked` means to whoever asked, as the reply under its question's id; and, for a
+/// refused approval, what the person said (empty for nothing), for the call's block.
+pub(crate) fn answer(open: &Open, picked: Picked) -> (Option<(u64, Reply)>, Option<String>) {
+    let (id, reply) = match *open {
+        Open::Quit => return (None, None),
+        Open::Approval(id) => {
             let approval = match picked {
                 Picked::Option(0) => Approval::Yes,
                 Picked::Option(1) => Approval::Always,
@@ -105,49 +106,53 @@ pub(crate) fn answer(open: Open, picked: Picked) -> Option<String> {
                 Approval::No(why) => Some(why.clone().unwrap_or_default()),
                 _ => None,
             };
-            let _ = reply.send(approval);
-            return said;
+            return (Some((id, Reply::Approval(approval))), said);
         }
-        Open::Question(reply) => {
-            let answer = match picked {
-                Picked::Option(at) => Some(Answer {
-                    choices: vec![at],
-                    note: None,
-                }),
-                Picked::Typed(_, text) if !text.is_empty() => Some(Answer {
-                    choices: vec![],
-                    note: Some(text),
-                }),
-                Picked::Typed(..) => Some(Answer::default()),
-                Picked::Many(picked) => Some(Answer {
-                    choices: picked,
-                    note: None,
-                }),
-                Picked::Cancelled | Picked::Adjusted(..) => None,
-            };
-            let _ = reply.send(answer);
-        }
-        Open::Line(reply) => {
-            let _ = reply.send(match picked {
+        Open::Question(id) => (id, Reply::Question(answered(picked))),
+        Open::Line(id) => (
+            id,
+            Reply::Line(match picked {
                 Picked::Typed(_, text) => Some(text),
                 _ => None,
-            });
-        }
-        Open::Quit => {}
-        Open::Adjustable(reply) => {
-            let _ = reply.send(match picked {
+            }),
+        ),
+        Open::Adjustable(id) => (
+            id,
+            Reply::Adjusted(match picked {
                 Picked::Adjusted(at, value) => Some((at, value)),
                 _ => None,
-            });
-        }
-        Open::Choice(reply) => {
-            let _ = reply.send(match picked {
+            }),
+        ),
+        Open::Choice(id) => (
+            id,
+            Reply::Choice(match picked {
                 Picked::Option(at) => Some(at),
                 _ => None,
-            });
-        }
+            }),
+        ),
+    };
+    (Some((id, reply)), None)
+}
+
+/// A question of the model's as the person answered it: an option, their words, several
+/// options, or nothing (skipped); `None` when they cancelled it.
+fn answered(picked: Picked) -> Option<Answer> {
+    match picked {
+        Picked::Option(at) => Some(Answer {
+            choices: vec![at],
+            note: None,
+        }),
+        Picked::Typed(_, text) if !text.is_empty() => Some(Answer {
+            choices: vec![],
+            note: Some(text),
+        }),
+        Picked::Typed(..) => Some(Answer::default()),
+        Picked::Many(picked) => Some(Answer {
+            choices: picked,
+            note: None,
+        }),
+        Picked::Cancelled | Picked::Adjusted(..) => None,
     }
-    None
 }
 
 #[cfg(test)]

@@ -85,3 +85,21 @@ fn usage_counts_tokens_with_thousands_separators_as_the_trace_does() {
         0
     });
 }
+
+#[test]
+fn usage_says_what_the_whole_session_spent_its_earlier_tasks_too() {
+    crate::testing::composed(crate::mode::Mode::Default, false, vec![], |rig| {
+        rig.output.spend(contracts::history::Spent {
+            input_tokens: 24_100,
+            cached_tokens: 21_000,
+            output_tokens: 1_200,
+            cost: 0.042,
+        });
+        let shown = usage(rig);
+        assert!(
+            shown.contains("session    24,100 in (21,000 cached) · 1,200 out · $0.0420"),
+            "{shown}"
+        );
+        0
+    });
+}

@@ -10,7 +10,7 @@ use ratatui::text::{Line, Span};
 
 use super::app::{Action, App};
 use super::cells;
-use super::event::{Event, Typed};
+use super::event::Event;
 use super::style;
 use super::tool_cell::{self, State};
 pub(crate) use super::views::{AgentState, LaneState, Running, SessionView, Views};
@@ -143,8 +143,7 @@ impl App {
                 self.views.sessions.retain(|session| !theirs(session));
                 return None;
             }
-            event @ Event::In(..) => return self.event(event, now),
-            event => return self.lane_event(at, event, now),
+            event => return self.lane_event(at, event),
         };
         self.push(at, block);
         None
@@ -160,40 +159,38 @@ impl App {
     }
 
     /// What only a lane has; anything else is the interface's.
-    fn lane_event(&mut self, at: usize, event: Event, now: Instant) -> Option<Action> {
-        let left = self.left;
+    fn lane_event(&mut self, at: usize, event: Event) -> Option<Action> {
         let Some(lane) = self.views.sessions[at].lane.as_deref_mut() else {
-            return self.global(at, event, now);
+            return self.global(at, event);
         };
         match event {
             Event::Mode(mode) => lane.mode = mode,
-            Event::Ready(reply) if left => {
-                let _ = reply.send(None);
-            }
-            // What came back from the background waits behind the person's own.
-            Event::Ready(reply) => match lane.queued.pop_front().or(lane.background.pop_front()) {
-                Some(entry) => {
-                    let _ = reply.send(Some(entry));
-                }
-                None => lane.waiting = Some(reply),
-            },
             Event::Step(step) => {
                 lane.steps.push(step);
                 let over = lane.steps.len().saturating_sub(STEPS);
                 lane.steps.drain(..over);
             }
-            Event::Background(text) => {
-                let entry = Typed::from(text.as_str());
-                match lane.waiting.take() {
-                    Some(reply) => {
-                        let _ = reply.send(Some(entry));
-                    }
-                    None => lane.background.push_back(entry),
+            Event::Context(left) => lane.context = Some(left),
+            Event::Total(total) => lane.total = Some(total),
+            Event::Queue {
+                ready,
+                steered,
+                queued,
+                background,
+            } => {
+                lane.ready = ready;
+                lane.steered = steered;
+                lane.queued = queued;
+                lane.background = background;
+            }
+            // The task read what the person said to it: theirs now, in the transcript.
+            Event::Steered(texts) => {
+                for text in texts {
+                    let block = cells::user(&text, self.width);
+                    self.push(at, block);
                 }
             }
-            Event::Context(left) => lane.context = Some(left),
-            Event::TakeSteered { reply, peek } => self.take_steered(at, &reply, peek),
-            event => return self.global(at, event, now),
+            event => return self.global(at, event),
         }
         None
     }

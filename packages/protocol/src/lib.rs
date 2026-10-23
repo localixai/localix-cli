@@ -10,7 +10,7 @@ mod frame;
 
 pub use asked::{Adjustment, Answer, Approval, Asked, Choice, Question, Reply};
 pub use command::{Command, Done, Input, Target};
-pub use event::{Event, JobRow, Label, Outcome, Saved, Turn, Update};
+pub use event::{Event, JobRow, Label, Outcome, Saved, Total, Turn, Update};
 pub use frame::{ToClient, ToServer};
 
 /// The protocol's version: a breaking change is a new one (W3).

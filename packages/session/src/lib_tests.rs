@@ -77,3 +77,56 @@ fn the_newest_session_is_never_an_agent() {
         (Some("1-parent"), "scout")
     );
 }
+
+#[test]
+fn what_a_task_spent_is_kept_and_an_older_session_without_it_still_loads() {
+    let scratch = Scratch::new("spent");
+    let sessions = Sessions {
+        dir: scratch.0.clone(),
+    };
+    let mut session = sessions.start();
+    let turn = contracts::history::Step {
+        what: "model".into(),
+        spent: contracts::history::Spent {
+            input_tokens: 12_000,
+            cached_tokens: 9_000,
+            output_tokens: 300,
+            cost: 0.0125,
+        },
+        ..Default::default()
+    };
+    let call = contracts::history::Step {
+        what: "bash".into(),
+        ..Default::default()
+    };
+    session.record(
+        Turn {
+            goal: "fix it".into(),
+            answer: "Fixed.".into(),
+            status: "achieved".into(),
+            at: now(),
+            steps: vec![turn.clone(), call],
+        },
+        None,
+    );
+    sessions.save(&session).unwrap();
+    let saved = std::fs::read_to_string(scratch.0.join(format!("{}.json", session.id))).unwrap();
+    assert_eq!(
+        saved.matches("\"spent\"").count(),
+        1,
+        "a call that spent nothing says nothing"
+    );
+    let back = sessions.load(Some(&session.id)).unwrap();
+    assert_eq!(back.turns[0].steps[0], turn);
+    // A session written before steps said what they spent.
+    let mut older: serde_json::Value = serde_json::from_str(&saved).unwrap();
+    older["id"] = "2-older".into();
+    let step = &mut older["turns"][0]["steps"][0];
+    assert!(step.as_object_mut().unwrap().remove("spent").is_some());
+    std::fs::write(scratch.0.join("2-older.json"), older.to_string()).unwrap();
+    let older = sessions.load(Some("2-older")).unwrap();
+    assert_eq!(
+        older.turns[0].steps[0].spent,
+        contracts::history::Spent::default()
+    );
+}

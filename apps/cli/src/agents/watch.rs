@@ -10,7 +10,7 @@ use contracts::tool::{ToolError, ToolOutput};
 
 use crate::output::Output;
 use crate::server::label::label;
-use crate::tui::event::Event;
+use protocol::Event;
 
 /// Watches one agent's run.
 pub(crate) struct Watch<'a> {
@@ -24,7 +24,7 @@ impl Watch<'_> {
     /// Send `event` to the agent's view.
     pub(crate) fn show(&self, event: Event) {
         if let Some(ui) = self.output.ui() {
-            ui.send(Event::In(self.id.to_string(), Box::new(event)));
+            ui.for_lane(self.id).send(event);
         }
     }
 }

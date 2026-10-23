@@ -382,3 +382,71 @@ impl Chat for Gated {
         waited.map_err(|error| ChatError::Unavailable(format!("the test sent no reply: {error}")))
     }
 }
+
+/// The sessions' side of an interface no one draws: the test reads the frames it is sent.
+pub(crate) fn fake_ui() -> (
+    crate::server::Ui,
+    std::sync::mpsc::Receiver<protocol::ToClient>,
+) {
+    let (ui, _peer, frames) = fake_peer();
+    (ui, frames)
+}
+
+/// [`fake_ui`], and the server's side of the interface: replies and entries go through it.
+pub(crate) fn fake_peer() -> (
+    crate::server::Ui,
+    Arc<crate::server::Peer>,
+    std::sync::mpsc::Receiver<protocol::ToClient>,
+) {
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the in-process transport's channel, as the binary makes it"
+    )]
+    let (out, frames) = std::sync::mpsc::channel();
+    let peer = crate::server::Peer::new(out);
+    (crate::server::Ui::new(Arc::clone(&peer)), peer, frames)
+}
+
+/// An interface whose person answers each question with `answer` (nothing for `None`), on a
+/// thread of its own until the interface is gone; what was asked, in order, and in which session.
+pub(crate) fn answering(
+    answer: impl Fn(&protocol::Asked) -> Option<protocol::Reply> + Send + 'static,
+) -> (
+    crate::server::Ui,
+    std::thread::JoinHandle<Vec<(String, protocol::Asked)>>,
+) {
+    let (ui, peer, frames) = fake_peer();
+    // Held weakly: the frames end once the test lets the interface go.
+    let peer = Arc::downgrade(&peer);
+    let person = std::thread::Builder::new().name("person".into());
+    let person = person.spawn(move || {
+        let mut asked = vec![];
+        for frame in frames {
+            if let protocol::ToClient::Ask {
+                id,
+                session,
+                asked: question,
+            } = frame
+            {
+                let reply = answer(&question);
+                asked.push((session, question));
+                if let (Some(reply), Some(peer)) = (reply, peer.upgrade()) {
+                    peer.replied(id, reply);
+                }
+            }
+        }
+        asked
+    });
+    (ui, person.unwrap())
+}
+
+/// The events sent so far, each with the session it is in; questions and the rest are left out.
+pub(crate) fn events(
+    frames: &std::sync::mpsc::Receiver<protocol::ToClient>,
+) -> Vec<(Option<String>, protocol::Event)> {
+    let events = frames.try_iter().filter_map(|frame| match frame {
+        protocol::ToClient::Event { session, event } => Some((session, event)),
+        _ => None,
+    });
+    events.collect()
+}

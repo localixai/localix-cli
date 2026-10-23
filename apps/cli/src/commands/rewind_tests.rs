@@ -78,14 +78,13 @@ fn background_tasks_are_listed_as_the_transcript_shows_them_and_not_put_back_in_
     composed(Mode::Bypass, true, answers(2), |rig| {
         rig.task("(scheduled `hello`) say hello");
         rig.task(&crate::arrivals::monitor("ticks", "tick 1").render());
-        let (ui, events) = crate::tui::test_support::fake_ui();
+        let (ui, frames) = crate::testing::fake_ui();
         rig.ui = Some(ui);
         let mut person = picks(&[Some(0), Some(1)]);
         steps(rig, &mut person);
         assert_eq!(person.1[0], ["≋ ticks · tick 1", "◷ hello · say hello"]);
-        let prefilled = events
-            .try_iter()
-            .any(|event| matches!(event, Event::Prefill(_)));
+        let prefilled = (crate::testing::events(&frames).into_iter())
+            .any(|(_, event)| matches!(event, Event::Prefill(_)));
         assert!(!prefilled);
         0
     });

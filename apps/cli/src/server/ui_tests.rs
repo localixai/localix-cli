@@ -1,49 +1,40 @@
 use super::*;
-use crate::tui::test_support::fake_ui;
-
-/// The session `event` came from, and what it was.
-fn tagged(event: Event) -> (String, Event) {
-    match event {
-        Event::In(id, inner) => (id, *inner),
-        _ => panic!("not tagged"),
-    }
-}
+use crate::testing::fake_ui;
 
 #[test]
 fn a_lanes_ui_tags_what_it_sends() {
-    let (ui, events) = fake_ui();
+    let (ui, frames) = fake_ui();
     ui.for_lane("a").send(Event::Note("hi".into()));
-    let (id, inner) = tagged(events.try_recv().unwrap());
-    assert_eq!(id, "a");
-    assert!(matches!(inner, Event::Note(text) if text == "hi"));
+    let frame = frames.try_recv().unwrap();
+    let note = ToClient::Event {
+        session: Some("a".into()),
+        event: Event::Note("hi".into()),
+    };
+    assert_eq!(frame, note);
 }
 
 #[test]
-fn an_agents_event_keeps_its_own_tag() {
-    let (ui, events) = fake_ui();
-    let inner = Box::new(Event::Answer("found".into()));
-    ui.for_lane("a").send(Event::In("agent".into(), inner));
-    let (id, inner) = tagged(events.try_recv().unwrap());
-    assert_eq!(id, "agent");
-    assert!(matches!(inner, Event::Answer(_)));
+fn an_agents_events_are_in_its_own_name() {
+    let (ui, frames) = fake_ui();
+    ui.for_lane("a")
+        .for_lane("agent")
+        .send(Event::Answer("found".into()));
+    let frame = frames.try_recv().unwrap();
+    let answer = ToClient::Event {
+        session: Some("agent".into()),
+        event: Event::Answer("found".into()),
+    };
+    assert_eq!(frame, answer);
 }
 
 #[test]
-fn the_interfaces_own_ui_tags_nothing() {
-    // What the interface itself sends (the keys' thread has its own sender, the end of the
-    // session goes through this one) belongs to no session.
-    let (ui, events) = fake_ui();
+fn the_servers_own_ui_tags_nothing() {
+    // What the server says of itself (the end of the work) belongs to no session.
+    let (ui, frames) = fake_ui();
     ui.send(Event::Quit);
-    assert!(matches!(events.try_recv().unwrap(), Event::Quit));
-}
-
-#[test]
-fn a_question_closed_by_a_stop_is_dismissed_in_its_own_lane() {
-    let (ui, events) = fake_ui();
-    let answer = ui.for_lane("a").approve("bash", "ls", &|| true);
-    assert_eq!(answer, Approval::No(None));
-    let (id, asked) = tagged(events.try_recv().unwrap());
-    assert!(id == "a" && matches!(asked, Event::Approve { .. }));
-    let (id, closed) = tagged(events.try_recv().unwrap());
-    assert!(id == "a" && matches!(closed, Event::Dismiss));
+    let quit = ToClient::Event {
+        session: None,
+        event: Event::Quit,
+    };
+    assert_eq!(frames.try_recv().unwrap(), quit);
 }

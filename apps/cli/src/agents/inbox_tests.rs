@@ -50,24 +50,25 @@ fn answer(registry: &Registry, text: &str) {
 
 #[test]
 fn the_person_comes_first_then_the_agents_then_the_jobs() {
-    let (ui, events) = crate::tui::test_support::fake_ui();
+    let (ui, peer, _frames) = crate::testing::fake_peer();
+    let ui = ui.for_lane("lane");
+    // The person said it to the task running.
+    ui.send(Event::TaskStarted("the task".into()));
+    peer.inputs.input(protocol::Input {
+        session: "lane".into(),
+        text: "stop, use the other file".into(),
+        ..protocol::Input::default()
+    });
     let output = quiet().in_ui(Some(ui));
     with_inbox(&output, |inbox, registry, jobs, kit| {
         let _ = jobs;
         kit.queue.post(crate::arrivals::monitor("m", "tick"));
         answer(registry, "found");
-        std::thread::scope(|scope| {
-            scope.spawn(move || {
-                if let Ok(Event::TakeSteered { reply, .. }) = events.recv() {
-                    let _ = reply.send(vec!["stop, use the other file".into()]);
-                }
-            });
-            let came = inbox.take();
-            assert!(came[0].starts_with("stop, use"), "{came:?}");
-            // Then the queue, in the order things came: the monitor first here.
-            assert!(came[1].contains("<monitor job=\"m\">"), "{came:?}");
-            assert!(came[2].starts_with("<agent_result"), "{came:?}");
-        });
+        let came = inbox.take();
+        assert!(came[0].starts_with("stop, use"), "{came:?}");
+        // Then the queue, in the order things came: the monitor first here.
+        assert!(came[1].contains("<monitor job=\"m\">"), "{came:?}");
+        assert!(came[2].starts_with("<agent_result"), "{came:?}");
     });
 }
 

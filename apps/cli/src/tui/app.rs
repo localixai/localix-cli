@@ -4,19 +4,17 @@
 //! Nothing here touches the terminal, so the tests drive it as the person would.
 
 use std::collections::VecDeque;
-use std::sync::mpsc::SyncSender;
 use std::time::Instant;
 
-use protocol::Answer;
+use protocol::{Command, Input as Sent, ToClient};
 use ratatui::text::Line;
 
 use super::agents::{LaneState, Views};
 use super::composer::Composer;
-use super::event::{Approval, Event, JobRow, Typed};
+use super::event::{Event, Input, JobRow, Out, Typed};
 use super::mention::Files;
 use super::questions;
 use super::queue::Asked;
-use super::steer::steerable;
 use crate::attach;
 use crate::printable::printable;
 
@@ -32,7 +30,7 @@ pub(crate) enum Action {
     /// Write the composer's text in `$EDITOR`.
     Editor,
     /// Open a lane (`/new`), whatever the lane shown is doing.
-    Open(crate::desk::Target),
+    Open(protocol::Target),
     /// The list of sessions opened: the saved ones are asked for.
     Sessions,
     /// Stop the task of the lane named, and never quit for it (`x` on its row).
@@ -44,15 +42,30 @@ pub(crate) enum Action {
 /// What Shift+Tab sends: the session reads it as the plan-mode switch.
 pub(crate) use protocol::SHIFT_TAB;
 
-/// A question open, and where its answer goes.
+/// A question open, by the id its reply goes under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Open {
-    Approval(SyncSender<Approval>),
-    Question(SyncSender<Option<Answer>>),
-    Choice(SyncSender<Option<usize>>),
-    Adjustable(SyncSender<Option<(usize, usize)>>),
-    Line(SyncSender<Option<String>>),
+    Approval(u64),
+    Question(u64),
+    Choice(u64),
+    Adjustable(u64),
+    Line(u64),
     /// Whether to quit while work runs: the interface's own, nobody waits for it.
     Quit,
+}
+
+impl Open {
+    /// The id of the server's question; `None` for the interface's own.
+    pub(crate) fn id(self) -> Option<u64> {
+        match self {
+            Self::Approval(id)
+            | Self::Question(id)
+            | Self::Choice(id)
+            | Self::Adjustable(id)
+            | Self::Line(id) => Some(id),
+            Self::Quit => None,
+        }
+    }
 }
 
 pub(crate) struct App {
@@ -92,6 +105,10 @@ pub(crate) struct App {
     pub(super) closed: Option<String>,
     /// How many shells run, in every session: quitting stops them.
     pub shells: fn() -> usize,
+    /// Lanes the server keeps open at most.
+    pub max_lanes: usize,
+    /// What the interface sends next: commands and replies, in order.
+    pub outbox: Vec<Out>,
 }
 /// How long a first Ctrl-C at the prompt waits for a second.
 pub(super) const QUIT_WINDOW_MS: u128 = 2000;
@@ -118,6 +135,8 @@ impl App {
             saved: vec![],
             closed: None,
             shells: || 0,
+            max_lanes: 8,
+            outbox: vec![],
         }
     }
 
@@ -166,12 +185,57 @@ impl App {
         &self.views.sessions[self.views.home()].id
     }
 
+    /// What the interface's thread took: a frame from the server, or the terminal's.
+    pub(crate) fn input(&mut self, input: Input, now: Instant) -> Option<Action> {
+        match input {
+            Input::Frame(frame) => self.frame(frame, now),
+            Input::Key(key) => self.key(key, now),
+            Input::Paste(text) => {
+                self.paste(&text);
+                None
+            }
+            Input::Resize(width, height) => {
+                self.width = width as usize;
+                self.height = height as usize;
+                None
+            }
+        }
+    }
+
+    /// A frame from the server: an event of a session or of the server, a question, a
+    /// question withdrawn.
+    pub(crate) fn frame(&mut self, frame: ToClient, now: Instant) -> Option<Action> {
+        match frame {
+            ToClient::Event {
+                session: Some(id),
+                event,
+            } => self.event_in(&id, event, now),
+            ToClient::Event {
+                session: None,
+                event,
+            } => self.event(event, now),
+            ToClient::Ask { id, session, asked } => {
+                self.asked(id, &session, asked, now);
+                None
+            }
+            ToClient::Resolved { id } => {
+                self.resolved(id, now);
+                None
+            }
+            // What a command came to is the client's.
+            ToClient::Done { .. } => None,
+        }
+    }
+
+    /// What happened in session `id` (a lane or an agent); one no longer shown is let go.
+    pub(crate) fn event_in(&mut self, id: &str, event: Event, now: Instant) -> Option<Action> {
+        let at = self.views.find(id)?;
+        self.on(at, event, now)
+    }
+
+    /// What happened in the server as a whole; anything else is the lane shown's.
     pub(crate) fn event(&mut self, event: Event, now: Instant) -> Option<Action> {
         match event {
-            Event::In(id, inner) => match self.views.find(&id) {
-                Some(at) => self.on(at, *inner, now),
-                None => None,
-            },
             Event::LaneStarted { id, name } => {
                 self.views.lane_started(id.clone(), name);
                 if let (Some(said), Some(at)) = (self.closed.take(), self.views.find(&id)) {
@@ -187,62 +251,58 @@ impl App {
                 self.saved(rows.into_iter().map(|s| (s.id, s.title, s.meta)).collect());
                 None
             }
-            // What names no session is the lane's shown.
+            Event::Quit => Some(Action::Quit),
             event => self.on(self.views.home(), event, now),
         }
     }
 
-    /// What is the interface's as a whole: the questions, the jobs, the terminal's.
-    /// `at` is the session the event came from (the lane shown for the terminal's own).
-    pub(super) fn global(&mut self, at: usize, event: Event, now: Instant) -> Option<Action> {
+    /// The server asks the person, for `session`'s task: an approval and the model's questions
+    /// wait their turn; a choice of the lane's own waits until it is shown.
+    pub(crate) fn asked(&mut self, id: u64, session: &str, asked: protocol::Asked, now: Instant) {
+        let at = self
+            .views
+            .find(session)
+            .unwrap_or_else(|| self.views.home());
         let lane = self.lane_at(at);
-        match event {
-            Event::Approve {
-                tool,
-                summary,
-                reply,
-            } => {
-                let label = self.label(lane);
+        let label = self.label(lane);
+        match asked {
+            protocol::Asked::Approve { tool, summary } => {
                 let select = questions::approval(&tool, &summary, label.as_deref());
-                self.ask(lane, select, Open::Approval(reply), true, now);
+                self.ask(lane, select, Open::Approval(id), true, now);
             }
-            Event::Ask {
-                question,
-                at,
-                of,
-                reply,
-            } => {
-                let label = self.label(lane);
+            protocol::Asked::Question { question, at, of } => {
                 let select = questions::question(&question, at, of, label.as_deref());
-                self.ask(lane, select, Open::Question(reply), false, now);
+                self.ask(lane, select, Open::Question(id), false, now);
             }
-            Event::Choose {
+            protocol::Asked::Choose {
                 title,
                 options,
                 marked,
-                reply,
             } => {
                 let select = questions::choice(&title, &options, marked);
-                self.ask_own(lane, select, Open::Choice(reply), now);
+                self.ask_own(lane, select, Open::Choice(id), now);
             }
-            Event::ChooseAdjustable {
+            protocol::Asked::ChooseAdjustable {
                 title,
                 options,
                 marked,
                 adjustments,
-                reply,
             } => {
                 let select = questions::choice(&title, &options, marked).adjustable(adjustments);
-                self.ask_own(lane, select, Open::Adjustable(reply), now);
+                self.ask_own(lane, select, Open::Adjustable(id), now);
             }
-            Event::Line {
-                prompt,
-                hidden,
-                reply,
-            } => {
+            protocol::Asked::Line { prompt, hidden } => {
                 let select = questions::line(&prompt, hidden);
-                self.ask_own(lane, select, Open::Line(reply), now);
+                self.ask_own(lane, select, Open::Line(id), now);
             }
+        }
+    }
+
+    /// What is the interface's as a whole: the jobs, the composer's words.
+    /// `at` is the session the event came from.
+    pub(super) fn global(&mut self, at: usize, event: Event) -> Option<Action> {
+        let lane = self.lane_at(at);
+        match event {
             // Each session's jobs, in the order of the sessions.
             Event::Jobs(rows) => {
                 let id = self.views.sessions[lane].id.clone();
@@ -259,24 +319,6 @@ impl App {
                 self.views.focus = self.views.focus.map(|row| row.min(last));
             }
             Event::Prefill(text) => self.composer.set(&text),
-            Event::Dismiss => self.dismiss(lane, now),
-            Event::Key(key) => return self.key(key, now),
-            Event::Paste(text) => match self.questions.front_mut() {
-                Some(asked) => asked.select.paste(&text),
-                // A dropped file arrives as a path; other clipboard text is shown as [Paste].
-                None => {
-                    if Composer::is_path_list(&text, &attach::resolve) {
-                        self.composer.paste(&text);
-                        self.adopt_paths();
-                    } else {
-                        self.composer.paste_marked(&text);
-                    }
-                }
-            },
-            Event::Resize(width, height) => {
-                self.width = width as usize;
-                self.height = height as usize;
-            }
             Event::Quit => return Some(Action::Quit),
             // A session's own events reach it through [`App::on`].
             _ => {}
@@ -284,24 +326,32 @@ impl App {
         None
     }
 
-    /// An entry for the session: now if it waits for one, else after what is queued.
-    /// While a task works, a plain message goes to it at its next step; a command, a picture or
-    /// Tab waits for the task to end.
+    /// What the terminal pasted: into the question open, else the composer. A dropped file
+    /// arrives as a path; other clipboard text is shown as [Paste].
+    fn paste(&mut self, text: &str) {
+        if let Some(asked) = self.questions.front_mut() {
+            return asked.select.paste(text);
+        }
+        if Composer::is_path_list(text, &attach::resolve) {
+            self.composer.paste(text);
+            self.adopt_paths();
+        } else {
+            self.composer.paste_marked(text);
+        }
+    }
+
+    /// An entry for the lane shown: the server gives it to the lane at its prompt, to the task
+    /// running (words), or keeps it for after.
     pub(super) fn send(&mut self, entry: Typed) {
         // What the person types is for the lane: it is shown again to see it go there.
         let lane = self.lane_id().to_string();
         self.show(&lane);
-        let busy = self.busy().is_some();
-        let lane = self.lane_mut();
-        match lane.waiting.take() {
-            Some(reply) => {
-                if reply.send(Some(entry.clone())).is_err() {
-                    lane.queued.push_back(entry);
-                }
-            }
-            None if busy && steerable(&entry) => lane.steered.push(entry),
-            None => lane.queued.push_back(entry),
-        }
+        self.outbox.push(Out::Call(Command::Input(Sent {
+            session: lane,
+            text: entry.text,
+            images: entry.images,
+            later: false,
+        })));
     }
 
     /// Each path in the composer that names a file becomes its mark; a picture is kept a copy of.
@@ -311,19 +361,10 @@ impl App {
         self.composer.adopt(&attach::resolve, &keep);
     }
 
-    /// The person is leaving: the session's wait ends with nothing.
+    /// The person is leaving: what waits for them ends with nothing.
     pub(crate) fn leave(&mut self) {
         self.left = true;
-        for lane in self
-            .views
-            .sessions
-            .iter_mut()
-            .filter_map(|v| v.lane.as_mut())
-        {
-            if let Some(reply) = lane.waiting.take() {
-                let _ = reply.send(None);
-            }
-        }
+        self.outbox.push(Out::Call(Command::Leave));
         self.close_questions();
     }
 }

@@ -60,10 +60,6 @@ impl App {
         view.running.clear();
         view.worked += millis;
         if let Some(lane) = &mut view.lane {
-            // What the task did not get to read is the next thing it is given.
-            for entry in lane.steered.drain(..).rev() {
-                lane.queued.push_front(entry);
-            }
             lane.stopping = false;
         }
         let end = End {

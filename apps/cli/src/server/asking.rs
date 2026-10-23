@@ -7,8 +7,9 @@ use std::time::{Duration, Instant};
 use contracts::gate::Effect;
 use contracts::person::{Person, Question, Reply};
 
+use protocol::Approval;
+
 use super::Ui;
-use super::event::Approval;
 use crate::gate::Asker;
 use crate::mode::{AUTONOMOUS, Mode, ModeCell};
 use crate::picker::{Adjustment, Item, Lines, Picker};
@@ -50,7 +51,9 @@ impl Person for UiPerson<'_> {
             if (self.stopped)() {
                 break;
             }
-            let answer = self.ui.ask(question, at, questions.len(), self.stopped);
+            let answer = self
+                .ui
+                .question(question, at, questions.len(), self.stopped);
             answers.push(answer.unwrap_or_default());
         }
         (self.waited)(asked.elapsed());

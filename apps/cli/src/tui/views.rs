@@ -1,13 +1,9 @@
 //! What the interface keeps of each session: a lane (a session the person started) or an agent
 //! it started, each with its transcript, and which one is shown.
 
-use std::collections::VecDeque;
-use std::sync::mpsc::SyncSender;
 use std::time::Instant;
 
 use ratatui::text::Line;
-
-use super::event::Typed;
 
 /// Every session the interface knows, and which one it shows.
 pub(crate) struct Views {
@@ -134,14 +130,15 @@ impl SessionView {
 /// A lane's own: what the person sent it, and what its task reports beside its transcript.
 #[derive(Default)]
 pub(crate) struct LaneState {
-    /// The session waits for its next entry here.
-    pub waiting: Option<SyncSender<Option<Typed>>>,
-    /// Entries for after the task running (Tab, or a command), oldest first.
-    pub queued: VecDeque<Typed>,
-    /// What the person said to the task running, not yet read by it (Enter while it works).
-    pub steered: Vec<Typed>,
-    /// What came back from the background while nothing ran: tasks after what is queued.
-    pub background: VecDeque<Typed>,
+    /// The lane waits for its next entry (the server says so).
+    pub ready: bool,
+    /// As the server keeps them: the person's words for the task running, their entries for
+    /// after it, and what came back from the background, as the transcript will show it.
+    pub steered: Vec<String>,
+    pub queued: Vec<String>,
+    pub background: Vec<String>,
+    /// What the session spent in all, as the server last said it.
+    pub total: Option<protocol::Total>,
     /// The share of the context window left after the last task, in percent.
     pub context: Option<u8>,
     pub mode: String,

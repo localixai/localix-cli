@@ -12,7 +12,7 @@ use contracts::gate::{Effect, Gate, Verdict};
 
 use crate::interrupt;
 use crate::printable::printable;
-use crate::tui::event::Approval;
+use protocol::Approval;
 
 /// Times an unreadable answer is asked again before it counts as no.
 const TRIES: usize = 3;

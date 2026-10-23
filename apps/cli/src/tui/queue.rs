@@ -6,6 +6,7 @@
 use std::time::{Duration, Instant};
 
 use super::app::{Action, App, Open};
+use super::event::Out;
 use super::questions;
 use super::select::{Picked, Select};
 
@@ -85,7 +86,7 @@ impl App {
     pub(super) fn ask_own(&mut self, lane: usize, select: Select, open: Open, now: Instant) {
         // The person left: nobody would answer it (held, it would never even be shown).
         if self.left {
-            questions::answer(open, Picked::Cancelled);
+            self.answered("", open, Picked::Cancelled);
             return;
         }
         if lane == self.views.home() {
@@ -126,10 +127,13 @@ impl App {
         Some(asked.asker)
     }
 
-    /// `open` is answered with `picked`; what the person said refusing an approval waits for
-    /// the call refused, in the asker's lane.
+    /// `open` is answered with `picked`: the reply goes to the server; what the person said
+    /// refusing an approval waits for the call refused, in the asker's lane.
     fn answered(&mut self, asker: &str, open: Open, picked: Picked) {
-        let said = questions::answer(open, picked);
+        let (reply, said) = questions::answer(&open, picked);
+        if let Some((id, reply)) = reply {
+            self.outbox.push(Out::Reply(id, reply));
+        }
         let lane = self.views.find(asker).map(|at| self.lane_at(at));
         if let Some(state) = lane.and_then(|at| self.views.sessions[at].lane.as_deref_mut())
             && said.is_some()
@@ -138,23 +142,20 @@ impl App {
         }
     }
 
-    /// The lane at `lane` no longer waits for its question (its task was stopped): the first it
-    /// asked closes unanswered, else the first it held.
-    pub(super) fn dismiss(&mut self, lane: usize, now: Instant) {
-        let asker = self.views.sessions[lane].id.clone();
-        if let Some(found) = self.questions.iter().position(|q| q.asker == asker) {
+    /// The server withdrew question `id` (its task stopped, or it was answered elsewhere): it
+    /// closes, open, waiting its turn or held, and nothing is replied.
+    pub(super) fn resolved(&mut self, id: u64, now: Instant) {
+        if let Some(found) = self.questions.iter().position(|q| q.open.id() == Some(id)) {
+            self.questions.remove(found);
             if found == 0 {
-                self.answer_open(Picked::Cancelled, now);
-            } else if let Some(asked) = self.questions.remove(found) {
-                self.answered(&asked.asker, asked.open, Picked::Cancelled);
+                self.settling = (!self.questions.is_empty()).then(|| now + SETTLE);
             }
             return;
         }
-        if let Some(state) = self.views.sessions[lane].lane.as_deref_mut()
-            && !state.held.is_empty()
-        {
-            let (_, open) = state.held.remove(0);
-            questions::answer(open, Picked::Cancelled);
+        for view in &mut self.views.sessions {
+            if let Some(state) = view.lane.as_deref_mut() {
+                state.held.retain(|(_, open)| open.id() != Some(id));
+            }
         }
     }
 
@@ -188,17 +189,20 @@ impl App {
 
     /// Every question, open, waiting or held, closes unanswered: the person is leaving.
     pub(super) fn close_questions(&mut self) {
-        for asked in std::mem::take(&mut self.questions) {
-            questions::answer(asked.open, Picked::Cancelled);
-        }
+        let mut open: Vec<Open> = (std::mem::take(&mut self.questions).into_iter())
+            .map(|asked| asked.open)
+            .collect();
         for view in &mut self.views.sessions {
-            for (_, open) in view
+            let held = view
                 .lane
                 .as_deref_mut()
-                .map(|l| std::mem::take(&mut l.held))
-                .unwrap_or_default()
-            {
-                questions::answer(open, Picked::Cancelled);
+                .map(|l| std::mem::take(&mut l.held));
+            open.extend(held.unwrap_or_default().into_iter().map(|(_, open)| open));
+        }
+        for open in open {
+            let (reply, _) = questions::answer(&open, Picked::Cancelled);
+            if let Some((id, reply)) = reply {
+                self.outbox.push(Out::Reply(id, reply));
             }
         }
     }

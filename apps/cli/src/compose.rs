@@ -40,7 +40,7 @@ use crate::jobs::{self, Jobs};
 use crate::live::Live;
 use crate::mode::{ModeCell, ModeGate};
 use crate::output::{Output, lock};
-use crate::tui::asking::{UiGate, UiPerson};
+use crate::server::asking::{UiGate, UiPerson};
 use crate::windows;
 
 /// Who calls the providers: attribution, the sign-in pages, the folder sign-ins are saved in.

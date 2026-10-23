@@ -1,12 +1,12 @@
-use std::sync::mpsc::{Receiver, sync_channel};
 use std::time::Instant;
 
 use crossterm::event::KeyCode;
 
 use super::*;
 use crate::tui::app::App;
-use crate::tui::event::Event;
-use crate::tui::test_support::{Term, key, typed};
+use protocol::{Asked, Reply};
+
+use crate::tui::test_support::{Term, key, replies, typed};
 
 /// A long list as `/login` shows it: a name, then the id and a note.
 fn providers() -> Vec<(String, String)> {
@@ -24,23 +24,47 @@ fn providers() -> Vec<(String, String)> {
     named
 }
 
-/// `options` put to the person under `title`; the app, and where the pick goes.
-fn choose(title: &str, options: Vec<(String, String)>) -> (App, Receiver<Option<usize>>) {
+/// `options` put to the person under `title`, as question 1.
+fn choose(title: &str, options: Vec<(String, String)>) -> App {
     let mut app = App::new(80, 40, vec![]);
-    let (reply, picked) = sync_channel(1);
-    let event = Event::Choose {
+    let asked = Asked::Choose {
         title: title.into(),
         options,
         marked: None,
-        reply,
     };
-    app.event(event, Instant::now());
-    (app, picked)
+    app.asked(1, "", asked, Instant::now());
+    app
+}
+
+/// The pick replied, if one was.
+#[allow(
+    clippy::option_option,
+    reason = "no reply yet, or the reply: a pick or a cancel"
+)]
+fn picked(app: &mut App) -> Option<Option<usize>> {
+    match &replies(app)[..] {
+        [] => None,
+        [(1, Reply::Choice(picked))] => Some(*picked),
+        other => panic!("not a pick: {other:?}"),
+    }
+}
+
+/// The row and value replied, if they were.
+#[allow(
+    clippy::option_option,
+    reason = "no reply yet, or the reply: a pick or a cancel"
+)]
+fn adjusted(app: &mut App) -> Option<Option<(usize, usize)>> {
+    match &replies(app)[..] {
+        [] => None,
+        [(1, Reply::Adjusted(picked))] => Some(*picked),
+        other => panic!("not a pick: {other:?}"),
+    }
 }
 
 fn press(app: &mut App, codes: &[KeyCode]) {
     for code in codes {
-        app.event(key(*code), Instant::now());
+        app.input(key(*code), Instant::now());
     }
 }
 
@@ -52,20 +76,16 @@ fn adjustable(
     options: Vec<(String, String)>,
     adjustments: Vec<crate::picker::Adjustment>,
     marked: Option<usize>,
-) -> (App, Receiver<Option<(usize, usize)>>) {
+) -> App {
     let mut app = App::new(80, 40, vec![]);
-    let (reply, picked) = sync_channel(1);
-    app.event(
-        Event::ChooseAdjustable {
-            title: "Model".into(),
-            options,
-            marked,
-            adjustments,
-            reply,
-        },
-        Instant::now(),
-    );
-    (app, picked)
+    let asked = Asked::ChooseAdjustable {
+        title: "Model".into(),
+        options,
+        marked,
+        adjustments,
+    };
+    app.asked(1, "", asked, Instant::now());
+    app
 }
 
 fn levels(values: &[&str], at: usize) -> crate::picker::Adjustment {
@@ -77,7 +97,7 @@ fn levels(values: &[&str], at: usize) -> crate::picker::Adjustment {
 
 #[test]
 fn adjustable_rows_bound_arrows_and_remember_each_rows_value() {
-    let (mut app, picked) = adjustable(
+    let mut app = adjustable(
         providers()[..2].to_vec(),
         vec![
             levels(&["low", "medium", "high"], 1),
@@ -105,7 +125,7 @@ fn adjustable_rows_bound_arrows_and_remember_each_rows_value() {
         &mut app,
         &[KeyCode::Left, KeyCode::Left, KeyCode::Left, KeyCode::Enter],
     );
-    assert_eq!(picked.try_recv(), Ok(Some((0, 0))));
+    assert_eq!(adjusted(&mut app), Some(Some((0, 0))));
 }
 
 #[test]
@@ -115,7 +135,7 @@ fn adjustable_search_keeps_values_on_the_original_rows() {
         .iter()
         .map(|_| levels(&["low", "high"], 0))
         .collect();
-    let (mut app, picked) = adjustable(options, adjustments, Some(3));
+    let mut app = adjustable(options, adjustments, Some(3));
     press(&mut app, &[KeyCode::Right]);
     typed(&mut app, "openai", Instant::now());
     press(&mut app, &[KeyCode::Right, KeyCode::Esc]);
@@ -124,26 +144,26 @@ fn adjustable_search_keeps_values_on_the_original_rows() {
     assert!(shown.contains("❯ DeepSeek"), "{shown}");
     assert!(shown.contains("← high →"), "{shown}");
     press(&mut app, &[KeyCode::Enter]);
-    assert_eq!(picked.try_recv(), Ok(Some((3, 1))));
+    assert_eq!(adjusted(&mut app), Some(Some((3, 1))));
 }
 
 #[test]
 fn adjustable_empty_single_and_missing_values_are_harmless() {
     let options = providers()[..3].to_vec();
     for row in 0..3 {
-        let (mut app, picked) = adjustable(
+        let mut app = adjustable(
             options.clone(),
             vec![levels(&[], 9), levels(&["fixed"], 9)],
             Some(row),
         );
         press(&mut app, &[KeyCode::Left, KeyCode::Right, KeyCode::Enter]);
-        assert_eq!(picked.try_recv(), Ok(Some((row, 0))));
+        assert_eq!(adjusted(&mut app), Some(Some((row, 0))));
     }
-    let (mut app, picked) = adjustable(vec![], vec![], None);
+    let mut app = adjustable(vec![], vec![], None);
     press(&mut app, &[KeyCode::Right, KeyCode::Left, KeyCode::Enter]);
-    assert!(picked.try_recv().is_err());
+    assert!(adjusted(&mut app).is_none());
     press(&mut app, &[KeyCode::Esc]);
-    assert_eq!(picked.try_recv(), Ok(None));
+    assert_eq!(adjusted(&mut app), Some(None));
 }
 
 #[test]
@@ -153,17 +173,17 @@ fn adjustable_cancel_and_no_matches_do_not_choose_a_row() {
         .iter()
         .map(|_| levels(&["low", "high"], 0))
         .collect();
-    let (mut app, picked) = adjustable(options, adjustments, None);
+    let mut app = adjustable(options, adjustments, None);
     typed(&mut app, "xyz", Instant::now());
     press(&mut app, &[KeyCode::Right, KeyCode::Enter]);
-    assert!(picked.try_recv().is_err());
+    assert!(adjusted(&mut app).is_none());
     press(&mut app, &[KeyCode::Esc, KeyCode::Esc]);
-    assert_eq!(picked.try_recv(), Ok(None));
+    assert_eq!(adjusted(&mut app), Some(None));
 }
 
 #[test]
 fn a_long_list_scrolls_to_its_end_and_back() {
-    let (mut app, _picked) = choose("Provider", providers());
+    let mut app = choose("Provider", providers());
     for _ in 0..29 {
         press(&mut app, &[KeyCode::Down]);
     }
@@ -188,7 +208,7 @@ fn a_long_list_scrolls_to_its_end_and_back() {
 
 #[test]
 fn typing_filters_the_list_by_name_and_id_prefix_first() {
-    let (mut app, _picked) = choose("Provider", providers());
+    let mut app = choose("Provider", providers());
     typed(&mut app, "OPEN", Instant::now());
     insta::assert_snapshot!(screen(&mut app), @"
     • Provider
@@ -205,7 +225,7 @@ fn typing_filters_the_list_by_name_and_id_prefix_first() {
 
 #[test]
 fn backspace_edits_the_query_and_esc_clears_it_then_cancels() {
-    let (mut app, picked) = choose("Provider", providers());
+    let mut app = choose("Provider", providers());
     typed(&mut app, "deepx", Instant::now());
     assert!(screen(&mut app).contains("No provider matches 'deepx'"));
     press(&mut app, &[KeyCode::Backspace]);
@@ -219,31 +239,31 @@ fn backspace_edits_the_query_and_esc_clears_it_then_cancels() {
         "the query is cleared:\n{shown}"
     );
     assert!(shown.contains("OpenAI"), "every row is back:\n{shown}");
-    assert!(picked.try_recv().is_err(), "the first Esc does not cancel");
+    assert!(picked(&mut app).is_none(), "the first Esc does not cancel");
     press(&mut app, &[KeyCode::Esc]);
-    assert_eq!(picked.try_recv(), Ok(None));
+    assert_eq!(picked(&mut app), Some(None));
 }
 
 #[test]
 fn enter_picks_the_row_marked_among_the_matches() {
-    let (mut app, picked) = choose("Provider", providers());
+    let mut app = choose("Provider", providers());
     // Digits are part of the query here, not picks.
     typed(&mut app, "vendor-1", Instant::now());
     press(&mut app, &[KeyCode::Down, KeyCode::Enter]);
     assert_eq!(
-        picked.try_recv(),
-        Ok(Some(15)),
+        picked(&mut app),
+        Some(Some(15)),
         "Vendor 11, the second match"
     );
 }
 
 #[test]
 fn nothing_matching_enter_picks_nothing() {
-    let (mut app, picked) = choose("Model (DeepSeek)", providers());
+    let mut app = choose("Model (DeepSeek)", providers());
     typed(&mut app, "xyz", Instant::now());
     assert!(screen(&mut app).contains("No model matches 'xyz'"));
     press(&mut app, &[KeyCode::Enter]);
-    assert!(picked.try_recv().is_err());
+    assert!(picked(&mut app).is_none());
 }
 
 #[test]
@@ -252,13 +272,13 @@ fn a_short_list_is_numbered_and_takes_no_query() {
         ("Keep it".to_string(), String::new()),
         ("Sign in again".to_string(), String::new()),
     ];
-    let (mut app, picked) = choose("Signed in", options);
+    let mut app = choose("Signed in", options);
     typed(&mut app, "s", Instant::now());
     let shown = screen(&mut app);
     assert!(!shown.contains("Search"), "{shown}");
     assert!(shown.contains("❯ 1. Keep it"), "{shown}");
     press(&mut app, &[KeyCode::Char('2')]);
-    assert_eq!(picked.try_recv(), Ok(Some(1)));
+    assert_eq!(picked(&mut app), Some(Some(1)));
 }
 
 #[test]

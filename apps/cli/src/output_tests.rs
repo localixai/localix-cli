@@ -130,7 +130,7 @@ fn what_the_model_says_beside_its_calls_is_in_the_trace_and_not_in_the_events() 
 
 #[test]
 fn a_turn_tells_the_interface_its_tokens() {
-    let (ui, events) = crate::tui::test_support::fake_ui();
+    let (ui, frames) = crate::testing::fake_ui();
     let output = Output::new(false, false).in_ui(Some(ui.for_lane("lane")));
     let usage = Usage {
         input_tokens: 1000,
@@ -138,14 +138,12 @@ fn a_turn_tells_the_interface_its_tokens() {
         ..Default::default()
     };
     Observer::turn(&output, &usage);
-    let spent = events.try_iter().find_map(|event| match event {
-        Event::In(lane, inner) => match *inner {
-            Event::Spent(tokens) => Some((lane, tokens)),
-            _ => None,
-        },
+    let events = crate::testing::events(&frames);
+    let spent = events.into_iter().find_map(|(lane, event)| match event {
+        Event::Spent(tokens) => Some((lane, tokens)),
         _ => None,
     });
-    assert_eq!(spent, Some(("lane".to_string(), 1200)));
+    assert_eq!(spent, Some((Some("lane".to_string()), 1200)));
 }
 
 #[test]

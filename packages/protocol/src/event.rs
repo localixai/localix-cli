@@ -59,6 +59,9 @@ pub enum Event {
     Closed,
     /// Tokens a model turn of an agent used.
     Spent(u64),
+    /// What the session spent in all so far, its agents and the hands included: sent whole,
+    /// never as a change, so a client that missed one is right at the next.
+    Total(Total),
     /// The lane's conversation went back or began again: its agents are gone.
     AgentsCleared,
     /// Words put in the composer for the person to change and send (a rewound task).
@@ -89,6 +92,17 @@ pub struct Label {
     pub doing: String,
     pub done: String,
     pub subject: String,
+}
+
+/// Tokens and money, in all.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct Total {
+    pub input_tokens: u64,
+    /// Input tokens read from the provider's prompt cache.
+    pub cached_tokens: u64,
+    pub output_tokens: u64,
+    /// US dollars.
+    pub cost: f64,
 }
 
 /// How a call ended, as the interface shows it.

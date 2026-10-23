@@ -1,6 +1,6 @@
 //! Choosing at the terminal: a title and options in, the index chosen out, or nothing when the
 //! person cancels ([`Picker`]); and a line of text, hidden for a secret ([`Lines`]). The
-//! interface implements both (`tui::asking::UiTerminal`).
+//! interface implements both (`server::asking::UiTerminal`).
 
 /// One option.
 #[derive(Debug, Clone, PartialEq, Eq)]

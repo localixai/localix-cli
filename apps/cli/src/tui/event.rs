@@ -1,13 +1,13 @@
-//! What reaches the interface: from the session (a task started, a call ran, a question waits)
-//! and from the terminal (a key, a paste, a new size). Questions carry where their answer goes.
+//! What reaches the interface and what it sends. A session's events are the protocol's
+//! ([`Event`]); the interface's thread takes them, the questions and the terminal's keys as one
+//! [`Input`], and sends commands and replies as [`Out`].
 
 use std::path::PathBuf;
-use std::sync::mpsc::SyncSender;
 
 use crossterm::event::KeyEvent;
-use protocol::{Adjustment, Answer, Label, Outcome, Question};
+use protocol::{Command, Reply, ToClient};
 
-pub(crate) use protocol::{Approval, JobRow};
+pub(crate) use protocol::{Approval, Event, JobRow};
 
 /// What the person sent: the text, and the pictures attached to it.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -25,120 +25,19 @@ impl From<&str> for Typed {
     }
 }
 
-pub(crate) enum Event {
-    /// The session's first row: the version and what it runs with.
-    Header(Vec<String>),
-    /// A quiet line from llx; its rows are kept as they are.
-    Note(String),
-    Error(String),
-    /// The mode changed: its name, `default` included.
-    Mode(String),
-    /// The session takes its next entry; `None` goes back when the person quits.
-    Ready(SyncSender<Option<Typed>>),
-    TaskStarted(String),
-    /// A call began: `call` is its id, the same on its result.
-    Call {
-        call: String,
-        name: String,
-        label: Label,
-    },
-    Result {
-        call: String,
-        name: String,
-        label: Label,
-        outcome: Outcome,
-    },
-    /// One action of the browser's hands, under the call that runs them.
-    Step(String),
-    /// The model's answer.
-    Answer(String),
-    TaskEnded {
-        status: String,
-        millis: u64,
-        turns: u64,
-        cost: f64,
-    },
-    Approve {
-        tool: String,
-        summary: String,
-        reply: SyncSender<Approval>,
-    },
-    /// One question of the `ask` tool: the `at`th of `of`.
-    Ask {
-        question: Question,
-        at: usize,
-        of: usize,
-        reply: SyncSender<Option<Answer>>,
-    },
-    /// A choice of llx's own (carry out the plan?): a title and its options, and the one picked.
-    Choose {
-        title: String,
-        /// Each option's label and a short note.
-        options: Vec<(String, String)>,
-        /// The option in effect now, where the marker starts.
-        marked: Option<usize>,
-        reply: SyncSender<Option<usize>>,
-    },
-    /// A choice with a value adjusted inline for each row.
-    ChooseAdjustable {
-        title: String,
-        options: Vec<(String, String)>,
-        marked: Option<usize>,
-        adjustments: Vec<Adjustment>,
-        reply: SyncSender<Option<(usize, usize)>>,
-    },
-    /// A line to type (a key, a pasted address), hidden when it is a secret.
-    Line {
-        prompt: String,
-        hidden: bool,
-        reply: SyncSender<Option<String>>,
-    },
-    /// The question open no longer waits (the task was stopped): it closes unanswered.
-    Dismiss,
-    /// A resumed session's tasks so far, oldest first: shown above what it does next.
-    Earlier(Vec<protocol::Turn>),
-    /// What is known of the session changed (sent inside its [`Event::In`]): its title.
-    Updated(protocol::Update),
-    /// A session of the interface began: its stop is known by its id.
-    LaneStarted {
-        id: String,
-        name: String,
-    },
-    /// This directory's saved sessions, newest first.
-    Saved(Vec<protocol::Saved>),
-    /// Show lane `id`: the desk opened it, or it was asked for and is open already.
-    Show(String),
-    /// What happened in session `id` (a lane, or an agent): shown in its view.
-    In(String, Box<Event>),
-    /// The session started an agent (sent inside its parent's [`Event::In`]).
-    Started {
-        id: String,
-        name: String,
-    },
-    /// The agent was closed (sent inside its own [`Event::In`]): it stays in the tree, dimmed.
-    Closed,
-    /// Tokens a model turn of an agent used (sent inside [`Event::In`]).
-    Spent(u64),
-    /// The lane's conversation went back or began again: its agents are gone.
-    AgentsCleared,
-    /// What came back from the background (a monitor's lines, a schedule due) while nothing
-    /// runs: a task of its own, after what the person queued.
-    Background(String),
-    /// Words put in the composer for the person to change and send (a rewound task).
-    Prefill(String),
-    /// The share of the model's context window left, in percent, after a task.
-    Context(u8),
-    /// The jobs running in the background, all of them, whenever they change.
-    Jobs(Vec<JobRow>),
-    /// The task running reads what the person said to it meanwhile (taken from the interface,
-    /// and shown as theirs), or only looks whether there is any (`peek`).
-    TakeSteered {
-        reply: SyncSender<Vec<String>>,
-        peek: bool,
-    },
+/// What the interface's thread takes: a frame from the server, or the terminal's.
+#[derive(Debug)]
+pub(crate) enum Input {
+    Frame(ToClient),
     Key(KeyEvent),
     Paste(String),
     Resize(u16, u16),
-    /// The session is over: the terminal is given back.
-    Quit,
+}
+
+/// What the interface sends the server.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Out {
+    Call(Command),
+    /// The person's reply to the question with this id.
+    Reply(u64, Reply),
 }

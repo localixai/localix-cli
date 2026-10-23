@@ -8,7 +8,8 @@ mod task;
 
 use std::io::IsTerminal;
 use std::path::Path;
-use std::sync::mpsc::Receiver;
+use std::sync::Arc;
+use std::sync::mpsc::{Receiver, Sender, channel};
 
 use contracts::history::{History, Session};
 use tools::browser::Browser;
@@ -26,6 +27,7 @@ use crate::gate::Tty;
 use crate::input::{self, Prompt};
 use crate::interrupt;
 use crate::mode::{self, Mode};
+use crate::server::{Peer, Ui, serve};
 use crate::tui;
 use crate::windows;
 
@@ -158,8 +160,8 @@ pub(crate) fn run(
     let ready = match work {
         // The person's colours are asked only where terminal windows will show them.
         Work::Session(first) => {
-            let (running, requests) = interface(&mut setup, browser && shown)?;
-            Ready::Session(first, running, requests)
+            let attached = interface(&mut setup, browser && shown)?;
+            Ready::Session(first, attached)
         }
         Work::One(task) => Ready::One(task),
     };
@@ -173,8 +175,16 @@ pub(crate) fn run(
 
 /// A run's work with what it runs in: a session with its interface, or one task.
 enum Ready {
-    Session(Option<String>, tui::Running, Receiver<desk::Request>),
+    Session(Option<String>, Attached),
     One(String),
+}
+
+/// A session's interface attached to its server: the terminal's, the sessions' port, and what
+/// the person asks of the desk.
+struct Attached {
+    running: tui::Running,
+    ui: Ui,
+    requests: Receiver<desk::Request>,
 }
 
 impl Ready {
@@ -182,8 +192,12 @@ impl Ready {
     fn run(self, setup: Setup, browser: Option<Browser>) -> i32 {
         match self {
             // Each lane of the session is a session of its own, on its own thread.
-            Self::Session(first, running, requests) => {
-                let ui = running.ui.clone();
+            Self::Session(first, attached) => {
+                let Attached {
+                    running,
+                    ui,
+                    requests,
+                } = attached;
                 let (shared, seat) = setup.split(browser);
                 let seat = Seat {
                     ui: Some(ui.clone()),
@@ -209,10 +223,7 @@ impl Ready {
 
 /// A session takes the terminal for its interface; one that cannot draw there (no size to draw
 /// at) is a usage error, as having no terminal is. `windowed`: terminal windows will show.
-fn interface(
-    setup: &mut Setup,
-    windowed: bool,
-) -> Result<(tui::Running, Receiver<desk::Request>), Failure> {
+fn interface(setup: &mut Setup, windowed: bool) -> Result<Attached, Failure> {
     // Before the interface reads the keys, which would take the terminal's answers.
     #[cfg(unix)]
     if windowed {
@@ -225,12 +236,63 @@ fn interface(
     }
     #[cfg(not(unix))]
     let _ = windowed;
-    let running = tui::start(repl::commands(), setup.workspace.root());
     let why = |error| Failure::Usage(format!("{NO_INTERFACE} ({error}): {RUN_EXEC}"));
+    let Serving {
+        peer,
+        requests,
+        to_server,
+        from_server,
+    } = serving().map_err(why)?;
+    let running = tui::start(tui::Start {
+        to_server,
+        from_server,
+        commands: repl::commands(),
+        root: setup.workspace.root(),
+        quit_now: interrupt::quit_now,
+    });
     let running = running.map_err(why)?;
     // A newer model catalog, for the next session: nothing here waits on it.
     crate::providers::refresh_catalog();
-    Ok(running)
+    Ok(Attached {
+        running,
+        ui: Ui::new(peer),
+        requests,
+    })
+}
+
+/// The server, in this process: what it serves the interface on its own thread, the desk's
+/// requests, and the interface's ends of the frames.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the in-process transport: the server never waits on the interface (W6), the \
+              interface never on the desk; one frame per thing done or key pressed"
+)]
+fn serving() -> std::io::Result<Serving> {
+    let (to_server, incoming) = channel();
+    let (out, from_server) = channel();
+    let (desk, requests) = channel();
+    let peer = Peer::new(out);
+    let served = Arc::clone(&peer);
+    let info = serve::Info {
+        max_lanes: desk::MAX_LANES,
+        shells: tools::shell::running_anywhere,
+    };
+    let server = std::thread::Builder::new().name("llx-serve".into());
+    server.spawn(move || serve::serve(&incoming, &served, &desk, &info))?;
+    Ok(Serving {
+        peer,
+        requests,
+        to_server,
+        from_server,
+    })
+}
+
+/// The server running: the sessions' side of it, the desk's requests, and the interface's ends.
+struct Serving {
+    peer: Arc<Peer>,
+    requests: Receiver<desk::Request>,
+    to_server: Sender<protocol::ToServer>,
+    from_server: Receiver<protocol::ToClient>,
 }
 
 #[cfg(test)]

@@ -55,5 +55,6 @@ pub(crate) fn lane_with(
     let _known = interrupt::register(&seat.session.id, move || lane.stop());
     seat.ui = seat.ui.map(|ui| ui.for_lane(&seat.session.id));
     let output = Output::new(shared.options.json, shared.options.verbose).in_ui(seat.ui.clone());
+    output.spent_before(&seat.session);
     assemble(shared, seat, models, &output, &interrupt, work)
 }

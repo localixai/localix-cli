@@ -4,9 +4,9 @@
 
 use crate::compose::Rig;
 use crate::picker::{Item, Terminal};
-use crate::tui::Ui;
-use crate::tui::asking::UiTerminal;
-use crate::tui::event::Event;
+use crate::server::Ui;
+use crate::server::asking::UiTerminal;
+use protocol::Event;
 
 /// Characters of a task shown in the list.
 const SHOWN: usize = 70;

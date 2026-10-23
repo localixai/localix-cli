@@ -14,7 +14,7 @@ use super::inbox::AgentInbox;
 use super::kit::{Kit, Own, Tools};
 use super::watch::{Labeled, Watch};
 use crate::mode;
-use crate::tui::event::Event;
+use protocol::Event;
 
 /// What an agent is told before its first task: who it answers to, and how.
 fn brief(name: &str) -> String {

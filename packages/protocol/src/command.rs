@@ -14,8 +14,10 @@ pub enum Command {
     Input(Input),
     /// Ctrl-C: stop the session's task; asked again soon after, the person wants out.
     Interrupt { session: String },
-    /// Stop what runs under `id` (a lane's task, an agent, a job), and never quit for it.
+    /// Stop the task of a lane or an agent, and never quit for it.
     Halt { id: String },
+    /// Stop a lane's job (a monitor, a schedule).
+    StopJob { lane: String, job: String },
     /// Close an idle lane: its prompt is given nothing, and it ends (to make room for another).
     Close { session: String },
     /// Open a lane, or show it when it is open already.

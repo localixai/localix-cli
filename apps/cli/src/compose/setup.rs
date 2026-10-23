@@ -12,7 +12,7 @@ use tools::workspace::Workspace;
 use crate::choice::Choice;
 use crate::cli::RunOptions;
 use crate::mode::Mode;
-use crate::tui::Ui;
+use crate::server::Ui;
 
 /// Everything a session is built from, decided before the browser's event loop takes the main
 /// thread (so a bad argument still fails fast, with no window machinery started).

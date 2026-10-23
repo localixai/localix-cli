@@ -3,8 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use protocol::Answer;
 
 use super::*;
-use crate::tui::event::Event;
-use crate::tui::test_support::fake_ui;
+use crate::testing::answering;
 
 fn question(id: &str) -> Question {
     Question {
@@ -16,37 +15,33 @@ fn question(id: &str) -> Question {
 }
 
 /// An interface whose person answers each question with its place, `at of`; what it was asked.
-fn answering() -> (Ui, std::thread::JoinHandle<Vec<String>>) {
-    let (ui, events) = fake_ui();
-    let person = std::thread::Builder::new().name("person".into());
-    let person = person
-        .spawn(move || {
-            let mut asked = vec![];
-            for event in events {
-                if let Event::Ask {
-                    question,
-                    at,
-                    of,
-                    reply,
-                } = event
-                {
-                    asked.push(question.id);
-                    let note = Some(format!("{at} of {of}"));
-                    let _ = reply.send(Some(Answer {
-                        choices: vec![],
-                        note,
-                    }));
-                }
-            }
-            asked
-        })
-        .unwrap();
-    (ui, person)
+fn answering_places() -> (Ui, std::thread::JoinHandle<Vec<String>>) {
+    let (ui, person) = answering(|asked| match asked {
+        protocol::Asked::Question { at, of, .. } => {
+            let note = Some(format!("{at} of {of}"));
+            let answer = Answer {
+                choices: vec![],
+                note,
+            };
+            Some(protocol::Reply::Question(Some(answer)))
+        }
+        _ => None,
+    });
+    let asked = std::thread::Builder::new().name("asked".into());
+    let ids = asked.spawn(move || {
+        let asked = person.join().unwrap();
+        let ids = asked.into_iter().filter_map(|(_, asked)| match asked {
+            protocol::Asked::Question { question, .. } => Some(question.id),
+            _ => None,
+        });
+        ids.collect()
+    });
+    (ui, ids.unwrap())
 }
 
 #[test]
 fn each_question_is_asked_in_turn_and_the_time_taken_is_told() {
-    let (ui, person) = answering();
+    let (ui, person) = answering_places();
     let mode = ModeCell::new(Mode::Default);
     let told = AtomicUsize::new(0);
     let waited = |_: Duration| {
@@ -75,7 +70,7 @@ fn in_autonomous_mode_or_once_stopped_nobody_is_asked() {
         (Mode::Autonomous, false, Reply::Nobody(AUTONOMOUS.into())),
         (Mode::Default, true, Reply::Stopped),
     ] {
-        let (ui, person) = answering();
+        let (ui, person) = answering_places();
         let mode = ModeCell::new(mode);
         let is_stopped = move || stopped;
         let asking = UiPerson {

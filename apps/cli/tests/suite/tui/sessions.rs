@@ -213,3 +213,23 @@ fn a_resumed_session_shows_its_earlier_tasks() {
     }
     assert!(model.requests().is_empty(), "nothing is asked of the model");
 }
+
+#[test]
+fn a_resumed_session_shows_what_it_spent_before() {
+    let model = Model::start(vec![]);
+    let turns = r#"[
+        {"goal": "fix the parser", "answer": "Fixed.", "status": "achieved", "at": 1, "steps": [
+            {"what": "model", "at_ms": 0, "ms": 900, "spent": {"input_tokens": 20000,
+                "cached_tokens": 21000, "output_tokens": 1000, "cost": 0.04}},
+            {"what": "bash", "at_ms": 900, "ms": 100},
+            {"what": "decision", "at_ms": 0, "ms": 0, "spent": {"input_tokens": 4100,
+                "cached_tokens": 0, "output_tokens": 200, "cost": 0.002}}
+        ]}
+    ]"#;
+    let term = Term::resuming(&model, "1700000000-cd34", turns);
+    let screen = term.wait_for("1.2k out", LONG);
+    assert!(
+        screen.contains("24.1k in · 87% cached · 1.2k out · $0.042"),
+        "{screen}"
+    );
+}

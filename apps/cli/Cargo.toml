@@ -21,6 +21,7 @@ base64.workspace = true
 agent.workspace = true
 contracts.workspace = true
 protocol.workspace = true
+client.workspace = true
 queue.workspace = true
 decision-loop.workspace = true
 openai.workspace = true

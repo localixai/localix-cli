@@ -7,8 +7,8 @@ use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::output::lock;
-use crate::tui::Ui;
-use crate::tui::event::Event;
+use crate::server::Ui;
+use protocol::Event;
 
 /// How long "Quit anyway" waits for the lanes it stopped.
 pub(super) const QUIT_WAIT: Duration = Duration::from_secs(2);

@@ -1,6 +1,6 @@
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::channel;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::json;
@@ -9,8 +9,9 @@ use crate::compose::{Models, Seat, Shared, lane_with};
 use crate::desk::test_support::{Person, at_desk, at_desk_with, call, ended, state};
 use crate::desk::{Work, run};
 use crate::mode::Mode;
+use crate::server::serve::{Info, serve};
+use crate::server::{Peer, Ui};
 use crate::testing::{NoDecider, Scratch, gated, says, setup};
-use crate::tui::Ui;
 use crate::tui::app::{Action, App};
 use crate::tui::views::AgentState;
 
@@ -25,7 +26,7 @@ fn stopping_lane_b_leaves_lane_a_running() {
         person.until("B works", |app| app.busy().is_some());
         let action = person
             .app
-            .event(crate::tui::test_support::ctrl('c'), Instant::now());
+            .input(crate::tui::test_support::ctrl('c'), Instant::now());
         assert_eq!(action, Some(Action::Stop(lane_b.clone())));
         person.act(action, false);
         to_b.send(call("read", json!({"path": "."}))).unwrap();
@@ -54,17 +55,12 @@ fn a_panicking_lane_ends_the_other_lanes() {
         let (shared, seat) = setup(&scratch, Mode::Bypass, true).split(None);
         #[allow(
             clippy::disallowed_methods,
-            reason = "the interface's events and the desk's requests are unbounded, as `tui::start` \
-                          makes them"
+            reason = "the in-process transport and the desk's requests, as the binary makes them"
         )]
-        let (events, inbox) = channel();
-        let ui = Ui::new(events);
-        #[allow(
-            clippy::disallowed_methods,
-            reason = "the interface's events and the desk's requests are unbounded, as `tui::start` \
-                          makes them"
-        )]
-        let (requests, asked) = channel();
+        let ((to_server, incoming), (out, frames), (to_desk, asked)) =
+            (channel(), channel(), channel());
+        let peer = Peer::new(out);
+        let ui = Ui::new(Arc::clone(&peer));
         let seat = Seat {
             ui: Some(ui.clone()),
             ..seat
@@ -85,13 +81,18 @@ fn a_panicking_lane_ends_the_other_lanes() {
         };
         std::thread::scope(|scope| {
             let desk = scope.spawn(|| run(&shared, &ui, asked, seat, None, &start, &|| {}));
+            let info = Info {
+                max_lanes: crate::desk::MAX_LANES,
+                shells: || 0,
+            };
+            scope.spawn(move || serve(&incoming, &peer, &to_desk, &info));
             let mut person = Person {
                 app: App::new(80, 24, vec![]),
-                events: inbox,
-                requests,
+                frames,
+                to_server,
                 over: false,
             };
-            person.until("A waits", |app| app.lane().waiting.is_some());
+            person.until("A waits", |app| app.lane().ready);
             person.enter("/new");
             person.until_over();
             // The interface is gone: what A waits for never comes.

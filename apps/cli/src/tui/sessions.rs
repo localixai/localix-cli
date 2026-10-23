@@ -30,8 +30,8 @@ use super::cells;
 use super::style;
 use super::views::AgentState;
 use super::wrap::cut;
-use crate::desk::Target;
 use crate::printable::printable;
+use protocol::Target;
 
 /// Rows shown at once; a longer list scrolls with the row chosen.
 const WINDOW: usize = 14;

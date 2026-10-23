@@ -3,7 +3,9 @@
 //! the list, as a saved session.
 
 use super::app::{Action, App};
-use crate::desk::Target;
+use protocol::{Command, Target};
+
+use super::event::Out;
 
 impl App {
     /// Open `target` in a lane of its own: at the most lanes, the oldest idle one not shown
@@ -14,7 +16,7 @@ impl App {
             .sessions
             .iter()
             .filter(|view| view.lane.is_some());
-        if lanes.count() < crate::desk::MAX_LANES {
+        if lanes.count() < self.max_lanes {
             return Some(Action::Open(target));
         }
         let home = self.views.home();
@@ -25,26 +27,19 @@ impl App {
         };
         let idle = (0..views.len()).find(|&at| {
             let view = &views[at];
-            let waits = view
-                .lane
-                .as_ref()
-                .is_some_and(|lane| lane.waiting.is_some());
+            let waits = view.lane.as_ref().is_some_and(|lane| lane.ready);
             at != home && waits && view.busy.is_none() && !agents_work(&view.id)
         });
         let shown = self.views.find(&self.views.shown).unwrap_or(home);
         let Some(at) = idle.filter(|&at| !self.waits_for_person(at)) else {
-            let full = format!(
-                "{} sessions are working: stop one first",
-                crate::desk::MAX_LANES
-            );
+            let full = format!("{} sessions are working: stop one first", self.max_lanes);
             self.push(shown, super::cells::note(&full, self.width));
             return None;
         };
         let view = self.views.sessions.remove(at);
         let said = format!("closed the oldest idle session \"{}\"", view.title());
-        if let Some(reply) = view.lane.and_then(|mut lane| lane.waiting.take()) {
-            let _ = reply.send(None);
-        }
+        let session = view.id.clone();
+        self.outbox.push(Out::Call(Command::Close { session }));
         self.views
             .sessions
             .retain(|agent| agent.parent.as_ref() != Some(&view.id));

@@ -1,12 +1,14 @@
-use std::sync::mpsc::sync_channel;
 use std::time::{Duration, Instant};
 
 use crossterm::event::KeyCode;
 
+use protocol::{Approval, Command, Reply, ToClient};
+
 use super::*;
 use crate::tui::style;
 use crate::tui::test_support::{
-    call, ctrl, done, failed, history, key, next_entry, ran, render, result, typed,
+    approve as approve_asked, call, commands, ctrl, done, failed, history, in_session as from, key,
+    live_area, queue, ran, render, replies, result, sent, sent_texts, typed,
 };
 
 fn app() -> App {
@@ -28,49 +30,6 @@ fn app() -> App {
 /// When a question was opened that takes keys at `now`: an approval ignores them at first.
 fn opened(now: Instant) -> Instant {
     now.checked_sub(Duration::from_millis(300)).unwrap_or(now)
-}
-
-#[test]
-fn an_entry_goes_to_the_session_when_it_waits_steers_it_while_it_works_or_waits_with_tab() {
-    let now = Instant::now();
-    let mut app = app();
-    let (reply, entries) = sync_channel(1);
-    app.event(Event::Ready(reply), now);
-    typed(&mut app, "first", now);
-    app.event(key(KeyCode::Enter), now);
-    assert_eq!(entries.try_recv(), Ok(Some("first".into())));
-    app.event(Event::TaskStarted("first".into()), now);
-    typed(&mut app, "now", now);
-    app.event(key(KeyCode::Enter), now);
-    assert_eq!(app.lane().steered, [Typed::from("now")]);
-    typed(&mut app, "/status", now);
-    app.event(key(KeyCode::Enter), now);
-    typed(&mut app, "second", now);
-    app.event(key(KeyCode::Tab), now);
-    assert_eq!(
-        app.lane().queued,
-        [Typed::from("/status"), Typed::from("second")]
-    );
-    let (reply, taken) = sync_channel(1);
-    app.event(Event::TakeSteered { reply, peek: false }, now);
-    assert_eq!(taken.try_recv(), Ok(vec!["now".to_string()]));
-    assert!(app.lane().steered.is_empty());
-    app.event(
-        Event::TaskEnded {
-            status: "achieved".into(),
-            millis: 1,
-            turns: 1,
-            cost: 0.0,
-        },
-        now,
-    );
-    let (reply, entries) = sync_channel(1);
-    app.event(Event::Ready(reply), now);
-    assert_eq!(entries.try_recv(), Ok(Some("/status".into())));
-    let (reply, entries) = sync_channel(1);
-    app.event(Event::Ready(reply), now);
-    assert_eq!(entries.try_recv(), Ok(Some("second".into())));
-    assert!(app.lane().queued.is_empty());
 }
 
 #[test]
@@ -111,7 +70,7 @@ fn ctrl_c_on_a_draft_keeps_it_in_history_and_a_second_quits() {
     let now = Instant::now();
     let mut app = app();
     typed(&mut app, "a draft", now);
-    assert_eq!(app.event(ctrl('c'), now), None);
+    assert_eq!(app.input(ctrl('c'), now), None);
     let screen = render(&mut app, now);
     assert!(!screen.contains("a draft"), "{screen}");
     assert!(
@@ -119,25 +78,25 @@ fn ctrl_c_on_a_draft_keeps_it_in_history_and_a_second_quits() {
         "{screen}"
     );
     // ↑ brings it back, and a key other than Ctrl-C disarms the quit.
-    app.event(key(KeyCode::Up), now);
+    app.input(key(KeyCode::Up), now);
     assert_eq!(app.composer.text(), "a draft");
-    assert_eq!(app.event(ctrl('c'), now), None, "cleared again, not quit");
-    assert_eq!(app.event(ctrl('c'), now), Some(Action::Quit));
+    assert_eq!(app.input(ctrl('c'), now), None, "cleared again, not quit");
+    assert_eq!(app.input(ctrl('c'), now), Some(Action::Quit));
 }
 
 #[test]
 fn ctrl_c_at_an_empty_prompt_quits_only_when_pressed_twice_in_time() {
     let now = Instant::now();
     let mut app = app();
-    assert_eq!(app.event(ctrl('c'), now), None);
+    assert_eq!(app.input(ctrl('c'), now), None);
     assert!(render(&mut app, now).contains("ctrl-c again to quit"));
     assert_eq!(
-        app.event(ctrl('c'), now + Duration::from_secs(3)),
+        app.input(ctrl('c'), now + Duration::from_secs(3)),
         None,
         "too late: armed again"
     );
     assert_eq!(
-        app.event(ctrl('c'), now + Duration::from_secs(4)),
+        app.input(ctrl('c'), now + Duration::from_secs(4)),
         Some(Action::Quit)
     );
 }
@@ -148,9 +107,9 @@ fn ctrl_c_while_a_task_works_stops_it_and_keeps_the_draft() {
     let mut app = app();
     app.event(Event::TaskStarted("x".into()), now);
     typed(&mut app, "next idea", now);
-    assert_eq!(app.event(ctrl('c'), now), Some(Action::Stop(String::new())));
+    assert_eq!(app.input(ctrl('c'), now), Some(Action::Stop(String::new())));
     assert_eq!(app.composer.text(), "next idea");
-    assert_eq!(app.event(key(KeyCode::Esc), now), None, "stopping already");
+    assert_eq!(app.input(key(KeyCode::Esc), now), None, "stopping already");
 }
 
 #[test]
@@ -158,11 +117,11 @@ fn ctrl_d_quits_from_an_empty_prompt_and_asks_while_a_task_works() {
     let now = Instant::now();
     let mut app = app();
     typed(&mut app, "x", now);
-    assert_ne!(app.event(ctrl('d'), now), Some(Action::Quit), "a draft");
+    assert_ne!(app.input(ctrl('d'), now), Some(Action::Quit), "a draft");
     app.composer.clear();
-    assert_eq!(app.event(ctrl('d'), now), Some(Action::Quit));
+    assert_eq!(app.input(ctrl('d'), now), Some(Action::Quit));
     app.event(Event::TaskStarted("x".into()), now);
-    assert_eq!(app.event(ctrl('d'), now), None);
+    assert_eq!(app.input(ctrl('d'), now), None);
     assert!(render(&mut app, now).contains("Quit llx?"));
 }
 
@@ -170,7 +129,7 @@ fn ctrl_d_quits_from_an_empty_prompt_and_asks_while_a_task_works() {
 fn esc_twice_on_an_empty_prompt_says_what_the_second_does() {
     let now = Instant::now();
     let mut app = app();
-    app.event(key(KeyCode::Esc), now);
+    app.input(key(KeyCode::Esc), now);
     assert!(render(&mut app, now).contains("esc again to rewind"));
 }
 
@@ -180,31 +139,19 @@ fn an_approval_is_answered_with_a_key() {
     let mut app = app();
     // Approvals come while a task works.
     app.event(Event::TaskStarted("a task".into()), now);
-    let (reply, answer) = sync_channel(1);
-    app.event(
-        Event::Approve {
-            tool: "bash".into(),
-            summary: "run cargo test".into(),
-            reply,
-        },
-        opened(now),
-    );
-    app.event(key(KeyCode::Char('3')), now);
+    app.asked(1, "", approve_asked("bash", "run cargo test"), opened(now));
+    app.input(key(KeyCode::Char('3')), now);
     typed(&mut app, "use make", now);
-    app.event(key(KeyCode::Enter), now);
-    assert_eq!(answer.try_recv(), Ok(Approval::No(Some("use make".into()))));
+    app.input(key(KeyCode::Enter), now);
+    let no = Reply::Approval(Approval::No(Some("use make".into())));
+    assert_eq!(replies(&mut app), [(1, no)]);
     assert!(app.questions.is_empty());
-    let (reply, answer) = sync_channel(1);
-    app.event(
-        Event::Approve {
-            tool: "bash".into(),
-            summary: "rm -rf build".into(),
-            reply,
-        },
-        opened(now),
+    app.asked(2, "", approve_asked("bash", "rm -rf build"), opened(now));
+    assert_eq!(app.input(ctrl('c'), now), Some(Action::Stop(String::new())));
+    assert_eq!(
+        replies(&mut app),
+        [(2, Reply::Approval(Approval::No(None)))]
     );
-    assert_eq!(app.event(ctrl('c'), now), Some(Action::Stop(String::new())));
-    assert_eq!(answer.try_recv(), Ok(Approval::No(None)));
 }
 
 #[test]
@@ -213,45 +160,36 @@ fn keys_typed_ahead_as_an_approval_opens_do_not_answer_it() {
     let mut app = app();
     // Approvals come while a task works.
     app.event(Event::TaskStarted("a task".into()), now);
-    let (reply, answer) = sync_channel(1);
-    let approve = Event::Approve {
-        tool: "bash".into(),
-        summary: "rm -rf build".into(),
-        reply,
-    };
-    app.event(approve, now);
+    app.asked(1, "", approve_asked("bash", "rm -rf build"), now);
     // Typed for the composer just as the question opened: j, k, digits and Enter go nowhere.
     let soon = now + Duration::from_millis(120);
     typed(&mut app, "jk2", soon);
-    app.event(key(KeyCode::Enter), soon);
-    assert_eq!(answer.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty));
+    app.input(key(KeyCode::Enter), soon);
+    assert_eq!(replies(&mut app), []);
     assert!(!app.questions.is_empty(), "the approval is still open");
     let later = now + Duration::from_millis(300);
-    app.event(key(KeyCode::Char('3')), later);
+    app.input(key(KeyCode::Char('3')), later);
     typed(&mut app, "use make", later);
-    app.event(key(KeyCode::Enter), later);
-    assert_eq!(answer.try_recv(), Ok(Approval::No(Some("use make".into()))));
-    let (reply, answer) = sync_channel(1);
-    let approve = Event::Approve {
-        tool: "bash".into(),
-        summary: "rm -rf build".into(),
-        reply,
-    };
-    app.event(approve, now);
+    app.input(key(KeyCode::Enter), later);
+    let no = Reply::Approval(Approval::No(Some("use make".into())));
+    assert_eq!(replies(&mut app), [(1, no)]);
+    app.asked(2, "", approve_asked("bash", "rm -rf build"), now);
     // Ctrl-C still stops at once.
     assert_eq!(
-        app.event(ctrl('c'), soon),
+        app.input(ctrl('c'), soon),
         Some(Action::Stop(String::new()))
     );
-    assert_eq!(answer.try_recv(), Ok(Approval::No(None)));
+    assert_eq!(
+        replies(&mut app),
+        [(2, Reply::Approval(Approval::No(None)))]
+    );
 }
 
 #[test]
 fn slash_offers_the_commands_and_enter_takes_the_marked_one() {
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = sync_channel(1);
-    app.event(Event::Ready(reply), now);
+    app.event(queue(true, &[], &[], &[]), now);
     typed(&mut app, "/", now);
     insta::assert_snapshot!(render(&mut app, now), @"
     ❯ /
@@ -266,18 +204,18 @@ fn slash_offers_the_commands_and_enter_takes_the_marked_one() {
       /new        start over
       default mode · shift+tab to cycle
     ");
-    let opened = app.event(key(KeyCode::Enter), now);
+    let opened = app.input(key(KeyCode::Enter), now);
     assert_eq!(
         opened,
-        Some(Action::Open(crate::desk::Target::New)),
+        Some(Action::Open(protocol::Target::New)),
         "the marked one"
     );
     assert!(
-        entries.try_recv().is_err(),
+        sent_texts(&mut app).is_empty(),
         "the desk opens it, not the lane"
     );
     typed(&mut app, "/m", now);
-    app.event(key(KeyCode::Tab), now);
+    app.input(key(KeyCode::Tab), now);
     typed(&mut app, "plan", now);
     insta::assert_snapshot!(render(&mut app, now), @"
     ❯ /mode plan
@@ -285,27 +223,26 @@ fn slash_offers_the_commands_and_enter_takes_the_marked_one() {
       plan         Investigate and plan: file changes are refus…
       default mode · shift+tab to cycle
     ");
-    app.event(key(KeyCode::Enter), now);
-    assert_eq!(entries.try_recv(), Ok(Some("/mode plan".into())));
+    app.input(key(KeyCode::Enter), now);
+    assert_eq!(sent_texts(&mut app), ["/mode plan"]);
 }
 
 #[test]
 fn command_drill_down_shows_modes_and_preserves_argument_entry() {
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = sync_channel(1);
-    app.event(Event::Ready(reply), now);
+    app.event(queue(true, &[], &[], &[]), now);
     typed(&mut app, "/mo", now);
-    app.event(key(KeyCode::Enter), now);
+    app.input(key(KeyCode::Enter), now);
     assert_eq!(
-        entries.try_recv(),
-        Ok(Some("/mode".into())),
+        sent_texts(&mut app),
+        ["/mode"],
         "a part runs the marked one"
     );
     let sent = |app: &mut App, text: &str| {
         typed(app, text, now);
-        app.event(key(KeyCode::Enter), now);
-        next_entry(app, now)
+        app.input(key(KeyCode::Enter), now);
+        sent_texts(app).pop()
     };
     assert_eq!(sent(&mut app, "/mode").as_deref(), Some("/mode"));
     assert_eq!(sent(&mut app, "/plan").as_deref(), Some("/plan"));
@@ -320,7 +257,7 @@ fn command_drill_down_shows_modes_and_preserves_argument_entry() {
       default mode · shift+tab to cycle
     ");
     typed(&mut app, "aut", now);
-    app.event(key(KeyCode::Tab), now);
+    app.input(key(KeyCode::Tab), now);
     assert_eq!(sent(&mut app, "").as_deref(), Some("/mode autonomous"));
     assert_eq!(
         sent(&mut app, "/permissions by").as_deref(),
@@ -333,26 +270,23 @@ fn command_drill_down_shows_modes_and_preserves_argument_entry() {
 fn freeform_plan_task_and_unknown_mode_are_not_replaced_by_suggestions() {
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = sync_channel(1);
-    app.event(Event::Ready(reply), now);
     typed(&mut app, "/plan fix the tests", now);
     assert!(app.offers().is_empty());
-    app.event(key(KeyCode::Enter), now);
-    assert_eq!(entries.try_recv(), Ok(Some("/plan fix the tests".into())));
+    app.input(key(KeyCode::Enter), now);
     typed(&mut app, "/mode custom", now);
     assert!(app.offers().is_empty());
-    app.event(key(KeyCode::Enter), now);
-    assert_eq!(app.lane().queued[0].text, "/mode custom");
+    app.input(key(KeyCode::Enter), now);
+    assert_eq!(
+        sent_texts(&mut app),
+        ["/plan fix the tests", "/mode custom"]
+    );
 }
 
 #[test]
 fn leaving_ends_every_wait() {
-    let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = sync_channel(1);
-    app.event(Event::Ready(reply), now);
     app.leave();
-    assert_eq!(entries.try_recv(), Ok(None));
+    assert_eq!(commands(&mut app), [Command::Leave]);
 }
 
 #[test]
@@ -361,18 +295,10 @@ fn a_call_the_person_refused_says_what_they_said_not_an_error() {
     let mut app = app();
     let git_log = ran("git log");
     app.event(call("c1", "bash", &git_log), now);
-    let (reply, _answer) = sync_channel(1);
-    app.event(
-        Event::Approve {
-            tool: "bash".into(),
-            summary: "git log".into(),
-            reply,
-        },
-        opened(now),
-    );
-    app.event(key(KeyCode::Char('3')), now);
+    app.asked(1, "", approve_asked("bash", "git log"), opened(now));
+    app.input(key(KeyCode::Char('3')), now);
     typed(&mut app, "not this repository", now);
-    app.event(key(KeyCode::Enter), now);
+    app.input(key(KeyCode::Enter), now);
     let outcome = failed("not allowed: the person declined it", true);
     app.event(result("c1", "bash", &git_log, outcome), now);
     let lines = app.take_history();
@@ -388,32 +314,25 @@ fn at_offers_files_and_enter_puts_the_path_in_without_sending() {
     let now = Instant::now();
     let mut app = app();
     app.files = Files::with(vec!["src/main.rs".into(), "README.md".into()]);
-    let (reply, entries) = sync_channel(1);
-    app.event(Event::Ready(reply), now);
     typed(&mut app, "explain @mai", now);
     assert_eq!(
         app.offers(),
         [crate::tui::keys::Offer::File("src/main.rs".into())]
     );
-    app.event(key(KeyCode::Enter), now);
+    app.input(key(KeyCode::Enter), now);
     assert_eq!(app.composer.text(), "explain src/main.rs ");
-    assert!(entries.try_recv().is_err(), "nothing was sent");
+    assert!(sent(&mut app).is_empty(), "nothing was sent");
 }
 
 #[test]
 fn pasted_text_is_shown_as_a_mark_but_sent_as_text() {
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = sync_channel(1);
-    app.event(Event::Ready(reply), now);
     typed(&mut app, "review ", now);
-    app.event(Event::Paste("first\r\nsecond".into()), now);
+    app.input(Input::Paste("first\r\nsecond".into()), now);
     assert_eq!(app.composer.text(), "review [Paste] ");
-    app.event(key(KeyCode::Enter), now);
-    assert_eq!(
-        entries.try_recv().unwrap().unwrap().text,
-        "review first\nsecond "
-    );
+    app.input(key(KeyCode::Enter), now);
+    assert_eq!(sent_texts(&mut app), ["review first\nsecond "]);
 }
 
 #[test]
@@ -426,21 +345,19 @@ fn dropped_files_become_marks_and_go_with_the_message() {
     std::fs::write(&notes, "# notes").unwrap();
     let mut app = app();
     app.pasted = dir.path().join("kept");
-    let (reply, entries) = sync_channel(1);
-    app.event(Event::Ready(reply), now);
     typed(&mut app, "compare ", now);
     let dropped = format!(
         "{} {}",
         picture.display().to_string().replace(' ', "\\ "),
         notes.display()
     );
-    app.event(Event::Paste(dropped), now);
+    app.input(Input::Paste(dropped), now);
     assert_eq!(
         app.composer.text(),
         "compare [image: Screenshot at 2.26.05\u{202f}AM.png] [file: notes.md]"
     );
-    app.event(key(KeyCode::Enter), now);
-    let sent = entries.try_recv().unwrap().unwrap();
+    app.input(key(KeyCode::Enter), now);
+    let sent = sent(&mut app).remove(0);
     assert_eq!(
         sent.text,
         format!(
@@ -460,12 +377,10 @@ fn slash_then_arrows_then_enter_runs_the_command_chosen() {
     // The bug: "/" alone, Down to a command, Enter sent "/" and the session said it was unknown.
     let now = Instant::now();
     let mut app = app();
-    let (reply, entries) = sync_channel(1);
-    app.event(Event::Ready(reply), now);
     typed(&mut app, "/", now);
-    app.event(key(KeyCode::Down), now);
-    app.event(key(KeyCode::Enter), now);
-    assert_eq!(entries.try_recv(), Ok(Some("/mode".into())));
+    app.input(key(KeyCode::Down), now);
+    app.input(key(KeyCode::Enter), now);
+    assert_eq!(sent_texts(&mut app), ["/mode"]);
     assert!(app.composer.is_empty());
 }
 
@@ -476,16 +391,8 @@ fn a_refusal_is_drawn_on_the_call_refused_not_on_another_that_failed_meanwhile()
     let (refused, other) = (ran("git log"), ran("false"));
     app.event(call("refused", "bash", &refused), now);
     app.event(call("other", "bash", &other), now);
-    let (reply, _answer) = sync_channel(1);
-    app.event(
-        Event::Approve {
-            tool: "bash".into(),
-            summary: "git log".into(),
-            reply,
-        },
-        opened(now),
-    );
-    app.event(key(KeyCode::Esc), now);
+    app.asked(1, "", approve_asked("bash", "git log"), opened(now));
+    app.input(key(KeyCode::Esc), now);
     assert_eq!(app.lane().declined.as_deref(), Some(""));
     let declined = "not allowed: the person declined it; do not try the same thing another way";
     for (id, label, outcome) in [
@@ -509,95 +416,44 @@ fn lanes(now: Instant) -> App {
     app
 }
 
-/// `event` as lane (or agent) `id` sends it.
-fn from(id: &str, event: Event) -> Event {
-    Event::In(id.into(), Box::new(event))
-}
-
-/// Lane `id` asks for its next entry; where it arrives.
-fn ready(app: &mut App, id: &str, now: Instant) -> std::sync::mpsc::Receiver<Option<Typed>> {
-    let (reply, entries) = sync_channel(1);
-    app.event(from(id, Event::Ready(reply)), now);
-    entries
-}
-
 #[test]
 fn typing_goes_to_the_shown_lane() {
     let now = Instant::now();
     let mut app = lanes(now);
-    let (a, b) = (ready(&mut app, "A", now), ready(&mut app, "B", now));
     app.show("B");
     typed(&mut app, "for b", now);
-    app.event(key(KeyCode::Enter), now);
-    assert_eq!(b.try_recv(), Ok(Some("for b".into())));
-    assert!(a.try_recv().is_err(), "A still waits");
+    app.input(key(KeyCode::Enter), now);
+    let sent: Vec<(String, String)> = (sent(&mut app).into_iter())
+        .map(|input| (input.session, input.text))
+        .collect();
+    assert_eq!(sent, [("B".to_string(), "for b".to_string())]);
 }
 
 #[test]
 fn steered_is_per_lane() {
     let now = Instant::now();
     let mut app = lanes(now);
-    app.event(from("A", Event::TaskStarted("a's task".into())), now);
-    app.event(from("B", Event::TaskStarted("b's task".into())), now);
+    app.frame(from("A", Event::TaskStarted("a's task".into())), now);
+    app.frame(from("B", Event::TaskStarted("b's task".into())), now);
     app.show("B");
     typed(&mut app, "steer b", now);
-    app.event(key(KeyCode::Enter), now);
-    let take = |app: &mut App, id: &str| {
-        let (reply, taken) = sync_channel(1);
-        app.event(from(id, Event::TakeSteered { reply, peek: false }), now);
-        taken.try_recv().unwrap()
-    };
-    assert!(take(&mut app, "A").is_empty());
-    assert_eq!(take(&mut app, "B"), ["steer b"]);
-}
-
-#[test]
-fn background_mail_goes_to_its_lane() {
-    let now = Instant::now();
-    let mut app = lanes(now);
-    app.event(
-        from("A", Event::Background("<monitor>up</monitor>".into())),
-        now,
-    );
-    let b = ready(&mut app, "B", now);
-    assert!(b.try_recv().is_err(), "B has no mail");
-    let a = ready(&mut app, "A", now);
-    assert_eq!(a.try_recv(), Ok(Some("<monitor>up</monitor>".into())));
-}
-
-#[test]
-fn dismiss_closes_only_its_own_lanes_question() {
-    let now = Instant::now();
-    let mut app = lanes(now);
-    let (reply, answer) = sync_channel(1);
-    let approve = Event::Approve {
-        tool: "bash".into(),
-        summary: "cargo test".into(),
-        reply,
-    };
-    app.event(from("A", approve), opened(now));
-    app.event(from("B", Event::Dismiss), now);
-    assert!(answer.try_recv().is_err(), "A's question is still open");
-    app.event(from("A", Event::Dismiss), now);
-    assert_eq!(answer.try_recv(), Ok(Approval::No(None)));
+    app.input(key(KeyCode::Enter), now);
+    let sessions: Vec<String> = sent(&mut app).into_iter().map(|i| i.session).collect();
+    assert_eq!(sessions, ["B"]);
+    app.frame(from("B", queue(false, &["steer b"], &[], &[])), now);
+    assert!(live_area(&app, now).contains("↳ steer b"));
+    app.show("A");
+    assert!(!live_area(&app, now).contains("steer b"));
 }
 
 #[test]
 fn leave_answers_every_lane() {
     let now = Instant::now();
     let mut app = lanes(now);
-    let (a, b) = (ready(&mut app, "A", now), ready(&mut app, "B", now));
-    let (reply, picked) = sync_channel(1);
-    let choose = Event::Choose {
-        title: "Implement this plan?".into(),
-        options: vec![("Yes".into(), String::new())],
-        marked: None,
-        reply,
-    };
-    app.event(from("B", choose), now);
+    let picked = choose(&mut app, "B", now);
     app.leave();
-    assert_eq!((a.try_recv(), b.try_recv()), (Ok(None), Ok(None)));
-    assert_eq!(picked.try_recv(), Ok(None));
+    assert_eq!(commands(&mut app), [Command::Leave]);
+    assert_eq!(replies(&mut app), [(picked, Reply::Choice(None))]);
 }
 
 #[test]
@@ -608,9 +464,9 @@ fn esc_from_agent_view_shows_its_parent_lane() {
         id: "scout".into(),
         name: "scout".into(),
     };
-    app.event(from("B", started), now);
+    app.frame(from("B", started), now);
     app.show("scout");
-    app.event(key(KeyCode::Esc), now);
+    app.input(key(KeyCode::Esc), now);
     assert_eq!(app.views.shown, "B");
 }
 
@@ -618,41 +474,32 @@ fn esc_from_agent_view_shows_its_parent_lane() {
 fn exit_typed_in_any_lane_quits_the_interface() {
     let now = Instant::now();
     let mut app = lanes(now);
-    let b = ready(&mut app, "B", now);
     app.show("B");
     typed(&mut app, "/exit", now);
-    assert_eq!(app.event(key(KeyCode::Enter), now), Some(Action::Quit));
-    assert!(b.try_recv().is_err(), "the lane is not told: every lane is");
+    assert_eq!(app.input(key(KeyCode::Enter), now), Some(Action::Quit));
+    assert!(
+        sent(&mut app).is_empty(),
+        "the lane is not told: every lane is"
+    );
 }
 
-/// An approval of `summary` from lane `id`; where its answer goes.
-fn approve(
-    app: &mut App,
-    id: &str,
-    summary: &str,
-    at: Instant,
-) -> std::sync::mpsc::Receiver<Approval> {
-    let (reply, answer) = sync_channel(1);
-    let event = Event::Approve {
-        tool: "bash".into(),
-        summary: summary.into(),
-        reply,
-    };
-    app.event(from(id, event), at);
-    answer
+/// An approval of `summary` from lane `id`; the id its reply goes under.
+fn approve(app: &mut App, id: &str, summary: &str, at: Instant) -> u64 {
+    let asked = next_id();
+    app.asked(asked, id, approve_asked("bash", summary), at);
+    asked
 }
 
-/// A choice of llx's own from lane `id`; where its pick goes.
-fn choose(app: &mut App, id: &str, now: Instant) -> std::sync::mpsc::Receiver<Option<usize>> {
-    let (reply, picked) = sync_channel(1);
-    let event = Event::Choose {
+/// A choice of llx's own from lane `id`; the id its pick goes under.
+fn choose(app: &mut App, id: &str, now: Instant) -> u64 {
+    let asked = next_id();
+    let choose = protocol::Asked::Choose {
         title: "Implement this plan?".into(),
         options: vec![("Yes".into(), String::new()), ("No".into(), String::new())],
         marked: None,
-        reply,
     };
-    app.event(from(id, event), now);
-    picked
+    app.asked(asked, id, choose, now);
+    asked
 }
 
 #[test]
@@ -661,7 +508,7 @@ fn hidden_lane_approval_opens_labelled() {
     let mut app = lanes(now);
     app.show("B");
     let _answer = approve(&mut app, "A", "cargo test -p jobs", now);
-    let shown = crate::tui::test_support::live_area(&app, now);
+    let shown = live_area(&app, now);
     assert!(
         shown.contains("session fix the flaky jobs test (in the background)"),
         "{shown}"
@@ -673,7 +520,7 @@ fn own_lane_approval_has_no_label() {
     let now = Instant::now();
     let mut app = lanes(now);
     let _answer = approve(&mut app, "A", "cargo test -p jobs", now);
-    let shown = crate::tui::test_support::live_area(&app, now);
+    let shown = live_area(&app, now);
     assert!(shown.contains("cargo test -p jobs"), "{shown}");
     assert!(!shown.contains("session "), "{shown}");
 }
@@ -684,18 +531,21 @@ fn second_question_waits() {
     let mut app = lanes(now);
     let a = approve(&mut app, "A", "first command", opened(now));
     let b = approve(&mut app, "B", "second command", opened(now));
-    let shown = crate::tui::test_support::live_area(&app, now);
+    let shown = live_area(&app, now);
     assert!(shown.contains("first command"), "{shown}");
     assert!(!shown.contains("second command"), "{shown}");
     assert!(shown.contains("1 more question waiting"), "{shown}");
-    app.event(key(KeyCode::Char('1')), now);
-    assert_eq!(a.try_recv(), Ok(Approval::Yes));
+    app.input(key(KeyCode::Char('1')), now);
+    assert_eq!(replies(&mut app), [(a, Reply::Approval(Approval::Yes))]);
     let later = now + Duration::from_millis(300);
-    let shown = crate::tui::test_support::live_area(&app, later);
+    let shown = live_area(&app, later);
     assert!(shown.contains("second command"), "{shown}");
     assert!(!shown.contains("more question"), "{shown}");
-    app.event(key(KeyCode::Esc), later);
-    assert_eq!(b.try_recv(), Ok(Approval::No(None)));
+    app.input(key(KeyCode::Esc), later);
+    assert_eq!(
+        replies(&mut app),
+        [(b, Reply::Approval(Approval::No(None)))]
+    );
     assert!(app.questions.is_empty());
 }
 
@@ -705,31 +555,33 @@ fn held_choice_waits_until_shown() {
     let mut app = lanes(now);
     let picked = choose(&mut app, "B", now);
     assert!(app.questions.is_empty(), "held until B is shown");
-    let shown = crate::tui::test_support::live_area(&app, now);
+    let shown = live_area(&app, now);
     assert!(!shown.contains("Implement this plan?"), "{shown}");
     app.show("B");
-    let shown = crate::tui::test_support::live_area(&app, now);
+    let shown = live_area(&app, now);
     assert!(shown.contains("Implement this plan?"), "{shown}");
-    app.event(key(KeyCode::Enter), now);
-    assert_eq!(picked.try_recv(), Ok(Some(0)));
+    app.input(key(KeyCode::Enter), now);
+    assert_eq!(replies(&mut app), [(picked, Reply::Choice(Some(0)))]);
 }
 
 #[test]
 fn held_choice_does_not_block_other_lanes() {
     let now = Instant::now();
     let mut app = lanes(now);
-    let picked = choose(&mut app, "B", now);
+    let _picked = choose(&mut app, "B", now);
     let a = approve(&mut app, "A", "cargo build", opened(now));
-    app.event(key(KeyCode::Char('1')), now);
-    assert_eq!(a.try_recv(), Ok(Approval::Yes));
-    assert!(picked.try_recv().is_err(), "B's choice still waits for B");
+    app.input(key(KeyCode::Char('1')), now);
+    assert_eq!(
+        replies(&mut app),
+        [(a, Reply::Approval(Approval::Yes))],
+        "B's choice still waits for B"
+    );
 }
 
 #[test]
 fn keys_within_300ms_of_a_hidden_question_are_ignored() {
     let now = Instant::now();
     let mut app = lanes(now);
-    let (reply, answer) = sync_channel(1);
     let question = protocol::Question {
         id: "file".into(),
         text: "Which file?".into(),
@@ -739,28 +591,34 @@ fn keys_within_300ms_of_a_hidden_question_are_ignored() {
         }],
         multiple: false,
     };
-    let ask = Event::Ask {
+    let ask = protocol::Asked::Question {
         question,
         at: 0,
         of: 1,
-        reply,
     };
-    app.event(from("B", ask), now);
-    app.event(key(KeyCode::Char('1')), now + Duration::from_millis(100));
-    assert!(answer.try_recv().is_err(), "typed for the composer");
-    app.event(key(KeyCode::Char('1')), now + Duration::from_millis(300));
-    assert!(answer.try_recv().unwrap().is_some());
+    app.asked(7, "B", ask, now);
+    app.input(key(KeyCode::Char('1')), now + Duration::from_millis(100));
+    assert_eq!(replies(&mut app), [], "typed for the composer");
+    app.input(key(KeyCode::Char('1')), now + Duration::from_millis(300));
+    let replied = replies(&mut app);
+    assert!(
+        matches!(&replied[..], [(7, Reply::Question(Some(_)))]),
+        "{replied:?}"
+    );
 }
 
 #[test]
 fn ctrl_c_in_question_stops_the_asker() {
     let now = Instant::now();
     let mut app = lanes(now);
-    app.event(from("A", Event::TaskStarted("a's task".into())), now);
+    app.frame(from("A", Event::TaskStarted("a's task".into())), now);
     app.show("B");
     let a = approve(&mut app, "A", "rm -rf build", now);
-    assert_eq!(app.event(ctrl('c'), now), Some(Action::Stop("A".into())));
-    assert_eq!(a.try_recv(), Ok(Approval::No(None)));
+    assert_eq!(app.input(ctrl('c'), now), Some(Action::Stop("A".into())));
+    assert_eq!(
+        replies(&mut app),
+        [(a, Reply::Approval(Approval::No(None)))]
+    );
 }
 
 #[test]
@@ -769,8 +627,8 @@ fn ctrl_c_in_an_idle_lanes_choice_only_closes_it() {
     let now = Instant::now();
     let mut app = lanes(now);
     let picked = choose(&mut app, "A", now);
-    assert_eq!(app.event(ctrl('c'), now), None);
-    assert_eq!(picked.try_recv(), Ok(None));
+    assert_eq!(app.input(ctrl('c'), now), None);
+    assert_eq!(replies(&mut app), [(picked, Reply::Choice(None))]);
 }
 
 #[test]
@@ -780,7 +638,8 @@ fn a_lanes_own_choice_after_the_person_left_gets_nothing() {
     let mut app = lanes(now);
     app.leave();
     let (a, b) = (choose(&mut app, "A", now), choose(&mut app, "B", now));
-    assert_eq!((a.try_recv(), b.try_recv()), (Ok(None), Ok(None)));
+    let none = Reply::Choice(None);
+    assert_eq!(replies(&mut app), [(a, none.clone()), (b, none)]);
     assert!(app.questions.is_empty());
 }
 
@@ -788,11 +647,11 @@ fn a_lanes_own_choice_after_the_person_left_gets_nothing() {
 fn new_typed_while_a_task_works_opens_a_lane_at_once() {
     let now = Instant::now();
     let mut app = lanes(now);
-    app.event(from("A", Event::TaskStarted("a's task".into())), now);
+    app.frame(from("A", Event::TaskStarted("a's task".into())), now);
     typed(&mut app, "/new", now);
-    let opened = app.event(key(KeyCode::Enter), now);
-    assert_eq!(opened, Some(Action::Open(crate::desk::Target::New)));
-    assert!(app.lane().queued.is_empty(), "not kept for after the task");
+    let opened = app.input(key(KeyCode::Enter), now);
+    assert_eq!(opened, Some(Action::Open(protocol::Target::New)));
+    assert!(sent(&mut app).is_empty(), "not kept for after the task");
 }
 
 #[test]
@@ -808,26 +667,11 @@ fn a_background_questions_label_goes_once_its_lane_is_shown() {
     let now = Instant::now();
     let mut app = lanes(now);
     app.show("B");
-    let _answer = approve(&mut app, "A", "cargo test -p jobs", now);
+    let _asked = approve(&mut app, "A", "cargo test -p jobs", now);
     app.show("A");
-    let shown = crate::tui::test_support::live_area(&app, now);
+    let shown = live_area(&app, now);
     assert!(shown.contains("cargo test -p jobs"), "{shown}");
     assert!(!shown.contains("in the background"), "{shown}");
-}
-
-#[test]
-fn a_choice_after_a_dismissed_approval_takes_keys_at_once() {
-    let now = Instant::now();
-    let mut app = lanes(now);
-    let _answer = approve(&mut app, "A", "cargo build", now);
-    app.event(from("A", Event::Dismiss), now);
-    let picked = choose(&mut app, "A", now);
-    app.event(key(KeyCode::Enter), now + Duration::from_millis(10));
-    assert_eq!(
-        picked.try_recv(),
-        Ok(Some(0)),
-        "not swallowed by the approval's settling"
-    );
 }
 
 #[test]
@@ -876,4 +720,83 @@ fn a_call_that_took_a_while_says_how_long_and_a_quick_one_says_nothing() {
         "• Ran cargo test · 3.2s"
     );
     assert_eq!(run(&mut app, "ls", 40), "• Ran ls");
+}
+
+#[test]
+fn an_entry_goes_to_the_lane_shown_tab_keeps_it_for_after_and_the_screen_shows_what_waits() {
+    let now = Instant::now();
+    let mut app = app();
+    app.event(queue(true, &[], &[], &[]), now);
+    typed(&mut app, "first", now);
+    app.input(key(KeyCode::Enter), now);
+    app.event(Event::TaskStarted("first".into()), now);
+    typed(&mut app, "now", now);
+    app.input(key(KeyCode::Enter), now);
+    typed(&mut app, "/status", now);
+    app.input(key(KeyCode::Enter), now);
+    typed(&mut app, "second", now);
+    app.input(key(KeyCode::Tab), now);
+    let said: Vec<(String, bool)> = (sent(&mut app).into_iter())
+        .map(|input| (input.text, input.later))
+        .collect();
+    let said: Vec<(&str, bool)> = said.iter().map(|(t, l)| (t.as_str(), *l)).collect();
+    assert_eq!(
+        said,
+        [
+            ("first", false),
+            ("now", false),
+            ("/status", false),
+            ("second", true)
+        ]
+    );
+    // The server keeps them, and says what waits.
+    app.event(queue(false, &["now"], &["/status", "second"], &[]), now);
+    let shown = live_area(&app, now);
+    assert!(shown.contains("↳ now"), "{shown}");
+    assert!(
+        shown.contains("⏎ /status") && shown.contains("⏎ second"),
+        "{shown}"
+    );
+    // The task read it: it is the person's now, in the transcript.
+    history(&mut app);
+    app.event(Event::Steered(vec!["now".into()]), now);
+    app.event(queue(false, &[], &["/status", "second"], &[]), now);
+    assert!(history(&mut app).contains("❯ now"));
+    assert!(!live_area(&app, now).contains("↳ now"));
+}
+
+#[test]
+fn a_withdrawn_question_closes_only_itself_and_nothing_is_replied() {
+    let now = Instant::now();
+    let mut app = lanes(now);
+    let a = approve(&mut app, "A", "cargo test", opened(now));
+    let b = choose(&mut app, "B", now);
+    app.frame(ToClient::Resolved { id: b }, now);
+    assert_eq!(app.questions.len(), 1, "A's question is still open");
+    app.frame(ToClient::Resolved { id: a }, now);
+    assert!(app.questions.is_empty());
+    app.show("B");
+    assert!(app.questions.is_empty(), "B's held choice went too");
+    assert_eq!(replies(&mut app), []);
+}
+
+/// The next question's id.
+fn next_id() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+#[test]
+fn a_choice_after_a_withdrawn_approval_takes_keys_at_once() {
+    let now = Instant::now();
+    let mut app = lanes(now);
+    let asked = approve(&mut app, "A", "cargo build", now);
+    app.frame(ToClient::Resolved { id: asked }, now);
+    let picked = choose(&mut app, "A", now);
+    app.input(key(KeyCode::Enter), now + Duration::from_millis(10));
+    assert_eq!(
+        replies(&mut app),
+        [(picked, Reply::Choice(Some(0)))],
+        "not swallowed by the approval's settling"
+    );
 }

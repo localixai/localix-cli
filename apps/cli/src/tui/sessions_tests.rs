@@ -2,15 +2,10 @@ use std::time::Instant;
 
 use crossterm::event::KeyCode;
 
-use crate::desk::Target;
 use crate::tui::app::{Action, App};
 use crate::tui::event::Event;
-use crate::tui::test_support::{Term, press, typed};
-
-/// `event` as session `id` sends it.
-fn from(id: &str, event: Event) -> Event {
-    Event::In(id.into(), Box::new(event))
-}
+use crate::tui::test_support::{Term, in_session as from, press, typed};
+use protocol::Target;
 
 /// Lanes A (shown, idle, one task done), B (working) and C (a choice held for it).
 fn three(now: Instant) -> App {
@@ -24,26 +19,23 @@ fn three(now: Instant) -> App {
     }
     let (id, name) = ("C".to_string(), "add tabs to the browser".to_string());
     app.event(Event::LaneStarted { id, name }, now);
-    app.event(from("A", Event::Note("A's own transcript".into())), now);
-    app.event(from("A", Event::TaskStarted("refactor it".into())), now);
+    app.frame(from("A", Event::Note("A's own transcript".into())), now);
+    app.frame(from("A", Event::TaskStarted("refactor it".into())), now);
     let ended = Event::TaskEnded {
         status: "achieved".into(),
         millis: 1000,
         turns: 1,
         cost: 0.0,
     };
-    app.event(from("A", ended), now);
-    app.event(from("B", Event::Note("B's own transcript".into())), now);
-    app.event(from("B", Event::TaskStarted("fix it".into())), now);
-    // The receiver is kept for the test's length, so the reply is not refused.
-    let (reply, _picked) = std::sync::mpsc::sync_channel(1);
-    let choose = Event::Choose {
+    app.frame(from("A", ended), now);
+    app.frame(from("B", Event::Note("B's own transcript".into())), now);
+    app.frame(from("B", Event::TaskStarted("fix it".into())), now);
+    let choose = protocol::Asked::Choose {
         title: "Implement this plan?".into(),
         options: vec![("Yes".into(), String::new())],
         marked: None,
-        reply,
     };
-    app.event(from("C", choose), now);
+    app.asked(1, "C", choose, now);
     app
 }
 
@@ -194,7 +186,7 @@ fn a_finished_hidden_session_is_marked_unseen_in_the_list() {
         turns: 3,
         cost: 0.0,
     };
-    app.event(from("B", ended), now);
+    app.frame(from("B", ended), now);
     press(&mut app, KeyCode::Left, now);
     let screen = Term::new(&app).draw(&mut app, now);
     let row = screen
@@ -212,8 +204,8 @@ fn opening_a_tree_row_returns_the_keys_to_input() {
             id: "s1".into(),
             name: "scout".into(),
         };
-        app.event(from("A", scout), now);
-        app.event(
+        app.frame(from("A", scout), now);
+        app.frame(
             from("s1", Event::Note("scout's own transcript".into())),
             now,
         );
@@ -270,7 +262,7 @@ fn a_title_made_in_the_background_renames_the_session_where_it_is_listed() {
     let title = protocol::Update {
         title: Some("Fix the flaky jobs test".into()),
     };
-    app.event(from("B", Event::Updated(title)), now);
+    app.frame(from("B", Event::Updated(title)), now);
     let mut term = Term::new(&app);
     term.draw(&mut app, now);
     press(&mut app, KeyCode::Left, now);
@@ -287,7 +279,7 @@ fn ctrl_c_in_the_list_closes_it_and_nothing_else() {
     let now = Instant::now();
     let mut app = three(now);
     press(&mut app, KeyCode::Left, now);
-    assert_eq!(app.event(crate::tui::test_support::ctrl('c'), now), None);
+    assert_eq!(app.input(crate::tui::test_support::ctrl('c'), now), None);
     let screen = Term::new(&app).draw(&mut app, now);
     assert!(!screen.contains("Sessions in this project"), "{screen}");
     assert!(!screen.contains("again to quit"), "{screen}");

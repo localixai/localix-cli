@@ -9,8 +9,8 @@ use crate::commands::{login, model};
 use crate::compose::Rig;
 use crate::exit;
 use crate::mode::{self, Mode};
-use crate::tui::Ui;
-use crate::tui::event::Event;
+use crate::server::Ui;
+use protocol::Event;
 
 pub(crate) use super::entry::{Entry, HELP, commands, entry};
 

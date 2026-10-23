@@ -1,35 +1,39 @@
 //! Test-only: a session at the desk, its lanes thinking with gated models, and a person at a real
-//! [`App`] fed what the lanes send, acting as the interface's thread does.
+//! [`App`], attached to a real server through the protocol's frames, acting as the interface's
+//! thread does.
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, Instant};
 
 use contracts::chat::{Completion, Message, ToolCall};
 use crossterm::event::KeyCode;
+use protocol::{Command, Event, ToClient, ToServer};
 use serde_json::Value;
 
-use super::{Request, Seat, Shared, Work, run};
+use super::{Seat, Shared, Work, run};
 use crate::compose::{Models, lane_with};
 use crate::mode::Mode;
+use crate::server::serve::{Info, serve};
+use crate::server::{Peer, Ui};
 use crate::testing::{Gated, NoDecider, Scratch, setup};
-use crate::tui::Ui;
 use crate::tui::app::{Action, App};
-use crate::tui::event::Event;
+use crate::tui::event::{Input, Out};
 use crate::tui::test_support::{key, typed};
 use crate::tui::views::AgentState;
 
-/// The person at the interface: a real [`App`] fed what the lanes send, and the requests its
-/// actions make, as the interface's thread does.
+/// The person at the interface: a real [`App`] fed what the server sends, its commands and
+/// replies sent back, as the interface's thread does.
 pub(crate) struct Person {
     pub app: App,
-    pub events: Receiver<Event>,
-    pub requests: Sender<Request>,
+    pub frames: Receiver<ToClient>,
+    pub to_server: Sender<ToServer>,
     pub over: bool,
 }
 
 impl Person {
-    /// Take what the lanes send until `done` holds.
+    /// Take what the server sends until `done` holds.
     pub(crate) fn until(&mut self, what: &str, done: impl Fn(&App) -> bool) {
         let deadline = Instant::now() + Duration::from_secs(10);
         while !done(&self.app) {
@@ -39,57 +43,88 @@ impl Person {
                     .collect();
                 panic!("waited too long for {what}: {views:?}");
             }
-            if let Ok(event) = self.events.recv_timeout(Duration::from_millis(20)) {
-                let quit = matches!(event, Event::Quit);
-                let action = self.app.event(event, Instant::now());
-                self.act(action, quit);
-            }
+            self.take();
         }
     }
 
-    /// Take what the lanes send for `millis`.
+    /// One frame, if one comes soon.
+    fn take(&mut self) {
+        if let Ok(frame) = self.frames.recv_timeout(Duration::from_millis(20)) {
+            let ended = matches!(
+                &frame,
+                ToClient::Event {
+                    event: Event::Quit,
+                    ..
+                }
+            );
+            let action = self.app.input(Input::Frame(frame), Instant::now());
+            self.act(action, ended);
+        }
+    }
+
+    /// Take what the server sends for `millis`.
     pub(crate) fn wait(&mut self, millis: u64) {
         let until = Instant::now() + Duration::from_millis(millis);
         self.until("time to pass", |_| Instant::now() >= until);
     }
 
-    /// Take what the lanes send until the interface is told to end.
+    /// Take what the server sends until the interface is told to end.
     pub(crate) fn until_over(&mut self) {
         let deadline = Instant::now() + Duration::from_secs(10);
         while !self.over {
             assert!(Instant::now() < deadline, "waited too long for the end");
-            if let Ok(event) = self.events.recv_timeout(Duration::from_millis(20)) {
-                let quit = matches!(event, Event::Quit);
-                let action = self.app.event(event, Instant::now());
-                self.act(action, quit);
-            }
+            self.take();
         }
     }
 
-    pub(crate) fn act(&mut self, action: Option<Action>, quit: bool) {
-        match action {
-            Some(Action::Open(target)) => self.requests.send(Request::Open(target)).unwrap(),
-            Some(Action::Stop(id)) => {
-                crate::interrupt::stop(&id);
-            }
-            Some(Action::Sessions) => self.requests.send(Request::List).unwrap(),
-            Some(Action::Halt(id)) => {
-                crate::interrupt::stop(&id);
-            }
+    pub(crate) fn act(&mut self, action: Option<Action>, ended: bool) {
+        let call = match action {
+            Some(Action::Open(target)) => Some(Command::Open { target }),
+            Some(Action::Stop(session)) => Some(Command::Interrupt { session }),
+            Some(Action::Sessions) => Some(Command::List),
+            Some(Action::Halt(id)) => Some(Command::Halt { id }),
             Some(Action::QuitNow) => {
                 self.app.leave();
-                self.requests.send(Request::Quit).unwrap();
+                Some(Command::QuitAll)
             }
-            Some(Action::Quit) if quit => self.over = true,
-            Some(Action::Quit) => self.app.leave(),
-            _ => {}
+            Some(Action::Quit) if ended => {
+                self.over = true;
+                None
+            }
+            Some(Action::Quit) => {
+                self.app.leave();
+                None
+            }
+            _ => None,
+        };
+        self.app.outbox.extend(call.map(Out::Call));
+        self.flush();
+    }
+
+    /// What the interface has to send, in order.
+    pub(crate) fn flush(&mut self) {
+        for (id, out) in self.app.outbox.drain(..).enumerate() {
+            let frame = match out {
+                Out::Call(command) => ToServer::Call {
+                    id: id as u64 + 1_000,
+                    command,
+                },
+                Out::Reply(id, reply) => ToServer::Reply { id, reply },
+            };
+            let _ = self.to_server.send(frame);
         }
+    }
+
+    /// Send `command` as the interface would.
+    pub(crate) fn command(&mut self, command: Command) {
+        self.app.outbox.push(Out::Call(command));
+        self.flush();
     }
 
     /// Type `text` and send it.
     pub(crate) fn enter(&mut self, text: &str) {
         typed(&mut self.app, text, Instant::now());
-        let action = self.app.event(key(KeyCode::Enter), Instant::now());
+        let action = self.app.input(key(KeyCode::Enter), Instant::now());
         self.act(action, false);
     }
 
@@ -112,7 +147,7 @@ impl Person {
         self.enter("/new");
         self.until("the new lane", |app| {
             let shown = app.shown();
-            let waits = shown.lane.as_ref().is_some_and(|l| l.waiting.is_some());
+            let waits = shown.lane.as_ref().is_some_and(|l| l.ready);
             shown.id != before && waits
         });
         self.app.views.shown.clone()
@@ -162,17 +197,12 @@ pub(crate) fn at_desk_with(
     let (shared, seat) = setup(&scratch, Mode::Bypass, true).split(None);
     #[allow(
         clippy::disallowed_methods,
-        reason = "the interface's events and the desk's requests are unbounded, as `tui::start` \
-                  makes them"
+        reason = "the in-process transport and the desk's requests, as the binary makes them"
     )]
-    let (events, inbox) = channel();
-    let ui = Ui::new(events);
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "the interface's events and the desk's requests are unbounded, as `tui::start` \
-                  makes them"
-    )]
-    let (requests, asked) = channel();
+    let ((to_server, incoming), (out, frames), (to_desk, asked)) =
+        (channel(), channel(), channel());
+    let peer = Peer::new(out);
+    let ui = Ui::new(Arc::clone(&peer));
     let seat = Seat {
         ui: Some(ui.clone()),
         ..seat
@@ -191,14 +221,21 @@ pub(crate) fn at_desk_with(
     std::thread::scope(|scope| {
         let task = task.map(str::to_string);
         let desk = scope.spawn(|| run(&shared, &ui, asked, seat, task, &start, quit));
+        let info = Info {
+            max_lanes: super::MAX_LANES,
+            shells: || 0,
+        };
+        scope.spawn(move || serve(&incoming, &peer, &to_desk, &info));
         let mut at = Person {
             app: App::new(80, 24, vec![]),
-            events: inbox,
-            requests,
+            frames,
+            to_server,
             over: false,
         };
+        at.app.max_lanes = super::MAX_LANES;
         person(&mut at);
         at.app.leave();
+        at.flush();
         at.until("the desk to end", |_| desk.is_finished());
         assert_eq!(desk.join().unwrap(), crate::exit::OK);
     });

@@ -198,7 +198,7 @@ impl App {
         match parse(&entry.text) {
             Some(Entry::Exit) => return self.quit(),
             // A new lane opens now: the lane shown goes on in the background.
-            Some(Entry::New) => return self.opening(crate::desk::Target::New),
+            Some(Entry::New) => return self.opening(protocol::Target::New),
             _ => self.send(entry),
         }
         None

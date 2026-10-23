@@ -57,6 +57,26 @@ pub struct Step {
     pub ms: u64,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub failed: bool,
+    /// What it spent: a model turn's tokens and cost, the hands' at the task's end.
+    #[serde(default, skip_serializing_if = "Spent::is_empty")]
+    pub spent: Spent,
+}
+
+/// Tokens and money a step spent.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct Spent {
+    pub input_tokens: u64,
+    /// Input tokens read from the provider's prompt cache.
+    pub cached_tokens: u64,
+    pub output_tokens: u64,
+    /// US dollars.
+    pub cost: f64,
+}
+
+impl Spent {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl Session {

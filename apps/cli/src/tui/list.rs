@@ -6,7 +6,10 @@ use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use protocol::Command;
+
 use super::app::{Action, App};
+use super::event::Out;
 
 impl App {
     /// The list's last row drawn: the jobs past the first few are only counted.
@@ -59,7 +62,8 @@ impl App {
             }
             KeyCode::Char('x') if plain => match session {
                 Some(agent) if agent.parent.is_some() && agent.busy.is_some() => {
-                    crate::interrupt::stop(&agent.id);
+                    let id = agent.id.clone();
+                    self.outbox.push(Out::Call(Command::Halt { id }));
                 }
                 Some(lane) if lane.busy.is_some() => {
                     let id = lane.id.clone();
@@ -73,7 +77,8 @@ impl App {
                 Some(_) => {}
                 None => {
                     if let Some(job) = self.views.jobs.get(row - order.len()) {
-                        crate::interrupt::stop(&crate::interrupt::job_key(&job.lane, &job.id));
+                        let (lane, job) = (job.lane.clone(), job.id.clone());
+                        self.outbox.push(Out::Call(Command::StopJob { lane, job }));
                     }
                 }
             },

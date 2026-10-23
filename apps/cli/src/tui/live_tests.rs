@@ -1,4 +1,3 @@
-use std::sync::mpsc::sync_channel;
 use std::time::{Duration, Instant};
 
 use crossterm::event::KeyCode;
@@ -6,7 +5,9 @@ use crossterm::event::KeyCode;
 use super::*;
 use crate::tui::event::Event;
 use crate::tui::style;
-use crate::tui::test_support::{call, label, live_area as shown, press, typed};
+use crate::tui::test_support::{
+    approve, call, label, live_area as shown, press, queue, sent, sent_texts, typed,
+};
 
 fn app() -> App {
     App::new(
@@ -31,6 +32,43 @@ fn idle_shows_the_current_mode_and_cycle_hint() {
         ]
     );
     assert_eq!(cursor, Some(Cursor { row: 0, column: 2 }));
+}
+
+#[test]
+fn what_the_session_spent_sits_at_the_right_of_the_footer_once_it_spent() {
+    let mut app = App::new(80, 20, vec![]);
+    let now = Instant::now();
+    let footer = |app: &App| {
+        shown(app, now)
+            .lines()
+            .last()
+            .unwrap_or_default()
+            .to_string()
+    };
+    assert_eq!(
+        footer(&app),
+        "  default mode · shift+tab to cycle",
+        "nothing spent yet"
+    );
+    let total = protocol::Total {
+        input_tokens: 24_100,
+        cached_tokens: 21_000,
+        output_tokens: 1_200,
+        cost: 0.042,
+    };
+    app.event(Event::Total(total), now);
+    assert_eq!(
+        footer(&app),
+        "  default mode · shift+tab to cycle    24.1k in · 87% cached · 1.2k out · $0.042"
+    );
+    assert_eq!(
+        footer(&app).chars().count(),
+        80,
+        "it ends at the terminal's edge"
+    );
+    // A narrow terminal keeps the footer's own words.
+    app.width = 50;
+    assert_eq!(footer(&app), "  default mode · shift+tab to cycle");
 }
 
 #[test]
@@ -67,6 +105,10 @@ fn working_shows_the_call_its_steps_the_time_and_the_queue() {
     // Tab while it works keeps the entry for after the task; the session says the mode.
     typed(&mut app, "then update the changelog", start);
     press(&mut app, KeyCode::Tab, start);
+    let later = sent(&mut app);
+    assert!(later[0].later, "for after the task");
+    // The server keeps it, and says so.
+    app.event(queue(false, &[], &[&later[0].text], &[]), start);
     app.event(Event::Mode("plan".into()), start);
     insta::assert_snapshot!(shown(&app, start + Duration::from_millis(12_300)), @r#"
     ⠸ Working in w1: Buy one
@@ -115,16 +157,8 @@ fn a_long_command_in_an_approval_wraps_under_its_indent() {
     let now = Instant::now();
     let mut app = App::new(50, 20, vec![]);
     app.event(Event::TaskStarted("x".into()), now);
-    let (reply, _answer) = sync_channel(1);
     let summary = "cd /Users/me/site && wc -l index.html v2.html style.css && grep -n -i 'viewport' index.html";
-    app.event(
-        Event::Approve {
-            tool: "bash".into(),
-            summary: summary.into(),
-            reply,
-        },
-        now,
-    );
+    app.asked(1, "", approve("bash", summary), now);
     let (lines, _) = render(&app, now);
     assert!(
         lines
@@ -148,7 +182,7 @@ fn a_long_command_in_an_approval_wraps_under_its_indent() {
 fn the_quit_hint_goes_once_its_window_has_passed() {
     let now = Instant::now();
     let mut app = app();
-    app.event(crate::tui::test_support::ctrl('c'), now);
+    app.input(crate::tui::test_support::ctrl('c'), now);
     assert!(shown(&app, now).contains("ctrl-c again to quit"));
     let later = shown(&app, now + Duration::from_secs(3));
     assert!(!later.contains("ctrl-c again to quit"), "{later}");
@@ -159,23 +193,16 @@ fn what_waits_reads_as_the_transcript_shows_it() {
     let now = Instant::now();
     let mut app = app();
     app.event(Event::TaskStarted("x".into()), now);
-    app.event(
-        Event::Key(crossterm::event::KeyEvent::new(
-            KeyCode::BackTab,
-            crossterm::event::KeyModifiers::SHIFT,
-        )),
-        now,
-    );
-    app.event(
-        Event::Key(crossterm::event::KeyEvent::new(
-            KeyCode::Up,
-            crossterm::event::KeyModifiers::SHIFT,
-        )),
-        now,
-    );
-    app.lane_mut()
-        .background
-        .push_back("<monitor job=\"m\">\nx\n</monitor>".into());
+    let shift = |code| {
+        let key = crossterm::event::KeyEvent::new(code, crossterm::event::KeyModifiers::SHIFT);
+        crate::tui::event::Input::Key(key)
+    };
+    app.input(shift(KeyCode::BackTab), now);
+    app.input(shift(KeyCode::Up), now);
+    // The server keeps them for after the task, behind them what came back from a monitor.
+    let sent = sent_texts(&mut app);
+    let sent: Vec<&str> = sent.iter().map(String::as_str).collect();
+    app.event(queue(false, &[], &sent, &["≋ m · x"]), now);
     let screen = shown(&app, now);
     assert!(!screen.contains('\u{1b}'), "{screen}");
     insta::assert_snapshot!(screen, @"

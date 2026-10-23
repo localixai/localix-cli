@@ -106,8 +106,11 @@ pub(crate) fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cur
     }
     out.extend(offer_rows(app, &offers, width));
     let footer = footer(app, now);
+    let spent = app.lane().total.as_ref().map(super::spend::spent);
+    let row = width.saturating_sub(2);
+    let footer = super::spend::across(&cut(&footer, row), &spent.unwrap_or_default(), row);
     out.push(Line::from(Span::styled(
-        format!("  {}", cut(&footer, width.saturating_sub(2))),
+        format!("  {footer}"),
         style::dim(),
     )));
     if offers.is_empty() {
@@ -170,13 +173,13 @@ fn waiting_rows(app: &App, width: usize) -> Vec<Line<'static>> {
     let waiting = lane
         .steered
         .iter()
-        .map(|entry| format!("↳ {}", waiting(&entry.text)))
+        .map(|text| format!("↳ {}", waiting(text)))
         .chain(
             lane.queued
                 .iter()
-                .map(|e| format!("⏎ {}", waiting(&e.text))),
+                .map(|text| format!("⏎ {}", waiting(text))),
         )
-        .chain(lane.background.iter().map(|entry| waiting(&entry.text)));
+        .chain(lane.background.iter().cloned());
     let rows = waiting.map(|entry| {
         let entry = cut(&printable(&entry.replace('\n', " ")), width - 2);
         Line::from(Span::styled(format!("  {entry}"), style::dim()))
@@ -237,7 +240,7 @@ fn waiting(text: &str) -> String {
         SHIFT_TAB => "shift+tab · next mode".into(),
         MORE_REASONING => "more reasoning".into(),
         LESS_REASONING => "less reasoning".into(),
-        text => crate::server::wire::shown(text),
+        text => text.to_string(),
     }
 }
 

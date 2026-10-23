@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use contracts::history::Turn;
 use contracts::tool::Image;
 use contracts::view::View;
+use decision_loop::meter::Spend;
 use serde_json::Value;
 
 use super::{Ended, since};
@@ -59,7 +60,7 @@ impl Rig<'_> {
         self.conversation = Some(run.conversation);
         let ended = Ended::of(&run.status, run.data.as_ref(), halt, self.options.timeout);
         let decision = since(&self.meter.spend(), &before);
-        self.record(goal, &run.answer, ended.status);
+        self.record(goal, &run.answer, ended.status, &decision);
         // `-o` first, so `exit_code` in the report is the code the process ends with.
         let (code, error) = match self.write_last(&run.answer, run.data.as_ref()) {
             Ok(()) => (ended.code, ended.error),
@@ -117,25 +118,32 @@ impl Rig<'_> {
         let ceiling = self.agent.strategy.ceiling(self.agent.window);
         if let (Some(ui), true) = (&self.ui, self.agent.window > 0) {
             let left = 100u64.saturating_sub(used * 100 / ceiling.max(1));
-            ui.send(crate::tui::event::Event::Context(
+            ui.send(protocol::Event::Context(
                 u8::try_from(left).unwrap_or(u8::MAX),
             ));
         }
     }
 
     /// Add the task to the session, with where the browser was left, and save it.
-    fn record(&mut self, goal: &str, answer: &str, status: &str) {
+    fn record(&mut self, goal: &str, answer: &str, status: &str, hands: &Spend) {
         let location = (self.shared.page.as_ref())
             .filter(|page| page.is_open())
             .and_then(|page| page.observe().ok())
             .map(|view| view.location);
-        let turn = Turn {
+        let mut turn = Turn {
             goal: goal.to_string(),
             answer: answer.to_string(),
             status: status.to_string(),
             at: session::now(),
             steps: self.output.take_steps(),
         };
+        let hands = contracts::history::Spent {
+            input_tokens: hands.input_tokens,
+            cached_tokens: 0,
+            output_tokens: hands.output_tokens,
+            cost: hands.cost,
+        };
+        turn.steps.extend(self.output.hands_spent(hands));
         self.session.record(turn, location.as_deref());
         if let Err(error) = self.meta.save(self.history, &mut self.session) {
             self.output

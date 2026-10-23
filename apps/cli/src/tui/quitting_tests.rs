@@ -4,11 +4,7 @@ use crossterm::event::KeyCode;
 
 use crate::tui::app::{Action, App};
 use crate::tui::event::{Event, JobRow};
-use crate::tui::test_support::{ctrl, press, render, typed};
-
-fn from(id: &str, event: Event) -> Event {
-    Event::In(id.into(), Box::new(event))
-}
+use crate::tui::test_support::{ctrl, in_session as from, press, render, typed};
 
 /// Lanes A (shown) and B; B works when `b_works`.
 fn two(b_works: bool, now: Instant) -> App {
@@ -18,7 +14,7 @@ fn two(b_works: bool, now: Instant) -> App {
         app.event(Event::LaneStarted { id, name }, now);
     }
     if b_works {
-        app.event(from("B", Event::TaskStarted("fix it".into())), now);
+        app.frame(from("B", Event::TaskStarted("fix it".into())), now);
     }
     app
 }
@@ -46,9 +42,9 @@ fn second_ctrl_c_with_others_busy_asks_to_quit() {
     let now = Instant::now();
     let mut app = two(true, now);
     app.shells = || 3;
-    app.event(from("A", Event::Jobs(vec![monitor()])), now);
-    assert_eq!(app.event(ctrl('c'), now), None);
-    assert_eq!(app.event(ctrl('c'), now), None, "asked first");
+    app.frame(from("A", Event::Jobs(vec![monitor()])), now);
+    assert_eq!(app.input(ctrl('c'), now), None);
+    assert_eq!(app.input(ctrl('c'), now), None, "asked first");
     let shown = render(&mut app, now);
     assert!(shown.contains("• Quit llx?"), "{shown}");
     assert!(
@@ -64,8 +60,8 @@ fn second_ctrl_c_with_others_busy_asks_to_quit() {
     press(&mut app, KeyCode::Down, now);
     assert_eq!(press(&mut app, KeyCode::Enter, now), None, "Stay");
     assert!(app.questions.is_empty());
-    app.event(ctrl('c'), now);
-    app.event(ctrl('c'), now);
+    app.input(ctrl('c'), now);
+    app.input(ctrl('c'), now);
     assert_eq!(press(&mut app, KeyCode::Enter, now), Some(Action::QuitNow));
 }
 
@@ -73,7 +69,7 @@ fn second_ctrl_c_with_others_busy_asks_to_quit() {
 fn ctrl_d_with_nothing_busy_quits() {
     let now = Instant::now();
     let mut app = two(false, now);
-    assert_eq!(app.event(ctrl('d'), now), Some(Action::Quit));
+    assert_eq!(app.input(ctrl('d'), now), Some(Action::Quit));
 }
 
 #[test]
@@ -81,7 +77,7 @@ fn ctrl_d_with_a_shell_running_asks() {
     let now = Instant::now();
     let mut app = two(false, now);
     app.shells = || 1;
-    assert_eq!(app.event(ctrl('d'), now), None);
+    assert_eq!(app.input(ctrl('d'), now), None);
     let shown = render(&mut app, now);
     assert!(
         shown.contains("1 shell running — it will be stopped."),
@@ -105,16 +101,16 @@ fn exit_with_a_session_working_asks() {
 fn ctrl_c_while_stopping_quits_only_when_nothing_else_works() {
     let now = Instant::now();
     let mut alone = two(false, now);
-    alone.event(from("A", Event::TaskStarted("a's task".into())), now);
-    assert_eq!(alone.event(ctrl('c'), now), Some(Action::Stop("A".into())));
+    alone.frame(from("A", Event::TaskStarted("a's task".into())), now);
+    assert_eq!(alone.input(ctrl('c'), now), Some(Action::Stop("A".into())));
     assert_eq!(
-        alone.event(ctrl('c'), now),
+        alone.input(ctrl('c'), now),
         Some(Action::Stop("A".into())),
         "stopped again, it quits, as before"
     );
     let mut app = two(true, now);
-    app.event(from("A", Event::TaskStarted("a's task".into())), now);
-    assert_eq!(app.event(ctrl('c'), now), Some(Action::Stop("A".into())));
-    assert_eq!(app.event(ctrl('c'), now), None, "B works: asked first");
+    app.frame(from("A", Event::TaskStarted("a's task".into())), now);
+    assert_eq!(app.input(ctrl('c'), now), Some(Action::Stop("A".into())));
+    assert_eq!(app.input(ctrl('c'), now), None, "B works: asked first");
     assert!(render(&mut app, now).contains("• Quit llx?"));
 }

@@ -1,4 +1,3 @@
-use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use contracts::chat::{Completion, ToolCall};
@@ -7,7 +6,7 @@ use serde_json::json;
 use super::*;
 use crate::mode::Mode;
 use crate::testing::{Captured, Scratch, answers, composed, results, says, users};
-use crate::tui::event::Event;
+use protocol::Event;
 
 fn call(arguments: serde_json::Value) -> Completion {
     Completion {
@@ -102,10 +101,10 @@ fn a_monitor_asks_like_a_command() {
 }
 
 /// Jobs of a session shown in an interface whose events the test reads.
-fn in_session(work: impl FnOnce(&Jobs, &Kit, &Receiver<Event>)) {
+fn in_session(work: impl FnOnce(&Jobs, &Kit, &Seen)) {
     let scratch = Scratch::new();
     let workspace = Workspace::new(scratch.path()).unwrap();
-    let (ui, events) = crate::tui::test_support::fake_ui();
+    let (ui, peer, frames) = crate::testing::fake_peer();
     let output = Output::with(
         false,
         false,
@@ -122,17 +121,29 @@ fn in_session(work: impl FnOnce(&Jobs, &Kit, &Receiver<Event>)) {
         session: true,
         queue: &queue,
     };
-    work(&Jobs::default(), &kit, &events);
+    work(&Jobs::default(), &kit, &Seen { peer, frames });
 }
 
-/// What came back from the background as tasks of their own, and the job rows last listed.
-fn sent(events: &Receiver<Event>) -> (Vec<String>, Option<Vec<String>>) {
-    let (mut tasks, mut rows) = (vec![], None);
-    for event in events.try_iter() {
-        match event {
-            Event::Background(text) => tasks.push(text),
-            Event::Jobs(list) => rows = Some(list.into_iter().map(|row| row.name).collect()),
-            _ => {}
+/// What the interface was sent, and the server's side of it, where the lane's entries wait.
+struct Seen {
+    peer: Arc<crate::server::Peer>,
+    frames: std::sync::mpsc::Receiver<protocol::ToClient>,
+}
+
+/// What came back from the background as tasks of their own (the lane's next entries), and the
+/// job rows last listed.
+fn sent(seen: &Seen) -> (Vec<String>, Option<Vec<String>>) {
+    // A last entry of the test's own: what came before it is all there is.
+    const END: &str = "\u{0}the end";
+    seen.peer.inputs.background("", END);
+    let tasks = std::iter::from_fn(|| seen.peer.inputs.next(""))
+        .map(|entry| entry.text)
+        .take_while(|text| text != END)
+        .collect();
+    let mut rows = None;
+    for (_, event) in crate::testing::events(&seen.frames) {
+        if let Event::Jobs(list) = event {
+            rows = Some(list.into_iter().map(|row| row.name).collect());
         }
     }
     (tasks, rows)

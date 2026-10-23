@@ -2,7 +2,8 @@ use contracts::history::History;
 use serde_json::json;
 
 use super::test_support::{at_desk, call, ended, last_result, state};
-use super::{Request, Target};
+use protocol::{Command, Target};
+
 use crate::testing::{gated, says};
 use crate::tui::views::AgentState;
 
@@ -29,7 +30,7 @@ fn each_lane_records_in_its_own_session() {
     let ((to_a, a), (to_b, b)) = (gated(), gated());
     let ids = std::sync::Mutex::new(vec![]);
     let scratch = at_desk(&[&a, &b], None, |person| {
-        person.until("A waits", |app| app.lane().waiting.is_some());
+        person.until("A waits", |app| app.lane().ready);
         let lane_a = person.first();
         to_a.send(says("A is done.")).unwrap();
         person.enter("a's task");
@@ -123,11 +124,11 @@ fn a_monitor_wakes_only_its_lane() {
 fn opening_a_live_session_shows_it() {
     let ((_to_a, a), (_to_b, b)) = (gated(), gated());
     at_desk(&[&a, &b], None, |person| {
-        person.until("A waits", |app| app.lane().waiting.is_some());
+        person.until("A waits", |app| app.lane().ready);
         let lane_a = person.first();
         person.new_lane();
-        let open = Request::Open(Target::Saved(lane_a.clone()));
-        person.requests.send(open).unwrap();
+        let target = Target::Saved(lane_a.clone());
+        person.command(Command::Open { target });
         person.until("A shown", |app| app.views.shown == lane_a);
         person.wait(300);
         assert_eq!(person.lanes().len(), 2, "no second lane for A");
@@ -139,7 +140,7 @@ fn ninth_lane_closes_oldest_idle() {
     let chats: Vec<_> = (0..super::MAX_LANES + 1).map(|_| gated()).collect();
     let models: Vec<_> = chats.iter().map(|(_, chat)| chat).collect();
     at_desk(&models, None, |person| {
-        person.until("A waits", |app| app.lane().waiting.is_some());
+        person.until("A waits", |app| app.lane().ready);
         let oldest = person.first();
         for _ in 1..super::MAX_LANES {
             person.new_lane();
@@ -163,7 +164,9 @@ fn the_desk_never_opens_more_than_max_lanes() {
         person.first();
         // Asked past the interface's own limit, as a request that raced it would be.
         for _ in 0..super::MAX_LANES {
-            person.requests.send(Request::Open(Target::New)).unwrap();
+            person.command(Command::Open {
+                target: Target::New,
+            });
         }
         person.until("the lanes open", |app| {
             let lanes = app

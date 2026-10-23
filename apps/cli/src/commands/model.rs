@@ -12,8 +12,8 @@ use crate::choice::{self, Choice};
 use crate::compose::Rig;
 use crate::picker::{Adjustment, Item, Terminal};
 use crate::providers::{self, Provider};
-use crate::tui::Ui;
-use crate::tui::asking::UiTerminal;
+use crate::server::Ui;
+use crate::server::asking::UiTerminal;
 
 /// `/model`: a signed-in provider's model and its level in one list; `None` on cancellation
 /// or when nobody is signed in.

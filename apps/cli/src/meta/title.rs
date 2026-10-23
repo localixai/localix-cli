@@ -7,7 +7,7 @@ use contracts::chat::{Chat, Message, Request};
 
 use super::Update;
 use crate::compose::Rig;
-use crate::tui::event::Event;
+use protocol::Event;
 
 /// Characters a title takes at most.
 pub(crate) const MAX: usize = 36;

@@ -8,20 +8,22 @@ use std::time::Instant;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use protocol::{Label, Outcome};
 
+use protocol::{Asked, Command, Input as Sent};
+
 use super::app::{Action, App};
-use super::event::Event;
+use super::event::{Event, Input, Out};
 use super::live;
 use super::screen::Screen;
 use super::style;
 
 /// A key pressed with no modifier.
-pub(crate) fn key(code: KeyCode) -> Event {
-    Event::Key(KeyEvent::new(code, KeyModifiers::NONE))
+pub(crate) fn key(code: KeyCode) -> Input {
+    Input::Key(KeyEvent::new(code, KeyModifiers::NONE))
 }
 
 /// Ctrl and a letter.
-pub(crate) fn ctrl(c: char) -> Event {
-    Event::Key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL))
+pub(crate) fn ctrl(c: char) -> Input {
+    Input::Key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL))
 }
 
 /// How a call reads, as the server labels it: the verb while it runs, once done, and its subject.
@@ -74,23 +76,78 @@ pub(crate) fn failed(why: &str, declined: bool) -> Outcome {
 
 /// Press `code` on `app`; what the person asked for, if anything.
 pub(crate) fn press(app: &mut App, code: KeyCode, now: Instant) -> Option<Action> {
-    app.event(key(code), now)
+    app.input(key(code), now)
 }
 
 /// Type `text` a character at a time.
 pub(crate) fn typed(app: &mut App, text: &str, now: Instant) {
     for c in text.chars() {
-        app.event(key(KeyCode::Char(c)), now);
+        app.input(key(KeyCode::Char(c)), now);
     }
 }
 
-/// What the session gets when it asks for its next entry now (as `Ui::next_entry` does): what
-/// was queued, or `None` when nothing waits (the app then holds the question open, and an entry
-/// that finds it already answered is queued instead).
-pub(crate) fn next_entry(app: &mut App, now: Instant) -> Option<String> {
-    let (reply, entries) = std::sync::mpsc::sync_channel(1);
-    app.event(Event::Ready(reply), now);
-    entries.try_recv().ok().flatten().map(|entry| entry.text)
+/// What the person sent the server so far, taken: each entry as `Command::Input` carries it.
+pub(crate) fn sent(app: &mut App) -> Vec<Sent> {
+    let mut sent = vec![];
+    app.outbox.retain(|out| match out {
+        Out::Call(Command::Input(input)) => {
+            sent.push(input.clone());
+            false
+        }
+        _ => true,
+    });
+    sent
+}
+
+/// The texts of what the person sent, taken.
+pub(crate) fn sent_texts(app: &mut App) -> Vec<String> {
+    sent(app).into_iter().map(|input| input.text).collect()
+}
+
+/// The replies the person gave so far, taken, each with its question's id.
+pub(crate) fn replies(app: &mut App) -> Vec<(u64, protocol::Reply)> {
+    let mut replies = vec![];
+    app.outbox.retain(|out| match out {
+        Out::Reply(id, reply) => {
+            replies.push((*id, reply.clone()));
+            false
+        }
+        Out::Call(_) => true,
+    });
+    replies
+}
+
+/// The commands the interface sent so far other than entries, taken.
+pub(crate) fn commands(app: &mut App) -> Vec<Command> {
+    let mut commands = vec![];
+    app.outbox.retain(|out| match out {
+        Out::Call(Command::Input(_)) | Out::Reply(..) => true,
+        Out::Call(command) => {
+            commands.push(command.clone());
+            false
+        }
+    });
+    commands
+}
+
+/// Whether an effect of `tool` may happen, as the server asks it.
+pub(crate) fn approve(tool: &str, summary: &str) -> Asked {
+    Asked::Approve {
+        tool: tool.into(),
+        summary: summary.into(),
+    }
+}
+
+/// The lane's queue as the server shows it: whether it waits, the words steered, the entries
+/// queued, what came back from the background.
+pub(crate) fn queue(ready: bool, steered: &[&str], queued: &[&str], background: &[&str]) -> Event {
+    let owned = |texts: &[&str]| texts.iter().map(|t| (*t).to_string()).collect();
+    Event::Queue {
+        ready,
+        steered: owned(steered),
+        queued: owned(queued),
+        background: owned(background),
+    }
 }
 
 /// The finished blocks not printed yet, as plain text; taking them prints them.
@@ -192,12 +249,10 @@ pub(crate) fn normalize(text: &str) -> String {
     out
 }
 
-/// The session's side of an interface no one draws: the test reads the events it is sent.
-pub(crate) fn fake_ui() -> (super::Ui, std::sync::mpsc::Receiver<Event>) {
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "the interface's events are unbounded, as `tui::start` makes them"
-    )]
-    let (events, received) = std::sync::mpsc::channel();
-    (super::Ui::new(events), received)
+/// `event` as session `id` (a lane or an agent) sends it.
+pub(crate) fn in_session(id: &str, event: Event) -> protocol::ToClient {
+    protocol::ToClient::Event {
+        session: Some(id.into()),
+        event,
+    }
 }

@@ -29,7 +29,7 @@ use self::inbox::Letters;
 pub(crate) use self::tool::AgentsTool;
 use crate::mode::Mode;
 use crate::output::lock;
-use crate::tui::event::Event;
+use protocol::Event;
 
 /// Agents open at once: each keeps its conversation.
 const MAX_OPEN: usize = 6;

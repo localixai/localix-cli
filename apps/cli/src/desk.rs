@@ -14,12 +14,13 @@ use std::thread::Scope;
 use std::time::Duration;
 
 use contracts::history::History;
+use protocol::Target;
 
 use self::ending::{AllLanes, Lanes, Leaving};
 use crate::commands::repl;
 use crate::compose::{Rig, Seat, Shared};
-use crate::tui::Ui;
-use crate::tui::event::Event;
+use crate::server::Ui;
+use protocol::Event;
 
 /// How often the desk looks whether its lanes are gone while nothing is asked of it.
 const POLL: Duration = Duration::from_millis(200);
@@ -37,18 +38,6 @@ pub(crate) enum Request {
     List,
     /// "Quit anyway": every lane is stopped, then the process ends.
     Quit,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Target {
-    /// A new session.
-    New,
-    /// A session saved before, by its id.
-    #[cfg_attr(
-        not(test),
-        allow(dead_code, reason = "the list of sessions will send it")
-    )]
-    Saved(String),
 }
 
 /// What a lane does once built: its session at the prompt.
@@ -176,6 +165,8 @@ impl<'e> Desk<'e> {
                     rig.attached = rig.options.images.clone();
                 }
                 let ui = rig.ui.clone().unwrap_or(tagged);
+                // However the lane ends, what it had waiting goes with it.
+                let _forgotten = ui.ends();
                 repl::run(rig, &ui, task.as_deref())
             });
             start(shared, seat, work)

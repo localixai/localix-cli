@@ -18,7 +18,7 @@ use tools::workspace::Workspace;
 
 pub(crate) use self::tool::JobsTool;
 use crate::output::Output;
-use crate::tui::event::{Event, JobRow};
+use protocol::{Event, JobRow};
 
 /// What the jobs are built from.
 pub(crate) struct Kit<'a> {

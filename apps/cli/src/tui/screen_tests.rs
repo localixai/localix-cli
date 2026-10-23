@@ -248,22 +248,15 @@ fn grouped_calls_keep_outputs_and_failures_and_approvals_break_the_chain() {
         app.event(result(command, "bash", &ran(command), outcome), now);
         term.draw(&mut app, now);
     }
-    let (reply, _answer) = std::sync::mpsc::sync_channel(1);
-    app.event(
-        Event::Approve {
-            tool: "bash".into(),
-            summary: "run four".into(),
-            reply,
-        },
-        now,
-    );
+    let approve = crate::tui::test_support::approve("bash", "run four");
+    app.asked(1, "", approve, now);
     let shown = term.draw(&mut app, now);
     assert!(shown.contains("• Ran one\n  └ first output\n  ↳ Ran two\n  └ second output\n\n• Ran bad\n  └ permission denied\n\n• Ran three"), "{shown}");
     assert!(
         shown.contains("Run this command?") && shown.contains("run four"),
         "{shown}"
     );
-    app.event(Event::Dismiss, now);
+    app.frame(protocol::ToClient::Resolved { id: 1 }, now);
     let four = ran("four");
     app.event(result("four", "bash", &four, done("exit 0 in 0.0s")), now);
     let shown = term.draw(&mut app, now);

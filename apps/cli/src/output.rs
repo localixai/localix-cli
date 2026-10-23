@@ -8,6 +8,7 @@
 pub(crate) mod human;
 mod json;
 mod observer;
+mod spent;
 
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -21,9 +22,9 @@ use serde_json::Value;
 
 use ratatui::text::Line;
 
-use crate::tui::Ui;
-use crate::tui::event::Event;
+use crate::server::Ui;
 use crate::tui::{cells, style};
+use protocol::Event;
 
 /// The trace's width where stderr is not a terminal.
 const TRACE_WIDTH: usize = 100;
@@ -96,6 +97,8 @@ pub(crate) struct Output {
     done: Mutex<Vec<(String, contracts::history::Step)>>,
     /// stdout is a terminal: the answer is rendered there.
     answer_terminal: bool,
+    /// What the session spent in all (`spent.rs`).
+    total: Mutex<contracts::history::Spent>,
 }
 
 impl Output {
@@ -131,6 +134,7 @@ impl Output {
             blocks: AtomicUsize::new(0),
             steps: Mutex::new(vec![]),
             answer_terminal: false,
+            total: Mutex::default(),
         }
     }
 

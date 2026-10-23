@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use super::*;
 use crate::gate::Asker;
 use crate::testing::Typed;
-use crate::tui::event::Approval;
+use protocol::Approval;
 
 fn effect(tool: &str) -> Effect<'_> {
     Effect {

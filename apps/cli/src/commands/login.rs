@@ -9,9 +9,9 @@ use crate::commands::signin;
 use crate::compose::Rig;
 use crate::picker::{Item, Terminal};
 use crate::providers::{Method, Provider};
-use crate::tui::Ui;
-use crate::tui::asking::UiTerminal;
-use crate::tui::event::Event;
+use crate::server::Ui;
+use crate::server::asking::UiTerminal;
+use protocol::Event;
 
 /// What the steps ask of the world beyond the terminal: where each provider's sign-in comes
 /// from, and signing in (what was saved, in words).

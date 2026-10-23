@@ -14,7 +14,7 @@ use contracts::gate::{Effect, Gate, Verdict};
 
 use crate::gate::{Asker, Prompter, TerminalGate, declined};
 use crate::output::lock;
-use crate::tui::event::Approval;
+use protocol::Approval;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Mode {

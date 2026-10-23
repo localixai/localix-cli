@@ -10,7 +10,7 @@ use serde_json::Value;
 use super::kit::Kit;
 use super::spec::{self, Action};
 use super::{Child, MAX_OPEN, Registry, child, unique};
-use crate::tui::event::Event;
+use protocol::Event;
 
 pub(crate) struct AgentsTool<'scope, 'env> {
     pub(super) kit: &'env Kit<'env>,
@@ -153,7 +153,7 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
             child.conversation = None;
         }
         if let Some(ui) = self.kit.output.ui() {
-            ui.send(Event::In(child.session.id.clone(), Box::new(Event::Closed)));
+            ui.for_lane(&child.session.id).send(Event::Closed);
         }
         let (name, id) = (child.session.name.clone(), child.session.id.clone());
         (self.registry.queue).forget(|entry| entry.key.as_deref() == Some(id.as_str()));

@@ -111,9 +111,11 @@ pub(crate) fn usage(rig: &Rig) -> String {
     let spent = &rig.spent;
     let decision = rig.meter.spend();
     let minutes = rig.begun.elapsed().as_secs() / 60;
+    let session = rig.output.total();
     format!(
         "tasks      {}\nagent      {} · {} turns · {} · {} out · ${:.4}\n\
-         decision   {} calls · ${:.4}\ntotal      ${:.4} over {minutes} min\n",
+         decision   {} calls · ${:.4}\ntotal      ${:.4} over {minutes} min\n\
+         session    {} · {} out · ${:.4}\n",
         rig.session.turns.len(),
         rig.choice.model(),
         spent.calls,
@@ -123,6 +125,9 @@ pub(crate) fn usage(rig: &Rig) -> String {
         decision.calls,
         decision.cost,
         spent.cost + decision.cost,
+        tokens_in(session.input_tokens, session.cached_tokens),
+        thousands(session.output_tokens),
+        session.cost,
     )
 }
 

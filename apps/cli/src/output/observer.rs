@@ -7,9 +7,9 @@ use ratatui::text::{Line, Span};
 
 use super::{Output, human, json, lock};
 use crate::server::{label::label, wire};
-use crate::tui::event::Event;
 use crate::tui::tool_cell::{self, State};
 use crate::tui::{cells, style, wrap};
+use protocol::Event;
 
 impl Observer for Output {
     fn call(&self, call: &ToolCall) {
@@ -91,14 +91,22 @@ impl Observer for Output {
     }
 
     fn turn(&self, usage: &Usage) {
+        let spent = contracts::history::Spent {
+            input_tokens: usage.input_tokens,
+            cached_tokens: usage.cached_tokens,
+            output_tokens: usage.output_tokens,
+            cost: usage.cost,
+        };
         let step = contracts::history::Step {
             what: "model".into(),
             detail: format!("{} in · {} out", usage.input_tokens, usage.output_tokens),
             at_ms: self.millis().saturating_sub(usage.millis),
             ms: usage.millis,
             failed: false,
+            spent,
         };
         lock(&self.done).push((String::new(), step));
+        self.spend(spent);
         // A lane's tokens: its agents' turns come here too.
         if let Some(ui) = &self.ui {
             ui.send(Event::Spent(usage.input_tokens + usage.output_tokens));

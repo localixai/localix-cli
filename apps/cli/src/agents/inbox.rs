@@ -11,7 +11,7 @@ use contracts::inbox::Inbox;
 use super::Registry;
 use super::watch::Watch;
 use crate::output::Output;
-use crate::tui::event::Event;
+use protocol::Event;
 
 /// How often a wait looks whether the person wrote or the task was stopped.
 const POLL: Duration = Duration::from_millis(200);

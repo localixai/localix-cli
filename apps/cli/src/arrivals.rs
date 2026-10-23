@@ -9,8 +9,7 @@ use std::sync::{Arc, Mutex, Weak};
 
 use queue::{Entry, Idle, Policy, Queue};
 
-use crate::tui::Ui;
-use crate::tui::event::Event;
+use crate::server::Ui;
 
 /// Entries a lane's queue keeps at most: past it the oldest go, and the run is told.
 const CAPACITY: usize = 256;
@@ -20,7 +19,7 @@ const CAPACITY: usize = 256;
 pub(crate) fn queue(ui: Option<Ui>) -> Queue {
     let queue = Queue::new(CAPACITY);
     match ui {
-        Some(ui) => queue.on_open(move |entry| ui.send(Event::Background(entry.render()))),
+        Some(ui) => queue.on_open(move |entry| ui.background(&entry.render())),
         None => queue,
     }
 }

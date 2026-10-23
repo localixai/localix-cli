@@ -258,6 +258,7 @@ impl Deck {
                 Some(Item {
                     key: Key::parse(&tab.id)?,
                     title: tab.title,
+                    group: tab.group,
                 })
             })
             .collect();

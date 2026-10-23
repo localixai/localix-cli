@@ -11,12 +11,35 @@ use tools::browser::Browser;
 #[cfg(unix)]
 use tools::shell::{Painter, Sessions, Theme, Watch};
 
-/// The window as the `window` tool reads it: the browser host's tabs, of whatever kind.
-pub(crate) struct Tabs(pub Browser);
+/// The window as a lane's `window` tool reads it: the browser host's tabs, of whatever kind,
+/// and the group (the lane's project) of those it opens.
+pub(crate) struct Tabs {
+    pub browser: Browser,
+    pub group: String,
+}
+
+impl Tabs {
+    pub(crate) fn of(browser: Browser, group: &str) -> Self {
+        let group = group.to_string();
+        Self { browser, group }
+    }
+}
+
+/// The group a lane's tabs are of: its session's directory's name, else the root's.
+pub(crate) fn group(place: &str, root: &std::path::Path) -> String {
+    let path = match place {
+        "" => root,
+        place => std::path::Path::new(place),
+    };
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned());
+    name.unwrap_or_else(|| path.display().to_string())
+}
 
 impl tools::window::Windowed for Tabs {
     fn tabs(&self) -> Option<Vec<tools::window::WindowTab>> {
-        let listed = self.0.listing()?;
+        let listed = self.browser.listing()?;
         Some(
             listed
                 .into_iter()
@@ -27,17 +50,23 @@ impl tools::window::Windowed for Tabs {
                     detail: tab.detail,
                     shown: tab.shown,
                     acted_on: tab.acted_on,
+                    group: tab.group,
                 })
                 .collect(),
         )
     }
 
     fn act(&self, act: tools::window::Act, tab: &str) -> Result<(), String> {
-        self.0.act(tab, act == tools::window::Act::Close)
+        self.browser.act(tab, act == tools::window::Act::Close)
     }
 
     fn resize(&self, width: u32, height: u32) -> Result<(), String> {
-        self.0.resize_window(f64::from(width), f64::from(height))
+        self.browser
+            .resize_window(f64::from(width), f64::from(height))
+    }
+
+    fn opened(&self, tab: &str) {
+        self.browser.group(tab, &self.group);
     }
 }
 
@@ -61,11 +90,12 @@ pub(crate) fn terminals(watch: Option<Watch>, shown: bool) -> Sessions {
     }
 }
 
-/// The lanes, and the lane a terminal's tab is for.
+/// The lanes, the lane a terminal's tab is for, and its group.
 #[cfg(unix)]
 pub(crate) type Owner = (
     std::sync::Arc<crate::arrivals::Lanes>,
     std::sync::Weak<queue::Queue>,
+    String,
 );
 
 /// Terminal windows as the browser host's panels, in the person's colours when known, drawn by
@@ -77,7 +107,8 @@ pub(crate) fn panels(browser: Browser, theme: Option<Theme>, owner: Owner) -> Wa
         let title = format!("llx · {title}");
         let emulator = crate::xterm::installed();
         let page = tools::shell::page(&title, theme.as_ref(), emulator.as_ref());
-        // Its tab is known by the session's own id: `t3` is session 3.
+        // Its tab is known by the session's own id: `t3` is session 3, of the lane's project.
+        browser.group(&format!("t{id}"), &owner.2);
         let panel = browser.panel(id, &title, page, theme.map(|theme| theme.bg));
         // What the person does to its tab reaches the lane that opened it.
         if let Some(queue) = owner.1.upgrade() {

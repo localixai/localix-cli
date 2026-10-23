@@ -84,3 +84,12 @@ fn a_kept_session_opens_a_window_in_a_session_only() {
         );
     }
 }
+
+#[test]
+fn a_lanes_tabs_are_of_its_directory_by_its_name() {
+    let root = std::path::Path::new("/Users/me/code/llx");
+    assert_eq!(group("/Users/me/code/shop", root), "shop");
+    assert_eq!(group("/Users/me/code/shop/", root), "shop");
+    assert_eq!(group("", root), "llx");
+    assert_eq!(group("/", root), "/");
+}

@@ -132,6 +132,8 @@ pub struct Listed {
     pub detail: String,
     pub shown: bool,
     pub acted_on: bool,
+    /// The project it was opened for, as its opener named it.
+    pub group: String,
 }
 
 /// How a window is dressed, for checks: see [`Browser::dressed`].
@@ -155,6 +157,8 @@ pub(super) struct Shared {
     pub tabs: Mutex<Vec<Tab>>,
     /// Who hears what the person does in the window.
     listener: Mutex<Option<Listener>>,
+    /// The group (a project) of each tab, by key, as its opener named it.
+    pub groups: Mutex<HashMap<String, String>>,
 }
 
 /// Told what the person did to a tab (its key; `window` for the whole window), in words.
@@ -286,6 +290,9 @@ pub struct Browser {
     proxy: EventLoopProxy<Cmd>,
     shared: Arc<Shared>,
 }
+
+/// The panel id that names the strip's own page, for checks.
+pub(super) const STRIP: u32 = u32::MAX;
 
 /// The answer to every call while the window is closed.
 pub(super) const WINDOW_CLOSED: &str = "window_closed";

@@ -161,18 +161,29 @@ impl Hands for Helper {
 #[derive(Default)]
 struct Shown {
     asked: Mutex<Vec<String>>,
+    /// Tabs beside its own, of other projects.
+    others: Vec<WindowTab>,
 }
 
 impl Windowed for Shown {
     fn tabs(&self) -> Option<Vec<WindowTab>> {
-        Some(vec![WindowTab {
-            id: "w1".into(),
-            kind: "browser".into(),
-            title: "Example".into(),
-            detail: "https://example.org/".into(),
-            shown: true,
-            acted_on: true,
-        }])
+        Some(
+            vec![WindowTab {
+                id: "w1".into(),
+                kind: "browser".into(),
+                title: "Example".into(),
+                detail: "https://example.org/".into(),
+                shown: true,
+                acted_on: true,
+                group: "llx".into(),
+            }]
+            .into_iter()
+            .chain(self.others.clone())
+            .collect(),
+        )
+    }
+    fn opened(&self, tab: &str) {
+        self.asked.lock().unwrap().push(format!("opened {tab}"));
     }
     #[allow(
         clippy::unwrap_in_result,
@@ -290,7 +301,7 @@ fn show_puts_a_tab_in_front_and_reads_it_and_close_takes_several() {
     .unwrap();
     assert_eq!(
         *window.asked.lock().unwrap(),
-        ["Show t2", "resize 1100×760"]
+        ["opened t1", "opened t2", "Show t2", "resize 1100×760"]
     );
 }
 
@@ -322,6 +333,28 @@ fn list_reads_the_window_where_it_shows_else_every_kinds_tabs() {
     assert_eq!(
         listed.report,
         "1 tab:\nw1  browser  Example — https://example.org/  (shown, the browser acts here)"
+    );
+    // With another project's tabs in the window, each tab names its own.
+    let window = Shown {
+        others: vec![WindowTab {
+            id: "t4".into(),
+            kind: "terminal".into(),
+            title: "make".into(),
+            detail: String::new(),
+            shown: false,
+            acted_on: false,
+            group: "shop".into(),
+        }],
+        ..Shown::default()
+    };
+    let shared = WindowTool {
+        window: Some(&window),
+        ..shown
+    };
+    assert_eq!(
+        call(&shared, json!({"action": "list"})).unwrap().report,
+        "2 tabs:\nw1  browser  Example — https://example.org/  (group llx, shown, the browser \
+         acts here)\nt4  terminal  make  (group shop)"
     );
     let hidden = WindowTool {
         kinds: vec![&term],

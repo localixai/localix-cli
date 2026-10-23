@@ -26,7 +26,8 @@ pub(crate) fn run(rig: &mut Rig, ui: &Ui, first: Option<&str>) -> i32 {
         super::sessions::home_relative(&rig.workspace.root().display().to_string()),
     ]));
     if !rig.session.turns.is_empty() {
-        ui.send(Event::Earlier(rig.session.turns.clone()));
+        let turns = rig.session.turns.iter().map(crate::server::wire::turn);
+        ui.send(Event::Earlier(turns.collect()));
     }
     let signed_out = login::signed_out(&rig.choice);
     if !signed_out.is_empty() {

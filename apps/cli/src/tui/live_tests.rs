@@ -2,12 +2,11 @@ use std::sync::mpsc::sync_channel;
 use std::time::{Duration, Instant};
 
 use crossterm::event::KeyCode;
-use serde_json::json;
 
 use super::*;
 use crate::tui::event::Event;
 use crate::tui::style;
-use crate::tui::test_support::{live_area as shown, press, typed};
+use crate::tui::test_support::{call, label, live_area as shown, press, typed};
 
 fn app() -> App {
     App::new(
@@ -57,10 +56,11 @@ fn working_shows_the_call_its_steps_the_time_and_the_queue() {
     let mut app = app();
     app.event(Event::TaskStarted("check the shop".into()), start);
     app.event(
-        Event::Call {
-            name: "window".into(),
-            args: json!({"action": "interact", "tab": "w1", "goal": "Buy one"}),
-        },
+        call(
+            "c1",
+            "window",
+            &label("Working in", "Worked in", "w1: Buy one"),
+        ),
         start,
     );
     app.event(Event::Step("click \"Buy\" [e12]".into()), start);

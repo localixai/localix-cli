@@ -65,7 +65,7 @@ impl App {
             .views
             .jobs
             .iter()
-            .filter(|job| job.until.is_some())
+            .filter(|job| job.until_at.is_some())
             .count();
         if working + shells + monitors == 0 {
             return None;

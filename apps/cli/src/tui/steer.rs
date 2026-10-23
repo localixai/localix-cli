@@ -8,30 +8,6 @@ use super::app::App;
 use super::cells;
 use super::event::Typed;
 
-/// A task as the transcript shows it: what came back from the background reads as where it came
-/// from (`≋ ticks · tick 1`, `◷ hello · say hello`), not as the tags the model reads, and `/init`
-/// as itself.
-pub(crate) fn shown(goal: &str) -> String {
-    // `/init` is sent as its instruction, and reads as what the person typed.
-    if goal == crate::commands::extras::INIT {
-        return "/init".into();
-    }
-    let goal = (goal.strip_prefix(crate::arrivals::FROM_MONITOR))
-        .map_or(goal, |rest| rest.trim_start_matches('\n'));
-    if let Some(rest) = goal.strip_prefix("<monitor job=\"")
-        && let Some((name, body)) = rest.split_once("\">\n")
-    {
-        let body = body.trim_end().trim_end_matches("</monitor>").trim_end();
-        return format!("≋ {name} · {body}");
-    }
-    if let Some(rest) = goal.strip_prefix("(scheduled `")
-        && let Some((name, prompt)) = rest.split_once("`) ")
-    {
-        return format!("◷ {name} · {prompt}");
-    }
-    goal.to_string()
-}
-
 /// Whether `entry` may go to the task running: words only.
 pub(crate) fn steerable(entry: &Typed) -> bool {
     let text = entry.text.trim_start();
@@ -70,7 +46,3 @@ impl App {
         self.lane_mut().queued.push_back(Typed { text, images });
     }
 }
-
-#[cfg(test)]
-#[path = "steer_tests.rs"]
-mod tests;

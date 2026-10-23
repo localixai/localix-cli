@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use contracts::person::Answer;
+use protocol::Answer;
 
 use super::*;
 use crate::tui::event::Event;

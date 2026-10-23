@@ -19,11 +19,6 @@ use crate::printable::printable;
 
 /// What the person typed.
 pub(crate) fn user(text: &str, width: usize) -> Vec<Line<'static>> {
-    // `/init` sends a long instruction; the person typed the command.
-    let text = match text == crate::commands::extras::INIT {
-        true => "/init",
-        false => text,
-    };
     let first = Line::from(Span::styled("❯ ", style::bold()));
     let rest = Line::from("  ");
     text.trim()
@@ -89,7 +84,7 @@ const EARLIER: usize = 20;
 
 /// A resumed session's tasks as blocks: how many there were, then each task, its answer, and how
 /// it ended when it did not end well. Only the tasks and answers are kept, not their calls.
-pub(crate) fn earlier(turns: &[contracts::history::Turn], width: usize) -> Vec<Vec<Line<'static>>> {
+pub(crate) fn earlier(turns: &[protocol::Turn], width: usize) -> Vec<Vec<Line<'static>>> {
     let skipped = turns.len().saturating_sub(EARLIER);
     let mut said = count(turns.len() as u64, "earlier task");
     if skipped > 0 {
@@ -97,7 +92,7 @@ pub(crate) fn earlier(turns: &[contracts::history::Turn], width: usize) -> Vec<V
     }
     let mut out = vec![note(&said, width)];
     for turn in &turns[skipped..] {
-        out.push(user(&super::steer::shown(&turn.goal), width));
+        out.push(user(&turn.goal, width));
         if !turn.answer.trim().is_empty() {
             out.push(agent(&turn.answer, width));
         }

@@ -1,8 +1,8 @@
 use std::sync::mpsc::sync_channel;
 use std::time::Instant;
 
-use contracts::person::Choice as Offered;
 use crossterm::event::KeyCode;
+use protocol::Choice as Offered;
 
 use super::*;
 use crate::tui::app::App;

@@ -73,6 +73,7 @@ fn every_frame_to_the_interface_comes_back_the_same_through_json() {
             ready: false,
             steered: vec!["faster".into()],
             queued: vec![],
+            background: vec!["≋ ticks · tick 1".into()],
         }),
         ToClient::Event {
             session: None,

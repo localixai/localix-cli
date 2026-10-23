@@ -2,9 +2,8 @@
 
 use std::time::Instant;
 
-use contracts::tool::{ToolError, ToolOutput};
+use protocol::{Label, Outcome};
 use ratatui::text::{Line, Span};
-use serde_json::Value;
 
 use super::{AgentState, TOOK, finish_call, result_block};
 use crate::printable::printable;
@@ -17,17 +16,16 @@ impl App {
     pub(super) fn call_ended(
         &mut self,
         at: usize,
+        call: &str,
         name: &str,
-        args: &Value,
-        outcome: &Result<ToolOutput, ToolError>,
+        label: &Label,
+        outcome: &Outcome,
         now: Instant,
     ) -> Vec<Line<'static>> {
         let width = self.width;
         let view = &mut self.views.sessions[at];
-        let took = (view.running.iter())
-            .find(|(n, a, _)| n == name && a == args)
-            .map(|(_, _, started)| now.saturating_duration_since(*started));
-        finish_call(&mut view.running, name, args);
+        let took = finish_call(&mut view.running, call)
+            .map(|started| now.saturating_duration_since(started));
         if let Some(lane) = &mut view.lane {
             lane.steps.clear();
         }
@@ -35,7 +33,7 @@ impl App {
         let lane = self.views.sessions[lane].lane.as_deref_mut();
         let mut none = None;
         let declined = lane.map_or(&mut none, |lane| &mut lane.declined);
-        let mut block = result_block(declined, name, args, outcome, width);
+        let mut block = result_block(declined, name, label, outcome, width);
         // How long it took, where that is worth a glance.
         if let (Some(took), Some(head)) = (took, block.first_mut())
             && took >= TOOK

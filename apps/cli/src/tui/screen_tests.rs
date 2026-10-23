@@ -181,7 +181,8 @@ fn every_frame_is_one_synchronized_update() {
 
 #[test]
 fn successful_edit_displays_the_actual_before_and_after_in_the_terminal() {
-    use crate::tui::{app::App, event::Event, test_support::Term};
+    use crate::tui::app::App;
+    use crate::tui::test_support::{Term, done, label, result};
     use contracts::{gate::Open, tool::Tool};
     use serde_json::json;
 
@@ -193,18 +194,12 @@ fn successful_edit_displays_the_actual_before_and_after_in_the_terminal() {
         gate: &Open,
     };
     let args = json!({"path":"config.rs", "old_string":"throw: true", "new_string":"throw: false"});
-    let outcome = tool.call(&args);
+    let report = tool.call(&args).unwrap().report;
     let now = std::time::Instant::now();
     let mut app = App::new(80, 30, vec![]);
     let mut term = Term::new(&app);
-    app.event(
-        Event::Result {
-            name: "edit".into(),
-            args,
-            outcome,
-        },
-        now,
-    );
+    let edited = label("Editing", "Edited", "config.rs");
+    app.event(result("c1", "edit", &edited, done(&report)), now);
     let shown = term.draw(&mut app, now);
     assert!(shown.contains("• Edited config.rs"), "{shown}");
     assert!(shown.contains("- throw: true,"), "{shown}");
@@ -214,39 +209,19 @@ fn successful_edit_displays_the_actual_before_and_after_in_the_terminal() {
 
 #[test]
 fn consecutive_reads_form_a_compact_chain_even_when_they_finish_in_separate_frames() {
-    use contracts::tool::ToolOutput;
-    use serde_json::json;
-
     use crate::tui::app::App;
     use crate::tui::event::Event;
-    use crate::tui::test_support::Term;
+    use crate::tui::test_support::{Term, call, done, label, result};
 
     let now = std::time::Instant::now();
     let mut app = App::new(60, 24, vec![]);
     let mut term = Term::new(&app);
     app.event(Event::TaskStarted("inspect the files".into()), now);
     for (path, offset) in [("src/main.rs", 1), ("src/lib.rs", 20), ("README.md", 1)] {
-        let args = json!({"path": path, "offset": offset});
-        app.event(
-            Event::Call {
-                name: "read".into(),
-                args: args.clone(),
-            },
-            now,
-        );
+        let read = label("Reading", "Read", &format!("{path} from line {offset}"));
+        app.event(call(path, "read", &read), now);
         term.draw(&mut app, now);
-        app.event(
-            Event::Result {
-                name: "read".into(),
-                args,
-                outcome: Ok(ToolOutput {
-                    report: "contents".into(),
-                    state: None,
-                    image: None,
-                }),
-            },
-            now,
-        );
+        app.event(result(path, "read", &read, done("contents")), now);
         term.draw(&mut app, now);
     }
     app.event(Event::Answer("Found the entry points.".into()), now);
@@ -256,52 +231,21 @@ fn consecutive_reads_form_a_compact_chain_even_when_they_finish_in_separate_fram
 
 #[test]
 fn grouped_calls_keep_outputs_and_failures_and_approvals_break_the_chain() {
-    use contracts::tool::{ToolError, ToolOutput};
-    use serde_json::json;
-
     use crate::tui::app::App;
     use crate::tui::event::Event;
-    use crate::tui::test_support::Term;
+    use crate::tui::test_support::{Term, done, failed, ran, result};
 
     let now = std::time::Instant::now();
     let mut app = App::new(60, 40, vec![]);
     let mut term = Term::new(&app);
     app.event(Event::TaskStarted("check".into()), now);
     for (command, outcome) in [
-        (
-            "one",
-            Ok(ToolOutput {
-                report: "exit 0 in 0.0s\n### stdout\nfirst output".into(),
-                state: None,
-                image: None,
-            }),
-        ),
-        (
-            "two",
-            Ok(ToolOutput {
-                report: "exit 0 in 0.0s\n### stdout\nsecond output".into(),
-                state: None,
-                image: None,
-            }),
-        ),
-        ("bad", Err(ToolError::Failed("permission denied".into()))),
-        (
-            "three",
-            Ok(ToolOutput {
-                report: "exit 0 in 0.0s\n### stdout\nthird output".into(),
-                state: None,
-                image: None,
-            }),
-        ),
+        ("one", done("exit 0 in 0.0s\n### stdout\nfirst output")),
+        ("two", done("exit 0 in 0.0s\n### stdout\nsecond output")),
+        ("bad", failed("permission denied", false)),
+        ("three", done("exit 0 in 0.0s\n### stdout\nthird output")),
     ] {
-        app.event(
-            Event::Result {
-                name: "bash".into(),
-                args: json!({"command": command}),
-                outcome,
-            },
-            now,
-        );
+        app.event(result(command, "bash", &ran(command), outcome), now);
         term.draw(&mut app, now);
     }
     let (reply, _answer) = std::sync::mpsc::sync_channel(1);
@@ -320,18 +264,8 @@ fn grouped_calls_keep_outputs_and_failures_and_approvals_break_the_chain() {
         "{shown}"
     );
     app.event(Event::Dismiss, now);
-    app.event(
-        Event::Result {
-            name: "bash".into(),
-            args: json!({"command": "four"}),
-            outcome: Ok(ToolOutput {
-                report: "exit 0 in 0.0s".into(),
-                state: None,
-                image: None,
-            }),
-        },
-        now,
-    );
+    let four = ran("four");
+    app.event(result("four", "bash", &four, done("exit 0 in 0.0s")), now);
     let shown = term.draw(&mut app, now);
     assert!(shown.contains("third output\n\n• Ran four"), "{shown}");
 }

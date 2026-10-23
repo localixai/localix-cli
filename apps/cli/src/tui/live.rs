@@ -135,10 +135,10 @@ fn running_rows(
     } else {
         &[]
     };
-    for (at, (name, args, started)) in running.iter().enumerate() {
-        let mut rows = tool_cell::lines(name, args, State::Running, width);
+    for (at, call) in running.iter().enumerate() {
+        let mut rows = tool_cell::lines(&call.name, &call.label, State::Running, width);
         if let Some(first) = rows.first_mut() {
-            first.spans[0] = spinner(*started);
+            first.spans[0] = spinner(call.since);
             first.spans.insert(1, Span::raw(" "));
         }
         out.extend(rows);
@@ -232,13 +232,12 @@ fn command_context(text: &str, current: &str) -> Option<String> {
 
 /// An entry that waits: a key's by what it does, not the sequence it sent.
 fn waiting(text: &str) -> String {
-    use crate::commands::entry::{LESS_REASONING, MORE_REASONING};
-    use crate::tui::app::SHIFT_TAB;
+    use protocol::{LESS_REASONING, MORE_REASONING, SHIFT_TAB};
     match text {
         SHIFT_TAB => "shift+tab · next mode".into(),
         MORE_REASONING => "more reasoning".into(),
         LESS_REASONING => "less reasoning".into(),
-        text => super::steer::shown(text),
+        text => crate::server::wire::shown(text),
     }
 }
 

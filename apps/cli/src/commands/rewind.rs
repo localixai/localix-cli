@@ -26,7 +26,7 @@ fn steps(rig: &mut Rig, terminal: &mut dyn Terminal) -> String {
         .iter()
         .rev()
         .map(|task| {
-            let shown = crate::tui::steer::shown(&task.goal);
+            let shown = crate::server::wire::shown(&task.goal);
             let line = shown.lines().next().unwrap_or("");
             let mut label: String = line.chars().take(SHOWN).collect();
             if label.len() < line.len() {
@@ -74,7 +74,7 @@ fn steps(rig: &mut Rig, terminal: &mut dyn Terminal) -> String {
         said.push("the conversation is back to before it".into());
         // The person's own words go back in the prompt; what came from the background does not.
         if let Some(ui) = &rig.ui
-            && crate::tui::steer::shown(&task.goal) == task.goal
+            && crate::server::wire::shown(&task.goal) == task.goal
         {
             ui.send(Event::Prefill(task.goal.clone()));
         }

@@ -77,7 +77,7 @@ fn l3_tools_providers_and_stores_know_only_the_contracts() {
         if group == "packages" && PRIMITIVES.contains(&name.as_str()) {
             assert!(uses.is_empty(), "{name} depends on {uses:?}");
         } else if group == "packages"
-            && !matches!(name.as_str(), "contracts" | WIRE)
+            && !matches!(name.as_str(), "contracts" | WIRE | CLIENT)
             && !CORES.contains(&name.as_str())
         {
             assert_eq!(uses, &["contracts"], "{name} depends on {uses:?}");
@@ -120,7 +120,22 @@ fn l6_the_protocol_is_a_leaf() {
             external.push(name.trim().to_string());
         }
     }
-    assert_eq!(external, ["serde", "serde_json"], "the protocol uses {external:?}");
+    assert_eq!(
+        external,
+        ["serde", "serde_json"],
+        "the protocol uses {external:?}"
+    );
+}
+
+/// The interface's side of the seam.
+const CLIENT: &str = "client";
+
+/// L8: the client knows the wire and nothing else: no session, tool, model or store.
+#[test]
+fn l8_the_client_knows_only_the_protocol() {
+    let packages = packages();
+    let uses = &packages[&("packages".into(), CLIENT.into())];
+    assert_eq!(uses, &[WIRE], "the client depends on {uses:?}");
 }
 
 #[test]

@@ -6,6 +6,7 @@
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use protocol::{Label, Outcome};
 
 use super::app::{Action, App};
 use super::event::Event;
@@ -21,6 +22,54 @@ pub(crate) fn key(code: KeyCode) -> Event {
 /// Ctrl and a letter.
 pub(crate) fn ctrl(c: char) -> Event {
     Event::Key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL))
+}
+
+/// How a call reads, as the server labels it: the verb while it runs, once done, and its subject.
+pub(crate) fn label(doing: &str, done: &str, subject: &str) -> Label {
+    Label {
+        doing: doing.into(),
+        done: done.into(),
+        subject: subject.into(),
+    }
+}
+
+/// How a `bash` call of `command` reads.
+pub(crate) fn ran(command: &str) -> Label {
+    label("Running", "Ran", command)
+}
+
+/// Call `id` of `name` began.
+pub(crate) fn call(id: &str, name: &str, label: &Label) -> Event {
+    Event::Call {
+        call: id.into(),
+        name: name.into(),
+        label: label.clone(),
+    }
+}
+
+/// Call `id` of `name` ended with `outcome`.
+pub(crate) fn result(id: &str, name: &str, label: &Label, outcome: Outcome) -> Event {
+    Event::Result {
+        call: id.into(),
+        name: name.into(),
+        label: label.clone(),
+        outcome,
+    }
+}
+
+/// A call that ended well with `report`.
+pub(crate) fn done(report: &str) -> Outcome {
+    Outcome::Done {
+        report: report.into(),
+    }
+}
+
+/// A call that failed, or that the person refused when `declined`.
+pub(crate) fn failed(why: &str, declined: bool) -> Outcome {
+    Outcome::Failed {
+        why: why.into(),
+        declined,
+    }
 }
 
 /// Press `code` on `app`; what the person asked for, if anything.

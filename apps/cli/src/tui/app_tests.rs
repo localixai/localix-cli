@@ -1,13 +1,13 @@
 use std::sync::mpsc::sync_channel;
 use std::time::{Duration, Instant};
 
-use contracts::tool::ToolOutput;
 use crossterm::event::KeyCode;
-use serde_json::json;
 
 use super::*;
 use crate::tui::style;
-use crate::tui::test_support::{ctrl, history, key, next_entry, render, typed};
+use crate::tui::test_support::{
+    call, ctrl, done, failed, history, key, next_entry, ran, render, result, typed,
+};
 
 fn app() -> App {
     let commands = [
@@ -78,28 +78,11 @@ fn a_task_leaves_its_blocks_in_order() {
     let now = Instant::now();
     let mut app = app();
     app.event(Event::TaskStarted("list the files".into()), now);
-    let args = json!({"command": "ls"});
-    app.event(
-        Event::Call {
-            name: "bash".into(),
-            args: args.clone(),
-        },
-        now,
-    );
+    let ls = ran("ls");
+    app.event(call("c1", "bash", &ls), now);
     assert!(!app.shown().running.is_empty());
-    let outcome = Ok(ToolOutput {
-        report: "exit 0 in 0.0s\n### stdout\nREADME.md".into(),
-        state: None,
-        image: None,
-    });
-    app.event(
-        Event::Result {
-            name: "bash".into(),
-            args,
-            outcome,
-        },
-        now,
-    );
+    let outcome = done("exit 0 in 0.0s\n### stdout\nREADME.md");
+    app.event(result("c1", "bash", &ls, outcome), now);
     app.event(Event::Answer("One file: `README.md`.".into()), now);
     app.event(
         Event::TaskEnded {
@@ -376,14 +359,8 @@ fn leaving_ends_every_wait() {
 fn a_call_the_person_refused_says_what_they_said_not_an_error() {
     let now = Instant::now();
     let mut app = app();
-    let args = json!({"command": "git log"});
-    app.event(
-        Event::Call {
-            name: "bash".into(),
-            args: args.clone(),
-        },
-        now,
-    );
+    let git_log = ran("git log");
+    app.event(call("c1", "bash", &git_log), now);
     let (reply, _answer) = sync_channel(1);
     app.event(
         Event::Approve {
@@ -396,17 +373,8 @@ fn a_call_the_person_refused_says_what_they_said_not_an_error() {
     app.event(key(KeyCode::Char('3')), now);
     typed(&mut app, "not this repository", now);
     app.event(key(KeyCode::Enter), now);
-    let outcome = Err(contracts::tool::ToolError::Failed(
-        "not allowed: the person declined it".into(),
-    ));
-    app.event(
-        Event::Result {
-            name: "bash".into(),
-            args,
-            outcome,
-        },
-        now,
-    );
+    let outcome = failed("not allowed: the person declined it", true);
+    app.event(result("c1", "bash", &git_log, outcome), now);
     let lines = app.take_history();
     assert_eq!(lines[0].spans[0].style, style::waiting());
     insta::assert_snapshot!(lines.iter().map(style::plain).collect::<Vec<_>>().join("\n"), @r"
@@ -505,11 +473,9 @@ fn slash_then_arrows_then_enter_runs_the_command_chosen() {
 fn a_refusal_is_drawn_on_the_call_refused_not_on_another_that_failed_meanwhile() {
     let now = Instant::now();
     let mut app = app();
-    let (refused, other) = (json!({"command": "git log"}), json!({"command": "false"}));
-    for args in [&refused, &other] {
-        let (name, args) = ("bash".to_string(), args.clone());
-        app.event(Event::Call { name, args }, now);
-    }
+    let (refused, other) = (ran("git log"), ran("false"));
+    app.event(call("refused", "bash", &refused), now);
+    app.event(call("other", "bash", &other), now);
     let (reply, _answer) = sync_channel(1);
     app.event(
         Event::Approve {
@@ -521,23 +487,12 @@ fn a_refusal_is_drawn_on_the_call_refused_not_on_another_that_failed_meanwhile()
     );
     app.event(key(KeyCode::Esc), now);
     assert_eq!(app.lane().declined.as_deref(), Some(""));
-    let failed = |text: &str| Err(contracts::tool::ToolError::Failed(text.into()));
-    for (args, outcome) in [
-        (other, failed("exit 1")),
-        (
-            refused,
-            failed("not allowed: the person declined it; do not try the same thing another way"),
-        ),
+    let declined = "not allowed: the person declined it; do not try the same thing another way";
+    for (id, label, outcome) in [
+        ("other", other, failed("exit 1", false)),
+        ("refused", refused, failed(declined, true)),
     ] {
-        let name = "bash".to_string();
-        app.event(
-            Event::Result {
-                name,
-                args,
-                outcome,
-            },
-            now,
-        );
+        app.event(result(id, "bash", &label, outcome), now);
     }
     let shown = history(&mut app);
     assert!(!shown.contains("Skipped false"), "{shown}");
@@ -775,10 +730,10 @@ fn keys_within_300ms_of_a_hidden_question_are_ignored() {
     let now = Instant::now();
     let mut app = lanes(now);
     let (reply, answer) = sync_channel(1);
-    let question = contracts::person::Question {
+    let question = protocol::Question {
         id: "file".into(),
         text: "Which file?".into(),
-        choices: vec![contracts::person::Choice {
+        choices: vec![protocol::Choice {
             label: "a.rs".into(),
             description: String::new(),
         }],
@@ -880,12 +835,10 @@ fn a_long_history_shows_its_last_tasks_and_counts_the_rest() {
     let now = Instant::now();
     let mut app = app();
     let turns = (1..=25)
-        .map(|n| contracts::history::Turn {
+        .map(|n| protocol::Turn {
             goal: format!("task {n}"),
             answer: format!("answer {n}"),
             status: "achieved".into(),
-            at: n,
-            steps: vec![],
         })
         .collect();
     app.event(Event::Earlier(turns), now);
@@ -908,30 +861,19 @@ fn a_call_that_took_a_while_says_how_long_and_a_quick_one_says_nothing() {
     let mut app = app();
     app.event(Event::TaskStarted("go".into()), now);
     history(&mut app);
-    let ran = |app: &mut App, command: &str, took: u64| {
-        let args = json!({"command": command});
-        app.event(
-            Event::Call {
-                name: "bash".into(),
-                args: args.clone(),
-            },
-            now,
-        );
-        let outcome = Ok(ToolOutput::from("exit 0 in 0.0s".to_string()));
+    let run = |app: &mut App, command: &str, took: u64| {
+        let label = ran(command);
+        app.event(call(command, "bash", &label), now);
         let ended = now + Duration::from_millis(took);
         app.event(
-            Event::Result {
-                name: "bash".into(),
-                args,
-                outcome,
-            },
+            result(command, "bash", &label, done("exit 0 in 0.0s")),
             ended,
         );
         history(app).lines().next().unwrap_or("").to_string()
     };
     assert_eq!(
-        ran(&mut app, "cargo test", 3_240),
+        run(&mut app, "cargo test", 3_240),
         "• Ran cargo test · 3.2s"
     );
-    assert_eq!(ran(&mut app, "ls", 40), "• Ran ls");
+    assert_eq!(run(&mut app, "ls", 40), "• Ran ls");
 }

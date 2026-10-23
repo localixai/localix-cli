@@ -6,7 +6,6 @@ use std::sync::mpsc::SyncSender;
 use std::time::Instant;
 
 use ratatui::text::Line;
-use serde_json::Value;
 
 use super::event::Typed;
 
@@ -45,8 +44,8 @@ pub(crate) struct SessionView {
     pub parent: Option<String>,
     pub name: String,
     pub blocks: Vec<Vec<Line<'static>>>,
-    /// Its calls running, each with when it started.
-    pub running: Vec<(String, Value, Instant)>,
+    /// Its calls running, in the order they started.
+    pub running: Vec<Running>,
     /// When its task running started.
     pub busy: Option<Instant>,
     /// How long its finished tasks took, in milliseconds.
@@ -100,12 +99,31 @@ impl SessionView {
     }
 
     /// A lane with no name is named by the first line of its first task.
+    /// Its task began: it works, and the transcript shows what it was asked (not the mode
+    /// switch, which is no task of the person's).
+    pub(crate) fn started(
+        &mut self,
+        goal: &str,
+        now: Instant,
+        width: usize,
+    ) -> Option<Vec<Line<'static>>> {
+        self.busy = Some(now);
+        self.state = AgentState::Working;
+        if let Some(lane) = &mut self.lane {
+            lane.stopping = false;
+        }
+        if goal == protocol::SHIFT_TAB {
+            return None;
+        }
+        self.named_by(goal);
+        Some(super::cells::user(goal, width))
+    }
+
     pub(crate) fn named_by(&mut self, goal: &str) {
         if self.lane.is_none() || !self.name.is_empty() {
             return;
         }
-        let shown = super::steer::shown(goal);
-        let line = shown
+        let line = goal
             .lines()
             .find(|line| !line.trim().is_empty())
             .unwrap_or("");
@@ -135,6 +153,15 @@ pub(crate) struct LaneState {
     pub declined: Option<String>,
     /// Its own choices, asked while it was not shown: they wait until it is.
     pub held: Vec<(super::select::Select, super::app::Open)>,
+}
+
+/// A call running: its id, what it is and how it reads, and when it started.
+#[derive(Debug, Clone)]
+pub(crate) struct Running {
+    pub call: String,
+    pub name: String,
+    pub label: protocol::Label,
+    pub since: Instant,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

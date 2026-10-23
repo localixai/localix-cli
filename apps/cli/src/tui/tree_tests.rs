@@ -2,12 +2,11 @@ use std::time::Instant;
 
 use crossterm::event::KeyCode;
 use ratatui::text::Span;
-use serde_json::json;
 
 use super::*;
 use crate::tui::event::Event;
 use crate::tui::style;
-use crate::tui::test_support::{press, render as screen};
+use crate::tui::test_support::{call, label, press, ran, render as screen};
 
 fn rows(app: &App) -> Vec<String> {
     let spinner = |_| Span::raw("*");
@@ -38,24 +37,13 @@ fn each_session_is_a_row_the_shown_one_marked() {
     let now = Instant::now();
     let mut app = App::new(60, 20, vec![]);
     app.event(Event::TaskStarted("go".into()), now);
-    app.event(
-        Event::Call {
-            name: "agents".into(),
-            args: json!({"action": "send", "agent": "tests", "message": "run them"}),
-        },
-        now,
-    );
+    let send = label("Messaging", "Messaged", "agent tests · run them");
+    app.event(call("c1", "agents", &send), now);
     started(&mut app, "s1", "scout");
     started(&mut app, "s2", "tests");
     let agent = |event| Event::In("s2".into(), Box::new(event));
     app.event(agent(Event::TaskStarted("run them".into())), now);
-    app.event(
-        agent(Event::Call {
-            name: "bash".into(),
-            args: json!({"command": "cargo test"}),
-        }),
-        now,
-    );
+    app.event(agent(call("c2", "bash", &ran("cargo test"))), now);
     let ended = Event::TaskEnded {
         status: "achieved".into(),
         millis: 1,

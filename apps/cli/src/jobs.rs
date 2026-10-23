@@ -205,6 +205,15 @@ fn line(job: &Job) -> String {
     }
 }
 
+/// When `until` comes, in milliseconds since the epoch: the wire carries no `Instant`.
+fn epoch_ms(until: Instant) -> u64 {
+    let left = until.saturating_duration_since(Instant::now());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    u64::try_from((now + left).as_millis()).unwrap_or(u64::MAX)
+}
+
 /// A job as the interface lists it.
 fn row(job: &Job) -> JobRow {
     match &job.what {
@@ -212,7 +221,7 @@ fn row(job: &Job) -> JobRow {
             id: job.id.clone(),
             name: job.name.clone(),
             detail: command.clone(),
-            until: Some(*until),
+            until_at: Some(epoch_ms(*until)),
             next: None,
             events: job.events,
             lane: String::new(),
@@ -226,8 +235,8 @@ fn row(job: &Job) -> JobRow {
                 Some(cron) => format!("{} · {prompt}", cron.text()),
                 None => prompt.clone(),
             },
-            until: None,
-            next: Some(*next),
+            until_at: None,
+            next: Some(cron::clock(*next)),
             events: 0,
             lane: String::new(),
         },

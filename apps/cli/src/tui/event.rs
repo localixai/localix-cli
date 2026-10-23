@@ -4,20 +4,10 @@
 use std::path::PathBuf;
 use std::sync::mpsc::SyncSender;
 
-use contracts::person::{Answer, Question};
-use contracts::tool::{ToolError, ToolOutput};
 use crossterm::event::KeyEvent;
-use serde_json::Value;
+use protocol::{Adjustment, Answer, Label, Outcome, Question};
 
-/// The answer to an approval.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Approval {
-    Yes,
-    /// Yes, and the same tool is not asked about again.
-    Always,
-    /// No, and what the person said beside it.
-    No(Option<String>),
-}
+pub(crate) use protocol::{Approval, JobRow};
 
 /// What the person sent: the text, and the pictures attached to it.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -35,23 +25,6 @@ impl From<&str> for Typed {
     }
 }
 
-/// A job as the list under the composer shows it.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct JobRow {
-    pub id: String,
-    pub name: String,
-    /// Its command, or its cron and prompt.
-    pub detail: String,
-    /// A monitor's deadline.
-    pub until: Option<std::time::Instant>,
-    /// A schedule's next run, Unix seconds.
-    pub next: Option<u64>,
-    /// Batches a monitor gave.
-    pub events: usize,
-    /// The session whose job it is (set as it arrives): its stop is known under it.
-    pub lane: String,
-}
-
 pub(crate) enum Event {
     /// The session's first row: the version and what it runs with.
     Header(Vec<String>),
@@ -63,14 +36,17 @@ pub(crate) enum Event {
     /// The session takes its next entry; `None` goes back when the person quits.
     Ready(SyncSender<Option<Typed>>),
     TaskStarted(String),
+    /// A call began: `call` is its id, the same on its result.
     Call {
+        call: String,
         name: String,
-        args: Value,
+        label: Label,
     },
     Result {
+        call: String,
         name: String,
-        args: Value,
-        outcome: Result<ToolOutput, ToolError>,
+        label: Label,
+        outcome: Outcome,
     },
     /// One action of the browser's hands, under the call that runs them.
     Step(String),
@@ -108,7 +84,7 @@ pub(crate) enum Event {
         title: String,
         options: Vec<(String, String)>,
         marked: Option<usize>,
-        adjustments: Vec<crate::picker::Adjustment>,
+        adjustments: Vec<Adjustment>,
         reply: SyncSender<Option<(usize, usize)>>,
     },
     /// A line to type (a key, a pasted address), hidden when it is a secret.
@@ -120,17 +96,16 @@ pub(crate) enum Event {
     /// The question open no longer waits (the task was stopped): it closes unanswered.
     Dismiss,
     /// A resumed session's tasks so far, oldest first: shown above what it does next.
-    Earlier(Vec<contracts::history::Turn>),
+    Earlier(Vec<protocol::Turn>),
     /// What is known of the session changed (sent inside its [`Event::In`]): its title.
-    Updated(crate::meta::Update),
+    Updated(protocol::Update),
     /// A session of the interface began: its stop is known by its id.
     LaneStarted {
         id: String,
         name: String,
     },
-    /// This directory's saved sessions, newest first: each id, its first task, and when it ran
-    /// and how many tasks it has (`2 h ago · 4 tasks`).
-    Saved(Vec<(String, String, String)>),
+    /// This directory's saved sessions, newest first.
+    Saved(Vec<protocol::Saved>),
     /// Show lane `id`: the desk opened it, or it was asked for and is open already.
     Show(String),
     /// What happened in session `id` (a lane, or an agent): shown in its view.

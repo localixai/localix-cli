@@ -67,12 +67,14 @@ pub enum Event {
     Context(u8),
     /// The session's jobs, all of them, whenever they change.
     Jobs(Vec<JobRow>),
-    /// What the person sent that waits in the lane: for the task running, then for after it;
-    /// `ready` when the lane waits for its next entry.
+    /// What waits in the lane: the person's words for the task running, their entries for after
+    /// it, then what came back from the background (as the transcript will show it); `ready`
+    /// when the lane waits for its next entry.
     Queue {
         ready: bool,
         steered: Vec<String>,
         queued: Vec<String>,
+        background: Vec<String>,
     },
     /// The task running read what the person said to it: shown now as theirs.
     Steered(Vec<String>),

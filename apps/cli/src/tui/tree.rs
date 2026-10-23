@@ -172,15 +172,15 @@ fn hint(text: &str, width: usize) -> Line<'static> {
 fn jobs(app: &App, first: usize, names: usize, width: usize) -> Vec<Line<'static>> {
     let mut out = vec![];
     for (at, job) in app.views.jobs.iter().enumerate().take(ROWS) {
-        let (glyph, right) = match (job.until, job.next) {
+        let (glyph, right) = match (job.until_at, &job.next) {
             (Some(until), _) => {
-                let left = until.saturating_duration_since(Instant::now()).as_secs();
+                let left = until.saturating_sub(now_ms()) / 1000;
                 let events = cells::count(job.events as u64, "event");
                 let right = format!("{events} · {} left", cells::clock(left));
                 (Span::styled("≋", style::code()), right)
             }
             (None, next) => {
-                let when = next.map(crate::jobs::cron::clock).unwrap_or_default();
+                let when = next.clone().unwrap_or_default();
                 (Span::styled("◷", style::waiting()), format!("next {when}"))
             }
         };
@@ -237,6 +237,12 @@ fn more(count: usize, arrow: &str) -> Line<'static> {
         format!("  {arrow} {count} more"),
         style::dim(),
     ))
+}
+
+/// Now, in milliseconds since the epoch, as the wire gives times.
+fn now_ms() -> u64 {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+    u64::try_from(now.unwrap_or_default().as_millis()).unwrap_or(u64::MAX)
 }
 
 #[cfg(test)]

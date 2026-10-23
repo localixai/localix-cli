@@ -79,12 +79,14 @@ impl Ui {
     ) -> Option<Answer> {
         let (reply, answer) = sync_channel(1);
         self.send(Event::Ask {
-            question: question.clone(),
+            question: crate::server::wire::question(question),
             at,
             of,
             reply,
         });
-        self.wait(&answer, stopped).flatten()
+        self.wait(&answer, stopped)
+            .flatten()
+            .map(crate::server::wire::answer)
     }
 
     /// One of `options` (a label and a note each), starting on `marked`; `None` when cancelled.
@@ -110,7 +112,7 @@ impl Ui {
         title: &str,
         options: Vec<(String, String)>,
         marked: Option<usize>,
-        adjustments: Vec<crate::picker::Adjustment>,
+        adjustments: Vec<protocol::Adjustment>,
     ) -> Option<(usize, usize)> {
         let (reply, answer) = sync_channel(1);
         self.send(Event::ChooseAdjustable {

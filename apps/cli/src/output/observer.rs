@@ -6,6 +6,7 @@ use contracts::tool::{ToolError, ToolOutput};
 use ratatui::text::{Line, Span};
 
 use super::{Output, human, json, lock};
+use crate::server::{label::label, wire};
 use crate::tui::event::Event;
 use crate::tui::tool_cell::{self, State};
 use crate::tui::{cells, style, wrap};
@@ -14,15 +15,16 @@ impl Observer for Output {
     fn call(&self, call: &ToolCall) {
         let step = contracts::history::Step {
             what: call.name.clone(),
-            detail: wrap::cut(&tool_cell::doing(&call.name, &call.arguments), 120),
+            detail: wrap::cut(&tool_cell::doing(&label(&call.name, &call.arguments)), 120),
             at_ms: self.millis(),
             ..Default::default()
         };
         lock(&self.done).push((call.id.clone(), step));
         if let Some(ui) = &self.ui {
             return ui.send(Event::Call {
+                call: call.id.clone(),
                 name: call.name.clone(),
-                args: call.arguments.clone(),
+                label: label(&call.name, &call.arguments),
             });
         }
         if self.json {
@@ -44,28 +46,26 @@ impl Observer for Output {
         drop(done);
         if let Some(ui) = &self.ui {
             return ui.send(Event::Result {
+                call: call.id.clone(),
                 name: call.name.clone(),
-                args: call.arguments.clone(),
-                outcome: outcome.clone(),
+                label: label(&call.name, &call.arguments),
+                outcome: wire::outcome(outcome),
             });
         }
         if self.json {
             self.event(json::result(call, outcome, self.millis()));
         }
         if self.trace {
-            let done = State::Done(outcome);
-            self.block(&tool_cell::head(
-                &call.name,
-                &call.arguments,
-                &done,
-                self.width,
-            ));
+            let outcome = wire::outcome(outcome);
+            let done = State::Done(&outcome);
+            let label = label(&call.name, &call.arguments);
+            self.block(&tool_cell::head(&call.name, &label, &done, self.width));
             let steps: Vec<String> = lock(&self.steps).drain(..).collect();
             for step in steps {
                 let step = wrap::cut(&format!("  · {step}"), self.width);
                 self.lines(&[Line::from(Span::styled(step, style::dim()))]);
             }
-            self.lines(&tool_cell::body(&call.name, outcome, self.width));
+            self.lines(&tool_cell::body(&call.name, &outcome, self.width));
         }
     }
 

@@ -133,12 +133,6 @@ fn the_end_rule_says_a_limit_ran_out_and_a_goal_was_not_achieved() {
 }
 
 #[test]
-fn init_reads_as_the_command_typed() {
-    let rows = user(crate::commands::extras::INIT, 60);
-    assert_eq!(shown(rows), "❯ /init");
-}
-
-#[test]
 fn a_wide_row_of_a_table_wraps_under_its_second_column() {
     let rows = note(
         "* default     Each command and file change is asked about first.\n  plan        Investigate and plan: no file changes at all.",

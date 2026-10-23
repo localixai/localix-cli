@@ -44,7 +44,7 @@ pub(crate) fn start(rig: &Rig, goal: &str) {
         };
         let update = Update { title: Some(title) };
         pending.post(&history, &id, update.clone());
-        ui.send(Event::Updated(update));
+        ui.send(Event::Updated(crate::server::wire::update(&update)));
     });
     // No thread: the session stays untitled, and the naming ends with the closure, as on a
     // failed request.

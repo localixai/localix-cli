@@ -23,11 +23,7 @@ impl Item {
 }
 
 /// One row's inline values and the value initially selected.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct Adjustment {
-    pub values: Vec<String>,
-    pub at: usize,
-}
+pub(crate) use protocol::Adjustment;
 
 pub(crate) trait Picker {
     /// The index of the option chosen; `None` when the person cancels.

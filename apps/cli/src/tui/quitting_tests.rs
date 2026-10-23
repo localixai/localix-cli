@@ -23,12 +23,18 @@ fn two(b_works: bool, now: Instant) -> App {
     app
 }
 
+/// Ten minutes from now, in milliseconds since the epoch, as the wire gives a deadline.
+fn in_ten_minutes() -> u64 {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+    u64::try_from(now.unwrap().as_millis()).unwrap() + 600_000
+}
+
 fn monitor() -> JobRow {
     JobRow {
         id: "job-1".into(),
         name: "watch-ci".into(),
         detail: "gh run watch".into(),
-        until: Some(Instant::now() + std::time::Duration::from_secs(600)),
+        until_at: Some(in_ten_minutes()),
         next: None,
         events: 0,
         lane: String::new(),

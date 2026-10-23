@@ -5,16 +5,15 @@
 
 use std::time::Instant;
 
-use contracts::tool::{ToolError, ToolOutput};
+use protocol::{Label, Outcome};
 use ratatui::text::{Line, Span};
-use serde_json::Value;
 
-use super::app::{Action, App, SHIFT_TAB};
+use super::app::{Action, App};
 use super::cells;
 use super::event::{Event, Typed};
 use super::style;
 use super::tool_cell::{self, State};
-pub(crate) use super::views::{AgentState, LaneState, SessionView, Views};
+pub(crate) use super::views::{AgentState, LaneState, Running, SessionView, Views};
 use crate::printable::printable;
 
 mod ends;
@@ -31,26 +30,25 @@ const STEPS: usize = 3;
 pub(crate) fn result_block(
     declined: &mut Option<String>,
     name: &str,
-    args: &Value,
-    outcome: &Result<ToolOutput, ToolError>,
+    label: &Label,
+    outcome: &Outcome,
     width: usize,
 ) -> Vec<Line<'static>> {
     match (declined.take(), outcome) {
-        (Some(said), Err(ToolError::Failed(why))) if why.contains(crate::gate::DECLINED) => {
-            tool_cell::declined(name, args, &said, width)
+        (Some(said), Outcome::Failed { declined: true, .. }) => {
+            tool_cell::declined(label, &said, width)
         }
         (said, _) => {
             *declined = said;
-            tool_cell::lines(name, args, State::Done(outcome), width)
+            tool_cell::lines(name, label, State::Done(outcome), width)
         }
     }
 }
 
-/// The call `name` with `args` is no longer running.
-fn finish_call(running: &mut Vec<(String, Value, Instant)>, name: &str, args: &Value) {
-    if let Some(at) = running.iter().position(|(n, a, _)| n == name && a == args) {
-        running.remove(at);
-    }
+/// The call `call` is no longer running; when it started, if it was.
+fn finish_call(running: &mut Vec<Running>, call: &str) -> Option<Instant> {
+    let at = running.iter().position(|running| running.call == call)?;
+    Some(running.remove(at).since)
 }
 
 impl App {
@@ -72,30 +70,26 @@ impl App {
             Event::Note(text) if agent => cells::user(&text, width),
             Event::Note(text) => cells::note(&text, width),
             Event::Error(text) => cells::error(&text, width),
-            Event::TaskStarted(goal) => {
-                view.busy = Some(now);
-                view.state = AgentState::Working;
-                if let Some(lane) = &mut view.lane {
-                    lane.stopping = false;
-                }
-                if goal == SHIFT_TAB {
-                    return None;
-                }
-                view.named_by(&goal);
-                cells::user(&super::steer::shown(&goal), width)
-            }
-            Event::Call { name, args } => {
-                view.running.push((name, args, now));
+            Event::TaskStarted(goal) => view.started(&goal, now, width)?,
+            Event::Call { call, name, label } => {
+                let since = now;
+                view.running.push(Running {
+                    call,
+                    name,
+                    label,
+                    since,
+                });
                 if let Some(lane) = &mut view.lane {
                     lane.steps.clear();
                 }
                 return None;
             }
             Event::Result {
+                call,
                 name,
-                args,
+                label,
                 outcome,
-            } => self.call_ended(at, &name, &args, &outcome, now),
+            } => self.call_ended(at, &call, &name, &label, &outcome, now),
             Event::Answer(text) if !text.trim().is_empty() => cells::agent(&text, width),
             Event::Answer(_) => return None,
             Event::TaskEnded {
@@ -240,7 +234,7 @@ impl App {
     }
 
     /// The calls running and when the task started, in the view shown.
-    pub(crate) fn shown_work(&self) -> (&[(String, Value, Instant)], Option<Instant>) {
+    pub(crate) fn shown_work(&self) -> (&[Running], Option<Instant>) {
         let view = self.shown();
         (&view.running, view.busy)
     }

@@ -9,8 +9,8 @@ use contracts::gate::{Effect, Gate, Verdict};
 use contracts::tool::{ToolError, ToolOutput};
 
 use crate::output::Output;
+use crate::server::label::label;
 use crate::tui::event::Event;
-use crate::tui::tool_cell;
 
 /// Watches one agent's run.
 pub(crate) struct Watch<'a> {
@@ -31,19 +31,24 @@ impl Watch<'_> {
 
 impl Observer for Watch<'_> {
     fn call(&self, call: &ToolCall) {
+        let label = label(&call.name, &call.arguments);
+        let what = format!("{} {}", label.done, label.subject)
+            .trim()
+            .to_string();
         self.show(Event::Call {
+            call: call.id.clone(),
             name: call.name.clone(),
-            args: call.arguments.clone(),
+            label,
         });
-        let what = tool_cell::summary(&call.name, &call.arguments);
         self.output.substep(format!("{}: {what}", self.name));
     }
 
     fn result(&self, call: &ToolCall, outcome: &Result<ToolOutput, ToolError>) {
         self.show(Event::Result {
+            call: call.id.clone(),
             name: call.name.clone(),
-            args: call.arguments.clone(),
-            outcome: outcome.clone(),
+            label: label(&call.name, &call.arguments),
+            outcome: crate::server::wire::outcome(outcome),
         });
     }
 

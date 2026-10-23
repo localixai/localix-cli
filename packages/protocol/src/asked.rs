@@ -78,7 +78,7 @@ pub struct Answer {
 }
 
 /// A value a row adjusts inline: its choices and the one set.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Adjustment {
     pub values: Vec<String>,
     pub at: usize,

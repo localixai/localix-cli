@@ -139,7 +139,11 @@ impl<'e> Desk<'e> {
         let rows = saved.iter().take(SAVED);
         let rows = rows.map(|session| {
             let (title, meta) = crate::commands::sessions::brief(session);
-            (session.id.clone(), title, meta)
+            protocol::Saved {
+                id: session.id.clone(),
+                title,
+                meta,
+            }
         });
         self.ui.send(Event::Saved(rows.collect()));
     }

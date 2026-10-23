@@ -49,7 +49,7 @@ every new file already goes where its target crate will be.
 | Core | `agent`, `decision-loop` | `contracts` |
 | Adapters | `tools`, `session` | `contracts` |
 | Adapters | `providers/{models,openai,openrouter}` | `contracts`, `kit` |
-| Client | `client` (target: in-process and socket transports) | `protocol` |
+| Client | `client` (in process; the socket in D3) | `protocol` |
 | Server | `apps/server` (target) | every package but `client` |
 | Interface | `apps/tui` (target) | `client`, `protocol` |
 | Binary | `apps/cli` | `server`, `tui`, `client` |
@@ -72,8 +72,9 @@ every new file already goes where its target crate will be.
 - **L7** (_checked_ with the crate): the interface depends only on `client` and `protocol`: never
   on the agent, tools, providers, the session store or the server. What it needs to show, the
   protocol carries (Codex's `verify_tui_core_boundary`).
-- **L8** (_checked_ with the crate): the server is the only crate that serves the protocol and
-  the only one that knows every package; the client the only one that knows the socket.
+- **L8** _checked_ for the client: the server is the only crate that serves the protocol and
+  the only one that knows every package; the client knows only the protocol, and is the only
+  one that knows the socket.
 - **L9**: a new edge between crates is a design change, recorded here first. A new `pub` item is
   an API change: visibility is the tightest that compiles (`pub(super)`, `pub(crate)`), and
   `pub use` across crates is not used to reach past a layer.

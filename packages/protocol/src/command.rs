@@ -16,6 +16,8 @@ pub enum Command {
     Interrupt { session: String },
     /// Stop what runs under `id` (a lane's task, an agent, a job), and never quit for it.
     Halt { id: String },
+    /// Close an idle lane: its prompt is given nothing, and it ends (to make room for another).
+    Close { session: String },
     /// Open a lane, or show it when it is open already.
     Open { target: Target },
     /// This directory's saved sessions, for the list.

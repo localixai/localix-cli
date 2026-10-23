@@ -32,6 +32,7 @@ mod output;
 mod picker;
 mod printable;
 mod providers;
+mod server;
 #[cfg(test)]
 mod testing;
 mod tui;

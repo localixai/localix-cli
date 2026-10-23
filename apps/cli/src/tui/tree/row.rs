@@ -5,11 +5,10 @@ use std::time::Instant;
 
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use serde_json::Value;
 
 use super::{cells, ending, tokens};
 use crate::printable::printable;
-use crate::tui::agents::{AgentState, SessionView};
+use crate::tui::agents::{AgentState, Running, SessionView};
 use crate::tui::style;
 use crate::tui::tool_cell;
 use crate::tui::wrap::{cut, width as text_width};
@@ -57,9 +56,8 @@ pub(super) fn session_row<'a>(
 }
 
 /// What the calls running do: the first, and how many more.
-fn doing(running: &[(String, Value, Instant)]) -> Option<String> {
-    let (name, args, _) = running.first()?;
-    let first = tool_cell::doing(name, args);
+fn doing(running: &[Running]) -> Option<String> {
+    let first = tool_cell::doing(&running.first()?.label);
     Some(match running.len() {
         1 => first,
         n => format!("{first} +{} more", n - 1),

@@ -37,7 +37,8 @@ fn every_crate_takes_the_workspace_lints() {
 }
 
 /// The crates that call no OS directly: the vocabulary, the core, the stores, the providers.
-const SAFE: [&str; 7] = [
+const SAFE: [&str; 8] = [
+    "packages/client",
     "packages/contracts",
     "packages/protocol",
     "packages/agent",

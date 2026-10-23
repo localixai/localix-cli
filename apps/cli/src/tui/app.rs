@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::sync::mpsc::SyncSender;
 use std::time::Instant;
 
-use contracts::person::Answer;
+use protocol::Answer;
 use ratatui::text::Line;
 
 use super::agents::{LaneState, Views};
@@ -42,7 +42,7 @@ pub(crate) enum Action {
 }
 
 /// What Shift+Tab sends: the session reads it as the plan-mode switch.
-pub(crate) const SHIFT_TAB: &str = "\u{1b}[Z";
+pub(crate) use protocol::SHIFT_TAB;
 
 /// A question open, and where its answer goes.
 pub(crate) enum Open {
@@ -184,7 +184,7 @@ impl App {
                 None
             }
             Event::Saved(rows) => {
-                self.saved(rows);
+                self.saved(rows.into_iter().map(|s| (s.id, s.title, s.meta)).collect());
                 None
             }
             // What names no session is the lane's shown.

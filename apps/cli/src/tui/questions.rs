@@ -1,7 +1,7 @@
 //! The questions the session puts to the person, as choices: an approval, one of the model's
 //! questions, a choice of llx's own; and the answer each pick sends back.
 
-use contracts::person::{Answer, Question};
+use protocol::{Answer, Question};
 use ratatui::text::{Line, Span};
 
 use super::app::Open;

@@ -1,23 +1,23 @@
-use contracts::tool::{ToolError, ToolOutput};
-use serde_json::{Value, json};
-
 use super::*;
 use crate::tui::style;
 
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "a scripted tool reply, which is a call's result"
-)]
-fn done(report: &str) -> Result<ToolOutput, ToolError> {
-    Ok(ToolOutput {
+fn done(report: &str) -> Outcome {
+    Outcome::Done {
         report: report.into(),
-        state: None,
-        image: None,
-    })
+    }
 }
 
-fn shown(name: &str, args: Value, state: State, width: usize) -> String {
-    let lines = lines(name, &args, state, width);
+/// How a call reads, as the server says it.
+fn said(doing: &str, done: &str, subject: &str) -> Label {
+    Label {
+        doing: doing.into(),
+        done: done.into(),
+        subject: subject.into(),
+    }
+}
+
+fn shown(name: &str, label: Label, state: State, width: usize) -> String {
+    let lines = lines(name, &label, state, width);
     lines
         .iter()
         .map(style::plain)
@@ -30,8 +30,8 @@ fn a_command_shows_the_ends_of_what_it_printed() {
     let printed: Vec<String> = (1..=12).map(|n| format!("line {n}")).collect();
     let report = format!("exit 0 in 0.4s\n### stdout\n{}", printed.join("\n"));
     insta::assert_snapshot!([
-        shown("bash", json!({"command": "seq 12 | sed 's/^/line /'"}), State::Done(&done(&report)), 80),
-        shown("bash", json!({"command": "touch a"}), State::Done(&done("exit 0 in 0.0s, no output")), 80),
+        shown("bash", said("Running", "Ran", "seq 12 | sed 's/^/line /'"), State::Done(&done(&report)), 80),
+        shown("bash", said("Running", "Ran", "touch a"), State::Done(&done("exit 0 in 0.0s, no output")), 80),
     ].join("\n"), @r"
     • Ran seq 12 | sed 's/^/line /'
       └ line 1
@@ -48,7 +48,7 @@ fn a_command_shows_the_ends_of_what_it_printed() {
 #[test]
 fn a_long_command_wraps_under_a_rule_and_long_output_is_cut() {
     let report = format!("exit 0 in 1.0s\n### stdout\n{}", "x".repeat(100));
-    insta::assert_snapshot!(shown("bash", json!({"command": "find . -maxdepth 3 -not -path '*/node_modules/*' -not -path '*/.git/*' -name '*.rs'"}), State::Done(&done(&report)), 48), @r"
+    insta::assert_snapshot!(shown("bash", said("Running", "Ran", "find . -maxdepth 3 -not -path '*/node_modules/*' -not -path '*/.git/*' -name '*.rs'"), State::Done(&done(&report)), 48), @r"
     • Ran find . -maxdepth 3 -not -path
       │ '*/node_modules/*' -not -path '*/.git/*'
       │ -name '*.rs'
@@ -61,7 +61,7 @@ fn a_failing_command_ends_with_how_it_exited_in_red() {
     let outcome = done("exit 101 in 2.1s\n### stderr\nerror[E0425]: cannot find value `x`");
     let lines = lines(
         "bash",
-        &json!({"command": "cargo build"}),
+        &said("Running", "Ran", "cargo build"),
         State::Done(&outcome),
         80,
     );
@@ -78,7 +78,7 @@ fn a_failing_command_ends_with_how_it_exited_in_red() {
 fn a_running_call_has_a_dim_bullet_and_a_present_verb() {
     let lines = lines(
         "bash",
-        &json!({"command": "cargo test"}),
+        &said("Running", "Ran", "cargo test"),
         State::Running,
         80,
     );
@@ -92,10 +92,10 @@ fn files_say_what_changed() {
     let edited = done("Edited src/a.rs: replaced 1 occurrence (+3 -1 lines).\n12 fn a() {}");
     let created = done("Created site/index.html (48 lines).");
     insta::assert_snapshot!([
-        shown("read", json!({"path": "src/lib.rs"}), State::Done(&done("1 use x;")), 80),
-        shown("read", json!({"path": "src/lib.rs", "offset": 40}), State::Done(&done("40 x")), 80),
-        shown("edit", json!({"path": "src/a.rs", "old_string": "a", "new_string": "b"}), State::Done(&edited), 80),
-        shown("edit", json!({"path": "site/index.html", "old_string": "", "new_string": "<h1>"}), State::Done(&created), 80),
+        shown("read", said("Reading", "Read", "src/lib.rs"), State::Done(&done("1 use x;")), 80),
+        shown("read", said("Reading", "Read", "src/lib.rs from line 40"), State::Done(&done("40 x")), 80),
+        shown("edit", said("Editing", "Edited", "src/a.rs"), State::Done(&edited), 80),
+        shown("edit", said("Creating", "Created", "site/index.html"), State::Done(&created), 80),
     ].join("\n"), @r"
     • Read src/lib.rs
     • Read src/lib.rs from line 40
@@ -111,7 +111,12 @@ fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
     let outcome = done(
         "Edited a.rs: replaced 1 occurrence (+1 -1 lines).\n\nDiff:\n@@ -181,3 +181,3 @@\n target: 'bun',\n-throw: true,\n+throw: false,\n end",
     );
-    let rendered = lines("edit", &json!({"path":"a.rs"}), State::Done(&outcome), 60);
+    let rendered = lines(
+        "edit",
+        &said("Editing", "Edited", "a.rs"),
+        State::Done(&outcome),
+        60,
+    );
     let screen = rendered
         .iter()
         .map(style::plain)
@@ -136,7 +141,12 @@ fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
         "Created x (1 line).\n\nDiff:\n@@ -0,0 +1,1 @@\n+    {}",
         "x".repeat(80)
     );
-    let rendered = lines("edit", &json!({"path":"x"}), State::Done(&done(&long)), 30);
+    let rendered = lines(
+        "edit",
+        &said("Editing", "Edited", "x"),
+        State::Done(&done(&long)),
+        30,
+    );
     assert!(
         rendered
             .iter()
@@ -164,7 +174,12 @@ fn diff_backgrounds_fill_changed_rows_including_wraps_but_not_context() {
 
     let report =
         done("Edited x.\n\nDiff:\n@@ -1,2 +1,2 @@\n context\n-old\n+abcdefghijklmnopqrstuvwxyz");
-    let rendered = lines("edit", &json!({"path":"x"}), State::Done(&report), 24);
+    let rendered = lines(
+        "edit",
+        &said("Editing", "Edited", "x"),
+        State::Done(&report),
+        24,
+    );
     let area = Rect::new(0, 0, 24, u16::try_from(rendered.len()).unwrap());
     let mut buffer = Buffer::empty(area);
     Paragraph::new(rendered.clone()).render(area, &mut buffer);
@@ -189,7 +204,7 @@ fn separated_diff_hunks_keep_their_line_numbers_and_a_visible_gap() {
     );
     let shown = shown(
         "edit",
-        json!({"path":"x", "old_string":"a"}),
+        said("Editing", "Edited", "x"),
         State::Done(&report),
         60,
     );
@@ -200,10 +215,11 @@ fn separated_diff_hunks_keep_their_line_numbers_and_a_visible_gap() {
 
 #[test]
 fn a_failed_call_shows_why() {
-    let outcome = Err(ToolError::Failed(
-        "old_string was not found in src/a.rs".into(),
-    ));
-    insta::assert_snapshot!(shown("edit", json!({"path": "src/a.rs", "old_string": "a"}), State::Done(&outcome), 80), @r"
+    let outcome = Outcome::Failed {
+        why: "old_string was not found in src/a.rs".into(),
+        declined: false,
+    };
+    insta::assert_snapshot!(shown("edit", said("Editing", "Edited", "src/a.rs"), State::Done(&outcome), 80), @r"
     • Edited src/a.rs
       └ old_string was not found in src/a.rs
     ");
@@ -212,10 +228,10 @@ fn a_failed_call_shows_why() {
 #[test]
 fn window_calls_and_questions() {
     insta::assert_snapshot!([
-        shown("window", json!({"action": "open", "kind": "terminal", "command": "python3 -q"}), State::Running, 80),
-        shown("window", json!({"action": "interact", "tab": "w1", "goal": "Click Buy; done when the cart shows 1"}), State::Done(&done("w1: ### Helper: done (90% sure)\nmore")), 80),
-        shown("ask", json!({"questions": [{}, {}]}), State::Running, 80),
-        shown("ask", json!({"questions": [{}]}), State::Done(&done("The person answered:\n- colour: Blue")), 80),
+        shown("window", said("Opening", "Opened", "python3 -q"), State::Running, 80),
+        shown("window", said("Working in", "Worked in", "w1: Click Buy; done when the cart shows 1"), State::Done(&done("w1: ### Helper: done (90% sure)\nmore")), 80),
+        shown("ask", said("Asking", "Asked", "2 questions"), State::Running, 80),
+        shown("ask", said("Asking", "Asked", "1 question"), State::Done(&done("The person answered:\n- colour: Blue")), 80),
     ].join("\n"), @r"
     • Opening python3 -q
     • Worked in w1: Click Buy; done when the cart shows 1
@@ -230,50 +246,9 @@ fn window_calls_and_questions() {
 fn control_characters_cannot_reach_the_terminal() {
     let text = shown(
         "bash",
-        json!({"command": "echo \u{1b}[2J"}),
+        said("Running", "Ran", "echo \u{1b}[2J"),
         State::Done(&done("exit 0 in 0.0s\n### stdout\n\u{1b}[2Jhi")),
         80,
     );
     assert!(!text.contains('\u{1b}'), "{text}");
-}
-
-#[test]
-fn a_window_call_says_what_it_opens_and_which_tab_it_acts_in() {
-    let said = |args: Value| doing("window", &args);
-    assert_eq!(said(json!({"action": "list"})), "Listing the window's tabs");
-    assert_eq!(
-        said(json!({"action": "show", "tab": "t2"})),
-        "Showing tab t2"
-    );
-    assert_eq!(
-        said(json!({"action": "close", "tabs": ["w1", "t2"]})),
-        "Closing tabs w1, t2"
-    );
-    assert_eq!(
-        said(json!({"action": "open", "kind": "browser", "url": "github.com"})),
-        "Opening github.com"
-    );
-    assert_eq!(
-        said(json!({"action": "open", "tabs": [
-            {"kind": "terminal", "command": "claude"},
-            {"kind": "browser", "url": "example.org"}
-        ]})),
-        "Opening claude, example.org"
-    );
-    assert_eq!(
-        said(json!({"action": "interact", "tab": "t1", "goal": "Answer yes"})),
-        "Working in t1: Answer yes"
-    );
-    assert_eq!(
-        said(json!({"action": "interact", "tab": "t1", "input": "hi", "keys": ["Enter"]})),
-        "Typing in t1: hi [Enter]"
-    );
-    assert_eq!(
-        said(json!({"action": "screenshot", "tab": "w1"})),
-        "Picturing tab w1"
-    );
-    assert_eq!(
-        said(json!({"action": "resize", "width": 1100, "height": 760})),
-        "Sizing the window to 1100×760"
-    );
 }

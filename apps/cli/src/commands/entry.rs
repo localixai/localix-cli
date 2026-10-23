@@ -1,7 +1,7 @@
 //! What is typed at a session's prompt: the slash commands and the help.
 
 use crate::mode::Mode;
-use crate::tui::app::SHIFT_TAB;
+use protocol::SHIFT_TAB;
 
 pub(crate) const HELP: &str = "Type a task and press Enter; each one goes on from the last.
   /model            choose the model and its reasoning level (of the providers signed in to)
@@ -31,8 +31,7 @@ Keys
   Ctrl-C            stop the task, clear the line, or twice to quit\n";
 
 /// What Shift+Up and Shift+Down send: a level higher or lower.
-pub(crate) const MORE_REASONING: &str = "\u{1b}[1;2A";
-pub(crate) const LESS_REASONING: &str = "\u{1b}[1;2B";
+pub(crate) use protocol::{LESS_REASONING, MORE_REASONING};
 
 /// One entry at the prompt.
 #[derive(Debug, PartialEq, Eq)]

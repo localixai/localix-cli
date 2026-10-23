@@ -48,7 +48,11 @@ fn three(now: Instant) -> App {
 }
 
 fn saved() -> Event {
-    let row = |id: &str, title: &str, meta: &str| (id.into(), title.into(), meta.into());
+    let row = |id: &str, title: &str, meta: &str| protocol::Saved {
+        id: id.into(),
+        title: title.into(),
+        meta: meta.into(),
+    };
     Event::Saved(vec![
         row("B", "fix the flaky jobs test", "2 h ago · 4 tasks"),
         row("old", "make the binary smaller", "1 d ago · 1 task"),
@@ -263,7 +267,7 @@ fn an_empty_session_has_a_clear_name_and_current_marker() {
 fn a_title_made_in_the_background_renames_the_session_where_it_is_listed() {
     let now = Instant::now();
     let mut app = three(now);
-    let title = crate::meta::Update {
+    let title = protocol::Update {
         title: Some("Fix the flaky jobs test".into()),
     };
     app.event(from("B", Event::Updated(title)), now);

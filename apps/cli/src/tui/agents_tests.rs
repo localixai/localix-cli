@@ -1,12 +1,10 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use contracts::tool::ToolOutput;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use serde_json::json;
 
 use super::*;
-use crate::tui::test_support::{Term, press, typed};
+use crate::tui::test_support::{Term, call, done, label, press, result, typed};
 
 fn app() -> App {
     App::new(60, 20, vec![])
@@ -31,11 +29,12 @@ fn with_scout_as(id: &str, now: Instant) -> App {
     in_agent(
         &mut app,
         id,
-        Event::Result {
-            name: "read".into(),
-            args: json!({"path": "src/lib.rs"}),
-            outcome: Ok(ToolOutput::default()),
-        },
+        result(
+            "c1",
+            "read",
+            &label("Reading", "Read", "src/lib.rs"),
+            done(""),
+        ),
         now,
     );
     app
@@ -290,8 +289,8 @@ fn job(id: &str, name: &str) -> super::super::event::JobRow {
         id: id.into(),
         name: name.into(),
         detail: format!("say {name}"),
-        until: None,
-        next: Some(0),
+        until_at: None,
+        next: Some("00:00".into()),
         events: 0,
         lane: String::new(),
     }
@@ -371,11 +370,8 @@ fn tagged_events_reach_their_own_view() {
         );
     }
     let lane = |id: &str, event| Event::In(id.into(), Box::new(event));
-    let call = Event::Call {
-        name: "read".into(),
-        args: json!({"path": "a.rs"}),
-    };
-    app.event(lane("A", call), now);
+    let read = call("c1", "read", &label("Reading", "Read", "a.rs"));
+    app.event(lane("A", read), now);
     app.event(lane("B", Event::Answer("from b".into())), now);
     let (a, b) = (app.views.find("A").unwrap(), app.views.find("B").unwrap());
     let (a, b) = (&app.views.sessions[a], &app.views.sessions[b]);

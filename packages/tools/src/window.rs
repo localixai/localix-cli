@@ -57,6 +57,8 @@ pub struct WindowTab {
     pub shown: bool,
     /// The tab the browser acts on.
     pub acted_on: bool,
+    /// What it was opened for (a project), as whoever holds the window names it.
+    pub group: String,
 }
 
 /// The window the person watches, as whoever holds it lets it be read and changed.
@@ -66,6 +68,8 @@ pub trait Windowed: Send + Sync {
     fn act(&self, act: Act, tab: &str) -> Result<(), String>;
     /// Size the whole window, in points.
     fn resize(&self, width: u32, height: u32) -> Result<(), String>;
+    /// Tab `tab` was opened through this hold of the window: it is of the holder's group.
+    fn opened(&self, _tab: &str) {}
 }
 
 /// A tab just opened: its id among its kind's, and what opening it gave.

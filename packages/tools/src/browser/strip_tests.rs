@@ -30,10 +30,12 @@ fn the_tabs_reach_the_page_as_data() {
         Item {
             key: Key::Web(1),
             title: "</script><img src=x onerror=alert(1)>".into(),
+            group: "llx".into(),
         },
         Item {
             key: Key::Term(2),
             title: "session 2 · python3".into(),
+            group: "llx".into(),
         },
     ];
     let script = script(&items, Key::Term(2));
@@ -63,7 +65,60 @@ fn an_empty_title_reads_as_what_the_tab_is() {
     let items = [Item {
         key: Key::Web(1),
         title: String::new(),
+        group: String::new(),
     }];
     let script = script(&items, Key::Web(1));
     assert!(script.contains("\"title\":\"New tab\""), "{script}");
+}
+
+fn item(key: Key, title: &str, group: &str) -> Item {
+    Item {
+        key,
+        title: title.into(),
+        group: group.into(),
+    }
+}
+
+#[test]
+fn one_project_draws_as_it_always_has() {
+    let items = [
+        item(Key::Web(1), "Docs", "llx"),
+        item(Key::Term(2), "make", "llx"),
+    ];
+    assert_eq!(
+        script(&items, Key::Web(1)),
+        r#"S({"shown":"w1","tabs":[{"key":"w1","kind":"web","title":"Docs"},{"key":"t2","kind":"term","title":"make"}]})"#
+    );
+}
+
+#[test]
+fn several_projects_draw_their_tabs_together_each_named_once() {
+    let items = [
+        item(Key::Web(1), "Docs", "llx"),
+        item(Key::Term(2), "make", "<b>shop</b>"),
+        item(Key::Web(3), "Issues", "llx"),
+    ];
+    let script = script(&items, Key::Web(1));
+    let json = script
+        .strip_prefix("S(")
+        .and_then(|s| s.strip_suffix(')'))
+        .unwrap();
+    let data: serde_json::Value = serde_json::from_str(json).unwrap();
+    let tabs = data["tabs"].as_array().unwrap();
+    let keys: Vec<&str> = tabs
+        .iter()
+        .map(|tab| tab["key"].as_str().unwrap())
+        .collect();
+    assert_eq!(keys, ["w1", "w3", "t2"]);
+    let labels: Vec<&serde_json::Value> = tabs.iter().map(|tab| &tab["group"]).collect();
+    assert_eq!(
+        labels,
+        [
+            &serde_json::json!("llx"),
+            &serde_json::Value::Null,
+            &serde_json::json!("<b>shop</b>")
+        ]
+    );
+    // A project's name is set as text too.
+    assert!(PAGE.contains("label.textContent = tab.group"));
 }

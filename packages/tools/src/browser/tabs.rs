@@ -14,6 +14,7 @@ use wry::WebView;
 use super::frame::fill;
 use super::host::{Cmd, Shared, Window};
 use super::platform::keep_tab_rendering;
+use super::strip::Key;
 use super::tab_view::{SHARED, build, builder, share};
 
 /// Tabs open at once: each is a WebView with its own web process.
@@ -106,6 +107,11 @@ impl Tabs {
             }
             None => return Err(format!("{MAX_TABS} tabs are open already: close one first")),
         };
+        // Of the project of the tab it was opened from, until its opener names its own.
+        let mut groups = crate::lock(&shared.groups);
+        let opener = groups.get(&Key::Web(self.active).name()).cloned();
+        groups.insert(Key::Web(id).name(), opener.unwrap_or_default());
+        drop(groups);
         self.active = id;
         shared.set_tabs(id, &self.ids());
         Ok(id)

@@ -15,15 +15,18 @@ body{display:flex;align-items:center;gap:4px;padding:0 8px;box-sizing:border-box
 .n{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .x{flex:none;width:16px;height:16px;border-radius:4px;display:grid;place-items:center;opacity:0}
 .t:hover .x,.t.on .x{opacity:.6}
+.g{flex:none;padding:0 2px 0 10px;font-size:11px;font-weight:600;opacity:.45;white-space:nowrap}
+.g:first-child{padding-left:2px}
 .x:hover{opacity:1!important;background:color-mix(in srgb,currentColor 14%,transparent)}
 </style>
 </head>
 <body>
 <script>
 "use strict";
-// Draw the tabs; every title is set as text. A click says which tab, and what to do with it.
+// Draw the tabs, a project's name before its first; every name is set as text. A click says
+// which tab, and what to do with it.
 function S(data) {
-  document.body.replaceChildren(...data.tabs.map((tab) => {
+  document.body.replaceChildren(...data.tabs.flatMap((tab) => {
     const item = document.createElement("div");
     item.className = tab.key === data.shown ? "t on" : "t";
     item.title = tab.title;
@@ -42,7 +45,11 @@ function S(data) {
     });
     item.addEventListener("click", () => window.ipc.postMessage("show " + tab.key));
     item.append(icon, name, close);
-    return item;
+    if (tab.group === undefined) return [item];
+    const label = document.createElement("span");
+    label.className = "g";
+    label.textContent = tab.group;
+    return [label, item];
   }));
 }
 </script>

@@ -109,6 +109,12 @@ process environment): commands run in the environment of the client that opened 
    window host in the daemon. Pty tests get a daemon per test home.
 4. **Attach and detach.** The event ring and cursors, pending requests replayed, the quit
    question (stop, move to the background, stay), `status`/`stop`, version restart.
-5. **The window by project.** Tab groups in the strip per session's directory.
+5. **The window by project.** Tab groups in the strip per session's directory. Built: each tab
+   has a group (`Browser::group`, by key; a page's own new tab takes its opener's), named by the
+   app per lane (`windows::group`, the session's directory's last component): a lane's `Tabs`
+   claims the tabs its `window` calls open (`Windowed::opened`), its terminals' panels are
+   grouped as they open. The strip draws each group's tabs together, the group's name before
+   them, only when there are several; `window list` names a tab's group only then. The tool
+   knows no project. Left for D3/D4: a daemon's lanes from several directories feed it.
 
 Estimated 2,500 to 3,500 lines; the budget has 5,000 left.

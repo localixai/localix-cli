@@ -1,8 +1,10 @@
 //! What is done to the window's tabs by their keys, the person's clicks on the strip and the
 //! agent's calls alike, and the tabs as both read them.
 
-use super::super::host::{Listed, Shared};
-use super::super::strip::{Click, Key};
+use wry::WebView;
+
+use super::super::host::{Listed, STRIP, Shared};
+use super::super::strip::{self, Click, Key};
 use super::{Deck, Shown};
 
 /// What became of the window.
@@ -62,8 +64,19 @@ impl Deck {
         })
     }
 
-    /// Every tab, the browser's first: its key, its kind, its title and what it holds.
+    /// Panel `id`'s page, or the strip's (`STRIP`).
+    pub(crate) fn page(&self, id: u32) -> Option<&WebView> {
+        match id {
+            STRIP => self.strip.as_ref(),
+            id => self.term(id).map(|open| &open.webview),
+        }
+    }
+
+    /// Every tab as the strip shows them: a project's together, the browser's first in each; its
+    /// key, its kind, its title, what it holds and its group.
     pub(crate) fn listing(&self, shared: &Shared) -> Vec<Listed> {
+        let groups = crate::lock(&shared.groups).clone();
+        let group = |key: Key| groups.get(&key.name()).cloned().unwrap_or_default();
         let mut out = vec![];
         if let Some(web) = &self.web {
             let (ids, active) = web.listed();
@@ -80,6 +93,7 @@ impl Deck {
                     detail: url,
                     shown: self.shown == Shown::Web && id == active,
                     acted_on: id == active,
+                    group: group(Key::Web(id)),
                 });
             }
         }
@@ -92,8 +106,9 @@ impl Deck {
                 detail: String::new(),
                 shown: self.shown == Shown::Term(open.id),
                 acted_on: false,
+                group: group(Key::Term(open.id)),
             });
         }
-        out
+        strip::by_group(out, |tab| tab.group.as_str())
     }
 }

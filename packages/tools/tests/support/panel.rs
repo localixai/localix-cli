@@ -304,7 +304,7 @@ pub(crate) fn first(browser: &Browser) {
     }
     // The window opens for it alone: its one tab, shown.
     let tab = format!("t{}", panel.id());
-    assert_eq!(showing(browser), Some((tab.clone(), vec![tab])));
+    assert_eq!(showing(browser), Some((tab.clone(), vec![tab.clone()])));
     // Long enough for WebKit to have settled what it thinks of the window.
     std::thread::sleep(Duration::from_millis(300));
     let count = "window.seen = 0; (function f() { window.seen++; requestAnimationFrame(f); })(); 1";
@@ -314,6 +314,29 @@ pub(crate) fn first(browser: &Browser) {
     let seen = browser.peek(&panel, read).unwrap();
     assert_eq!(seen[1], "visible", "{seen}");
     assert!(seen[0].as_u64() > Some(5), "no animation frames: {seen}");
+    // Two projects' tabs: each project's name before its own, set as text; one project's, none.
+    let labels = |want: Value| {
+        let read = "[...document.querySelectorAll('.g')].map(g => g.textContent)";
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while browser.peek_strip(read) != Ok(want.clone()) {
+            assert!(Instant::now() < deadline, "{:?}", browser.peek_strip(read));
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    };
+    browser.group(&tab, "alpha");
+    browser.group("t8", "beta <i>");
+    let other = browser.panel(
+        8,
+        "session 8 · sh",
+        tools::shell::page("sh", None, None),
+        None,
+    );
+    labels(json!(["alpha", "beta <i>"]));
+    let listed = browser.listing().unwrap_or_default();
+    let groups: Vec<&str> = listed.iter().map(|tab| tab.group.as_str()).collect();
+    assert_eq!(groups, ["alpha", "beta <i>"]);
+    drop(other);
+    labels(json!([]));
     // The last tab gone, the window is too.
     drop(panel);
     let deadline = Instant::now() + Duration::from_secs(5);

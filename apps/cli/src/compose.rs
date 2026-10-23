@@ -139,10 +139,11 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
         asks,
         ..
     } = shared;
-    // The one window as its tabs, where it shows.
+    // The one window as its tabs, where it shows; the lane's are of its directory.
+    let group = windows::group(&seat.session.workspace, workspace.root());
     let tabs = (shared.browser.clone())
         .filter(|_| shared.shown)
-        .map(windows::Tabs);
+        .map(|browser| windows::Tabs::of(browser, &group));
     // What commands never see: the variables of the key the models are called with, and of a
     // provider chosen later with `/login` (hiding is no barrier anyway).
     let hidden_names = Mutex::new(seat.choice.provider.hidden());
@@ -155,6 +156,7 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
     let sessions = windows::terminals(
         (shared.browser.clone()).map(|b| {
             let owner = (Arc::clone(&shared.lanes), Arc::downgrade(&lane_queue));
+            let owner = (owner.0, owner.1, group.clone());
             windows::panels(b, shared.theme, owner)
         }),
         shared.shown,

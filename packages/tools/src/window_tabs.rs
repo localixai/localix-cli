@@ -39,6 +39,9 @@ impl WindowTool<'_> {
             match opened {
                 Ok(opened) => {
                     let tab = format!("{}{}", kind.letter(), opened.id);
+                    if let Some(window) = self.window {
+                        window.opened(&tab);
+                    }
                     reports.push(format!("{tab} ({}): {}", kind.name(), opened.output.report));
                     if let Some(state) = opened.output.state {
                         states.push(format!("### {tab}\n{state}"));
@@ -97,6 +100,7 @@ impl WindowTool<'_> {
                         detail,
                         shown: false,
                         acted_on: false,
+                        group: String::new(),
                     })
                 })
                 .collect(),
@@ -104,6 +108,8 @@ impl WindowTool<'_> {
         if tabs.is_empty() {
             return "No tabs are open.".into();
         }
+        // A tab names its group only beside another group's: one project reads as it always has.
+        let grouped = tabs.iter().any(|tab| tab.group != tabs[0].group);
         let s = if tabs.len() == 1 { "" } else { "s" };
         let mut out = vec![format!("{} tab{s}:", tabs.len())];
         for tab in tabs {
@@ -111,7 +117,9 @@ impl WindowTool<'_> {
             if !tab.detail.is_empty() && tab.detail != tab.title {
                 line.push_str(&format!(" — {}", tab.detail));
             }
+            let group = format!("group {}", tab.group);
             let marks: Vec<&str> = [
+                (grouped, group.as_str()),
                 (tab.shown, "shown"),
                 (tab.acted_on, "the browser acts here"),
             ]

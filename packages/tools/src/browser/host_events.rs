@@ -54,6 +54,7 @@ where
         seq: AtomicU64::new(0),
         tabs: Mutex::new(vec![]),
         listener: Mutex::new(None),
+        groups: Mutex::new(HashMap::new()),
     });
     let browser = Browser {
         proxy: proxy.clone(),
@@ -259,14 +260,15 @@ impl On<'_> {
         }
     }
 
+    /// `script` in a panel's page, or in the strip's (`STRIP`, for checks).
     fn eval_panel(&self, id: u64, script: &str, panel: u32) {
         let answer = Arc::clone(self.shared);
         let reply = move |value: String| {
             let value = serde_json::from_str(&value).unwrap_or(Value::String(value));
             answer.answer(id, Ok(value));
         };
-        match self.deck.as_ref().and_then(|open| open.term(panel)) {
-            Some(open) => drop(open.webview.evaluate_script_with_callback(script, reply)),
+        match self.deck.as_ref().and_then(|open| open.page(panel)) {
+            Some(page) => drop(page.evaluate_script_with_callback(script, reply)),
             None => self.shared.answer(id, Err(WINDOW_CLOSED.into())),
         }
     }

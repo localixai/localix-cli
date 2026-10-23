@@ -11,7 +11,7 @@ use super::super::panel::Panel;
 use super::super::strip::{Click, Key};
 use super::super::webview::WebviewDriver;
 use super::super::{BrowserError, BrowserResult};
-use super::{Browser, Cmd, Dressing, Listed, Window};
+use super::{Browser, Cmd, Dressing, Listed, STRIP, Window};
 
 impl Browser {
     /// Open the window on `window.url` and wait for its document. One window per process: the
@@ -111,13 +111,30 @@ impl Browser {
         let _ = self.proxy.send_event(Cmd::Clicked(said.to_string()));
     }
 
+    /// Tab `key` (`w1`, `t2`) is of `group`, a project: the strip draws each one's tabs
+    /// together once there are several.
+    pub fn group(&self, key: &str, group: &str) {
+        crate::lock(&self.shared.groups).insert(key.to_string(), group.to_string());
+        let _ = self.proxy.send_event(Cmd::Strip);
+    }
+
     /// What `script` evaluates to in `panel`'s page, as JSON.
     pub fn peek(&self, panel: &Panel, script: &str) -> Result<Value, String> {
+        self.peek_in(panel.id(), script)
+    }
+
+    /// For checks: what `script` evaluates to in the strip's page.
+    #[doc(hidden)]
+    pub fn peek_strip(&self, script: &str) -> Result<Value, String> {
+        self.peek_in(STRIP, script)
+    }
+
+    fn peek_in(&self, panel: u32, script: &str) -> Result<Value, String> {
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = mpsc::sync_channel(1);
         crate::lock(&self.shared.pending).insert(id, sender);
         let script = script.to_string();
-        let panel = Some(panel.id());
+        let panel = Some(panel);
         let _ = (self.proxy).send_event(Cmd::Eval {
             id,
             script,

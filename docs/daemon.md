@@ -75,7 +75,7 @@ process environment): commands run in the environment of the client that opened 
 
 - `llx`: probe `$TMPDIR/llx-<uid>/<hash of the config dir>.sock` (a test home gets its own
   daemon); none → spawn `llx serve` detached (`setsid`), wait for its ready line; attach.
-- `llx serve`: `flock` on `<config>/llx/daemon.lock`, bind, write a ready line, run the window's
+- `llx serve`: `flock` on `<config>/llx/daemon.lock` (the credential store's directory), bind, write a ready line, run the window's
   event loop on the main thread and the sessions on threads.
 - Quitting while work runs asks, as Claude Code does:
 
@@ -107,6 +107,15 @@ process environment): commands run in the environment of the client that opened 
    session; `/copy` and the clipboard on the client.
 3. **The socket.** `llx serve`, discovery, spawn, lock, handshake, the remote transport; the
    window host in the daemon. Pty tests get a daemon per test home.
+   Built so far, not yet used by `llx`: `Client::connect` (the same reader loop as in process; a
+   writer thread with a 10 s write timeout, so a server that stops reading is gone), and on the
+   server `server/socket.rs` (`bind`, `accept`, `connection`: a reader, a pump and a writer per
+   client; 1,024 frames queued for a client before it is cut off; 64 read and not yet served
+   before its reader waits) and `daemon.rs` (`socket_path`, `lock` on `<config>/daemon.lock`
+   where `<config>` is the credential store's directory, `probe`). A connection's ends are those
+   `serve` and `Peer::new` take in process; a test drives `serve` over a real socket.
+   Still to come in this step: `llx serve` hosting a desk per connection, spawn, the handshake's
+   checks, the window host in the daemon, pty tests with a daemon per test home.
 4. **Attach and detach.** The event ring and cursors, pending requests replayed, the quit
    question (stop, move to the background, stay), `status`/`stop`, version restart.
 5. **The window by project.** Tab groups in the strip per session's directory.

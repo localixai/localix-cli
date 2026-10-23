@@ -16,6 +16,15 @@ mod colours;
 mod commands;
 mod compose;
 mod context;
+#[cfg(unix)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "D3 part 1: the daemon's plumbing, hosted by `llx serve` next"
+    )
+)]
+mod daemon;
 mod desk;
 mod error;
 mod exit;

@@ -34,8 +34,15 @@ impl std::fmt::Display for CallError {
 
 impl std::error::Error for CallError {}
 
-/// The commands sent and not yet done, each waiting where its answer goes.
-type Waiting = Mutex<HashMap<u64, SyncSender<Done>>>;
+/// The commands sent and not yet done, each waiting where its answer goes, and whether the server
+/// is gone: one lock, so a command sent after the end is told so, never left waiting (R7).
+#[derive(Default)]
+struct Pending {
+    waiting: HashMap<u64, SyncSender<Done>>,
+    gone: bool,
+}
+
+type Waiting = Mutex<Pending>;
 
 /// The interface's connection to the server; cheap to clone, one per thread that calls.
 #[derive(Clone)]
@@ -53,15 +60,26 @@ impl Client {
         from_server: Receiver<ToClient>,
         deliver: impl Fn(ToClient) + Send + 'static,
     ) -> std::io::Result<Self> {
+        Self::reading(to_server, from_server, deliver)
+    }
+
+    /// Whatever carries them, the server's frames are read here, one loop for both transports
+    /// (W4): what a command came to goes to it, the rest to `deliver`.
+    fn reading(
+        to_server: Sender<ToServer>,
+        from_server: impl IntoIterator<Item = ToClient, IntoIter: Send> + 'static,
+        deliver: impl Fn(ToClient) + Send + 'static,
+    ) -> std::io::Result<Self> {
         let waiting = Arc::new(Waiting::default());
         let theirs = Arc::clone(&waiting);
+        let from_server = from_server.into_iter();
         std::thread::Builder::new()
             .name("llx-client".into())
             .spawn(move || {
                 for frame in from_server {
                     match frame {
                         ToClient::Done { id, done } => {
-                            let reply = lock(&theirs).remove(&id);
+                            let reply = lock(&theirs).waiting.remove(&id);
                             if let Some(reply) = reply {
                                 let _ = reply.send(done);
                             }
@@ -69,8 +87,10 @@ impl Client {
                         frame => deliver(frame),
                     }
                 }
-                // The server is gone: what waits for it ends now.
-                lock(&theirs).clear();
+                // The server is gone: what waits for it ends now, and what is sent later too.
+                let mut pending = lock(&theirs);
+                pending.gone = true;
+                pending.waiting.clear();
             })?;
         Ok(Self {
             to_server,
@@ -83,15 +103,21 @@ impl Client {
     pub fn call(&self, command: Command, wait: Duration) -> Result<Done, CallError> {
         let (reply, done) = sync_channel(1);
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        lock(&self.waiting).insert(id, reply);
+        {
+            let mut pending = lock(&self.waiting);
+            if pending.gone {
+                return Err(CallError::Gone);
+            }
+            pending.waiting.insert(id, reply);
+        }
         if self.to_server.send(ToServer::Call { id, command }).is_err() {
-            lock(&self.waiting).remove(&id);
+            lock(&self.waiting).waiting.remove(&id);
             return Err(CallError::Gone);
         }
         let done = match done.recv_timeout(wait) {
             Ok(done) => done,
             Err(RecvTimeoutError::Timeout) => {
-                lock(&self.waiting).remove(&id);
+                lock(&self.waiting).waiting.remove(&id);
                 return Err(CallError::Timeout);
             }
             Err(RecvTimeoutError::Disconnected) => return Err(CallError::Gone),
@@ -105,19 +131,29 @@ impl Client {
     /// `command`, not waiting for what is done with it.
     pub fn send(&self, command: Command) -> Result<(), CallError> {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        (self.to_server.send(ToServer::Call { id, command })).map_err(|_gone| CallError::Gone)
+        self.frame(ToServer::Call { id, command })
     }
 
     /// The person's reply to the question `id`.
     pub fn reply(&self, id: u64, reply: Reply) -> Result<(), CallError> {
-        (self.to_server.send(ToServer::Reply { id, reply })).map_err(|_gone| CallError::Gone)
+        self.frame(ToServer::Reply { id, reply })
+    }
+
+    fn frame(&self, frame: ToServer) -> Result<(), CallError> {
+        if lock(&self.waiting).gone {
+            return Err(CallError::Gone);
+        }
+        (self.to_server.send(frame)).map_err(|_gone| CallError::Gone)
     }
 }
 
 /// The table, whatever a thread that held it did: it is only a map of waiting channels.
-fn lock(waiting: &Waiting) -> MutexGuard<'_, HashMap<u64, SyncSender<Done>>> {
+fn lock(waiting: &Waiting) -> MutexGuard<'_, Pending> {
     waiting.lock().unwrap_or_else(PoisonError::into_inner)
 }
+
+#[cfg(unix)]
+mod socket;
 
 #[cfg(test)]
 #[path = "lib_tests.rs"]

@@ -81,6 +81,8 @@ pub enum Event {
     },
     /// The task running read what the person said to it: shown now as theirs.
     Steered(Vec<String>),
+    /// Text for the client's clipboard (`/copy`): the clipboard is the person's, not the server's.
+    Copy(String),
     /// The interface's work is over: the terminal is given back.
     Quit,
 }

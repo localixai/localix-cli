@@ -21,12 +21,12 @@ pub(super) enum Ended {
     Stopped,
 }
 
-/// Run `command` in `dir` until it exits, `deadline` passes or `stopped` says so; give each
+/// Run `command` in `dir` with `env` until it exits, `deadline` passes or `stopped` says so; give each
 /// batch of lines to `lines`.
 pub(super) fn watch(
     command: &str,
     dir: &Path,
-    hidden: &[&str],
+    env: tools::shell::Env,
     deadline: Instant,
     stopped: &dyn Fn() -> bool,
     lines: &dyn Fn(Vec<String>, usize),
@@ -38,9 +38,7 @@ pub(super) fn watch(
         .current_dir(dir)
         .stdin(Stdio::null());
     shell.stdout(Stdio::piped()).stderr(Stdio::piped());
-    for name in hidden {
-        shell.env_remove(name);
-    }
+    env.apply(&mut shell);
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut shell, 0);
     let mut child = shell

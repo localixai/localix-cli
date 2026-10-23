@@ -53,7 +53,7 @@ fn opened(asks: bool, mode: Mode, remote: bool, show: Option<bool>) -> Vec<Strin
         yield_ms: Some(200),
     };
     let turn = sessions
-        .start("cat", dir.path(), &[], wait, show, &|| false)
+        .start("cat", dir.path(), Default::default(), wait, show, &|| false)
         .unwrap();
     assert!(sessions.close(turn.id).is_ok(), "cat was kept");
     titles.lock().unwrap().clone()

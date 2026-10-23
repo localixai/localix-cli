@@ -19,7 +19,7 @@ fn a_session_reads_as_its_screen_with_an_input_and_keys_and_is_typed_into() {
         .start(
             "printf 'name? '; read n; echo \"hi $n\"; sleep 30",
             dir.path(),
-            &[],
+            Default::default(),
             wait,
             None,
             &never,

@@ -1,10 +1,9 @@
 //! The small commands: `/diff` (the working tree's changes, new
-//! files too), `/init` (an AGENTS.md written for the project), `/copy` (the last answer to the
-//! clipboard) and `/usage` (what the session spent).
+//! files too), `/init` (an AGENTS.md written for the project), `/copy` (the last answer, for the
+//! client's clipboard) and `/usage` (what the session spent).
 
-use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use crate::compose::Rig;
 
@@ -57,43 +56,17 @@ pub(crate) fn diff(root: &Path) -> String {
     rows.join("\n") + "\n"
 }
 
-/// `/copy`: the last answer to the system clipboard.
-pub(crate) fn copy(rig: &Rig) -> String {
+/// `/copy`: the last answer, for the client to copy: the clipboard is the person's (K2), and
+/// the client says what came of it. What there is to say here instead, if anything.
+pub(crate) fn copy(rig: &Rig) -> Option<&'static str> {
     let Some(answer) = last_answer(&rig.session.turns) else {
-        return "No answer to copy yet.\n".into();
+        return Some("No answer to copy yet.\n");
     };
-    #[cfg(target_os = "macos")]
-    let tools: &[&[&str]] = &[&["pbcopy"]];
-    #[cfg(target_os = "windows")]
-    let tools: &[&[&str]] = &[&["clip"]];
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let tools: &[&[&str]] = &[
-        &["wl-copy"],
-        &["xclip", "-selection", "clipboard"],
-        &["xsel", "-ib"],
-    ];
-    for tool in tools {
-        let spawned = Command::new(tool[0])
-            .args(&tool[1..])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
-        let Ok(mut child) = spawned else {
-            continue;
-        };
-        let written = child
-            .stdin
-            .take()
-            .map(|mut stdin| stdin.write_all(answer.as_bytes()));
-        if matches!(written, Some(Ok(()))) && child.wait().is_ok_and(|s| s.success()) {
-            return format!(
-                "Copied the last answer ({} characters).\n",
-                answer.chars().count()
-            );
-        }
+    match &rig.ui {
+        Some(ui) => ui.send(protocol::Event::Copy(answer)),
+        None => return Some("No interface to copy to.\n"),
     }
-    "No clipboard tool here (pbcopy, wl-copy, xclip, xsel or clip).\n".into()
+    None
 }
 
 /// The last answer that says something: a failed or stopped task leaves none, and copying

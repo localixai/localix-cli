@@ -26,7 +26,7 @@ fn until(needle: &str) -> Wait<'_> {
 
 fn start(sessions: &Sessions, dir: &Scratch, command: &str, wait: Wait) -> Turn {
     sessions
-        .start(command, dir.path(), &[], wait, None, &never)
+        .start(command, dir.path(), Default::default(), wait, None, &never)
         .unwrap()
 }
 
@@ -258,7 +258,14 @@ fn a_session_in_a_wait_still_counts_and_is_busy() {
         start(&sessions, &dir, "sleep 30", short);
     }
     while_busy(&sessions, 1_500, || {
-        let refused = sessions.start("sleep 30", dir.path(), &[], short, None, &never);
+        let refused = sessions.start(
+            "sleep 30",
+            dir.path(),
+            Default::default(),
+            short,
+            None,
+            &never,
+        );
         assert!(refused.unwrap_err().contains("sessions are running"));
         let busy = sessions.send(1, b"", &[], short, None, &never).unwrap_err();
         assert!(busy.contains("session 1 is busy in another call"), "{busy}");
@@ -277,7 +284,14 @@ fn at_most_four_run() {
         start(&sessions, &dir, "sleep 30", short);
     }
     let refused = sessions
-        .start("sleep 30", dir.path(), &[], short, None, &never)
+        .start(
+            "sleep 30",
+            dir.path(),
+            Default::default(),
+            short,
+            None,
+            &never,
+        )
         .unwrap_err();
     assert_eq!(
         refused,
@@ -298,7 +312,10 @@ fn a_session_runs_in_its_directory_without_the_hidden_variables() {
         .start(
             command,
             dir.path(),
-            &["HOME"],
+            Env {
+                vars: None,
+                hidden: &["HOME"],
+            },
             Wait::default(),
             None,
             &never,
@@ -356,4 +373,23 @@ fn a_sessions_screen_is_read_whole_whatever_was_read_before() {
         "{screen}"
     );
     assert!(sessions.screen(99).unwrap_err().contains("not running"));
+}
+
+#[test]
+fn a_session_runs_with_the_environment_it_is_given() {
+    let (dir, sessions) = (Scratch::new(), sessions());
+    let vars = [
+        (
+            "PATH".to_string(),
+            std::env::var("PATH").unwrap_or_default(),
+        ),
+        ("LLX_PLACE".to_string(), "client".to_string()),
+    ];
+    let env = Env {
+        vars: Some(&vars),
+        hidden: &[],
+    };
+    let command = r#"echo "place=$LLX_PLACE home=${HOME-none}""#;
+    let turn = (sessions.start(command, dir.path(), env, Wait::default(), None, &never)).unwrap();
+    assert_eq!(output(&turn), "place=client home=none", "{turn:?}");
 }

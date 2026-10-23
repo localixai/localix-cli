@@ -10,6 +10,7 @@
 pub(crate) mod agents;
 pub(crate) mod app;
 pub(crate) mod cells;
+mod clipboard;
 pub(crate) mod composer;
 mod drawing;
 pub(crate) mod event;
@@ -43,7 +44,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use client::Client;
-use protocol::{Command, Done, Event, ToClient, ToServer};
+use protocol::{Command, Done, Event, Place, ToClient, ToServer};
 
 use self::app::App;
 use self::event::Input;
@@ -57,12 +58,14 @@ pub(crate) struct Running {
 }
 
 /// What the interface is given: the server's ends of the frames, what `/` offers, the
-/// directory for `@`, and how to end the process at once.
+/// directory for `@` (where the sessions it opens work), the terminal's colours, and how to end
+/// the process at once.
 pub(crate) struct Start<'a> {
     pub to_server: Sender<ToServer>,
     pub from_server: Receiver<ToClient>,
     pub commands: Vec<(String, String)>,
     pub root: &'a std::path::Path,
+    pub theme: Option<protocol::Theme>,
     pub quit_now: fn() -> !,
 }
 
@@ -110,6 +113,7 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
     })?;
     let hello = Command::Initialize {
         version: protocol::VERSION,
+        place: Some(here(start.root, start.theme)),
     };
     let Ok(Done::Initialized { max_lanes, .. }) = client.call(hello, Duration::from_secs(5)) else {
         return Err(io::Error::other("the server did not attach the interface"));
@@ -128,6 +132,18 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
         inbox,
         thread: Some(thread),
     })
+}
+
+/// Where this interface is: the sessions it opens work there, and their commands run with its
+/// environment (a variable that is not text is left out).
+fn here(root: &std::path::Path, theme: Option<protocol::Theme>) -> Place {
+    let env = std::env::vars_os()
+        .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)));
+    Place {
+        cwd: root.display().to_string(),
+        env: env.collect(),
+        theme,
+    }
 }
 
 impl Drop for Running {

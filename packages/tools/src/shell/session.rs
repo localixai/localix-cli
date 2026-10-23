@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use super::process::Ending;
+use super::process::{Ending, Env};
 use super::pty;
 use super::running::Session;
 use super::watch::{self, Watch};
@@ -152,7 +152,7 @@ impl Sessions {
         &self,
         command: &str,
         dir: &Path,
-        hidden: &[&str],
+        env: Env,
         wait: Wait,
         show: Option<bool>,
         stop: &(dyn Fn() -> bool + Sync),
@@ -168,7 +168,7 @@ impl Sessions {
             registry.busy.push(id);
             id
         };
-        let pty = pty::spawn(command, dir, hidden, wait.needle).map_err(|error| {
+        let pty = pty::spawn(command, dir, env, wait.needle).map_err(|error| {
             self.release(id);
             format!("the shell could not start: {error}")
         })?;

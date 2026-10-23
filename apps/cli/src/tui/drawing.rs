@@ -108,6 +108,9 @@ fn act(
                 app.event(Event::Note(why), Instant::now());
             }
         },
+        Some(Action::Copy(text)) => {
+            app.event(Event::Note(super::clipboard::copy(&text)), Instant::now());
+        }
         Some(Action::Open(target)) => app.outbox.push(Out::Call(Command::Open { target })),
         Some(Action::Sessions) => app.outbox.push(Out::Call(Command::List)),
         // Every lane is stopped, its prompt given nothing; the server waits for them.

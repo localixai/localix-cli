@@ -103,3 +103,24 @@ fn usage_says_what_the_whole_session_spent_its_earlier_tasks_too() {
         0
     });
 }
+
+#[test]
+fn copy_sends_the_last_answer_to_the_client_whose_clipboard_it_is() {
+    use protocol::Event;
+    let replies = vec![crate::testing::says("forty-two")];
+    crate::testing::composed(crate::mode::Mode::Default, true, replies, |rig| {
+        let (ui, frames) = crate::testing::fake_ui();
+        rig.ui = Some(ui);
+        assert_eq!(copy(rig), Some("No answer to copy yet.\n"));
+        rig.task("the answer?");
+        assert_eq!(copy(rig), None, "the client says what came of it");
+        let copied: Vec<_> = (crate::testing::events(&frames).into_iter())
+            .filter_map(|(_, event)| match event {
+                Event::Copy(text) => Some(text),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(copied, ["forty-two"]);
+        0
+    });
+}

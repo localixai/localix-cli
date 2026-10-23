@@ -25,6 +25,7 @@ mod unix {
     use crate::ask;
     use crate::shell::bash::{EMPTY, NAME, summary};
     use crate::shell::keys::{self, NAMES};
+    use crate::shell::process::Env;
     use crate::shell::report::{report, typed};
     use crate::shell::session::{Until, Wait};
 
@@ -61,9 +62,13 @@ mod unix {
                 ask(tool.gate, NAME, &format!("{}  ({place})", summary(command)))?;
                 let names = (tool.hidden)();
                 let hidden: Vec<&str> = names.iter().map(String::as_str).collect();
+                let env = Env {
+                    vars: tool.workspace.env(),
+                    hidden: &hidden,
+                };
                 let turn = tool
                     .sessions
-                    .start(command, &dir, &hidden, wait, args.show, tool.stop)
+                    .start(command, &dir, env, wait, args.show, tool.stop)
                     .map_err(failed)?;
                 if !matches!(turn.until, Until::Exited(_) | Until::Closed { .. }) {
                     started = Some(turn.id);

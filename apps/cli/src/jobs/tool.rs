@@ -119,7 +119,11 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
             let deadline = Instant::now() + timeout;
             let names = (kit.hidden)();
             let hidden: Vec<&str> = names.iter().map(String::as_str).collect();
-            let ended = monitor::watch(&command, root, &hidden, deadline, &stopped, &lines);
+            let env = tools::shell::Env {
+                vars: kit.workspace.env(),
+                hidden: &hidden,
+            };
+            let ended = monitor::watch(&command, root, env, deadline, &stopped, &lines);
             let listed = {
                 let mut state = jobs.lock();
                 let before = state.jobs.len();

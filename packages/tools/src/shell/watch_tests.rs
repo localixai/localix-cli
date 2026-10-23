@@ -96,7 +96,14 @@ fn quick() -> Wait<'static> {
 
 fn start(sessions: &Sessions, command: &str, show: Option<bool>) -> u32 {
     let dir = Scratch::new();
-    let turn = sessions.start(command, dir.path(), &[], quick(), show, &never);
+    let turn = sessions.start(
+        command,
+        dir.path(),
+        Default::default(),
+        quick(),
+        show,
+        &never,
+    );
     turn.unwrap().id
 }
 
@@ -105,7 +112,14 @@ fn a_command_that_ends_at_once_opens_no_window() {
     let windows = Windows::default();
     let sessions = Sessions::new(windows.watch(), true);
     let dir = Scratch::new();
-    let turn = sessions.start("printf hi", dir.path(), &[], Wait::default(), None, &never);
+    let turn = sessions.start(
+        "printf hi",
+        dir.path(),
+        Default::default(),
+        Wait::default(),
+        None,
+        &never,
+    );
     assert!(matches!(turn.unwrap().until, Until::Exited(_)));
     assert!(windows.opened().is_empty());
 }

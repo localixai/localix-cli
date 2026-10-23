@@ -27,6 +27,8 @@ pub(crate) enum Action {
     Quit,
     /// Attach the clipboard's picture.
     Clipboard,
+    /// Put a session's text in the clipboard (`/copy`).
+    Copy(String),
     /// Write the composer's text in `$EDITOR`.
     Editor,
     /// Open a lane (`/new`), whatever the lane shown is doing.
@@ -319,6 +321,7 @@ impl App {
                 self.views.focus = self.views.focus.map(|row| row.min(last));
             }
             Event::Prefill(text) => self.composer.set(&text),
+            Event::Copy(text) => return Some(Action::Copy(text)),
             Event::Quit => return Some(Action::Quit),
             // A session's own events reach it through [`App::on`].
             _ => {}

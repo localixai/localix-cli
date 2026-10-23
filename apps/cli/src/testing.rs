@@ -224,6 +224,9 @@ pub fn setup(scratch: &Scratch, mode: Mode, asks: bool) -> Setup {
         history,
         session,
         ui: None,
+        shown: false,
+        #[cfg(unix)]
+        theme: None,
     }
 }
 

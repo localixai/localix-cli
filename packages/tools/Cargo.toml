@@ -26,6 +26,8 @@ wry.workspace = true
 # own for a session (openpty, TIOCSCTTY, poll, waitid).
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
+# A terminal session's screen, for its window: cursor moves and erases applied as a terminal would.
+vt100.workspace = true
 
 # Already in the tree through wry: messages to the WKWebView behind the window, and the block its
 # screenshot answers through.
@@ -33,3 +35,7 @@ libc.workspace = true
 block2.workspace = true
 objc2.workspace = true
 objc2-web-kit.workspace = true
+
+[dev-dependencies]
+# The terminal page's own script is allowed by its hash: a test checks the one written down.
+sha2.workspace = true

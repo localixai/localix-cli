@@ -74,5 +74,5 @@ is a design change, never a convenience.
 - 25,000 lines of working code, build scripts included (`apps/cli/tests/suite/repo/budget.rs`), the maximum. New code is paid for by
   cuts first; going over needs the owner's approval, asked with the numbers and the alternatives
   (AGENTS.md).
-- The release binary under 2.5 MiB (CI); a bundled data file counts.
+- The release binary under 3 MiB (CI; raised from 2.5 MiB by the owner for the terminal window and the windows' look); a bundled data file counts.
 - New files under 300 lines; tests beside the code (`x_tests.rs`).

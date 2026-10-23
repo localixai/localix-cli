@@ -173,15 +173,15 @@ struct CGPoint {
 #[cfg(target_os = "macos")]
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct CGSize {
-    width: f64,
-    height: f64,
+pub(super) struct CGSize {
+    pub width: f64,
+    pub height: f64,
 }
 
 #[cfg(target_os = "macos")]
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct CGRect {
+pub(super) struct CGRect {
     origin: CGPoint,
     size: CGSize,
 }

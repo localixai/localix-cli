@@ -142,7 +142,7 @@ fn status_shows_the_mode_and_the_terminals() {
         let root = rig.workspace.root().to_path_buf();
         let turn = rig
             .sessions
-            .start("sleep 30", &root, &[], wait, &|| false)
+            .start("sleep 30", &root, &[], wait, None, &|| false)
             .unwrap();
         assert_eq!(turn.id, 1);
         let status = crate::commands::repl::status(rig);
@@ -187,6 +187,9 @@ fn commands_never_see_the_key_of_the_provider_in_use() {
         history,
         session,
         ui: None,
+        shown: false,
+        #[cfg(unix)]
+        theme: None,
     };
     let chat = ScriptedChat::new(vec![]);
     let models = Models {

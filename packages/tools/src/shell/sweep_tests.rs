@@ -103,7 +103,7 @@ fn a_background_job_of_an_interactive_shell_dies_with_its_session() {
     };
     let start = "bash --noprofile --norc -i";
     let turn = sessions
-        .start(start, dir.path(), &[], ready, &never)
+        .start(start, dir.path(), &[], ready, None, &never)
         .unwrap();
     // The echo of what is typed reads `jo''b=$!`: only bash's own output reads `job=<pid>`. The
     // `!` ends the line, where history expansion leaves it alone.
@@ -112,7 +112,9 @@ fn a_background_job_of_an_interactive_shell_dies_with_its_session() {
         needle: Some("job="),
         yield_ms: Some(10_000),
     };
-    let typed = sessions.send(turn.id, input, &[], wait, &never).unwrap();
+    let typed = sessions
+        .send(turn.id, input, &[], wait, None, &never)
+        .unwrap();
     assert_eq!(typed.until, Until::Matched, "{typed:?}");
     let output = typed.output.unwrap_or_default();
     let pid: libc::pid_t = output

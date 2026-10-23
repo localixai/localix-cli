@@ -45,6 +45,7 @@ use crate::providers::Provider;
 use crate::tui::Ui;
 use crate::tui::asking::{UiGate, UiPerson};
 use crate::tui::event::Event;
+use crate::windows;
 
 /// Who calls the providers: attribution, the sign-in pages, the folder sign-ins are saved in.
 pub const APP: App = App {
@@ -76,6 +77,11 @@ pub struct Setup {
     pub session: Session,
     /// The interface a session at a terminal is shown in.
     pub ui: Option<Ui>,
+    /// Whether the browser and terminal windows show by themselves (`windows::shown`).
+    pub shown: bool,
+    /// The person's terminal colours, which terminal windows take.
+    #[cfg(unix)]
+    pub theme: Option<tools::shell::Theme>,
 }
 
 /// What every lane of a session shares: the options, the workspace, the browser's page (one
@@ -85,6 +91,13 @@ pub struct Shared {
     pub options: RunOptions,
     pub workspace: Workspace,
     pub page: Option<Page>,
+    /// The browser the terminal windows open in, beside the page.
+    pub browser: Option<Browser>,
+    /// Whether the windows show by themselves (`windows::shown`).
+    pub shown: bool,
+    /// The person's terminal colours, which terminal windows take.
+    #[cfg(unix)]
+    pub theme: Option<tools::shell::Theme>,
     /// One browser action at a time, every lane's and every agent's.
     pub browser_lock: Mutex<()>,
     pub history: Sessions,
@@ -112,11 +125,13 @@ pub struct Seat {
 impl Setup {
     /// What the lanes share, with the page on `browser`, and the first lane's seat.
     pub fn split(self, browser: Option<Browser>) -> (Shared, Seat) {
-        // Shown in a session, so the person watches what the agent does there; hidden when
-        // nobody watches (exec) or nobody is to be asked (autonomous). A call can still choose.
-        let shown = self.options.show_browser || (self.asks && self.mode != Mode::Autonomous);
+        let shown = self.shown;
         let shared = Shared {
-            page: browser.map(|browser| Page::new(browser, !shown)),
+            page: browser.clone().map(|browser| Page::new(browser, !shown)),
+            browser,
+            shown,
+            #[cfg(unix)]
+            theme: self.theme,
             browser_lock: Mutex::new(()),
             options: self.options,
             workspace: self.workspace,
@@ -370,6 +385,16 @@ pub fn assemble(
     // provider chosen later with `/login` (hiding is no barrier anyway).
     let hidden_names = Mutex::new(choice.provider.hidden());
     let hidden = || lock(&hidden_names).clone();
+    // Terminal windows open only where windows show; a call can still show or hide one.
+    #[cfg(unix)]
+    let sessions = windows::terminals(
+        shared
+            .browser
+            .clone()
+            .map(|b| windows::panels(b, shared.theme)),
+        shared.shown,
+    );
+    #[cfg(not(unix))]
     let sessions = tools::shell::Sessions::default();
     let checkpoints = Checkpoints::default();
     let window = AtomicU64::new(choice.selection.model().context);

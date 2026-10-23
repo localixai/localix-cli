@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src {{scripts}}">
+<title>{{title}}</title>
+<style>{{css}}</style>
+<style>
+:root{--fg:#1d1d1f;--bg:#ffffff;--cursor:#1d1d1f;--cols:{{cols}};--rows:{{rows}};--mono:ui-monospace,SFMono-Regular,Menlo,Monaco,"Cascadia Code","DejaVu Sans Mono",monospace}
+@media (prefers-color-scheme: dark){:root{--fg:#e6e6e6;--bg:#1e1e1e;--cursor:#e6e6e6}}
+{{theme}}
+:root{--ground:var(--bg)}
+body{display:flex;align-items:center;justify-content:center;color:var(--fg);cursor:default}
+#t{width:calc(100% - 28px);height:calc(100% - 28px);display:flex;align-items:center;justify-content:center}
+.xterm .xterm-viewport{background:transparent!important;overflow:hidden!important}
+</style>
+</head>
+<body>
+<div id="t"></div>
+<script>{{xterm}}</script>
+<script>{{fit}}</script>
+<script>{{glue}}</script>
+</body>
+</html>

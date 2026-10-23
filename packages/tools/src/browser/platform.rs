@@ -2,9 +2,6 @@
 
 use tao::window::WindowBuilder;
 
-#[cfg(not(target_os = "macos"))]
-use super::host::{HEIGHT, WIDTH};
-
 /// Where a headless window goes. macOS keeps it on screen and makes it invisible afterwards
 /// ([`keep_rendering`]): WebKit marks an off-screen window hidden and stops its animation frames
 /// and timers, so a page there would never settle. Elsewhere it goes off screen.
@@ -15,7 +12,11 @@ pub(super) fn conceal(builder: WindowBuilder) -> WindowBuilder {
 
 #[cfg(not(target_os = "macos"))]
 pub(super) fn conceal(builder: WindowBuilder) -> WindowBuilder {
-    builder.with_position(tao::dpi::LogicalPosition::new(-WIDTH * 4.0, -HEIGHT * 4.0))
+    let size = super::viewport::Viewport::DESKTOP;
+    builder.with_position(tao::dpi::LogicalPosition::new(
+        -size.width * 4.0,
+        -size.height * 4.0,
+    ))
 }
 
 /// WebKit stops animation frames and timers in a window it considers hidden, and a driven window
@@ -47,7 +48,9 @@ pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
             MOVE_TO_ACTIVE_SPACE | FULL_SCREEN_AUXILIARY
         };
         let _: () = msg_send![&*window, setCollectionBehavior: behavior];
-        let _: () = msg_send![&*window, setLevel: level(headless)];
+        // NSWindow levels: only an invisible window floats (3), above every ordinary one (0).
+        let level: isize = if headless { 3 } else { 0 };
+        let _: () = msg_send![&*window, setLevel: level];
         let _: () = msg_send![&*window, orderFrontRegardless];
         if headless {
             let _: () = msg_send![&*window, setAlphaValue: 0.0f64];
@@ -57,20 +60,7 @@ pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
     }
 }
 
-/// NSWindow levels: an ordinary window, and one above every ordinary window.
-pub(super) const NORMAL_WINDOW_LEVEL: isize = 0;
-pub(super) const FLOATING_WINDOW_LEVEL: isize = 3;
-
-/// The level a window opens at: only an invisible one floats.
-pub(super) fn level(headless: bool) -> isize {
-    if headless {
-        FLOATING_WINDOW_LEVEL
-    } else {
-        NORMAL_WINDOW_LEVEL
-    }
-}
-
-/// A tab's WebView keeps drawing while covered: WebKit's occlusion detection is off for it.
+/// A page keeps drawing while covered: WebKit's occlusion detection is off for its WebView.
 #[cfg(target_os = "macos")]
 pub(super) fn keep_tab_rendering(webview: &wry::WebView) {
     use objc2::runtime::Bool;
@@ -83,6 +73,11 @@ pub(super) fn keep_tab_rendering(webview: &wry::WebView) {
         if available {
             let _: () = msg_send![&*view, _setWindowOcclusionDetectionEnabled: Bool::NO];
         }
+        // WebKit decides whether the page is shown when the view joins its window, with the
+        // switch still on: a window that opened unseen (the screen asleep, another Space) stayed
+        // hidden, its animation frames stopped. Hidden and shown again, it looks once more.
+        let _: () = msg_send![&*view, setHidden: Bool::YES];
+        let _: () = msg_send![&*view, setHidden: Bool::NO];
     }
 }
 

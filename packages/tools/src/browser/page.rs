@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use contracts::view::{Action, Observation, View, ViewError, ViewResult};
 
-use super::{Browser, Driver, PageText, Tab, Viewport, WebviewDriver, Window, toolbar};
+use super::{Browser, Driver, Tab, Viewport, WebviewDriver, Window, toolbar};
 
 /// How web pages behave where it is not obvious: forms, suggestions, date pickers, results.
 const CONVENTIONS: &str = "A form sends only once its required fields are filled and its Search, \
@@ -107,21 +107,6 @@ impl Page {
             .ok_or_else(|| ViewError::Unavailable("the browser window is not open".into()))
     }
 
-    /// Open `url` in a new tab and act on it from now on.
-    pub fn new_tab(&self, url: &str) -> ViewResult<u32> {
-        self.driver()?.new_tab(url)
-    }
-
-    /// Act on tab `id` from now on.
-    pub fn switch_tab(&self, id: u32) -> ViewResult<()> {
-        self.driver()?.switch_tab(id)
-    }
-
-    /// Close tab `id`; whether tabs are left (with none, the window closed).
-    pub fn close_tab(&self, id: u32) -> ViewResult<bool> {
-        self.driver()?.close_tab(id)
-    }
-
     /// The tabs, when they changed since the agent was last told: one line each, the shown one
     /// marked. Nothing while a single tab was and is open.
     pub fn tabs_news(&self) -> Option<String> {
@@ -146,11 +131,6 @@ impl Page {
             true => "### Tabs\nOne tab is open.".to_string(),
             false => format!("### Tabs\n{}", listing(&tabs, active)),
         })
-    }
-
-    /// The document's readable text from `offset`, at most `limit` characters.
-    pub fn read(&self, offset: usize, limit: usize) -> ViewResult<PageText> {
-        self.driver()?.read(offset, limit)
     }
 
     /// A toolbar control: back, reload, or a page size.

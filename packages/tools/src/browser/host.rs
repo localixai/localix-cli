@@ -12,10 +12,13 @@ use serde_json::Value;
 use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
+use tao::window::WindowId;
 use wry::PageLoadEvent;
 
 use super::capture::{Clip, Shot, capture};
+use super::frame;
 use super::guard::token;
+use super::panel::{self, Open, Panel, Route, route};
 use super::tabs::Tabs;
 use super::viewport::Viewport;
 use super::webview::WebviewDriver;
@@ -31,11 +34,6 @@ pub(super) const PROBE: &str = concat!(
     include_str!("probe/keys.js"),
     include_str!("probe/evaluate.js"),
 );
-/// Off-screen placement of a headless window where the OS allows it (see platform.rs).
-#[cfg(not(target_os = "macos"))]
-pub(super) const WIDTH: f64 = 1280.0;
-#[cfg(not(target_os = "macos"))]
-pub(super) const HEIGHT: f64 = 860.0;
 
 /// How the window is opened.
 #[derive(Debug, Clone)]
@@ -54,16 +52,15 @@ pub(super) enum Cmd {
         window: Window,
         reply: Sender<Result<(), String>>,
     },
-    Call {
-        id: u64,
-        name: &'static str,
-        args: String,
-    },
-    /// A script built by the driver that hands its promise to the probe; `false` or a parse error
-    /// answers the call at once with `script_not_started`.
+    /// A script built by the driver that hands a probe call or its promise to the probe; `false`
+    /// or a parse error answers the call at once with `failed` (`probe_not_ready`,
+    /// `script_not_started`).
     Eval {
         id: u64,
         script: String,
+        failed: &'static str,
+        /// In this panel's page instead, answered with the script's value (for checks).
+        panel: Option<u32>,
     },
     Navigate(String),
     /// Open a tab on `url` and show it. A page's own new window (`target=_blank`, `window.open`)
@@ -91,10 +88,27 @@ pub(super) enum Cmd {
         clip: Option<Clip>,
         reply: Sender<Result<Shot, String>>,
     },
+    /// Open a panel: its id, title and page, and what it shares with its caller.
+    Panel(panel::Opening),
+    /// Run a panel's newest frame.
+    Paint(u32),
+    /// Close a panel.
+    Unpanel(u32),
+    /// Ask a panel's page the size it wants (once it loaded)...
+    Shape(u32),
+    /// ...and give its window that size.
+    Reshape(u32, (f64, f64)),
+    /// For checks: how a window is dressed, the browser's or a panel's, once tinted again.
+    Dressed(Option<u32>, Sender<Option<Dressing>>),
+    /// For checks: a panel's window resized.
+    PanelSize(u32, f64, f64),
     Exit(i32),
 }
 
 pub(super) type Reply = Result<Value, String>;
+
+/// How a window is dressed, for checks: see [`Browser::dressed`].
+pub type Dressing = (usize, isize, bool, f64);
 
 /// State the event loop and the worker share.
 pub(super) struct Shared {
@@ -112,6 +126,7 @@ pub(super) struct Shared {
     /// tab's (a page that opened a tab has started a load: the new tab's).
     seq: AtomicU64,
     pub tabs: Mutex<Vec<Tab>>,
+    next_panel: AtomicU32,
 }
 
 /// The loads of tab `active`.
@@ -244,22 +259,72 @@ impl Browser {
             })?;
         Ok(WebviewDriver::new(self.proxy.clone(), self.shared.clone()))
     }
+
+    /// A window titled `title` beside the browser's, showing `html` (a page of the caller's,
+    /// which paints run frames in); it closes when the panel is dropped. It opens whether or not
+    /// the browser's window is open, and closing either leaves the other.
+    pub fn panel(&self, title: &str, html: String, ground: Option<[u8; 3]>) -> Panel {
+        let id = self.shared.next_panel.fetch_add(1, Ordering::Relaxed);
+        let proxy = self.proxy.clone();
+        let panel = Panel::new(id, Box::new(move |cmd| proxy.send_event(cmd).is_ok()));
+        let slot = Arc::clone(&panel.slot);
+        let open = Cmd::Panel((id, title.to_string(), html, ground, slot));
+        if self.proxy.send_event(open).is_err() {
+            panel.slot.alive.store(false, Ordering::SeqCst);
+        }
+        panel
+    }
+
+    /// For checks: how the browser's window (no `panel`) or a panel's is dressed: its materials,
+    /// the first one's state, whether the window is opaque, the shape its resizing keeps (width
+    /// over height, 0 for none). `None` once it is closed.
+    #[doc(hidden)]
+    pub fn dressed(&self, panel: Option<&Panel>) -> Option<Dressing> {
+        let (reply, answer) = mpsc::channel();
+        let ask = Cmd::Dressed(panel.map(Panel::id), reply);
+        self.proxy.send_event(ask).ok()?;
+        answer
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .ok()?
+    }
+
+    /// For checks: resize `panel`'s window, as the person would.
+    #[doc(hidden)]
+    pub fn resize_panel(&self, panel: &Panel, width: f64, height: f64) {
+        let _ = (self.proxy).send_event(Cmd::PanelSize(panel.id(), width, height));
+    }
+
+    /// What `script` evaluates to in `panel`'s page, as JSON.
+    pub fn peek(&self, panel: &Panel, script: &str) -> Result<Value, String> {
+        let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
+        let (sender, receiver) = mpsc::channel();
+        self.shared.pending.lock().unwrap().insert(id, sender);
+        let script = script.to_string();
+        let panel = Some(panel.id());
+        let _ = (self.proxy).send_event(Cmd::Eval {
+            id,
+            script,
+            failed: "",
+            panel,
+        });
+        let reply = receiver.recv_timeout(std::time::Duration::from_secs(5));
+        self.shared.pending.lock().unwrap().remove(&id);
+        reply.unwrap_or_else(|_| Err("no answer".into()))
+    }
 }
 
 /// Take the main thread for the browser's event loop and run `work` on a worker thread with a
 /// handle that opens the window when it is needed. The event loop never returns, so the process
 /// exits here, with the code `work` returns. When the person closes the window, every call waiting
 /// on it fails, `on_close` runs (the app decides what that means for its task), and the window
-/// opens again on its next use. `headless` is decided here: an invisible window keeps the app out
-/// of the Dock.
-pub fn host<F>(headless: bool, on_close: fn(), work: F) -> !
+/// opens again on its next use.
+pub fn host<F>(on_close: fn(), work: F) -> !
 where
     F: FnOnce(Browser) -> i32 + Send + 'static,
 {
-    // Changed, and `headless` read, on macOS only.
+    // Changed on macOS only.
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut event_loop = EventLoopBuilder::<Cmd>::with_user_event().build();
-    let _ = headless;
     // The window never takes the keyboard: the person keeps typing where they were, and their keys
     // never land in the driven page.
     #[cfg(target_os = "macos")]
@@ -281,6 +346,7 @@ where
         active: AtomicU32::new(1),
         seq: AtomicU64::new(0),
         tabs: Mutex::new(vec![]),
+        next_panel: AtomicU32::new(1),
     });
     let browser = Browser {
         proxy: proxy.clone(),
@@ -293,24 +359,40 @@ where
     });
 
     let mut view: Option<Tabs> = None;
+    // The panels' windows, beside the browser's: closing one closes it alone.
+    let mut panels: Vec<Open> = vec![];
     event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
         let Event::UserEvent(command) = event else {
-            match event {
-                Event::WindowEvent {
-                    event: WindowEvent::CloseRequested,
-                    ..
-                } => {
+            let Event::WindowEvent {
+                window_id, event, ..
+            } = event
+            else {
+                return;
+            };
+            let browser = view.as_ref().map(|tabs| tabs.frame.native.id());
+            let ids: Vec<WindowId> = panels.iter().map(|open| open.frame.native.id()).collect();
+            match (route(window_id, browser, &ids), event) {
+                (Route::Panel(index), WindowEvent::CloseRequested) => {
+                    let closed = panels.remove(index);
+                    closed.slot.alive.store(false, Ordering::SeqCst);
+                }
+                (Route::Browser, WindowEvent::CloseRequested) => {
                     view = None;
                     shared.closed();
                     on_close();
                 }
-                Event::WindowEvent {
-                    event: WindowEvent::Resized(_),
-                    ..
-                } => {
+                (Route::Panel(index), event) if frame::relayout(&event) => panels[index].layout(),
+                (Route::Browser, event) if frame::relayout(&event) => {
                     if let Some(tabs) = &view {
                         tabs.layout();
+                    }
+                }
+                // The system's appearance changed: a glass that follows it is tinted again.
+                (Route::Panel(index), WindowEvent::ThemeChanged(_)) => panels[index].frame.retint(),
+                (Route::Browser, WindowEvent::ThemeChanged(_)) => {
+                    if let Some(tabs) = &view {
+                        tabs.frame.retint();
                     }
                 }
                 _ => {}
@@ -330,6 +412,83 @@ where
                 return;
             }
             (Cmd::Exit(code), _) => std::process::exit(code),
+            (Cmd::Panel(opening), _) => {
+                let alive = Arc::clone(&opening.4);
+                match panel::open(opening, target, proxy.clone()) {
+                    Ok(open) => panels.push(open),
+                    Err(_) => alive.alive.store(false, Ordering::SeqCst),
+                }
+                return;
+            }
+            (Cmd::Paint(id), _) => {
+                let open = panels.iter().find(|open| open.id == id);
+                if let Some((open, frame)) = open.and_then(|o| Some((o, o.slot.latest()?))) {
+                    let _ = open.webview.evaluate_script(&frame);
+                }
+                return;
+            }
+            (Cmd::Unpanel(id), _) => {
+                panels.retain(|open| open.id != id);
+                return;
+            }
+            (Cmd::Shape(id), _) => {
+                if let Some(open) = panels.iter().find(|open| open.id == id) {
+                    let proxy = proxy.clone();
+                    let _ =
+                        open.webview
+                            .evaluate_script_with_callback(panel::SHAPE, move |answer| {
+                                if let Some(size) = frame::shape(&answer) {
+                                    let _ = proxy.send_event(Cmd::Reshape(id, size));
+                                }
+                            });
+                }
+                return;
+            }
+            (Cmd::Reshape(id, size), _) => {
+                if let Some(open) = panels.iter().find(|open| open.id == id) {
+                    open.reshape(size);
+                }
+                return;
+            }
+            (Cmd::Dressed(panel, reply), _) => {
+                let frame = match panel {
+                    Some(id) => panels.iter().find(|o| o.id == id).map(|o| &o.frame),
+                    None => view.as_ref().map(|tabs| &tabs.frame),
+                };
+                let _ = reply.send(frame.map(|frame| {
+                    frame.retint();
+                    frame::dressed(&frame.native)
+                }));
+                return;
+            }
+            (Cmd::PanelSize(id, width, height), _) => {
+                if let Some(open) = panels.iter().find(|open| open.id == id) {
+                    open.frame
+                        .native
+                        .set_inner_size(LogicalSize::new(width, height));
+                }
+                return;
+            }
+            (
+                Cmd::Eval {
+                    id,
+                    script,
+                    panel: Some(panel),
+                    ..
+                },
+                _,
+            ) => {
+                let answer = shared.clone();
+                let reply = move |value: String| {
+                    let value = serde_json::from_str(&value).unwrap_or(Value::String(value));
+                    answer.answer(id, Ok(value));
+                };
+                match panels.iter().find(|open| open.id == panel) {
+                    Some(open) => drop(open.webview.evaluate_script_with_callback(&script, reply)),
+                    None => shared.answer(id, Err(WINDOW_CLOSED.into())),
+                }
+                return;
+            }
             (Cmd::Close, _) => {
                 view = None;
                 shared.closed();
@@ -337,7 +496,7 @@ where
             }
             (command, Some(_)) => command,
             // A driver exists only once the window opened: with none now, it was closed.
-            (Cmd::Call { id, .. } | Cmd::Eval { id, .. }, None) => {
+            (Cmd::Eval { id, .. }, None) => {
                 shared.answer(id, Err(WINDOW_CLOSED.into()));
                 return;
             }
@@ -347,37 +506,25 @@ where
             return;
         };
         match command {
-            Cmd::Call { id, name, args } => {
-                let script = format!(
-                    "window.__dloop_call ? window.__dloop_call({id}, {name:?}, {args}) : false"
-                );
-                let answer = shared.clone();
-                let sent = tabs
-                    .active()
-                    .evaluate_script_with_callback(&script, move |accepted| {
-                        if accepted.trim() != "true" {
-                            answer.answer(id, Err("probe_not_ready".into()));
-                        }
-                    });
-                if let Err(error) = sent {
-                    shared.answer(id, Err(format!("probe_not_ready: {error}")));
-                }
-            }
-            Cmd::Eval { id, script } => {
+            Cmd::Eval {
+                id, script, failed, ..
+            } => {
                 let answer = shared.clone();
                 let sent = tabs
                     .active()
                     .evaluate_script_with_callback(&script, move |started| {
                         if started.trim() != "true" {
-                            answer.answer(id, Err("script_not_started".into()));
+                            answer.answer(id, Err(failed.into()));
                         }
                     });
                 if let Err(error) = sent {
-                    shared.answer(id, Err(format!("script_not_started: {error}")));
+                    shared.answer(id, Err(format!("{failed}: {error}")));
                 }
             }
             Cmd::Resize(width, height) => {
-                tabs.native.set_inner_size(LogicalSize::new(width, height));
+                tabs.frame
+                    .native
+                    .set_inner_size(LogicalSize::new(width, height));
                 tabs.layout();
             }
             Cmd::Capture { clip, reply } => capture(tabs.active(), clip, reply),
@@ -409,30 +556,11 @@ where
                 let _ = reply.send(closed);
             }
             Cmd::Open { .. } | Cmd::Exit(_) | Cmd::Close => {}
+            Cmd::Panel(..) | Cmd::Paint(_) | Cmd::Unpanel(_) => {}
+            Cmd::Dressed(..) | Cmd::PanelSize(..) | Cmd::Shape(_) | Cmd::Reshape(..) => {}
         }
     })
 }
 
-/// Open `window` and run `work` with its driver: the browser alone, for tests and examples. A
-/// window that cannot open ends the process with `ENVIRONMENT_EXIT`.
-pub fn run<F>(window: Window, work: F) -> !
-where
-    F: FnOnce(WebviewDriver) -> i32 + Send + 'static,
-{
-    host(
-        window.headless,
-        || std::process::exit(CLOSED_EXIT),
-        move |browser| match browser.open(window) {
-            Ok(driver) => work(driver),
-            Err(error) => {
-                eprintln!("{error}");
-                ENVIRONMENT_EXIT
-            }
-        },
-    )
-}
-
-const CLOSED_EXIT: i32 = 130;
 /// The answer to every call while the window is closed.
 pub(super) const WINDOW_CLOSED: &str = "window_closed";
-const ENVIRONMENT_EXIT: i32 = 3;

@@ -8,6 +8,9 @@ use std::time::Duration;
 
 use tools::browser::{self, Action, BrowserError, Driver, Observation, WebviewDriver, Window};
 
+#[path = "support/panel.rs"]
+mod panel;
+
 /// Serves `tests/fixtures` on an ephemeral port; returns its origin. Each connection has its own
 /// thread: a browser opens connections ahead of need, and one that never sends a request must not
 /// hold up the next page.
@@ -592,22 +595,22 @@ fn screenshots(driver: &WebviewDriver, origin: &str) {
     );
 }
 
-/// One test, `driver`, as the standard harness lists and runs tests, so a test runner that asks
-/// for the list (`--list --format terse`) and then runs each by name finds it.
+/// Two tests, `driver` and `panel`, as the standard harness lists and runs tests, so a test
+/// runner that asks for the list (`--list --format terse`) and then runs each by name finds them.
+/// The event loop takes the main thread once per process, so the chosen ones run in one loop.
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--list") {
         if !args.iter().any(|arg| arg == "--ignored") {
-            println!("driver: test");
+            println!("driver: test\npanel: test");
         }
         return;
     }
     let filters: Vec<&String> = args.iter().filter(|arg| !arg.starts_with('-')).collect();
-    if !filters.is_empty()
-        && !filters
-            .iter()
-            .any(|filter| "driver".contains(filter.as_str()))
-    {
+    let chosen =
+        |name: &str| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str()));
+    let (driving, paneling) = (chosen("driver"), chosen("panel"));
+    if !driving && !paneling {
         return;
     }
     let origin = serve();
@@ -617,13 +620,44 @@ fn main() {
         headless: true,
         viewport: browser::Viewport::DESKTOP,
     };
-    browser::run(window, move |driver| {
-        match catch_unwind(AssertUnwindSafe(|| scenario(&driver, &origin))) {
-            Ok(()) => {
-                println!("driver: ok");
-                0
+    // A window that cannot open ends the run with 3; the person closing it, with 130.
+    browser::host(
+        || std::process::exit(130),
+        move |browser| {
+            let run = |name: &str, test: &dyn Fn()| match catch_unwind(AssertUnwindSafe(test)) {
+                Ok(()) => {
+                    println!("{name}: ok");
+                    true
+                }
+                Err(_) => false,
+            };
+            if paneling && !run("panel (first)", &|| panel::first(&browser)) {
+                return 1;
             }
-            Err(_) => 1,
-        }
-    })
+            let driver = match browser.open(window.clone()) {
+                Ok(driver) => driver,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 3;
+                }
+            };
+            let driven = !driving || run("driver", &|| scenario(&driver, &origin));
+            // The driver's scenario ends with its window closed: the panel's opens it again.
+            let paneled = !paneling
+                || run("panel", &|| {
+                    let reopened = driver
+                        .observe()
+                        .is_err()
+                        .then(|| browser.open(window.clone()));
+                    let driver = match reopened {
+                        Some(opened) => opened.expect("it opens again"),
+                        None => driver.clone(),
+                    };
+                    panel::scenario(&browser, &driver);
+                    panel::emulator(&browser);
+                    panel::glass(&browser, &driver, &window, &origin);
+                });
+            if driven && paneled { 0 } else { 1 }
+        },
+    )
 }

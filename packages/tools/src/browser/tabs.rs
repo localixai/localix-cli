@@ -8,11 +8,11 @@ use std::sync::Arc;
 
 use tao::dpi::LogicalSize;
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
-use tao::window::WindowBuilder;
 use wry::WebView;
 
+use super::frame::{self, Frame, fill};
 use super::host::{Cmd, Shared, Window};
-use super::platform::{conceal, keep_rendering, keep_tab_rendering};
+use super::platform::keep_tab_rendering;
 use super::tab_view::{SHARED, build, builder, share};
 
 /// Tabs open at once: each is a WebView with its own web process.
@@ -26,7 +26,7 @@ struct Slot {
 }
 
 pub(super) struct Tabs {
-    pub native: tao::window::Window,
+    pub frame: Frame,
     slots: Vec<Slot>,
     /// The id of the tab shown and acted on.
     active: u32,
@@ -41,31 +41,19 @@ impl Tabs {
         shared: &Arc<Shared>,
         proxy: &EventLoopProxy<Cmd>,
     ) -> Result<Self, String> {
-        let mut builder = WindowBuilder::new()
-            .with_title(&window.title)
-            .with_inner_size(LogicalSize::new(
-                window.viewport.width,
-                window.viewport.height,
-            ))
-            .with_focused(false);
-        if window.headless {
-            // Shown only once concealed, so it never flashes on screen.
-            builder = conceal(builder.with_decorations(false).with_visible(false));
-        }
-        let native = builder.build(target).map_err(|error| error.to_string())?;
+        let size = LogicalSize::new(window.viewport.width, window.viewport.height);
+        let look = frame::look(window.headless, frame::glass_allowed());
+        // No coat: the pages paint their own ground, and stay opaque for the screenshots.
+        let frame = Frame::build(target, (&window.title, size, None), look, None)?;
         let mut tabs = Self {
-            native,
+            frame,
             slots: vec![],
             active: 1,
             window: window.clone(),
         };
         let webview = tabs.build(1, &window.url, shared, proxy)?;
         // Shows the window too, without making it the key window (tao's set_visible would).
-        keep_rendering(&webview, window.headless);
-        #[cfg(not(target_os = "macos"))]
-        if window.headless {
-            tabs.native.set_visible(true);
-        }
+        tabs.frame.show(&webview);
         tabs.slots.push(Slot {
             webview,
             open: true,
@@ -162,10 +150,8 @@ impl Tabs {
 
     /// The shown tab fills the window; the others stand beside it, out of sight.
     pub fn layout(&self) {
-        let size = self
-            .native
-            .inner_size()
-            .to_logical::<f64>(self.native.scale_factor());
+        let native = &self.frame.native;
+        let size = native.inner_size().to_logical::<f64>(native.scale_factor());
         for (at, slot) in self.slots.iter().enumerate() {
             let shown = at as u32 + 1 == self.active;
             let x = if shown { 0.0 } else { -(size.width + 100.0) };
@@ -187,7 +173,7 @@ impl Tabs {
         let ipc = !(SHARED && first.is_some());
         let builder = builder(id, url, &self.window, shared, proxy.clone(), ipc);
         let builder = share(builder, first);
-        build(builder, &self.native).map_err(|error| error.to_string())
+        build(builder, &self.frame.native).map_err(|error| error.to_string())
     }
 }
 
@@ -201,11 +187,7 @@ fn list(ids: &[u32]) -> String {
 /// shown are hidden instead (WebKitGTK keeps running a hidden view's timers).
 #[cfg(not(target_os = "linux"))]
 fn place(webview: &WebView, x: f64, size: LogicalSize<f64>, _shown: bool) {
-    use wry::dpi::{LogicalPosition, LogicalSize as Size};
-    let _ = webview.set_bounds(wry::Rect {
-        position: LogicalPosition::new(x, 0.0).into(),
-        size: Size::new(size.width, size.height).into(),
-    });
+    let _ = webview.set_bounds(fill(size, x));
 }
 
 #[cfg(target_os = "linux")]

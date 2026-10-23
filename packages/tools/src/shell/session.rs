@@ -11,6 +11,7 @@ use std::time::Duration;
 use super::process::Ending;
 use super::pty;
 use super::running::Session;
+use super::watch::{self, Watch};
 
 pub const MAX_SESSIONS: usize = 4;
 const DEFAULT_YIELD_MS: u64 = 2_000;
@@ -72,6 +73,8 @@ pub struct Turn {
 #[derive(Default)]
 pub struct Sessions {
     inner: Mutex<Registry>,
+    watch: Option<Watch>,
+    shown: bool,
 }
 
 #[derive(Default)]
@@ -84,6 +87,15 @@ struct Registry {
 }
 
 impl Sessions {
+    /// Sessions shown through `watch` once kept: all of them when `shown`, else when asked.
+    pub fn new(watch: Watch, shown: bool) -> Self {
+        Self {
+            inner: Mutex::default(),
+            watch: Some(watch),
+            shown,
+        }
+    }
+
     /// Room for one more session, or why there is none: checked before the person is asked.
     pub fn room(&self) -> Result<(), String> {
         room(&self.registry())
@@ -111,6 +123,7 @@ impl Sessions {
         dir: &Path,
         hidden: &[&str],
         wait: Wait,
+        show: Option<bool>,
         stop: &(dyn Fn() -> bool + Sync),
     ) -> Result<Turn, String> {
         let id = {
@@ -121,12 +134,13 @@ impl Sessions {
             registry.busy.push(id);
             id
         };
-        let pty = pty::spawn(command, dir, hidden, wait.needle).map_err(|error| {
+        let screen = self.watch.is_some();
+        let pty = pty::spawn(command, dir, hidden, wait.needle, screen).map_err(|error| {
             self.release(id);
             format!("the shell could not start: {error}")
         })?;
         let session = Session::new(id, shown(command), pty);
-        Ok(self.go_on(session, wait, stop, None))
+        Ok(self.go_on(session, wait, stop, None, show.unwrap_or(self.shown)))
     }
 
     /// Type `input` and press `keys` in session `id` (neither, to only read it), then wait.
@@ -136,16 +150,22 @@ impl Sessions {
         input: &[u8],
         keys: &[String],
         wait: Wait,
+        show: Option<bool>,
         stop: &(dyn Fn() -> bool + Sync),
     ) -> Result<Turn, String> {
         let session = self.take(id)?;
+        match show {
+            Some(true) => self.show(&session),
+            Some(false) => session.pty.shared.lock().detach(),
+            None => {}
+        }
         let typing = !input.is_empty() || !keys.is_empty();
         session.pty.shared.lock().expect(wait.needle, typing);
         let stalled = match typing {
             true => Some(session.pty.type_in(input, keys)).filter(|(sent, all)| sent < all),
             false => None,
         };
-        Ok(self.go_on(session, wait, stop, stalled))
+        Ok(self.go_on(session, wait, stop, stalled, false))
     }
 
     /// End session `id`, and everything it started.
@@ -166,13 +186,14 @@ impl Sessions {
         count
     }
 
-    /// Wait on `session`, then keep it while it runs.
+    /// Wait on `session`, then keep it while it runs, in a window from then on when `open`.
     fn go_on(
         &self,
         mut session: Session,
         wait: Wait,
         stop: &(dyn Fn() -> bool + Sync),
         stalled: Option<(usize, usize)>,
+        open: bool,
     ) -> Turn {
         let begun = std::time::Instant::now();
         let until = session.wait(wait, stop);
@@ -181,6 +202,9 @@ impl Sessions {
             // A stop is this call's (an agent's, or the task's, whose end closes the rest).
             Until::Stopped | Until::Exited(_) | Until::Closed { .. } => drop(session),
             _ => {
+                if open {
+                    self.show(&session);
+                }
                 let mut registry = self.registry();
                 registry.busy.retain(|&busy| busy != turn.id);
                 registry.live.push(session);
@@ -190,6 +214,17 @@ impl Sessions {
         }
         self.release(turn.id);
         turn
+    }
+
+    /// Show `session` in a window, unless one is open; it opens with no lock held.
+    fn show(&self, session: &Session) {
+        let open = || session.pty.shared.lock().attached();
+        let Some(watch) = self.watch.as_ref().filter(|_| !open()) else {
+            return;
+        };
+        if let Some(painter) = watch(&watch::title(session.id, &session.command)) {
+            session.pty.shared.lock().attach(painter);
+        }
     }
 
     fn take(&self, id: u32) -> Result<Session, String> {

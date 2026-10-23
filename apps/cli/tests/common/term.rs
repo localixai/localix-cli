@@ -31,6 +31,8 @@ pub struct Term {
     child: Child,
     input: File,
     screen: Arc<Mutex<vt100::Parser>>,
+    /// Every byte llx wrote, for what the screen does not keep (a query to the terminal).
+    raw: Arc<Mutex<Vec<u8>>>,
     home: PathBuf,
     workspace: PathBuf,
 }
@@ -38,6 +40,13 @@ pub struct Term {
 impl Term {
     /// `llx` with `args`, in a fresh home and workspace, thinking with `model`.
     pub fn start(model: &Model, args: &[&str]) -> Self {
+        let term = Self::spawn(model, args, &[]);
+        term.wait_for("❯", Duration::from_secs(10));
+        term
+    }
+
+    /// `llx` with `args` and the variables `env`, not waited on.
+    pub fn spawn(model: &Model, args: &[&str], env: &[(&str, &str)]) -> Self {
         let home = std::env::temp_dir().join(format!(
             "llx-term-{}-{:?}",
             std::process::id(),
@@ -81,6 +90,7 @@ impl Term {
             .env("OPENROUTER_BASE_URL", &model.base)
             .env("LLX_PROVIDER", "openrouter")
             .env("LLX_MODEL", "anthropic/claude-haiku-5.5")
+            .envs(env.iter().copied())
             .stdin(file(&slave))
             .stdout(file(&slave))
             .stderr(file(&slave))
@@ -89,6 +99,8 @@ impl Term {
         drop(slave);
         let screen = Arc::new(Mutex::new(vt100::Parser::new(ROWS, COLS, 0)));
         let reading = screen.clone();
+        let raw = Arc::new(Mutex::new(vec![]));
+        let written = raw.clone();
         let mut output = File::from(master.try_clone().unwrap());
         std::thread::spawn(move || {
             let mut buffer = [0u8; 65536];
@@ -97,17 +109,22 @@ impl Term {
                     break;
                 }
                 reading.lock().unwrap().process(&buffer[..n]);
+                written.lock().unwrap().extend_from_slice(&buffer[..n]);
             }
         });
-        let term = Self {
+        Self {
             child,
             input: File::from(master),
             screen,
+            raw,
             home,
             workspace,
-        };
-        term.wait_for("❯", Duration::from_secs(10));
-        term
+        }
+    }
+
+    /// Every byte llx wrote so far.
+    pub fn raw(&self) -> Vec<u8> {
+        self.raw.lock().unwrap().clone()
     }
 
     /// What the screen shows now, row by row.

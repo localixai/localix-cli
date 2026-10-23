@@ -5,9 +5,11 @@
 
 mod args;
 mod capture;
+mod frame;
 mod guard;
 mod host;
 mod page;
+mod panel;
 mod platform;
 mod script;
 mod tab_view;
@@ -25,8 +27,9 @@ pub use capture::{Clip, Shot};
 pub use contracts::view::{
     Action, Element, SelectOption, ViewError as BrowserError, ViewResult as BrowserResult,
 };
-pub use host::{Browser, Tab, Window, host, run};
+pub use host::{Browser, Dressing, Tab, Window, host};
 pub use page::Page;
+pub use panel::Panel;
 pub use tool::BrowserTool;
 pub use viewport::Viewport;
 pub use webview::WebviewDriver;

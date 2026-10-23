@@ -39,6 +39,10 @@ Results land in `evals/results/<timestamp>/`, which git ignores:
 
 Every task makes paid OpenRouter calls: a few tenths of a cent each with the default models.
 
+## By hand
+
+Terminal windows (a session, on a machine with a display): start one with a task like `run python3 -q in a terminal and compute 2+2 there`. Its window opens at the right edge once the session is kept, while the prompt keeps the keyboard; typing into it does nothing. Close it: the task and the session go on. The next `show: true` opens it again with the current screen. Over SSH, in `exec` and in autonomous mode, none opens.
+
 ## Tasks
 
 A task in `tasks.json` has an `id`, a `kind` (`code` or `browser`) and a `goal`. It can also have a `fixture`, `contains`, `matches`, `uses`, `avoids`, `check`, `schema` and `args` (more llx arguments, such as `["--mode", "plan"]`).

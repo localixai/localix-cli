@@ -1,3 +1,7 @@
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
 use super::*;
 
 #[test]
@@ -78,4 +82,155 @@ fn a_query_is_answered_through_the_reader() {
     assert_eq!(stream.take_in(b"\x1b[6n"), b"\x1b[1;1R");
     stream.take_in(b"\x1b[?1h");
     assert!(stream.application_cursor());
+}
+
+/// A window that records the frames it is given, answers whether it is still open, and counts
+/// how often it was closed (dropped).
+#[derive(Clone, Default)]
+struct Window {
+    frames: Arc<Mutex<Vec<String>>>,
+    closed_by_person: Arc<AtomicBool>,
+    drops: Arc<AtomicUsize>,
+}
+
+struct Dropped(Arc<AtomicUsize>);
+
+impl Drop for Dropped {
+    fn drop(&mut self) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+impl Window {
+    fn painter(&self) -> Painter {
+        let (frames, closed) = (Arc::clone(&self.frames), Arc::clone(&self.closed_by_person));
+        let dropped = Dropped(Arc::clone(&self.drops));
+        Box::new(move |frame| {
+            let _ = &dropped;
+            frames.lock().unwrap().push(frame);
+            !closed.load(Ordering::SeqCst)
+        })
+    }
+
+    fn paints(&self) -> usize {
+        self.frames.lock().unwrap().len()
+    }
+
+    fn last(&self) -> String {
+        self.frames
+            .lock()
+            .unwrap()
+            .last()
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn drops(&self) -> usize {
+        self.drops.load(Ordering::SeqCst)
+    }
+}
+
+fn watched() -> Stream {
+    Stream {
+        screen: Some(Screen::new(40, 120)),
+        ..Stream::default()
+    }
+}
+
+#[test]
+fn a_window_attached_shows_what_was_printed_before() {
+    let (mut stream, window) = (watched(), Window::default());
+    stream.take_in(b"before\r\n");
+    stream.attach(window.painter());
+    assert_eq!(window.paints(), 1);
+    assert!(window.last().contains("before"), "{}", window.last());
+}
+
+#[test]
+fn output_in_a_burst_is_painted_once_its_time_comes() {
+    let (mut stream, window) = (watched(), Window::default());
+    stream.attach(window.painter());
+    stream.take_in(b"one ");
+    stream.take_in(b"two");
+    assert_eq!(window.paints(), 1, "within the frame's time: not yet");
+    let wait = stream.paint_wait().expect("a paint is due");
+    assert!(wait <= PAINT_EVERY);
+    stream.paint_due();
+    assert_eq!(window.paints(), 1, "still too soon");
+    std::thread::sleep(PAINT_EVERY);
+    assert_eq!(stream.paint_wait(), Some(Duration::ZERO));
+    stream.paint_due();
+    assert_eq!(window.paints(), 2);
+    assert!(window.last().contains("one two"), "{}", window.last());
+    assert_eq!(stream.paint_wait(), None, "nothing new");
+    // Once the frame's time passed, the next output is painted at once.
+    std::thread::sleep(PAINT_EVERY);
+    stream.take_in(b"!");
+    assert_eq!(window.paints(), 3);
+}
+
+#[test]
+fn a_window_the_person_closed_is_painted_no_more() {
+    let (mut stream, window) = (watched(), Window::default());
+    window.closed_by_person.store(true, Ordering::SeqCst);
+    stream.attach(window.painter());
+    assert_eq!(window.drops(), 1, "let go at once");
+    assert!(!stream.attached());
+    std::thread::sleep(PAINT_EVERY);
+    stream.take_in(b"more");
+    assert_eq!(window.paints(), 1);
+}
+
+#[test]
+fn no_window_opens_on_an_ended_session() {
+    for end in [true, false] {
+        let (mut stream, window) = (watched(), Window::default());
+        match end {
+            true => assert!(stream.finish().is_none(), "no window yet"),
+            false => stream.close(),
+        }
+        stream.attach(window.painter());
+        assert_eq!((window.paints(), window.drops()), (0, 1), "eof: {end}");
+    }
+}
+
+#[test]
+fn closing_the_session_closes_its_window_once() {
+    let (mut stream, window) = (watched(), Window::default());
+    stream.attach(window.painter());
+    stream.close();
+    stream.close();
+    assert_eq!(window.drops(), 1);
+}
+
+#[test]
+fn a_detached_window_closes_and_the_end_keeps_nothing() {
+    let (mut stream, window) = (watched(), Window::default());
+    stream.attach(window.painter());
+    stream.detach();
+    assert_eq!(window.drops(), 1);
+    assert!(stream.finish().is_none());
+}
+
+#[test]
+fn the_end_hands_over_the_window_and_its_screen() {
+    let (mut stream, window) = (watched(), Window::default());
+    stream.attach(window.painter());
+    stream.take_in(b"bye");
+    let (painter, screen) = stream.finish().expect("the window, to say it ended");
+    assert!(stream.eof);
+    assert!(painter(screen.frame(Some(" · exited 0"))));
+    assert!(window.last().contains("bye") && window.last().contains("exited 0"));
+    drop(painter);
+    assert_eq!(window.drops(), 1);
+}
+
+#[test]
+fn without_a_screen_nothing_is_painted_and_nothing_changes() {
+    let (mut stream, window) = (Stream::default(), Window::default());
+    stream.attach(window.painter());
+    assert_eq!((window.paints(), window.drops()), (0, 1));
+    assert_eq!(stream.take_in(b"\x1b[6nhi"), b"\x1b[1;1R");
+    assert_eq!(stream.take().as_deref(), Some("hi"));
+    assert_eq!(stream.paint_wait(), None);
 }

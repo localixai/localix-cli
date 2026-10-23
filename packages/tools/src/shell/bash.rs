@@ -55,6 +55,7 @@ pub(super) struct Args {
     pub yield_ms: Option<u64>,
     #[serde(default)]
     pub close: bool,
+    pub show: Option<bool>,
 }
 
 impl Args {
@@ -67,6 +68,7 @@ impl Args {
             || self.keys.is_some()
             || self.wait_for.is_some()
             || self.yield_ms.is_some()
+            || self.show.is_some()
     }
 }
 

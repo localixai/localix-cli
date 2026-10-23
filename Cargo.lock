@@ -1760,6 +1760,7 @@ dependencies = [
  "ratatui",
  "serde_json",
  "session",
+ "sha2 0.11.1",
  "textwrap",
  "tools",
  "unicode-width",
@@ -3662,7 +3663,9 @@ dependencies = [
  "objc2-web-kit",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "tao",
+ "vt100",
  "wry",
 ]
 

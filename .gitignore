@@ -8,3 +8,4 @@ dist/
 *.pending-snap
 *.snap.new
 .claude/worktrees/
+*.profraw

@@ -27,7 +27,14 @@ fn kill_all_now_reaches_more_than_four() {
     let mut started = Vec::new();
     for sessions in [&one, &one, &one, &two, &two] {
         let turn = sessions
-            .start("echo started; exec sleep 60", &dir, &[], wait, &|| false)
+            .start(
+                "echo started; exec sleep 60",
+                &dir,
+                &[],
+                wait,
+                None,
+                &|| false,
+            )
             .unwrap();
         assert_eq!(turn.until, Until::Matched, "{turn:?}");
         started.push((sessions, turn.id));
@@ -42,7 +49,7 @@ fn kill_all_now_reaches_more_than_four() {
         yield_ms: Some(2_000),
     };
     for (sessions, id) in started {
-        let ended = sessions.send(id, b"", &[], poll, &|| false).unwrap();
+        let ended = sessions.send(id, b"", &[], poll, None, &|| false).unwrap();
         assert_eq!(ended.until, Until::Exited(Ending::Signal(9)), "{ended:?}");
     }
 }
@@ -59,7 +66,9 @@ fn kill_all_now_kills_a_live_session() {
     // `set -m`: job control, as in an interactive shell, so the sleep is in a group of its own and
     // only the sweep of the session's processes reaches it.
     let command = "set -m; sleep 60 & echo started $!; wait";
-    let turn = sessions.start(command, &dir, &[], wait, &|| false).unwrap();
+    let turn = sessions
+        .start(command, &dir, &[], wait, None, &|| false)
+        .unwrap();
     assert_eq!(turn.until, Until::Matched, "{turn:?}");
     let poll = Wait {
         needle: None,
@@ -74,7 +83,7 @@ fn kill_all_now_kills_a_live_session() {
     {
         Some(_) => turn.output.unwrap(),
         None => sessions
-            .send(turn.id, b"", &[], poll, &|| false)
+            .send(turn.id, b"", &[], poll, None, &|| false)
             .unwrap()
             .output
             .unwrap(),
@@ -91,6 +100,8 @@ fn kill_all_now_kills_a_live_session() {
         assert!(Instant::now() < deadline, "the sleep still runs");
         std::thread::sleep(Duration::from_millis(20));
     }
-    let ended = sessions.send(turn.id, b"", &[], poll, &|| false).unwrap();
+    let ended = sessions
+        .send(turn.id, b"", &[], poll, None, &|| false)
+        .unwrap();
     assert_eq!(ended.until, Until::Exited(Ending::Signal(9)), "{ended:?}");
 }

@@ -13,15 +13,25 @@ fn main() {
         headless: true,
         viewport: browser::Viewport::DESKTOP,
     };
-    browser::run(window, move |driver| {
-        let _ = driver.wait_loaded(Duration::from_secs(20));
-        for script in &scripts {
-            match driver.evaluate(script) {
-                Ok(result) => println!("{result}"),
-                Err(error) => println!("error: {error}"),
+    browser::host(
+        || std::process::exit(130),
+        move |browser| {
+            let driver = match browser.open(window) {
+                Ok(driver) => driver,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 3;
+                }
+            };
+            let _ = driver.wait_loaded(Duration::from_secs(20));
+            for script in &scripts {
+                match driver.evaluate(script) {
+                    Ok(result) => println!("{result}"),
+                    Err(error) => println!("error: {error}"),
+                }
+                std::thread::sleep(Duration::from_millis(800));
             }
-            std::thread::sleep(Duration::from_millis(800));
-        }
-        0
-    })
+            0
+        },
+    )
 }

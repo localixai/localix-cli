@@ -29,6 +29,7 @@ use crate::interrupt;
 use crate::mode::{self, Mode};
 use crate::output::{Start, Summary};
 use crate::tui;
+use crate::windows;
 
 pub use super::ended::{Ended, since};
 
@@ -124,6 +125,11 @@ pub fn run(
     let mode = Mode::choose(options.mode, options.yes);
     let (terminal, asks) = (Tty::available(), kind == Kind::Session);
     let browser = tools::browser::has_display();
+    let remote = windows::remote(|name| std::env::var_os(name).is_some());
+    let shown = windows::shown(&options, asks, mode, remote);
+    // The person's colours are asked only where terminal windows will show them.
+    #[cfg(unix)]
+    let windowed = browser && shown;
     let environment = Environment {
         root: workspace.root(),
         mode: &mode::describe(mode, terminal, asks),
@@ -137,8 +143,7 @@ pub fn run(
     if session.workspace.is_empty() {
         session.workspace = workspace.root().display().to_string();
     }
-    let headless = !options.show_browser;
-    let setup = Setup {
+    let mut setup = Setup {
         options,
         choice,
         workspace,
@@ -151,11 +156,24 @@ pub fn run(
         history,
         session,
         ui: None,
+        shown,
+        #[cfg(unix)]
+        theme: None,
     };
     // A session takes the terminal for its interface; one that cannot draw there (no size to
     // draw at) is a usage error, as having no terminal is.
     let running = match &work {
         Work::Session(_) => {
+            // Before the interface reads the keys, which would take the terminal's answers.
+            #[cfg(unix)]
+            if windowed {
+                setup.theme = crate::colours::ask();
+            }
+            // xterm.js for the terminal windows, once: until it is kept they show a grid.
+            #[cfg(unix)]
+            if crate::xterm::wanted(true, windowed, |name| std::env::var(name).ok()) {
+                crate::xterm::prefetch();
+            }
             let running = tui::start(repl::commands(), setup.workspace.root());
             let why = |error| Failure::Usage(format!("{NO_INTERFACE} ({error}): {RUN_EXEC}"));
             Some(running.map_err(why)?)
@@ -199,7 +217,7 @@ pub fn run(
     if !browser {
         return Ok(work(None));
     }
-    tools::browser::host(headless, interrupt::window_closed, move |b| work(Some(b)))
+    tools::browser::host(interrupt::window_closed, move |b| work(Some(b)))
 }
 
 impl Rig<'_> {

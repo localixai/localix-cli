@@ -17,7 +17,7 @@ fn a_program_that_reads_nothing_stalls_the_typing() {
     };
     let never = || false;
     let turn = sessions
-        .start("sleep 30", dir.path(), &[], quick, &never)
+        .start("sleep 30", dir.path(), &[], quick, None, &never)
         .unwrap();
     // Whole lines, which a terminal queues until it is full (one too long it drops instead), and
     // far more than any terminal's queue holds.
@@ -25,7 +25,7 @@ fn a_program_that_reads_nothing_stalls_the_typing() {
     let keys = ["Enter".to_string()];
     let begun = Instant::now();
     let typed = sessions
-        .send(turn.id, input.as_bytes(), &keys, quick, &never)
+        .send(turn.id, input.as_bytes(), &keys, quick, None, &never)
         .unwrap();
     let took = begun.elapsed();
     let (sent, all) = typed
@@ -58,11 +58,11 @@ fn input_a_program_reads_does_not_stall() {
         yield_ms: Some(300),
     };
     let turn = sessions
-        .start("cat", dir.path(), &[], quick, &never)
+        .start("cat", dir.path(), &[], quick, None, &never)
         .unwrap();
     let input = format!("{}\r", "x".repeat(99)).repeat(40);
     let typed = sessions
-        .send(turn.id, input.as_bytes(), &[], quick, &never)
+        .send(turn.id, input.as_bytes(), &[], quick, None, &never)
         .unwrap();
     assert_eq!(typed.stalled, None, "{typed:?}");
 }
@@ -76,11 +76,11 @@ fn ctrl_c_reaches_a_program_whose_parent_ignored_it() {
             yield_ms: Some(300),
         };
         let turn = sessions
-            .start("sleep 30", dir.path(), &[], quick, &never)
+            .start("sleep 30", dir.path(), &[], quick, None, &never)
             .unwrap();
         let keys = ["Ctrl-C".to_string()];
         let turn = sessions
-            .send(turn.id, b"", &keys, Wait::default(), &never)
+            .send(turn.id, b"", &keys, Wait::default(), None, &never)
             .unwrap();
         assert_eq!(
             turn.until,

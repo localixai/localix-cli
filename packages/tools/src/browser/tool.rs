@@ -52,7 +52,8 @@ impl Tool for BrowserTool<'_> {
         let new_tab = args.new_tab() == Ok(true);
         if let Some(id) = args.switch_to() {
             self.page
-                .switch_tab(id)
+                .driver()
+                .and_then(|driver| driver.switch_tab(id))
                 .map_err(|error| ToolError::Failed(error.to_string()))?;
             report.push(format!("Showing tab {id}."));
         }
@@ -143,14 +144,14 @@ impl BrowserTool<'_> {
     /// Open `url`, or the search page, in a new tab.
     fn open_tab(&self, url: Option<String>, report: &mut Vec<String>) {
         let url = url.unwrap_or_else(|| SEARCH_PAGE.to_string());
-        match self.page.new_tab(&url) {
+        match self.page.driver().and_then(|driver| driver.new_tab(&url)) {
             Ok(id) => report.push(format!("Opened {url} in tab {id}.")),
             Err(error) => report.push(format!("No new tab: {error}")),
         }
     }
 
     fn close_tab(&self, id: u32) -> String {
-        match self.page.close_tab(id) {
+        match self.page.driver().and_then(|driver| driver.close_tab(id)) {
             Ok(true) => format!("Closed tab {id}."),
             Ok(false) => format!(
                 "Closed tab {id}, the last one: the window is closed, and the next call opens a \
@@ -213,7 +214,11 @@ impl BrowserTool<'_> {
     }
 
     fn read(&self, offset: usize) -> String {
-        match self.page.read(offset, READ_LIMIT) {
+        match self
+            .page
+            .driver()
+            .and_then(|driver| driver.read(offset, READ_LIMIT))
+        {
             Ok(text) => {
                 let end = text.offset + text.text.chars().count();
                 let more = if end < text.total {

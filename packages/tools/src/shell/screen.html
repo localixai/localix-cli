@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>{{title}}</title>
+<style>
+:root{--fg:#1d1d1f;--bg:#ffffff;--cursor:#1d1d1f;--cols:{{cols}};--rows:{{rows}}}
+@media (prefers-color-scheme: dark){:root{--fg:#e6e6e6;--bg:#1e1e1e;--cursor:#e6e6e6}}
+{{theme}}
+body{color:var(--fg);display:flex;align-items:center;justify-content:center}
+:root{--ground:var(--bg)}
+#s{position:relative;padding:8px;width:calc(var(--cols) * 1ch);height:calc(var(--rows) * 1.2em);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"DejaVu Sans Mono",monospace;font-size:13px;line-height:1.2;white-space:pre;cursor:default}
+.r{height:1.2em}
+#c{position:absolute;width:1ch;height:1.2em;background:var(--cursor);opacity:.75}
+</style>
+</head>
+<body>
+<div id="s"><div id="c" hidden></div></div>
+<script>
+"use strict";
+const screen = document.getElementById("s"), cursor = document.getElementById("c");
+const rows = [], base = document.title;
+const css = (name) => +getComputedStyle(document.documentElement).getPropertyValue(name);
+const COLS = css("--cols"), ROWS = css("--rows"), PAD = 8, LINE = 1.2;
+// A character's width for each pixel of font size.
+const probe = document.createElement("span");
+probe.textContent = "0".repeat(100);
+probe.style.fontSize = "100px";
+screen.appendChild(probe);
+const CH = probe.getBoundingClientRect().width / 10000;
+probe.remove();
+// The largest font at which the whole grid fits the window.
+function size() {
+  if (!innerWidth || !innerHeight) return;
+  const fits = Math.min((innerWidth - 2 * PAD) / (COLS * CH), (innerHeight - 2 * PAD) / (ROWS * LINE));
+  screen.style.fontSize = fits + "px";
+}
+// For checks: a cell, and the grid with its space around it.
+function cells() {
+  const font = parseFloat(getComputedStyle(screen).fontSize);
+  return [font * CH, font * LINE, COLS * font * CH + 2 * PAD, ROWS * font * LINE + 2 * PAD];
+}
+// The window this grid wants: its size at a comfortable font. The window keeps that shape.
+function shape() {
+  return [COLS * 13 * CH + 2 * PAD, ROWS * 13 * LINE + 2 * PAD];
+}
+size();
+addEventListener("resize", size);
+// Each row is set as text only: what a program prints never becomes markup.
+function F(lines, row, column, hidden, end) {
+  while (rows.length < lines.length) {
+    const div = document.createElement("div");
+    div.className = "r";
+    screen.appendChild(div);
+    rows.push(div);
+  }
+  lines.forEach((line, i) => { if (rows[i].textContent !== line) rows[i].textContent = line; });
+  cursor.style.top = `calc(8px + ${row * 1.2}em)`;
+  cursor.style.left = `calc(8px + ${column}ch)`;
+  cursor.hidden = hidden;
+  document.title = end ? base + end : base;
+}
+</script>
+</body>
+</html>

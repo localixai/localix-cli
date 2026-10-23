@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 use tao::event_loop::EventLoopProxy;
 
-use super::host::{Cmd, Loads, Shared, Tab, WINDOW_CLOSED, active_loads};
+use super::host::{Cmd, Loads, Reply, Shared, Tab, WINDOW_CLOSED, active_loads};
 use super::script::script_forms;
 use super::{Action, BrowserError, BrowserResult, Clip, Driver, Observation, PageText, Shot};
 
@@ -59,23 +59,36 @@ impl WebviewDriver {
         }
     }
 
-    /// One probe call, answered over IPC or refused while the page has no probe.
-    fn call(&self, name: &'static str, args: Value, timeout: Duration) -> BrowserResult<Value> {
-        self.open_or_closed()?;
+    /// Send the script `form` makes of a fresh call id, its answer awaited on the receiver; the
+    /// caller removes the id from `pending` once it is done waiting.
+    fn post(
+        &self,
+        form: impl FnOnce(u64) -> String,
+        failed: &'static str,
+    ) -> BrowserResult<(u64, mpsc::Receiver<Reply>)> {
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = mpsc::channel();
         self.shared.pending.lock().unwrap().insert(id, sender);
-        let sent = self.proxy.send_event(Cmd::Call {
+        let script = form(id);
+        let sent = self.send(Cmd::Eval {
             id,
-            name,
-            args: args.to_string(),
+            script,
+            failed,
+            panel: None,
         });
         if sent.is_err() {
             self.shared.pending.lock().unwrap().remove(&id);
-            return Err(BrowserError::Unavailable(
-                "the browser window is gone".into(),
-            ));
         }
+        sent.map(|()| (id, receiver))
+    }
+
+    /// One probe call, answered over IPC or refused while the page has no probe.
+    fn call(&self, name: &'static str, args: Value, timeout: Duration) -> BrowserResult<Value> {
+        self.open_or_closed()?;
+        let call = |id| {
+            format!("window.__dloop_call ? window.__dloop_call({id}, {name:?}, {args}) : false")
+        };
+        let (id, receiver) = self.post(call, "probe_not_ready")?;
         let reply = receiver.recv_timeout(timeout);
         self.shared.pending.lock().unwrap().remove(&id);
         match reply {
@@ -182,16 +195,8 @@ impl WebviewDriver {
     fn run_script(&self, form: &str) -> BrowserResult<Value> {
         self.open_or_closed()?;
         let before = self.loads();
-        let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
-        let (sender, receiver) = mpsc::channel();
-        self.shared.pending.lock().unwrap().insert(id, sender);
-        let script = form.replace("__ID__", &id.to_string());
-        if self.proxy.send_event(Cmd::Eval { id, script }).is_err() {
-            self.shared.pending.lock().unwrap().remove(&id);
-            return Err(BrowserError::Unavailable(
-                "the browser window is gone".into(),
-            ));
-        }
+        let script = |id: u64| form.replace("__ID__", &id.to_string());
+        let (id, receiver) = self.post(script, "script_not_started")?;
         let deadline = Instant::now() + SCRIPT_TIMEOUT;
         let mut left: Option<Instant> = None;
         let reply = loop {
@@ -285,7 +290,7 @@ fn action_args(epoch: &str, action: &Action) -> Value {
 impl WebviewDriver {
     /// Close the window; calls waiting on it fail, and the next `Page::open` opens a new one.
     pub fn close(&self) {
-        let _ = self.proxy.send_event(Cmd::Close);
+        let _ = self.send(Cmd::Close);
     }
 }
 
@@ -293,9 +298,7 @@ impl Driver for WebviewDriver {
     fn navigate(&self, url: &str) -> BrowserResult<()> {
         self.open_or_closed()?;
         let before = self.loads();
-        self.proxy
-            .send_event(Cmd::Navigate(url.to_string()))
-            .map_err(|_| BrowserError::Unavailable("the browser window is gone".into()))?;
+        self.send(Cmd::Navigate(url.to_string()))?;
         self.load_started_since(before, PROBE_READY);
         self.wait_loaded(LOAD_TIMEOUT)
     }
@@ -366,9 +369,7 @@ impl Driver for WebviewDriver {
     }
 
     fn resize(&self, width: f64, height: f64) -> BrowserResult<()> {
-        self.proxy
-            .send_event(Cmd::Resize(width, height))
-            .map_err(|_| BrowserError::Unavailable("the browser window is gone".into()))?;
+        self.send(Cmd::Resize(width, height))?;
         // The page reflows on its own resize event; give it the usual settle.
         let _ = self.call("settle", json!({}), SETTLE_TIMEOUT);
         Ok(())
@@ -430,9 +431,7 @@ impl Driver for WebviewDriver {
             None => None,
         };
         let (reply, shot) = mpsc::channel();
-        self.proxy
-            .send_event(Cmd::Capture { clip, reply })
-            .map_err(|_| BrowserError::Unavailable("the browser window is gone".into()))?;
+        self.send(Cmd::Capture { clip, reply })?;
         match shot.recv_timeout(CAPTURE_TIMEOUT) {
             Ok(Ok(shot)) => Ok(shot),
             Ok(Err(why)) => Err(BrowserError::Refused(format!("no screenshot: {why}"))),

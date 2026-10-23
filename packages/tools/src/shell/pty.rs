@@ -15,12 +15,13 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use super::screen::Screen;
 use super::stream::Shared;
-use super::{keys, process};
+use super::{keys, process, watch};
 
 /// The window's size, which never changes: wide enough that tables do not wrap.
-const COLUMNS: u16 = 120;
-const ROWS: u16 = 40;
+pub(super) const COLUMNS: u16 = 120;
+pub(super) const ROWS: u16 = 40;
 /// Bytes written at a time, each when the terminal can take them.
 const CHUNK: usize = 512;
 /// How long a write may wait for a program that does not read its input.
@@ -37,8 +38,14 @@ pub struct Pty {
 }
 
 /// Start `command` in `dir` in a new terminal, without the `hidden` variables, waiting for
-/// `needle` from its first output on.
-pub fn spawn(command: &str, dir: &Path, hidden: &[&str], needle: Option<&str>) -> io::Result<Pty> {
+/// `needle` from its first output on; with `screen`, its screen is kept for a window.
+pub fn spawn(
+    command: &str,
+    dir: &Path,
+    hidden: &[&str],
+    needle: Option<&str>,
+    screen: bool,
+) -> io::Result<Pty> {
     let (master, slave) = open()?;
     let mut shell = process::shell(command);
     process::quiet_env(&mut shell, hidden);
@@ -83,10 +90,11 @@ pub fn spawn(command: &str, dir: &Path, hidden: &[&str], needle: Option<&str>) -
     )?;
     let writer = File::from(master);
     let reader = writer.try_clone()?;
-    let shared = Arc::new(Shared::default());
+    let shared = Arc::new(Shared::new(screen.then(|| Screen::new(ROWS, COLUMNS))));
     shared.lock().expect(needle, true);
     let stream = Arc::clone(&shared);
-    thread::spawn(move || read(reader, &stream));
+    let pid = child.id();
+    thread::spawn(move || read(reader, &stream, pid));
     Ok(Pty {
         child,
         writer,
@@ -134,6 +142,12 @@ impl Pty {
                 _ => true,
             }
         }
+    }
+
+    /// Close the session's window at once, even one kept to say the session ended.
+    pub fn dismiss(&self) {
+        self.shared.lock().detach();
+        self.shared.wake.notify_all();
     }
 
     /// The session ends: the reader stops at its next look.
@@ -222,14 +236,20 @@ fn retry(error: &io::Error) -> bool {
 }
 
 /// Read the terminal into `shared` until it closes (EOF on macOS, EIO on Linux once nothing holds
-/// the other end) or the session ends, answering the program's queries on the way.
-fn read(file: File, shared: &Shared) {
+/// the other end) or the session ends, answering the program's queries on the way. While a
+/// window waits for a paint, the reader wakes for it; at the end, the window says so.
+fn read(file: File, shared: &Shared, pid: u32) {
     let mut buffer = [0; 8192];
     loop {
-        if shared.lock().closed() {
-            break;
-        }
-        if !ready(file.as_raw_fd(), libc::POLLIN, READ_POLL) {
+        let poll = {
+            let stream = shared.lock();
+            if stream.closed() {
+                break;
+            }
+            stream.paint_wait().unwrap_or(READ_POLL)
+        };
+        if !ready(file.as_raw_fd(), libc::POLLIN, poll) {
+            shared.lock().paint_due();
             continue;
         }
         match (&file).read(&mut buffer) {
@@ -243,8 +263,15 @@ fn read(file: File, shared: &Shared) {
             Err(_) => break,
         }
     }
-    shared.lock().eof = true;
+    // How the program ended is read before the end is told: a call waiting on it reaps it then.
+    let attached = shared.lock().attached();
+    let status = attached.then(|| watch::status(pid)).flatten();
+    // The end and the window's leaving happen under one lock: no window opens after it.
+    let window = shared.lock().finish();
     shared.wake.notify_all();
+    if let Some((painter, screen)) = window {
+        watch::linger(shared, status, painter, &screen);
+    }
 }
 
 #[cfg(test)]

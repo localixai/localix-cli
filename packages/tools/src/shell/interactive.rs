@@ -56,6 +56,11 @@ pub(super) fn properties() -> Vec<(&'static str, Value)> {
             json!({"type": "boolean",
             "description": "End the session: it and everything it started are killed."}),
         ),
+        (
+            "show",
+            json!({"type": "boolean", "description": "Show this session's screen in a window \
+            beside the terminal, when a display is available."}),
+        ),
     ]
 }
 
@@ -111,7 +116,7 @@ mod unix {
                 let hidden: Vec<&str> = names.iter().map(String::as_str).collect();
                 let turn = tool
                     .sessions
-                    .start(command, &dir, &hidden, wait, tool.stop)
+                    .start(command, &dir, &hidden, wait, args.show, tool.stop)
                     .map_err(failed)?;
                 report(&turn, Some(&place), wait.needle, "")
             }
@@ -130,7 +135,7 @@ mod unix {
                 }
                 let turn = tool
                     .sessions
-                    .send(id, &keys::typed(input), keys, wait, tool.stop)
+                    .send(id, &keys::typed(input), keys, wait, args.show, tool.stop)
                     .map_err(failed)?;
                 report(&turn, None, wait.needle, input)
             }
@@ -160,8 +165,8 @@ mod unix {
         }
         if !args.tty && args.session.is_none() {
             return refuse(
-                "input, keys, wait_for, yield_ms and close are for terminal sessions: set tty to \
-                 start one, or pass session",
+                "input, keys, wait_for, yield_ms, close and show are for terminal sessions: set \
+                 tty to start one, or pass session",
             );
         }
         if typing && args.tty {

@@ -52,7 +52,8 @@ pulldown-cmark = { version = "0.13", default-features = false }
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm", "scrolling-regions", "unstable-backend-writer"] }
 textwrap = "0.16.2"
 unicode-width = "0.2"
-# Tests of what the terminal shows (dev only): snapshots, and a terminal emulator to draw into.
+# Tests of what the terminal shows (dev only): snapshots. A terminal emulator: what the tests draw
+# into, and a terminal session's screen in its window.
 insta = "1.46"
 vt100 = "0.16.2"
 objc2 = "0.6"

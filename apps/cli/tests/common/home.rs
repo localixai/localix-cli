@@ -118,6 +118,7 @@ pub fn isolate(command: &mut Command, home: &Path) {
         .env("APPDATA", home.join("config"))
         .env("LLX_SESSIONS", home.join("sessions"))
         .env("LLX_MODELS_REFRESH", "0")
+        .env("LLX_XTERM", "0")
         .env("OPENROUTER_BASE_URL", "http://127.0.0.1:1");
 }
 

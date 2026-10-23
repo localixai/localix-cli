@@ -4,10 +4,15 @@
 //! until the next one.
 
 use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::filter::Filter;
 use super::output::Output;
+use super::screen::Screen;
+
+/// A window's painter: a frame in, whether the window is still open out.
+pub type Painter = Box<dyn Fn(String) -> bool + Send>;
+pub const PAINT_EVERY: Duration = Duration::from_millis(33);
 
 /// The output read so far, and the wake for who waits on it.
 #[derive(Default)]
@@ -17,6 +22,17 @@ pub struct Shared {
 }
 
 impl Shared {
+    /// Shared output, with `screen` kept for a window when there is one.
+    pub fn new(screen: Option<Screen>) -> Self {
+        Self {
+            state: Mutex::new(Stream {
+                screen,
+                ..Stream::default()
+            }),
+            wake: Condvar::new(),
+        }
+    }
+
     pub fn lock(&self) -> MutexGuard<'_, Stream> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -40,6 +56,15 @@ pub struct Stream {
     pub matched: bool,
     /// The session ended: the reader stops.
     closed: bool,
+    /// The screen, kept only for a window: without one, the output is never parsed twice.
+    screen: Option<Screen>,
+    /// The window that shows the screen, while one is open.
+    painter: Option<Painter>,
+    painted_at: Instant,
+    /// Output came since the last paint.
+    dirty: bool,
+    /// The window was closed by a call: one kept to say the session ended closes too.
+    pub dismissed: bool,
 }
 
 impl Default for Stream {
@@ -55,6 +80,11 @@ impl Default for Stream {
             carry: vec![],
             matched: false,
             closed: false,
+            screen: None,
+            painter: None,
+            painted_at: Instant::now(),
+            dirty: false,
+            dismissed: false,
         }
     }
 }
@@ -107,6 +137,11 @@ impl Stream {
         self.bytes += chunk.len();
         self.since_write += chunk.len();
         self.changed_at = Instant::now();
+        if let Some(screen) = &mut self.screen {
+            screen.feed(chunk);
+            self.dirty = true;
+            self.paint_due();
+        }
         if let (Some(needle), false) = (&self.needle, self.matched) {
             self.carry.extend_from_slice(&seen);
             self.matched = self.carry.windows(needle.len()).any(|at| at == &needle[..]);
@@ -120,8 +155,63 @@ impl Stream {
         self.filter.application_cursor
     }
 
+    /// Show the screen in the window `painter` paints, from now on. With no screen, or once the
+    /// session ended, the window is let go at once.
+    pub fn attach(&mut self, painter: Painter) {
+        if self.screen.is_none() || self.eof || self.closed {
+            return;
+        }
+        self.painter = Some(painter);
+        self.dismissed = false;
+        self.paint();
+    }
+
+    /// Close the window, if one is open.
+    pub fn detach(&mut self) {
+        self.painter = None;
+        self.dismissed = true;
+    }
+
+    pub fn attached(&self) -> bool {
+        self.painter.is_some()
+    }
+
+    /// How long until a paint is due, while output waits for one.
+    pub fn paint_wait(&self) -> Option<Duration> {
+        match (self.dirty, &self.painter) {
+            (true, Some(_)) => Some(PAINT_EVERY.saturating_sub(self.painted_at.elapsed())),
+            _ => None,
+        }
+    }
+
+    /// Paint what waits, if its time came.
+    pub fn paint_due(&mut self) {
+        if self.paint_wait() == Some(Duration::ZERO) {
+            self.paint();
+        }
+    }
+
+    /// The terminal closed: its window, if one is open, and the screen it shows, to say so.
+    pub fn finish(&mut self) -> Option<(Painter, Screen)> {
+        self.eof = true;
+        let painter = self.painter.take()?;
+        Some((painter, self.screen.take()?))
+    }
+
+    fn paint(&mut self) {
+        let (Some(painter), Some(screen)) = (&self.painter, &self.screen) else {
+            return;
+        };
+        if !painter(screen.frame(None)) {
+            self.painter = None;
+        }
+        self.painted_at = Instant::now();
+        self.dirty = false;
+    }
+
     pub fn close(&mut self) {
         self.closed = true;
+        self.painter = None;
     }
 
     pub fn closed(&self) -> bool {

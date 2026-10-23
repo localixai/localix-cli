@@ -31,6 +31,8 @@ pub struct Session {
     /// Where its group is mirrored in [`GROUPS`].
     slot: Option<usize>,
     ended: bool,
+    /// The program ended by itself while a call waited: its window may say so a moment.
+    exited_alone: bool,
 }
 
 impl Session {
@@ -43,6 +45,7 @@ impl Session {
             pty,
             slot,
             ended: false,
+            exited_alone: false,
         }
     }
 
@@ -57,6 +60,7 @@ impl Session {
             }
             if self.pty.exited() {
                 drop(stream);
+                self.exited_alone = true;
                 self.drain();
                 self.end();
                 let status = self.pty.child.try_wait().ok().flatten();
@@ -108,6 +112,10 @@ impl Session {
             return true;
         }
         self.ended = true;
+        // Killed by a call, a stop or the task's end: its window goes at once, before the kill.
+        if !self.exited_alone {
+            self.pty.dismiss();
+        }
         // Unmirrored first: once the shell is reaped, its pid may be given to another process.
         if let Some(slot) = self.slot.take() {
             let group = self.pty.child.id() as i32;

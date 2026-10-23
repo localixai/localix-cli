@@ -26,14 +26,16 @@ fn until(needle: &str) -> Wait<'_> {
 
 fn start(sessions: &Sessions, dir: &Scratch, command: &str, wait: Wait) -> Turn {
     sessions
-        .start(command, dir.path(), &[], wait, &never)
+        .start(command, dir.path(), &[], wait, None, &never)
         .unwrap()
 }
 
 fn send(sessions: &Sessions, id: u32, input: &str, keys: &[&str], wait: Wait) -> Turn {
     let keys: Vec<String> = keys.iter().map(|key| key.to_string()).collect();
     let typed = super::super::keys::typed(input);
-    sessions.send(id, &typed, &keys, wait, &never).unwrap()
+    sessions
+        .send(id, &typed, &keys, wait, None, &never)
+        .unwrap()
 }
 
 fn python() -> bool {
@@ -201,7 +203,9 @@ fn a_stop_ends_only_its_session() {
     let first = start(&sessions, &dir, "sleep 30", short);
     let second = start(&sessions, &dir, "sleep 31", short);
     let group = pid(&sessions, first.id);
-    let stopped = sessions.send(first.id, b"", &[], short, &|| true).unwrap();
+    let stopped = sessions
+        .send(first.id, b"", &[], short, None, &|| true)
+        .unwrap();
     assert_eq!(stopped.until, Until::Stopped);
     assert!(gone(-group), "group {group} still runs");
     assert_eq!(sessions.running(), format!("{} (`sleep 31`)", second.id));
@@ -215,7 +219,7 @@ fn while_busy(sessions: &Sessions, millis: u64, then: impl FnOnce()) {
                 needle: Some("never printed"),
                 yield_ms: Some(millis),
             };
-            sessions.send(1, b"", &[], wait, &never).unwrap();
+            sessions.send(1, b"", &[], wait, None, &never).unwrap();
         });
         thread::sleep(Duration::from_millis(200));
         then();
@@ -233,9 +237,9 @@ fn a_session_in_a_wait_still_counts_and_is_busy() {
         start(&sessions, &dir, "sleep 30", short);
     }
     while_busy(&sessions, 1_500, || {
-        let refused = sessions.start("sleep 30", dir.path(), &[], short, &never);
+        let refused = sessions.start("sleep 30", dir.path(), &[], short, None, &never);
         assert!(refused.unwrap_err().contains("sessions are running"));
-        let busy = sessions.send(1, b"", &[], short, &never).unwrap_err();
+        let busy = sessions.send(1, b"", &[], short, None, &never).unwrap_err();
         assert!(busy.contains("session 1 is busy in another call"), "{busy}");
     });
     assert_eq!(sessions.close_all(), MAX_SESSIONS);
@@ -252,7 +256,7 @@ fn at_most_four_run() {
         start(&sessions, &dir, "sleep 30", short);
     }
     let refused = sessions
-        .start("sleep 30", dir.path(), &[], short, &never)
+        .start("sleep 30", dir.path(), &[], short, None, &never)
         .unwrap_err();
     assert_eq!(
         refused,
@@ -270,7 +274,14 @@ fn a_session_runs_in_its_directory_without_the_hidden_variables() {
     dir.file("marker.txt", "");
     let command = r#"ls; echo "term=$TERM home=${HOME+set}""#;
     let turn = sessions
-        .start(command, dir.path(), &["HOME"], Wait::default(), &never)
+        .start(
+            command,
+            dir.path(),
+            &["HOME"],
+            Wait::default(),
+            None,
+            &never,
+        )
         .unwrap();
     assert_eq!(output(&turn), "marker.txt\nterm=dumb home=", "{turn:?}");
 }

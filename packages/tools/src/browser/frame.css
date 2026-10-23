@@ -1,0 +1,16 @@
+/* The window's ground, painted once. The page names it (--ground). Glass (macOS, data-glass): the
+   window's own material and coat show through a clear page, so the titlebar and the page are one
+   sheet. Elsewhere a backdrop drawn from the ground stands in for the desktop, under a coat of
+   it. Reduced transparency, or forced colours: the ground, solid. */
+html{background:var(--ground);color-scheme:light dark;-webkit-font-smoothing:antialiased}
+html,body{margin:0;height:100%;overflow:hidden}
+@supports (background:color-mix(in srgb,red 50%,transparent)) and ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+html:not([data-glass]){background:radial-gradient(ellipse 120% 40% at 10% 40%,color-mix(in srgb,var(--ground) 82%,#7b8cff),transparent 80%),radial-gradient(ellipse 80% 40% at 90% 60%,color-mix(in srgb,var(--ground) 88%,#b07bff),transparent 85%),color-mix(in srgb,var(--ground) 90%,#000)}
+html:not([data-glass]) body{background:color-mix(in srgb,var(--ground) 72%,transparent)}
+}
+html[data-glass],html[data-glass] body{background:transparent}
+@media (prefers-reduced-transparency:reduce),(forced-colors:active){
+html:is([data-glass],:not([data-glass])){background:var(--ground)}
+html:is([data-glass],:not([data-glass])) body{background:transparent}
+}
+::selection{background:color-mix(in srgb,currentColor 28%,transparent)}

@@ -17,11 +17,15 @@ mod report;
 #[cfg(unix)]
 mod running;
 #[cfg(unix)]
+mod screen;
+#[cfg(unix)]
 mod session;
 #[cfg(unix)]
 mod stream;
 #[cfg(unix)]
 mod sweep;
+#[cfg(unix)]
+mod watch;
 
 pub use bash::BashTool;
 #[cfg(not(unix))]
@@ -30,7 +34,11 @@ pub use process::{Ending, SHELL};
 #[cfg(unix)]
 pub use running::{kill_all_now, running_anywhere};
 #[cfg(unix)]
+pub use screen::{Asset, Emulator, Rgb, Theme, page};
+#[cfg(unix)]
 pub use session::{MAX_SESSIONS, Sessions, Turn, Until, Wait};
+#[cfg(unix)]
+pub use watch::{Painter, Watch};
 
 /// Where there are no terminal sessions: nothing to keep, close or kill.
 #[cfg(not(unix))]

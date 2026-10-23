@@ -68,13 +68,18 @@ fn session_arguments_are_checked_before_the_gate() {
         ),
         (
             json!({"command": "x", "input": "y"}),
-            "input, keys, wait_for, yield_ms and close are for terminal sessions: set tty to \
-             start one, or pass session",
+            "input, keys, wait_for, yield_ms, close and show are for terminal sessions: set tty \
+             to start one, or pass session",
         ),
         (
             json!({"command": "x", "close": true}),
-            "input, keys, wait_for, yield_ms and close are for terminal sessions: set tty to \
-             start one, or pass session",
+            "input, keys, wait_for, yield_ms, close and show are for terminal sessions: set tty \
+             to start one, or pass session",
+        ),
+        (
+            json!({"command": "x", "show": true}),
+            "input, keys, wait_for, yield_ms, close and show are for terminal sessions: set tty \
+             to start one, or pass session",
         ),
         (
             json!({"command": "x", "tty": true, "keys": ["Enter"]}),
@@ -266,4 +271,67 @@ fn a_terminal_is_refused_on_windows() {
         json!({"command": "x", "tty": true}),
     ));
     assert_eq!(message, NO_TERMINAL);
+}
+
+/// Sessions that open a window only when a call asks, each window keeping its frames in `frames`.
+#[cfg(unix)]
+fn watched(frames: &std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> Sessions {
+    let frames = std::sync::Arc::clone(frames);
+    let watch = move |_: &str| {
+        let frames = std::sync::Arc::clone(&frames);
+        let painter = move |frame: String| {
+            frames.lock().unwrap().push(frame);
+            true
+        };
+        Some(Box::new(painter) as crate::shell::Painter)
+    };
+    Sessions::new(std::sync::Arc::new(watch), false)
+}
+
+/// A session driven through the tool, with `show` on every call or on none: what the gate was
+/// asked, what the model read (each report's wait time cut), and the frames painted.
+#[cfg(unix)]
+fn python(show: bool) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let frames = std::sync::Arc::default();
+    let (dir, sessions, gate) = (Scratch::new(), watched(&frames), Recorder::default());
+    let call = |mut arguments: Value| {
+        if show {
+            arguments["show"] = json!(true);
+        }
+        let report = in_session(&sessions, &dir, &gate, arguments).unwrap();
+        match report.split_once(" after ") {
+            Some((head, rest)) => format!("{head}{}", &rest[rest.find('\n').unwrap_or(0)..]),
+            None => report,
+        }
+    };
+    let started = call(json!({"command": "python3 -q", "tty": true, "wait_for": ">>> "}));
+    let typed =
+        call(json!({"session": id(&started), "input": "print(1+1)\n", "wait_for": "2\n>>> "}));
+    // The last frame is painted within a frame's time of the output, after the call returned.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while show && !frames.lock().unwrap().iter().any(|frame| sum(frame)) {
+        assert!(std::time::Instant::now() < deadline, "{:#?}", frames.lock());
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    call(json!({"session": id(&started), "close": true}));
+    let asked = gate.asked.lock().unwrap().clone();
+    let frames = frames.lock().unwrap().clone();
+    (asked, vec![started, typed], frames)
+}
+
+/// A frame that shows the sum typed and its answer, each on a row of its own.
+#[cfg(unix)]
+fn sum(frame: &str) -> bool {
+    frame.contains(r#"">>> print(1+1)","2""#)
+}
+
+#[cfg(unix)]
+#[test]
+fn show_puts_a_session_in_a_window_and_changes_nothing_the_model_or_the_person_reads() {
+    let (asked, reports, frames) = python(true);
+    let (plain_asked, plain_reports, plain_frames) = python(false);
+    assert_eq!(asked, plain_asked, "the gate is asked the same");
+    assert_eq!(reports, plain_reports, "the model reads the same");
+    assert!(plain_frames.is_empty(), "no window unless asked");
+    assert!(frames.iter().any(|frame| sum(frame)), "{frames:#?}");
 }

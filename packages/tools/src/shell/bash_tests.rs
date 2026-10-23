@@ -268,6 +268,7 @@ fn the_schema_offers_sessions_only_with_a_terminal() {
     let properties = &spec.parameters["properties"];
     assert_eq!(properties.get("session").is_some(), cfg!(unix));
     assert_eq!(properties.get("tty").is_some(), cfg!(unix));
+    assert_eq!(properties.get("show").is_some(), cfg!(unix));
     assert_eq!(spec.parameters.get("required").is_none(), cfg!(unix));
     assert_eq!(spec.description.contains("runs with `tty`"), cfg!(unix));
     assert!(!spec.description.contains("{terminal}"));

@@ -10,6 +10,8 @@ mod brake;
 mod checkpoints;
 mod choice;
 mod cli;
+#[cfg(unix)]
+mod colours;
 mod commands;
 mod compose;
 mod context;
@@ -30,6 +32,9 @@ mod providers;
 #[cfg(test)]
 mod testing;
 mod tui;
+mod windows;
+#[cfg(unix)]
+mod xterm;
 
 use clap::Parser;
 

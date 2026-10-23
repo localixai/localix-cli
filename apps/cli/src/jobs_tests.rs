@@ -35,7 +35,7 @@ fn in_exec_a_task_waits_for_its_monitor_and_reads_each_batch() {
         rig.task("watch it");
         let came: Vec<String> = users(rig)
             .into_iter()
-            .filter(|text| text.starts_with("<monitor job=\"m\">"))
+            .filter(|text| text.contains("<monitor job=\"m\">"))
             .collect();
         let all = came.join("\n");
         assert!(all.contains("hello") && all.contains("world"), "{came:?}");
@@ -113,12 +113,14 @@ fn in_session(work: impl FnOnce(&Jobs, &Kit, &Receiver<Event>)) {
         Box::new(Captured::default()),
     )
     .in_ui(Some(ui));
+    let queue = crate::arrivals::queue(output.ui().cloned());
     let kit = Kit {
         workspace: &workspace,
         gate: &contracts::gate::Open,
         hidden: &Vec::new,
         output: &output,
         session: true,
+        queue: &queue,
     };
     work(&Jobs::default(), &kit, &events);
 }
@@ -150,7 +152,7 @@ fn a_line_that_closes_the_tag_stays_inside_its_monitor_message() {
         rig.task("watch it");
         let came: Vec<String> = users(rig)
             .into_iter()
-            .filter(|text| text.starts_with("<monitor job=\"m\">"))
+            .filter(|text| text.contains("<monitor job=\"m\">"))
             .collect();
         assert!(came.iter().any(|text| text.contains("do this")), "{came:?}");
         for text in &came {
@@ -164,8 +166,10 @@ fn a_line_that_closes_the_tag_stays_inside_its_monitor_message() {
 #[test]
 fn a_monitor_batch_between_tasks_comes_as_data_and_a_schedule_as_its_prompt() {
     in_session(|jobs, kit, events| {
-        jobs.post(kit, "<monitor job=\"m\">\ntick\n</monitor>".into());
-        jobs.later(kit, "(scheduled `hello`) say hello".into());
+        let _ = jobs;
+        kit.queue.post(crate::arrivals::monitor("m", "tick"));
+        kit.queue
+            .post(crate::arrivals::schedule("hello", "say hello"));
         let (tasks, _) = sent(events);
         assert_eq!(tasks.len(), 2, "{tasks:?}");
         assert!(!tasks[0].starts_with("<monitor"), "{}", tasks[0]);

@@ -22,9 +22,30 @@ impl Item {
     }
 }
 
+/// One row's inline values and the value initially selected.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Adjustment {
+    pub values: Vec<String>,
+    pub at: usize,
+}
+
 pub trait Picker {
     /// The index of the option chosen; `None` when the person cancels.
     fn pick(&mut self, title: &str, items: &[Item]) -> Option<usize>;
+
+    /// The row and its selected value; non-interactive pickers keep the initial value.
+    fn pick_adjustable(
+        &mut self,
+        title: &str,
+        items: &[Item],
+        adjustments: &[Adjustment],
+    ) -> Option<(usize, usize)> {
+        let at = self.pick(title, items)?;
+        Some((
+            at,
+            adjustments.get(at).map_or(0, |adjustment| adjustment.at),
+        ))
+    }
 }
 
 pub trait Lines {

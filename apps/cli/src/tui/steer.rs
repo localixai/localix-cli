@@ -16,7 +16,8 @@ pub fn shown(goal: &str) -> String {
     if goal == crate::commands::extras::INIT {
         return "/init".into();
     }
-    let goal = goal.strip_prefix(crate::jobs::FROM_MONITOR).unwrap_or(goal);
+    let goal = (goal.strip_prefix(crate::arrivals::FROM_MONITOR))
+        .map_or(goal, |rest| rest.trim_start_matches('\n'));
     if let Some(rest) = goal.strip_prefix("<monitor job=\"")
         && let Some((name, body)) = rest.split_once("\">\n")
     {

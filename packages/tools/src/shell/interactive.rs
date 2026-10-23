@@ -1,71 +1,15 @@
-//! `bash` with a terminal: a program that must ask runs in a session that stays open between
-//! calls. The arguments are checked before the person is asked and before anything is typed;
+//! A terminal session through `bash` (`BashTool::terminal`, the window's terminal tabs): a
+//! program that must ask runs in a session that stays open between calls. The arguments are checked before the person is asked and before anything is typed;
 //! starting a session and typing into it ask the gate, and the question shows exactly what is
 //! typed; reading a session and closing it ask nothing, since they only end or read what the
 //! person already approved.
 
 use contracts::tool::{ToolError, ToolOutput};
-use serde_json::Value;
-#[cfg(unix)]
-use serde_json::json;
 
 use super::bash::{Args, BashTool};
 
-/// What a session's fields are for, in the schema.
-pub(super) fn properties() -> Vec<(&'static str, Value)> {
-    #[cfg(not(unix))]
-    return vec![];
-    #[cfg(unix)]
-    vec![
-        (
-            "tty",
-            json!({"type": "boolean", "description": "Run it in a terminal that stays open \
-            for input: while it runs, the call returns its output so far and a session id."}),
-        ),
-        (
-            "session",
-            json!({"type": "integer", "minimum": 1, "description": "A running session's \
-            id: type into it, read its new output, or close it."}),
-        ),
-        (
-            "input",
-            json!({"type": "string",
-            "description": "Text to type into the session; a line break is Enter. At most \
-            4096 bytes, and 1000 on one line."}),
-        ),
-        (
-            "keys",
-            json!({"type": "array", "items": {"type": "string"}, "description": "Keys to \
-            press after input, in order: Enter, Tab, Escape, Backspace, Space, Up, Down, Left, \
-            Right, Home, End, PageUp, PageDown, Delete, F1-F12, Ctrl-<letter> (Ctrl-C interrupts, \
-            Ctrl-D ends input)."}),
-        ),
-        (
-            "wait_for",
-            json!({"type": "string", "description": "Return as soon as new output \
-            contains this exact text: the program's answer or next prompt, not what was typed."}),
-        ),
-        (
-            "yield_ms",
-            json!({"type": "integer", "minimum": unix::MIN_YIELD_MS,
-            "maximum": unix::MAX_YIELD_MS, "description": "The longest the call waits for output \
-            (default 2000, or 15000 with wait_for); the session keeps running."}),
-        ),
-        (
-            "close",
-            json!({"type": "boolean",
-            "description": "End the session: it and everything it started are killed."}),
-        ),
-        (
-            "show",
-            json!({"type": "boolean", "description": "Show this session's screen in a window \
-            beside the terminal, when a display is available."}),
-        ),
-    ]
-}
-
 #[cfg(not(unix))]
-pub(super) fn call(_: &BashTool, _: &Args) -> Result<ToolOutput, ToolError> {
+pub(super) fn run(_: &BashTool, _: &Args) -> Result<(ToolOutput, Option<u32>), ToolError> {
     Err(ToolError::Failed(
         "terminal sessions need a unix system; pass the program's non-interactive flags instead"
             .into(),
@@ -73,7 +17,7 @@ pub(super) fn call(_: &BashTool, _: &Args) -> Result<ToolOutput, ToolError> {
 }
 
 #[cfg(unix)]
-pub(super) use unix::call;
+pub(super) use unix::run;
 
 #[cfg(unix)]
 mod unix {
@@ -82,8 +26,7 @@ mod unix {
     use crate::shell::bash::{EMPTY, NAME, summary};
     use crate::shell::keys::{self, NAMES};
     use crate::shell::report::{report, typed};
-    use crate::shell::session::Wait;
-    pub use crate::shell::session::{MAX_YIELD_MS, MIN_YIELD_MS};
+    use crate::shell::session::{Until, Wait};
 
     /// The longest input typed at once: a longer text is better read from a file.
     const MAX_INPUT: usize = 4096;
@@ -93,7 +36,7 @@ mod unix {
     /// with room for keys pressed after the text.
     const MAX_LINE: usize = 1000;
 
-    pub fn call(tool: &BashTool, args: &Args) -> Result<ToolOutput, ToolError> {
+    pub fn run(tool: &BashTool, args: &Args) -> Result<(ToolOutput, Option<u32>), ToolError> {
         check(args)?;
         let input = args.input.as_deref().unwrap_or_default();
         let keys = args.keys.as_deref().unwrap_or_default();
@@ -102,6 +45,7 @@ mod unix {
             yield_ms: args.yield_ms,
         };
         let failed = ToolError::Failed;
+        let mut started = None;
         let report = match args.session {
             None => {
                 let command = args.command.as_deref().unwrap_or_default();
@@ -118,6 +62,9 @@ mod unix {
                     .sessions
                     .start(command, &dir, &hidden, wait, args.show, tool.stop)
                     .map_err(failed)?;
+                if !matches!(turn.until, Until::Exited(_) | Until::Closed { .. }) {
+                    started = Some(turn.id);
+                }
                 report(&turn, Some(&place), wait.needle, "")
             }
             Some(id) if args.close => {
@@ -140,7 +87,7 @@ mod unix {
                 report(&turn, None, wait.needle, input)
             }
         };
-        Ok(report.into())
+        Ok((report.into(), started))
     }
 
     /// Every problem with the arguments, before anything is asked or typed.
@@ -160,7 +107,7 @@ mod unix {
         if args.timeout_ms.is_some() && (args.tty || args.session.is_some()) {
             return refuse(
                 "timeout_ms is for commands run to their end; a session waits yield_ms per call \
-                 and ends with close or the task",
+                 and ends with close",
             );
         }
         if !args.tty && args.session.is_none() {

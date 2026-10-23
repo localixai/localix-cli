@@ -58,7 +58,7 @@ pub fn report(turn: &Turn, place: Option<&str>, needle: Option<&str>, input: &st
             }
         ),
         (Until::Stopped, _) => {
-            format!("stopped after {waited}: session {id} was killed, with everything it started")
+            format!("stopped waiting after {waited}: session {id} still runs")
         }
     };
     let mut out = vec![];

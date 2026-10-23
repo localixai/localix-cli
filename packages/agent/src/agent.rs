@@ -217,8 +217,11 @@ impl Agent<'_> {
                 // Something came in meanwhile, or is still to come: the run goes on with it. On
                 // the last turn the answer stands, and what is still to come waits for the next goal.
                 let last = turn + 1 == self.max_turns;
+                // Whether more is to come is asked before taking: a source that is done posts
+                // its last entry before it says so, so nothing it sent is left behind.
+                let expecting = !last && self.expecting();
                 let came = if last { vec![] } else { self.take() };
-                let waits = !last && came.is_empty() && self.expecting();
+                let waits = came.is_empty() && expecting;
                 if waits || !came.is_empty() {
                     self.say(&completion);
                 }

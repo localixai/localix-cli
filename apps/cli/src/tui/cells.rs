@@ -84,6 +84,34 @@ pub fn end(end: &End, width: usize) -> Vec<Line<'static>> {
     ))]
 }
 
+/// Tasks shown at most of a resumed session; the earlier ones are counted.
+const EARLIER: usize = 20;
+
+/// A resumed session's tasks as blocks: how many there were, then each task, its answer, and how
+/// it ended when it did not end well. Only the tasks and answers are kept, not their calls.
+pub fn earlier(turns: &[contracts::history::Turn], width: usize) -> Vec<Vec<Line<'static>>> {
+    let skipped = turns.len().saturating_sub(EARLIER);
+    let mut said = count(turns.len() as u64, "earlier task");
+    if skipped > 0 {
+        said.push_str(&format!(" · the last {EARLIER} shown"));
+    }
+    let mut out = vec![note(&said, width)];
+    for turn in &turns[skipped..] {
+        out.push(user(&super::steer::shown(&turn.goal), width));
+        if !turn.answer.trim().is_empty() {
+            out.push(agent(&turn.answer, width));
+        }
+        if !matches!(turn.status.as_str(), "achieved" | "unstated") {
+            let (style, mark, word, _) = super::tree::ending(&turn.status);
+            out.push(vec![Line::from(vec![
+                Span::styled(format!("{mark} "), style),
+                Span::styled(word, style::dim()),
+            ])]);
+        }
+    }
+    out
+}
+
 /// Something that went wrong outside a tool call: the model, the network, the session.
 pub fn error(text: &str, width: usize) -> Vec<Line<'static>> {
     let line = Line::from(Span::styled(printable(text.trim()), style::failed()));

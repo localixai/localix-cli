@@ -103,6 +103,97 @@ fn files_say_what_changed() {
 }
 
 #[test]
+fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
+    let outcome = done(
+        "Edited a.rs: replaced 1 occurrence (+1 -1 lines).\n\nDiff:\n@@ -181,3 +181,3 @@\n target: 'bun',\n-throw: true,\n+throw: false,\n end",
+    );
+    let rendered = lines("edit", &json!({"path":"a.rs"}), State::Done(&outcome), 60);
+    let screen = rendered
+        .iter()
+        .map(style::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(screen.contains("181 181   target: 'bun',"), "{screen}");
+    assert!(screen.contains("182     - throw: true,"), "{screen}");
+    assert!(screen.contains("    182 + throw: false,"), "{screen}");
+    assert!(rendered.iter().any(|row| {
+        row.spans.iter().any(|span| {
+            span.content.contains("throw: true")
+                && span.style.bg == Some(ratatui::style::Color::Red)
+        })
+    }));
+    assert!(rendered.iter().any(|row| {
+        row.spans.iter().any(|span| {
+            span.content.contains("throw: false")
+                && span.style.bg == Some(ratatui::style::Color::Green)
+        })
+    }));
+    let long = format!(
+        "Created x (1 line).\n\nDiff:\n@@ -0,0 +1,1 @@\n+    {}",
+        "x".repeat(80)
+    );
+    let rendered = lines("edit", &json!({"path":"x"}), State::Done(&done(&long)), 30);
+    assert!(
+        rendered
+            .iter()
+            .all(|row| super::super::wrap::line_width(row) <= 30)
+    );
+    assert_eq!(
+        rendered
+            .iter()
+            .map(style::plain)
+            .collect::<String>()
+            .matches('x')
+            .count(),
+        81
+    );
+}
+
+#[test]
+fn diff_backgrounds_fill_changed_rows_including_wraps_but_not_context() {
+    use ratatui::{
+        buffer::Buffer,
+        layout::Rect,
+        style::Color,
+        widgets::{Paragraph, Widget},
+    };
+
+    let report =
+        done("Edited x.\n\nDiff:\n@@ -1,2 +1,2 @@\n context\n-old\n+abcdefghijklmnopqrstuvwxyz");
+    let rendered = lines("edit", &json!({"path":"x"}), State::Done(&report), 24);
+    let area = Rect::new(0, 0, 24, rendered.len() as u16);
+    let mut buffer = Buffer::empty(area);
+    Paragraph::new(rendered.clone()).render(area, &mut buffer);
+    let changed = rendered
+        .iter()
+        .position(|row| style::plain(row).contains("- old"))
+        .unwrap();
+    for x in 0..24 {
+        assert_eq!(buffer[(x, changed as u16)].bg, Color::Red);
+        for y in changed + 1..rendered.len() {
+            assert_eq!(buffer[(x, y as u16)].bg, Color::Green);
+        }
+        assert_eq!(buffer[(x, changed as u16 - 1)].bg, Color::Reset);
+    }
+}
+
+#[test]
+fn separated_diff_hunks_keep_their_line_numbers_and_a_visible_gap() {
+    let report = done(
+        "Edited x (+2 -2 lines).\n\nDiff:\n@@ -1,1 +1,1 @@\n-a\n+b\n@@ -300,1 +300,1 @@\n-c\n+d",
+    );
+    let shown = shown(
+        "edit",
+        json!({"path":"x", "old_string":"a"}),
+        State::Done(&report),
+        60,
+    );
+    assert!(shown.contains("    …\n"), "{shown}");
+    assert!(shown.contains("300     - c"), "{shown}");
+    assert!(shown.contains("    300 + d"), "{shown}");
+}
+
+#[test]
 fn a_failed_call_shows_why() {
     let outcome = Err(ToolError::Failed(
         "old_string was not found in src/a.rs".into(),
@@ -114,22 +205,16 @@ fn a_failed_call_shows_why() {
 }
 
 #[test]
-fn sessions_browser_and_questions() {
+fn window_calls_and_questions() {
     insta::assert_snapshot!([
-        shown("bash", json!({"command": "python3 -q", "tty": true}), State::Running, 80),
-        shown("bash", json!({"session": 1, "input": "print(1)\n"}), State::Running, 80),
-        shown("bash", json!({"session": 1}), State::Running, 80),
-        shown("bash", json!({"session": 1, "close": true}), State::Running, 80),
-        shown("browser", json!({"url": "http://127.0.0.1:4173/", "goal": "Click Buy; done when the cart shows 1"}), State::Done(&done("Done: the cart shows 1.\nmore")), 80),
+        shown("window", json!({"action": "open", "kind": "terminal", "command": "python3 -q"}), State::Running, 80),
+        shown("window", json!({"action": "interact", "tab": "w1", "goal": "Click Buy; done when the cart shows 1"}), State::Done(&done("w1: ### Helper: done (90% sure)\nmore")), 80),
         shown("ask", json!({"questions": [{}, {}]}), State::Running, 80),
         shown("ask", json!({"questions": [{}]}), State::Done(&done("The person answered:\n- colour: Blue")), 80),
     ].join("\n"), @r"
-    • Starting python3 -q
-    • Typing into session 1: print(1)
-    • Reading session 1
-    • Closing session 1
-    • Browsed http://127.0.0.1:4173/ · Click Buy; done when the cart shows 1
-      └ Done: the cart shows 1.
+    • Opening python3 -q
+    • Worked in w1: Click Buy; done when the cart shows 1
+      └ w1: ### Helper: done (90% sure)
     • Asking 2 questions
     • Asked 1 question
       └ - colour: Blue
@@ -148,22 +233,42 @@ fn control_characters_cannot_reach_the_terminal() {
 }
 
 #[test]
-fn a_browser_call_says_what_it_takes() {
-    insta::assert_snapshot!([
-        shown("browser", json!({"screenshot": true, "selector": "#board"}), State::Running, 80),
-        shown("browser", json!({"script": "1 + 1"}), State::Running, 80),
-        shown("browser", json!({"close": true}), State::Running, 80),
-        shown("browser", json!({}), State::Running, 80),
-        shown("browser", json!({"tab": "new", "url": "https://go.dev"}), State::Running, 80),
-        shown("browser", json!({"tab": 2, "screenshot": true}), State::Running, 80),
-        shown("browser", json!({"close_tab": 2}), State::Running, 80),
-    ].join("\n"), @r"
-    • Browsing a screenshot of #board
-    • Browsing a script
-    • Closing the browser
-    • Reading the page
-    • Browsing a new tab · https://go.dev
-    • Browsing tab 2 · a screenshot
-    • Closing tab 2
-    ");
+fn a_window_call_says_what_it_opens_and_which_tab_it_acts_in() {
+    let said = |args: Value| doing("window", &args);
+    assert_eq!(said(json!({"action": "list"})), "Listing the window's tabs");
+    assert_eq!(
+        said(json!({"action": "show", "tab": "t2"})),
+        "Showing tab t2"
+    );
+    assert_eq!(
+        said(json!({"action": "close", "tabs": ["w1", "t2"]})),
+        "Closing tabs w1, t2"
+    );
+    assert_eq!(
+        said(json!({"action": "open", "kind": "browser", "url": "github.com"})),
+        "Opening github.com"
+    );
+    assert_eq!(
+        said(json!({"action": "open", "tabs": [
+            {"kind": "terminal", "command": "claude"},
+            {"kind": "browser", "url": "example.org"}
+        ]})),
+        "Opening claude, example.org"
+    );
+    assert_eq!(
+        said(json!({"action": "interact", "tab": "t1", "goal": "Answer yes"})),
+        "Working in t1: Answer yes"
+    );
+    assert_eq!(
+        said(json!({"action": "interact", "tab": "t1", "input": "hi", "keys": ["Enter"]})),
+        "Typing in t1: hi [Enter]"
+    );
+    assert_eq!(
+        said(json!({"action": "screenshot", "tab": "w1"})),
+        "Picturing tab w1"
+    );
+    assert_eq!(
+        said(json!({"action": "resize", "width": 1100, "height": 760})),
+        "Sizing the window to 1100×760"
+    );
 }

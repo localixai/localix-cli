@@ -23,7 +23,7 @@ Keys
   Tab               complete a command
   Ctrl-R            the last earlier entry with the words typed before it; again for older
   Ctrl-G            write the entry in $EDITOR
-  Shift+Tab         plan mode on or off
+  Shift+Tab         cycle default, plan, bypass, autonomous (after the task if working)
   Shift+Up, Down    more or less reasoning, as far as the model takes it
   Left, Right       on an empty prompt: switch to an agent's session and back
   Esc               stop the task (a message typed meanwhile waits for it), or back to main
@@ -54,7 +54,7 @@ pub enum Entry {
     /// `/plan`, with a task to run in plan mode.
     Plan(Option<String>),
     /// Shift+Tab.
-    TogglePlan,
+    CycleMode,
     /// Shift+Up or Shift+Down: the next level the model takes, up or down.
     Reasoning(bool),
     /// `/rewind` (also `/undo`): back to before one of the conversation's tasks.
@@ -104,7 +104,7 @@ pub fn entry(text: &str) -> Option<Entry> {
         return Some(Entry::Reasoning(text == MORE_REASONING));
     }
     if text == SHIFT_TAB {
-        return Some(Entry::TogglePlan);
+        return Some(Entry::CycleMode);
     }
     let Some(command) = text.strip_prefix('/') else {
         return Some(Entry::Task(text.to_string()));

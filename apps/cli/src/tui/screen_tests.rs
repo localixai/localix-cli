@@ -180,6 +180,163 @@ fn every_frame_is_one_synchronized_update() {
 }
 
 #[test]
+fn successful_edit_displays_the_actual_before_and_after_in_the_terminal() {
+    use crate::tui::{app::App, event::Event, test_support::Term};
+    use contracts::{gate::Open, tool::Tool};
+    use serde_json::json;
+
+    let dir = crate::testing::Scratch::new();
+    dir.file("config.rs", "target: 'bun',\nthrow: true,\nend\n");
+    let workspace = tools::workspace::Workspace::new(dir.path()).unwrap();
+    let tool = tools::fs::EditTool {
+        workspace: &workspace,
+        gate: &Open,
+    };
+    let args = json!({"path":"config.rs", "old_string":"throw: true", "new_string":"throw: false"});
+    let outcome = tool.call(&args);
+    let now = std::time::Instant::now();
+    let mut app = App::new(80, 30, vec![]);
+    let mut term = Term::new(&app);
+    app.event(
+        Event::Result {
+            name: "edit".into(),
+            args,
+            outcome,
+        },
+        now,
+    );
+    let shown = term.draw(&mut app, now);
+    assert!(shown.contains("• Edited config.rs"), "{shown}");
+    assert!(shown.contains("- throw: true,"), "{shown}");
+    assert!(shown.contains("+ throw: false,"), "{shown}");
+    assert!(shown.contains("target: 'bun',"), "{shown}");
+}
+
+#[test]
+fn consecutive_reads_form_a_compact_chain_even_when_they_finish_in_separate_frames() {
+    use contracts::tool::ToolOutput;
+    use serde_json::json;
+
+    use crate::tui::app::App;
+    use crate::tui::event::Event;
+    use crate::tui::test_support::Term;
+
+    let now = std::time::Instant::now();
+    let mut app = App::new(60, 24, vec![]);
+    let mut term = Term::new(&app);
+    app.event(Event::TaskStarted("inspect the files".into()), now);
+    for (path, offset) in [("src/main.rs", 1), ("src/lib.rs", 20), ("README.md", 1)] {
+        let args = json!({"path": path, "offset": offset});
+        app.event(
+            Event::Call {
+                name: "read".into(),
+                args: args.clone(),
+            },
+            now,
+        );
+        term.draw(&mut app, now);
+        app.event(
+            Event::Result {
+                name: "read".into(),
+                args,
+                outcome: Ok(ToolOutput {
+                    report: "contents".into(),
+                    state: None,
+                    image: None,
+                }),
+            },
+            now,
+        );
+        term.draw(&mut app, now);
+    }
+    app.event(Event::Answer("Found the entry points.".into()), now);
+    let shown = term.draw(&mut app, now);
+    assert!(shown.contains("• Read src/main.rs from line 1\n  ↳ Read src/lib.rs from line 20\n  ↳ Read README.md from line 1\n\n• Found the entry points."), "{shown}");
+}
+
+#[test]
+fn grouped_calls_keep_outputs_and_failures_and_approvals_break_the_chain() {
+    use contracts::tool::{ToolError, ToolOutput};
+    use serde_json::json;
+
+    use crate::tui::app::App;
+    use crate::tui::event::Event;
+    use crate::tui::test_support::Term;
+
+    let now = std::time::Instant::now();
+    let mut app = App::new(60, 40, vec![]);
+    let mut term = Term::new(&app);
+    app.event(Event::TaskStarted("check".into()), now);
+    for (command, outcome) in [
+        (
+            "one",
+            Ok(ToolOutput {
+                report: "exit 0 in 0.0s\n### stdout\nfirst output".into(),
+                state: None,
+                image: None,
+            }),
+        ),
+        (
+            "two",
+            Ok(ToolOutput {
+                report: "exit 0 in 0.0s\n### stdout\nsecond output".into(),
+                state: None,
+                image: None,
+            }),
+        ),
+        ("bad", Err(ToolError::Failed("permission denied".into()))),
+        (
+            "three",
+            Ok(ToolOutput {
+                report: "exit 0 in 0.0s\n### stdout\nthird output".into(),
+                state: None,
+                image: None,
+            }),
+        ),
+    ] {
+        app.event(
+            Event::Result {
+                name: "bash".into(),
+                args: json!({"command": command}),
+                outcome,
+            },
+            now,
+        );
+        term.draw(&mut app, now);
+    }
+    let (reply, _answer) = std::sync::mpsc::channel();
+    app.event(
+        Event::Approve {
+            tool: "bash".into(),
+            summary: "run four".into(),
+            reply,
+        },
+        now,
+    );
+    let shown = term.draw(&mut app, now);
+    assert!(shown.contains("• Ran one\n  └ first output\n  ↳ Ran two\n  └ second output\n\n• Ran bad\n  └ permission denied\n\n• Ran three"), "{shown}");
+    assert!(
+        shown.contains("Run this command?") && shown.contains("run four"),
+        "{shown}"
+    );
+    app.event(Event::Dismiss, now);
+    app.event(
+        Event::Result {
+            name: "bash".into(),
+            args: json!({"command": "four"}),
+            outcome: Ok(ToolOutput {
+                report: "exit 0 in 0.0s".into(),
+                state: None,
+                image: None,
+            }),
+        },
+        now,
+    );
+    let shown = term.draw(&mut app, now);
+    assert!(shown.contains("third output\n\n• Ran four"), "{shown}");
+}
+
+#[test]
 fn a_row_wider_than_the_terminal_is_redrawn_without_leaving_copies() {
     let mut screen = Screen::new(Vec::new(), false);
     let wide = "x".repeat(70);

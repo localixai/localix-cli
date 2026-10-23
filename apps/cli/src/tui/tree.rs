@@ -1,14 +1,20 @@
-//! The sessions under the composer, once the main one has started agents: one
-//! row each with what it does now (or how its last task ended), and on the right how
-//! long it has worked and the tokens it used. The session shown is bold; while the list has the
-//! keys (↓ from an empty prompt), `❯` marks the row chosen.
+//! The sessions under the composer: the lane shown and the agents it started (none while it has
+//! started none), a row each with what it does now or how its last task ended, how long it has
+//! worked and the tokens it used, and the jobs. The agents hang under their lane as a branch, in a
+//! name column of their own. The other lanes are one line; the ← list has them. While the list
+//! has the keys (↓ from an empty prompt), `❯` marks the row chosen.
 //!
 //! ```text
-//!   ● main     Spawning tests · run the suite
-//! ❯ ⠹ scout    Reading src/lib.rs                       1m 12s · 54.1k tokens
-//!   ✓ tests    done                                         48s · 20.3k tokens
-//!   ↓ 2 more
-//!   ↑↓ choose · enter view · x stop · esc back
+//!   ⠹ fix the parser  Messaging agent tests · run the suite · 2m 03s · 81.2k tokens
+//! ❯   ├ ⠹ scout  Reading src/lib.rs · 1m 12s · 54.1k tokens
+//!     └ ✓ tests  done · 48s · 20.3k tokens
+//!   ↑↓ select · →/enter open · x stop · esc input
+//! ```
+//!
+//! With no agents and no jobs, only the line for the other lanes, if there are any:
+//!
+//! ```text
+//!   ← 2 other sessions (1 working, 1 waiting for you)
 //! ```
 
 use std::time::Instant;
@@ -27,77 +33,139 @@ use crate::printable::printable;
 
 /// Agents' rows shown at most; the rest are counted.
 pub(super) const ROWS: usize = 5;
-/// Columns a name takes at most.
-const NAME: usize = 16;
+/// Columns a lane's name takes at most, and an agent's or a job's.
+const NAME: usize = 36;
+const AGENT: usize = 20;
 /// A lane whose question waits for the person, open or held until it is shown.
 const WAITS: &str = "waiting for you";
 
-/// The list's rows; none while there is one session and no job.
+/// The list's rows: the lane shown with its agents, and the jobs; the other lanes are one line.
+/// None while there is nothing of the kind.
 pub fn render(
     app: &App,
     now: Instant,
     spinner: &dyn Fn(Instant) -> Span<'static>,
 ) -> Vec<Line<'static>> {
     let sessions = &app.views.sessions;
-    if sessions.len() == 1 && app.views.jobs.is_empty() {
-        return vec![];
+    let order = app.views.order();
+    let others = others(app);
+    if order.is_empty() && app.views.jobs.is_empty() {
+        return match others {
+            Some(others) => vec![hint(&others, app.width)],
+            None => vec![],
+        };
     }
     let width = app.width.max(10);
-    let order = app.views.order();
-    let names = order
-        .iter()
-        .map(|&at| {
-            text_width(sessions[at].title()) + 2 * usize::from(sessions[at].parent.is_some())
-        })
-        .chain(app.views.jobs.iter().map(|job| text_width(&job.name)))
-        .chain([4])
-        .max()
-        .unwrap_or(4)
-        .min(NAME);
+    let column = |names: &mut dyn Iterator<Item = usize>, most: usize| {
+        names.max().unwrap_or(0).clamp(1, most.min(width / 2))
+    };
+    // An agent's name column is its siblings', and the last of them closes the branch.
+    let agents = |row: usize| {
+        let names = (order.iter().skip(1)).map(|&at| text_width(sessions[at].title()));
+        (
+            column(&mut names.into_iter(), AGENT),
+            row + 1 == order.len(),
+        )
+    };
     let focus = app.views.focus;
     let shown = order
         .iter()
         .position(|&at| sessions[at].id == app.views.shown);
-    let line = |row: usize| {
-        let view = &sessions[order[row]];
-        let waits = app.waits_for_person(order[row]);
-        let mut row = session_row(view, focus == Some(row), shown == Some(row), now, spinner);
+    let line = |at_row: usize| {
+        let view = &sessions[order[at_row]];
+        let waits = app.waits_for_person(order[at_row]);
+        let chosen = focus == Some(at_row);
+        let mut row = session_row(view, chosen, shown == Some(at_row), now, spinner);
         if waits {
             (row.glyph, row.detail) = (Span::styled("?", style::waiting()), WAITS.into());
         }
+        // The lane is the one on the screen anyway; an agent shown is marked.
+        if row.shown && row.branch {
+            row.detail = format!("current · {}", row.detail);
+        }
+        let (names, last) = match row.branch {
+            true => agents(at_row),
+            false => (
+                column(&mut std::iter::once(text_width(view.title())), NAME),
+                false,
+            ),
+        };
+        row.branch_last = last;
         self::row(row, names, width)
     };
-    let mut out = vec![line(0)];
-    // A window of the sessions after the first around the row chosen, else the one shown.
-    let rest = order.len() - 1;
-    let around = focus
-        .or(shown)
-        .and_then(|row| row.checked_sub(1))
-        .unwrap_or(0);
-    let start = around
-        .saturating_sub(ROWS - 1)
-        .min(rest.saturating_sub(ROWS));
-    let end = (start + ROWS).min(rest);
-    if start > 0 {
-        out.push(more(start, "↑"));
+    let mut out = vec![];
+    if !order.is_empty() {
+        out.push(line(0));
+        // A window of the agents around the row chosen, else the one shown.
+        let rest = order.len() - 1;
+        let around = focus
+            .or(shown)
+            .and_then(|row| row.checked_sub(1))
+            .unwrap_or(0);
+        let start = around
+            .saturating_sub(ROWS - 1)
+            .min(rest.saturating_sub(ROWS));
+        let end = (start + ROWS).min(rest);
+        if start > 0 {
+            out.push(more(start, "↑"));
+        }
+        out.extend((start..end).map(|at| line(at + 1)));
+        if end < rest {
+            out.push(more(rest - end, "↓"));
+        }
     }
-    out.extend((start..end).map(|at| line(at + 1)));
-    if end < rest {
-        out.push(more(rest - end, "↓"));
-    }
+    let names = column(
+        &mut app.views.jobs.iter().map(|job| text_width(&job.name)),
+        AGENT,
+    );
     out.extend(jobs(app, order.len(), names, width));
     let on_agent = app.shown().parent.is_some();
-    let back = format!("↓ to manage · esc back to {}", app.home_title());
+    let others = others.unwrap_or_else(|| "← sessions".into());
     let hint = match (focus, on_agent) {
-        (Some(_), _) => "↑↓ choose · enter view · x stop · esc back",
-        (None, true) => &back,
-        (None, false) => "↓ to manage · ← sessions",
+        (Some(_), _) => "↑↓ select · →/enter open · x stop · esc input".to_string(),
+        (None, true) => format!("↓ to manage · esc back to {}", app.home_title()),
+        (None, false) => format!("↓ to manage · {others}"),
     };
-    out.push(Line::from(Span::styled(
-        format!("  {}", cut(hint, width.saturating_sub(2))),
-        style::dim(),
-    )));
+    out.push(self::hint(&hint, width));
     out
+}
+
+/// The lanes not shown, counted, with those that need a look: `← 2 other sessions (1 working)`.
+fn others(app: &App) -> Option<String> {
+    let home = app.views.home();
+    let sessions = &app.views.sessions;
+    let lanes: Vec<usize> = (0..sessions.len())
+        .filter(|&at| at != home && sessions[at].lane.is_some())
+        .collect();
+    if lanes.is_empty() {
+        return None;
+    }
+    let count = |test: &dyn Fn(usize) -> bool| lanes.iter().filter(|&&at| test(at)).count();
+    let working = count(&|at| sessions[at].busy.is_some());
+    let waiting = count(&|at| app.waits_for_person(at));
+    let finished = count(&|at| sessions[at].unseen && sessions[at].busy.is_none());
+    let notes: Vec<String> = [
+        (working, "working"),
+        (waiting, WAITS),
+        (finished, "finished"),
+    ]
+    .into_iter()
+    .filter(|(n, _)| *n > 0)
+    .map(|(n, what)| format!("{n} {what}"))
+    .collect();
+    let s = if lanes.len() == 1 { "" } else { "s" };
+    let mut said = format!("← {} other session{s}", lanes.len());
+    if !notes.is_empty() {
+        said.push_str(&format!(" ({})", notes.join(", ")));
+    }
+    Some(said)
+}
+
+fn hint(text: &str, width: usize) -> Line<'static> {
+    Line::from(Span::styled(
+        format!("  {}", cut(text, width.saturating_sub(2))),
+        style::dim(),
+    ))
 }
 
 /// A session's row: a lane by what its task does or how its last one ended, an agent by its
@@ -132,7 +200,8 @@ fn session_row<'a>(
     Row {
         chosen,
         shown,
-        indent: view.parent.is_some(),
+        branch: view.parent.is_some(),
+        branch_last: false,
         glyph,
         name: view.title(),
         detail,
@@ -161,7 +230,8 @@ fn jobs(app: &App, first: usize, names: usize, width: usize) -> Vec<Line<'static
             Row {
                 chosen: app.views.focus == Some(first + at),
                 shown: false,
-                indent: false,
+                branch: false,
+                branch_last: false,
                 glyph,
                 name: &job.name,
                 detail: job.detail.clone(),
@@ -194,14 +264,11 @@ fn spent(agent: &SessionView, now: Instant) -> String {
         + agent
             .busy
             .map_or(0, |since| now.duration_since(since).as_millis() as u64);
-    if millis < 1000 && agent.tokens == 0 {
-        return String::new();
+    match (millis < 1000, agent.tokens) {
+        (true, 0) => String::new(),
+        (_, 0) => cells::clock(millis / 1000),
+        (_, count) => format!("{} · {} tokens", cells::clock(millis / 1000), tokens(count)),
     }
-    format!(
-        "{} · {} tokens",
-        cells::clock(millis / 1000),
-        tokens(agent.tokens)
-    )
 }
 
 /// `950`, `54.1k`, `1.2M`.
@@ -216,14 +283,15 @@ pub(super) fn tokens(count: u64) -> String {
 struct Row<'a> {
     /// The row the list's keys are on.
     chosen: bool,
-    /// An agent's, under its lane.
-    indent: bool,
+    /// An agent's, under its lane; the last of its lane's closes the branch.
+    branch: bool,
+    branch_last: bool,
     /// The session on the screen.
     shown: bool,
     glyph: Span<'static>,
     name: &'a str,
     detail: String,
-    /// Right-aligned: time and tokens.
+    /// Time and tokens, after what it does.
     right: String,
     dimmed: bool,
 }
@@ -238,31 +306,28 @@ fn row(row: Row, names: usize, width: usize) -> Line<'static> {
         (false, true) => style::dim(),
         (false, false) => Style::default(),
     };
-    let indent = 2 * usize::from(row.indent);
-    let name = cut(&printable(row.name), names.saturating_sub(indent));
-    let pad = names.saturating_sub(text_width(&name) + indent);
-    let used = 2 + 2 + names + 2;
-    let right = match text_width(&row.right) + 2 <= width.saturating_sub(used + 12) {
-        true => row.right,
-        false => String::new(),
+    let branch = match (row.branch, row.branch_last) {
+        (false, _) => "",
+        (true, false) => "  ├ ",
+        (true, true) => "  └ ",
     };
-    let room = width.saturating_sub(used + text_width(&right) + 2 * usize::from(!right.is_empty()));
-    let detail = cut(&printable(&row.detail.replace('\n', " ")), room);
-    let gap = room.saturating_sub(text_width(&detail)) + 2 * usize::from(!right.is_empty());
-    let mut spans = vec![
+    let name = cut(&printable(row.name), names);
+    let pad = names.saturating_sub(text_width(&name));
+    let detail = printable(&row.detail.replace('\n', " "));
+    let said = match row.right.is_empty() {
+        true => detail,
+        false => format!("{detail} · {}", row.right),
+    };
+    let room = width.saturating_sub(2 + text_width(branch) + 2 + names + 2);
+    Line::from(vec![
         pointer,
-        Span::raw(" ".repeat(indent)),
+        Span::styled(branch, style::dim()),
         row.glyph,
         Span::raw(" "),
         Span::styled(name, name_style),
         Span::raw(" ".repeat(pad + 2)),
-        Span::styled(detail, style::dim()),
-    ];
-    if !right.is_empty() {
-        spans.push(Span::raw(" ".repeat(gap)));
-        spans.push(Span::styled(right, style::dim()));
-    }
-    Line::from(spans)
+        Span::styled(cut(&said, room), style::dim()),
+    ])
 }
 
 /// How an agent's task ended, as the interface says it: a style, a mark and a word for its row,

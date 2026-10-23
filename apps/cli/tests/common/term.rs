@@ -45,15 +45,34 @@ impl Term {
         term
     }
 
+    /// `llx resume ID`, where session `id` was saved in the workspace with the tasks `turns`
+    /// (their JSON array).
+    pub fn resuming(model: &Model, id: &str, turns: &str) -> Self {
+        let (home, workspace) = place();
+        let dir = home.join("sessions");
+        std::fs::create_dir_all(&dir).unwrap();
+        let session = serde_json::json!({"id": id, "created": 1700000000, "updated": 1700000000,
+            "workspace": workspace.display().to_string(),
+            "turns": serde_json::from_str::<serde_json::Value>(turns).unwrap()});
+        std::fs::write(dir.join(format!("{id}.json")), session.to_string()).unwrap();
+        let term = Self::spawn_at(home, workspace, model, &["resume", id], &[]);
+        term.wait_for("❯", Duration::from_secs(10));
+        term
+    }
+
     /// `llx` with `args` and the variables `env`, not waited on.
     pub fn spawn(model: &Model, args: &[&str], env: &[(&str, &str)]) -> Self {
-        let home = std::env::temp_dir().join(format!(
-            "llx-term-{}-{:?}",
-            std::process::id(),
-            Instant::now()
-        ));
-        let workspace = home.join("work");
-        std::fs::create_dir_all(&workspace).unwrap();
+        let (home, workspace) = place();
+        Self::spawn_at(home, workspace, model, args, env)
+    }
+
+    fn spawn_at(
+        home: PathBuf,
+        workspace: PathBuf,
+        model: &Model,
+        args: &[&str],
+        env: &[(&str, &str)],
+    ) -> Self {
         let (master, slave) = pty();
         let size = libc::winsize {
             ws_row: ROWS,
@@ -208,10 +227,33 @@ impl Term {
         None
     }
 
+    /// The sessions saved so far, as JSON.
+    pub fn saved(&self) -> Vec<serde_json::Value> {
+        let files = std::fs::read_dir(self.home.join("sessions"))
+            .into_iter()
+            .flatten();
+        (files.flatten())
+            .filter_map(|file| std::fs::read(file.path()).ok())
+            .filter_map(|bytes| serde_json::from_slice(&bytes).ok())
+            .collect()
+    }
+
     /// A file of the workspace the session runs in.
     pub fn file(&self, name: &str) -> PathBuf {
         self.workspace.join(name)
     }
+}
+
+/// A fresh home, and the workspace in it.
+fn place() -> (PathBuf, PathBuf) {
+    let home = std::env::temp_dir().join(format!(
+        "llx-term-{}-{:?}",
+        std::process::id(),
+        Instant::now()
+    ));
+    let workspace = home.join("work");
+    std::fs::create_dir_all(&workspace).unwrap();
+    (home, workspace)
 }
 
 impl Drop for Term {

@@ -15,21 +15,25 @@ fn quiet() -> Output {
     )
 }
 
-/// The main agent's inbox on `output`, with exec's jobs.
+/// The main agent's inbox on `output`, with exec's jobs, in a task.
 fn with_inbox(output: &Output, work: impl FnOnce(&MainInbox, &Registry, &Jobs, &Kit)) {
     let scratch = Scratch::new();
     let workspace = Workspace::new(scratch.path()).unwrap();
     let jobs_output = quiet();
+    let queue = std::sync::Arc::new(crate::arrivals::queue(None));
+    queue.begin();
     let kit = Kit {
         workspace: &workspace,
         gate: &Open,
         hidden: &Vec::new,
         output: &jobs_output,
         session: false,
+        queue: &queue,
     };
-    let (registry, jobs) = (Registry::default(), Jobs::default());
+    let (registry, jobs) = (Registry::new(queue.clone()), Jobs::default());
     let inbox = MainInbox {
         registry: &registry,
+        queue: &queue,
         jobs: &jobs,
         jobs_kit: &kit,
         output,
@@ -39,7 +43,7 @@ fn with_inbox(output: &Output, work: impl FnOnce(&MainInbox, &Registry, &Jobs, &
 }
 
 fn answer(registry: &Registry, text: &str) {
-    registry.lock().mail.push_back(("s1".into(), text.into()));
+    (registry.queue).post(crate::arrivals::report("a", "s1", "achieved", text));
 }
 
 #[test]
@@ -47,11 +51,9 @@ fn the_person_comes_first_then_the_agents_then_the_jobs() {
     let (ui, events) = crate::tui::test_support::fake_ui();
     let output = quiet().in_ui(Some(ui));
     with_inbox(&output, |inbox, registry, jobs, kit| {
-        jobs.post(kit, "<monitor job=\"m\">\ntick\n</monitor>".into());
-        answer(
-            registry,
-            "<agent_result agent=\"a\">\nfound\n</agent_result>",
-        );
+        let _ = jobs;
+        kit.queue.post(crate::arrivals::monitor("m", "tick"));
+        answer(registry, "found");
         std::thread::scope(|scope| {
             scope.spawn(move || {
                 if let Ok(Event::TakeSteered { reply, .. }) = events.recv() {
@@ -60,8 +62,9 @@ fn the_person_comes_first_then_the_agents_then_the_jobs() {
             });
             let came = inbox.take();
             assert!(came[0].starts_with("stop, use"), "{came:?}");
-            assert!(came[1].starts_with("<agent_result"), "{came:?}");
-            assert!(came[2].starts_with("<monitor"), "{came:?}");
+            // Then the queue, in the order things came: the monitor first here.
+            assert!(came[1].contains("<monitor job=\"m\">"), "{came:?}");
+            assert!(came[2].starts_with("<agent_result"), "{came:?}");
         });
     });
 }
@@ -76,15 +79,16 @@ fn the_waiting_line_is_said_once_until_the_task_ends() {
         Box::new(said.clone()),
     );
     with_inbox(&output, |inbox, registry, _, _| {
+        let rendered = |text: &str| crate::arrivals::report("a", "s1", "achieved", text).render();
         answer(registry, "one");
-        assert_eq!(inbox.wait(), ["one"]);
+        assert_eq!(inbox.wait(), [rendered("one")]);
         answer(registry, "two");
-        assert_eq!(inbox.wait(), ["two"]);
+        assert_eq!(inbox.wait(), [rendered("two")]);
         assert_eq!(said.text().matches("Waiting").count(), 1, "{}", said.text());
         // The task ends however it ends (stopped, out of turns, done): the next one says it again.
         registry.settled();
         answer(registry, "three");
-        assert_eq!(inbox.wait(), ["three"]);
+        assert_eq!(inbox.wait(), [rendered("three")]);
         assert_eq!(said.text().matches("Waiting").count(), 2, "{}", said.text());
     });
 }

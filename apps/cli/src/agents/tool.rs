@@ -156,7 +156,7 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
             ui.send(Event::In(child.session.id.clone(), Box::new(Event::Closed)));
         }
         let (name, id) = (child.session.name.clone(), child.session.id.clone());
-        state.mail.retain(|(from, _)| *from != id);
+        (self.registry.queue).forget(|entry| entry.key.as_deref() == Some(id.as_str()));
         Ok(ToolOutput::from(format!(
             "Closed `{name}`; its session {id} stays saved."
         )))

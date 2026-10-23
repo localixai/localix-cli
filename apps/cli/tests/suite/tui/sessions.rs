@@ -154,3 +154,50 @@ fn quit_with_work_running_asks() {
     let alive = unsafe { libc::kill(pid, 0) } == 0;
     assert!(!alive, "the shell was stopped");
 }
+
+#[test]
+fn a_session_is_titled_in_the_background_and_listed_and_saved_so() {
+    let model = Model::titling(
+        vec![Reply::text("Fixed.\nRESULT: achieved")],
+        "Fix the parser",
+    );
+    let mut term = Term::start(&model, &["-y"]);
+    term.type_text("the parser drops the last token")
+        .press(key::ENTER);
+    term.wait_for("Fixed.", LONG);
+    term.wait_for("Worked for", LONG);
+    term.press(key::LEFT);
+    let list = term.wait_for("Fix the parser", LONG);
+    assert!(list.contains("✓ Fix the parser"), "{list}");
+    assert_eq!(model.titled(), ["the parser drops the last token"]);
+    assert_eq!(model.requests().len(), 1, "the task's own request alone");
+    let end = Instant::now() + LONG;
+    while !term
+        .saved()
+        .iter()
+        .any(|saved| saved["title"] == "Fix the parser")
+    {
+        assert!(Instant::now() < end, "{:?}", term.saved());
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[test]
+fn a_resumed_session_shows_its_earlier_tasks() {
+    let model = Model::start(vec![]);
+    let turns = r#"[
+        {"goal": "fix the parser", "answer": "Fixed the **parser**.", "status": "achieved", "at": 1},
+        {"goal": "and the lexer", "answer": "", "status": "interrupted", "at": 2}
+    ]"#;
+    let term = Term::resuming(&model, "1700000000-ab12", turns);
+    let screen = term.wait_for("and the lexer", LONG);
+    for shown in [
+        "2 earlier tasks",
+        "❯ fix the parser",
+        "• Fixed the parser.",
+        "■ stopped",
+    ] {
+        assert!(screen.contains(shown), "{shown:?}:\n{screen}");
+    }
+    assert!(model.requests().is_empty(), "nothing is asked of the model");
+}

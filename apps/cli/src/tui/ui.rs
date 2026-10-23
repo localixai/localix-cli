@@ -96,6 +96,25 @@ impl Ui {
         answer.recv().ok().flatten()
     }
 
+    /// A row and its inline value, starting on `marked`; `None` when cancelled.
+    pub fn pick_adjustable(
+        &self,
+        title: &str,
+        options: Vec<(String, String)>,
+        marked: Option<usize>,
+        adjustments: Vec<crate::picker::Adjustment>,
+    ) -> Option<(usize, usize)> {
+        let (reply, answer) = channel();
+        self.send(Event::ChooseAdjustable {
+            title: title.into(),
+            options,
+            marked,
+            adjustments,
+            reply,
+        });
+        answer.recv().ok().flatten()
+    }
+
     /// A line the person types after `prompt`, shown as dots when `hidden`; `None` when cancelled,
     /// or closed unanswered once `done` says so.
     pub fn line(

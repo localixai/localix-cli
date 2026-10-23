@@ -67,12 +67,16 @@ fn l2_the_agent_and_the_hands_know_only_the_contracts() {
 
 /// What the model providers share: plumbing with no port, which knows no workspace package.
 const KIT: &str = "provider-kit";
+/// Primitives the app composes (the lanes' queue): no port, no workspace package.
+const PRIMITIVES: [&str; 1] = ["queue"];
 
 #[test]
 fn l3_tools_providers_and_stores_know_only_the_contracts() {
     let packages = packages();
     for ((group, name), uses) in &packages {
-        if group == "packages" && name != "contracts" && !CORES.contains(&name.as_str()) {
+        if group == "packages" && PRIMITIVES.contains(&name.as_str()) {
+            assert!(uses.is_empty(), "{name} depends on {uses:?}");
+        } else if group == "packages" && name != "contracts" && !CORES.contains(&name.as_str()) {
             assert_eq!(uses, &["contracts"], "{name} depends on {uses:?}");
         }
     }

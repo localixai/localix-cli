@@ -1,6 +1,6 @@
 //! What reaches a run between its turns. The main agent's: what the person sent while it worked
-//! (first: the person comes before what they started), then the answers of the agents it started, then what its jobs
-//! gave back. An agent's own: what the main agent sent it while it worked.
+//! (first: the person comes before what they started), then the lane's queue, oldest first. An
+//! agent's own: what the main agent sent it while it worked.
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
@@ -16,9 +16,11 @@ use crate::tui::event::Event;
 /// How often a wait looks whether the person wrote or the task was stopped.
 const POLL: Duration = Duration::from_millis(200);
 
-/// The main agent's inbox.
+/// The main agent's inbox: the person's words, then the lane's queue, which holds whatever else
+/// came (agents' answers, monitors, the window, ...) and knows no source.
 pub struct MainInbox<'a> {
     pub registry: &'a Registry,
+    pub queue: &'a queue::Queue,
     pub jobs: &'a crate::jobs::Jobs,
     pub jobs_kit: &'a crate::jobs::Kit<'a>,
     pub output: &'a Output,
@@ -38,8 +40,7 @@ impl MainInbox<'_> {
 impl Inbox for MainInbox<'_> {
     fn take(&self) -> Vec<String> {
         let mut came = self.steered();
-        came.extend(self.registry.take_mail());
-        came.extend(self.jobs.take_mail());
+        came.extend(self.queue.take_joining().iter().map(queue::Entry::render));
         came
     }
 
@@ -61,11 +62,14 @@ impl Inbox for MainInbox<'_> {
             self.output.note(&said);
         }
         loop {
+            // Asked before taking: an agent posts its answer as it stops working, so once none
+            // is expected, every answer is already in the queue.
+            let expecting = self.expecting();
             let came = self.take();
-            if !came.is_empty() || !self.expecting() || (self.stopped)() {
+            if !came.is_empty() || !expecting || (self.stopped)() {
                 return came;
             }
-            self.registry.wait_change(POLL);
+            self.queue.wait(POLL);
         }
     }
 }

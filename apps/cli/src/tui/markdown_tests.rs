@@ -46,6 +46,71 @@ See [the docs](https://llx.sh/docs) or https://llx.sh.\n\n---\n\nEnd.";
 }
 
 #[test]
+fn tables_keep_columns_rows_and_inline_styles() {
+    let text = "| | Codex | Our edit |\n|---|---|---|\n| Format | **Patch** | `exact replacement` |\n| Operations | creation | replacement |\n\nAfter the table.";
+    let rows = render(text, 60);
+    let screen = shown(text, 60);
+    assert!(screen.contains("│"), "{screen}");
+    assert!(!screen.contains("|---|"), "{screen}");
+    let header = rows
+        .iter()
+        .position(|row| style::plain(row).contains("Codex"))
+        .unwrap();
+    let format = rows
+        .iter()
+        .position(|row| style::plain(row).contains("Format"))
+        .unwrap();
+    let operations = rows
+        .iter()
+        .position(|row| style::plain(row).contains("Operations"))
+        .unwrap();
+    assert!(header < format && format < operations, "{screen}");
+    assert!(
+        rows[format]
+            .spans
+            .iter()
+            .any(|span| span.content == "Patch" && span.style == style::bold())
+    );
+    assert!(
+        rows[format]
+            .spans
+            .iter()
+            .any(|span| span.content.contains("exact") && span.style == style::code())
+    );
+    assert!(screen.ends_with("\n\nAfter the table."), "{screen}");
+}
+
+#[test]
+fn tables_wrap_without_losing_cells_in_narrow_terminals_or_quotes() {
+    let text = "> | Name | Description |\n> |:---|---:|\n> | 中文 | long words with **style** and [link](https://example.com) |\n> | empty | |";
+    assert!(!shown(text, 80).contains("|:---|"));
+    for width in [8, 20, 40, 80] {
+        let rows = render(text, width);
+        let screen = shown(text, width);
+        assert!(screen.contains("中文"), "{width}: {screen}");
+        assert!(screen.contains("empty"), "{width}: {screen}");
+        assert!(
+            rows.iter().all(|row| line_width(row) <= width),
+            "{width}: {screen}"
+        );
+        assert!(
+            rows.iter()
+                .filter(|row| !row.spans.is_empty())
+                .all(|row| style::plain(row).starts_with("│ ")),
+            "{screen}"
+        );
+    }
+}
+
+#[test]
+fn table_alignment_and_empty_cells_do_not_shift_columns() {
+    let text = "| Left | Right | Center |\n|:---|---:|:---:|\n| x | y | z |\n| | tail | |";
+    let screen = shown(text, 60);
+    assert!(screen.contains("│ x    │     y │   z    │"), "{screen}");
+    assert!(screen.contains("│      │  tail │        │"), "{screen}");
+}
+
+#[test]
 fn styles_carry_meaning() {
     let rows = render("**bold** `code` *it*", 40);
     let spans = &rows[0].spans;

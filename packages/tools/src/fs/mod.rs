@@ -3,6 +3,7 @@
 //! through a [`Workspace`](crate::workspace::Workspace); only `edit` asks the gate.
 
 mod atomic;
+mod diff;
 mod edit;
 mod read;
 mod text;

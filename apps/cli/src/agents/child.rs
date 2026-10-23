@@ -187,11 +187,7 @@ fn keep(
              it, or leave it."
                 .to_string()
         }
-        // A line that closes the tag stays inside it.
-        _ => run
-            .answer
-            .trim()
-            .replace("</agent_result", "<\\/agent_result"),
+        _ => run.answer.trim().to_string(),
     };
     if !unread.is_empty() {
         answer.push_str(&format!(
@@ -203,11 +199,8 @@ fn keep(
         answer.push_str(&format!("\n\n(its session was not saved: {error})"));
     }
     if open {
-        let mail = format!(
-            "<agent_result agent=\"{name}\" session=\"{id}\" status=\"{status}\">\n{answer}\n\
-             </agent_result>"
-        );
-        state.mail.push_back((id.to_string(), mail));
+        let came = crate::arrivals::report(&name, id, status, &answer);
+        registry.queue.post(came);
     }
     drop(state);
     registry.changed.notify_all();

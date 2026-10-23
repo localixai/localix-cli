@@ -41,7 +41,8 @@ fn a_unique_string_is_replaced_and_shown_in_context() {
         report,
         format!(
             "Edited {shown}: replaced 1 occurrence (+2 -1 lines).\n     2\tb\n     3\tc\n     \
-             4\td\n     5\tE1\n     6\tE2\n     7\tf\n     8\tg\n     9\th"
+             4\td\n     5\tE1\n     6\tE2\n     7\tf\n     8\tg\n     9\th\n\nDiff:\n\
+             @@ -2,7 +2,8 @@\n b\n c\n d\n-e\n+E1\n+E2\n f\n g\n h\n"
         )
     );
     assert_eq!(
@@ -73,6 +74,38 @@ fn replace_all_changes_every_occurrence() {
     assert_eq!(fs::read_to_string(&path).unwrap(), "qux\nbar\nqux\n");
     assert!(
         report.starts_with("Edited x.txt: replaced 2 occurrences, the first shown (+2 -2 lines).")
+    );
+    let diff = report.split_once("\n\nDiff:\n").unwrap().1;
+    assert!(diff.contains("-foo\n"), "{diff}");
+    assert_eq!(diff.matches("+qux\n").count(), 2);
+}
+
+#[test]
+fn diff_shows_whole_lines_for_a_partial_line_replacement() {
+    let dir = Scratch::new();
+    dir.file("x.txt", "before\nlet old = 1;\nafter\n");
+    let report = edit(&dir, &Open, change("x.txt", "old", "new")).unwrap();
+    assert!(
+        report.ends_with(
+            "\n\nDiff:\n@@ -1,3 +1,3 @@\n before\n-let old = 1;\n+let new = 1;\n after\n"
+        ),
+        "{report}"
+    );
+}
+
+#[test]
+fn large_diff_is_bounded_and_explicitly_incomplete() {
+    let dir = Scratch::new();
+    let report = edit(&dir, &Open, change("x.txt", "", &"line\n".repeat(500))).unwrap();
+    let diff = report.split_once("\n\nDiff:\n").unwrap().1;
+    assert!(diff.lines().count() <= 200);
+    assert!(diff.contains("truncated"), "{diff}");
+    assert_eq!(
+        fs::read_to_string(dir.path().join("x.txt"))
+            .unwrap()
+            .lines()
+            .count(),
+        500
     );
 }
 
@@ -110,7 +143,12 @@ fn an_empty_old_string_creates_a_file_and_its_directories() {
     )
     .unwrap();
     let shown = Path::new("new/dir/a.rs").display().to_string();
-    assert_eq!(report, format!("Created {shown} (2 lines)."));
+    assert_eq!(
+        report,
+        format!(
+            "Created {shown} (2 lines).\n\nDiff:\n@@ -0,0 +1,2 @@\n+fn a() {{}}\n+fn b() {{}}\n"
+        )
+    );
     assert_eq!(
         fs::read_to_string(dir.path().join("new/dir/a.rs")).unwrap(),
         "fn a() {}\nfn b() {}\n"

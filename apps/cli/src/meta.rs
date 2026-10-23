@@ -1,0 +1,94 @@
+//! What is known of a session beside its tasks, and changes while it runs: its title now, other
+//! fields later. A change is an [`Update`]. It reaches the interface as `Event::Updated`, and the
+//! saved session through [`Pending`]: the lane applies what is pending before each of its saves,
+//! and a session already on disk is written at once, under the same lock, so neither write loses
+//! the other's. Whatever makes an update (the title's request) runs on a thread of its own: a
+//! task never waits on it.
+
+pub mod title;
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
+
+use contracts::history::{History, Session};
+
+/// A change to a session's facts; a field left `None` stays as it is.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Update {
+    pub title: Option<String>,
+}
+
+impl Update {
+    pub fn apply(&self, session: &mut Session) {
+        if let Some(title) = &self.title {
+            session.title = title.clone();
+        }
+    }
+
+    /// `newer` over this one, field by field.
+    fn merge(&mut self, newer: Update) {
+        if newer.title.is_some() {
+            self.title = newer.title;
+        }
+    }
+}
+
+/// The updates a lane's session has not saved yet, shared with the threads that make them.
+#[derive(Clone, Default)]
+pub struct Pending(Arc<Shared>);
+
+#[derive(Default)]
+struct Shared {
+    update: Mutex<Update>,
+    /// A title is being asked for.
+    naming: AtomicBool,
+}
+
+impl Pending {
+    /// Save `session` with what is pending applied.
+    pub fn save(&self, history: &dyn History, session: &mut Session) -> Result<(), String> {
+        let pending = self.lock();
+        pending.apply(session);
+        history.save(session)
+    }
+
+    /// Keep `update` for the lane's next save, and write it now into session `id` when it is
+    /// saved already.
+    pub fn post(&self, history: &dyn History, id: &str, update: Update) {
+        let mut pending = self.lock();
+        if let Ok(mut saved) = history.load(Some(id)) {
+            update.apply(&mut saved);
+            let _ = history.save(&saved);
+        }
+        pending.merge(update);
+    }
+
+    /// Whether `session` should be named now: it has no title, none is made yet, and none is
+    /// being asked for. While the [`Naming`] returned lives, no other request starts; a request
+    /// that fails lets the next task ask again.
+    pub fn begin(&self, session: &Session) -> Option<Naming> {
+        let titled = !session.title.is_empty() || self.lock().title.is_some();
+        let free = !titled && !self.0.naming.swap(true, Ordering::SeqCst);
+        free.then(|| Naming(self.0.clone()))
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Update> {
+        self.0
+            .update
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+}
+
+/// A title being asked for: when it ends, another may be.
+pub struct Naming(Arc<Shared>);
+
+impl Drop for Naming {
+    fn drop(&mut self) {
+        self.0.naming.store(false, Ordering::SeqCst);
+    }
+}
+
+#[cfg(test)]
+#[path = "meta_tests.rs"]
+mod tests;

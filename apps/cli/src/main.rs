@@ -5,6 +5,7 @@
 //! returns. Nothing else exits.
 
 mod agents;
+mod arrivals;
 mod attach;
 mod brake;
 mod checkpoints;
@@ -23,7 +24,9 @@ mod input;
 mod instructions;
 mod interrupt;
 mod jobs;
+mod kinds;
 mod live;
+mod meta;
 mod mode;
 mod output;
 mod picker;

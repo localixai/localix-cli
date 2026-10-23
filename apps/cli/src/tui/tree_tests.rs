@@ -66,9 +66,9 @@ fn each_session_is_a_row_the_shown_one_marked() {
     assert_eq!(
         rows(&app),
         [
-            "  * go       Messaging agent tests · run them",
-            "    ✓ scout  done",
-            "    * tests  Running cargo test",
+            "  * go  Messaging agent tests · run them",
+            "    ├ ✓ scout  done",
+            "    └ * tests  Running cargo test",
             "  ↓ to manage · ← sessions",
         ]
     );
@@ -77,7 +77,7 @@ fn each_session_is_a_row_the_shown_one_marked() {
         press(&mut app, code, now);
     }
     insta::assert_snapshot!(screen(&mut app, now), @"
-    ◆ agent tests  ·  session s2  ·  started by go
+    ◆ agent tests  ·  started by go
 
     ❯ run them
 
@@ -86,16 +86,17 @@ fn each_session_is_a_row_the_shown_one_marked() {
     * Working (Ns · ctrl-c to interrupt)
 
     ❯ Viewing agent tests · a task you type goes to go
+      default mode · shift+tab to cycle
 
-      * go       Messaging agent tests · run them
-        ✓ scout  done
-    ❯   * tests  Running cargo test
-      ↑↓ choose · enter view · x stop · esc back
+      * go  Messaging agent tests · run them
+        ├ ✓ scout  done
+        └ * tests  current · Running cargo test
+      ↓ to manage · esc back to go
     ");
 }
 
 #[test]
-fn an_agent_shows_how_long_it_worked_and_its_tokens_on_the_right() {
+fn an_agent_shows_how_long_it_worked_and_its_tokens_after_what_it_does() {
     let now = Instant::now();
     let mut app = App::new(60, 20, vec![]);
     started(&mut app, "s1", "scout");
@@ -106,12 +107,34 @@ fn an_agent_shows_how_long_it_worked_and_its_tokens_on_the_right() {
     let later = now + std::time::Duration::from_secs(68);
     let row = style::plain(&render(&app, later, &spinner)[1]);
     // The seconds in two digits, as every duration of the interface reads.
-    assert!(row.ends_with("1m 08s · 54.1k tokens"), "{row:?}");
-    assert_eq!(
-        crate::tui::wrap::width(&row),
-        60,
-        "right-aligned to the width"
-    );
+    assert_eq!(row, "    └ * scout  thinking · 1m 08s · 54.1k tokens");
+}
+
+#[test]
+fn wide_tree_keeps_names_readable_and_statistics_near_the_rows() {
+    let now = Instant::now();
+    let mut app = App::new(160, 30, vec![]);
+    app.event(Event::TaskStarted("polish session navigation".into()), now);
+    started(&mut app, "s1", "inline-picker");
+    app.event(from("s1", Event::TaskStarted("choose".into())), now);
+    app.event(from("s1", Event::Spent(17_500)), now);
+    let spinner = |_| Span::raw("*");
+    let shown: Vec<String> = render(&app, now + std::time::Duration::from_secs(13), &spinner)
+        .iter()
+        .map(style::plain)
+        .collect();
+    assert!(shown[0].contains("polish session navigation"), "{shown:?}");
+    assert!(shown[1].contains("inline-picker"), "{shown:?}");
+    for row in &shown[..2] {
+        assert!(
+            text_width(row) <= 100,
+            "tree must not stretch across a wide terminal: {row:?}"
+        );
+        assert!(
+            row.find("13s").unwrap() < 80,
+            "statistics stay near the name: {row:?}"
+        );
+    }
 }
 
 #[test]
@@ -123,7 +146,7 @@ fn many_agents_show_a_window_around_the_one_shown() {
     app.show("s7");
     let shown = rows(&app);
     assert!(shown[1].contains("↑ 3 more"), "{shown:?}");
-    assert!(shown[6].starts_with("    ○ a7"), "{shown:?}");
+    assert!(shown[6].starts_with("    └ ○ a7"), "{shown:?}");
     assert_eq!(shown.len(), 8, "{shown:?}");
 }
 
@@ -169,10 +192,9 @@ fn tree_shows_lane_rows_with_time_and_tokens() {
         .map(style::plain)
         .collect();
     insta::assert_snapshot!(rows.join("\n"), @"
-    * fix the flaky  working                         1m 12s · 54.1k tokens
-      * scout        thinking                        1m 12s · 12.0k tokens
-    ✓ refactor       done · unseen                   4m 02s · 81.0k tokens
-    ↓ to manage · ← sessions
+    * fix the flaky  working · 1m 12s · 54.1k tokens
+      └ * scout  thinking · 1m 12s · 12.0k tokens
+    ↓ to manage · ← 1 other session (1 finished)
     ");
 }
 
@@ -189,11 +211,58 @@ fn waiting_for_you_detail_when_held() {
         reply,
     };
     app.event(from("B", choose), now);
-    let shown = rows(&app);
-    assert!(
-        shown
-            .iter()
-            .any(|row| row.starts_with("  ? add tabs") && row.contains("waiting for you")),
-        "{shown:?}"
+    // Another session is not listed under the prompt: one line says what waits there.
+    assert_eq!(rows(&app), ["  ← 1 other session (1 waiting for you)"]);
+}
+
+#[test]
+fn other_sessions_without_agents_take_one_line() {
+    let now = Instant::now();
+    let mut app = App::new(60, 20, vec![]);
+    lanes(&mut app, &[("A", "first"), ("B", "second"), ("C", "third")]);
+    app.event(from("B", Event::TaskStarted("go".into())), now);
+    assert_eq!(rows(&app), ["  ← 2 other sessions (1 working)"]);
+    // ↓ has nothing to choose there: it stays the composer's.
+    press(&mut app, KeyCode::Down, now);
+    assert_eq!(app.views.focus, None);
+}
+
+#[test]
+fn another_sessions_agents_are_not_listed() {
+    let now = Instant::now();
+    let mut app = App::new(60, 20, vec![]);
+    lanes(&mut app, &[("A", "first"), ("B", "second")]);
+    app.event(
+        from(
+            "B",
+            Event::Started {
+                id: "s1".into(),
+                name: "scout".into(),
+            },
+        ),
+        now,
     );
+    assert_eq!(rows(&app), ["  ← 1 other session"]);
+    app.show("B");
+    assert_eq!(
+        rows(&app),
+        [
+            "  ● second  idle",
+            "    └ ○ scout  starting",
+            "  ↓ to manage · ← 1 other session"
+        ]
+    );
+}
+
+#[test]
+fn ctrl_c_in_the_tree_gives_the_keys_back_and_stops_nothing() {
+    let now = Instant::now();
+    let mut app = App::new(60, 20, vec![]);
+    app.event(Event::TaskStarted("go".into()), now);
+    started(&mut app, "s1", "scout");
+    press(&mut app, KeyCode::Down, now);
+    assert_eq!(app.views.focus, Some(0));
+    assert_eq!(app.event(crate::tui::test_support::ctrl('c'), now), None);
+    assert_eq!(app.views.focus, None);
+    assert!(app.busy().is_some(), "the task goes on");
 }

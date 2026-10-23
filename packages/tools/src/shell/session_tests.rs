@@ -194,7 +194,7 @@ fn close_kills_what_it_started() {
 }
 
 #[test]
-fn a_stop_ends_only_its_session() {
+fn a_stop_ends_the_wait_and_leaves_the_program_running() {
     let (dir, sessions) = (Scratch::new(), sessions());
     let short = Wait {
         needle: None,
@@ -207,8 +207,16 @@ fn a_stop_ends_only_its_session() {
         .send(first.id, b"", &[], short, None, &|| true)
         .unwrap();
     assert_eq!(stopped.until, Until::Stopped);
-    assert!(gone(-group), "group {group} still runs");
-    assert_eq!(sessions.running(), format!("{} (`sleep 31`)", second.id));
+    // Ctrl-C stops the task, not a REPL or a program the person is watching.
+    assert_eq!(
+        unsafe { libc::kill(-group, 0) },
+        0,
+        "group {group} was killed"
+    );
+    assert_eq!(
+        sessions.running(),
+        format!("{} (`sleep 30`), {} (`sleep 31`)", first.id, second.id)
+    );
 }
 
 /// Session 1 waited on for `millis` on another thread while `then` runs.
@@ -283,7 +291,11 @@ fn a_session_runs_in_its_directory_without_the_hidden_variables() {
             &never,
         )
         .unwrap();
-    assert_eq!(output(&turn), "marker.txt\nterm=dumb home=", "{turn:?}");
+    assert_eq!(
+        output(&turn),
+        "marker.txt\nterm=xterm-256color home=",
+        "{turn:?}"
+    );
 }
 
 #[test]
@@ -296,4 +308,39 @@ fn a_wait_counts_from_its_own_limits() {
         wait(None, Some(u64::MAX)),
         Duration::from_millis(MAX_YIELD_MS)
     );
+}
+
+#[test]
+fn registries_that_share_their_numbers_never_give_the_same_id() {
+    let dir = Scratch::new();
+    let numbers = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let (a, b) = (
+        Sessions::default().numbered(numbers.clone()),
+        Sessions::default().numbered(numbers),
+    );
+    let short = Wait {
+        needle: None,
+        yield_ms: Some(100),
+    };
+    let first = start(&a, &dir, "sleep 30", short);
+    let second = start(&b, &dir, "sleep 30", short);
+    assert_eq!((first.id, second.id), (1, 2));
+}
+
+#[test]
+fn a_sessions_screen_is_read_whole_whatever_was_read_before() {
+    let (dir, sessions) = (Scratch::new(), sessions());
+    let turn = start(
+        &sessions,
+        &dir,
+        "printf 'one\\ntwo\\n'; sleep 30",
+        until("two"),
+    );
+    assert_eq!(output(&turn), "one\ntwo");
+    let screen = sessions.screen(turn.id).unwrap();
+    assert!(
+        screen.starts_with("screen 120×40, cursor at row 3 col 1:\none\ntwo"),
+        "{screen}"
+    );
+    assert!(sessions.screen(99).unwrap_err().contains("not running"));
 }

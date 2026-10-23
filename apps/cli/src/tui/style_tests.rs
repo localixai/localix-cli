@@ -17,6 +17,13 @@ fn colour_follows_the_terminal_and_the_environment() {
 }
 
 #[test]
+fn diff_bands_survive_ansi_scrollback_and_disappear_without_colour() {
+    let line = Line::from("+ added   ").style(Style::new().fg(Color::Black).bg(Color::Green));
+    assert_eq!(ansi(&line, true), "\x1b[30;42m+ added   \x1b[0m");
+    assert_eq!(ansi(&line, false), "+ added   ");
+}
+
+#[test]
 fn a_line_goes_out_as_ansi_or_as_plain_text() {
     let line = Line::from(vec![
         Span::raw("ran "),

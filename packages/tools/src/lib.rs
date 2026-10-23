@@ -19,6 +19,7 @@ pub mod ask;
 pub mod browser;
 pub mod fs;
 pub mod shell;
+pub mod window;
 pub mod workspace;
 
 #[cfg(test)]

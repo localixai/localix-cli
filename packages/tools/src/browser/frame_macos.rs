@@ -37,6 +37,11 @@ fn name() -> Retained<AnyObject> {
     unsafe { msg_send![class!(NSString), stringWithUTF8String: c"llx.glass".as_ptr()] }
 }
 
+/// What names the coat over it.
+fn coat_name() -> Retained<AnyObject> {
+    unsafe { msg_send![class!(NSString), stringWithUTF8String: c"llx.coat".as_ptr()] }
+}
+
 /// The view that holds the titlebar and the content.
 fn frame_view(window: &Window) -> Option<Retained<AnyObject>> {
     let window = window.ns_window() as *mut AnyObject;
@@ -79,6 +84,7 @@ impl Glass {
                 let _: () = msg_send![&*coat, setBorderWidth: 0.0f64];
                 let _: () = msg_send![&*coat, setFrame: bounds];
                 let _: () = msg_send![&*coat, setAutoresizingMask: SIZABLE];
+                let _: () = msg_send![&*coat, setIdentifier: &*coat_name()];
                 let _: () =
                     msg_send![&*frame, addSubview: &*coat, positioned: ABOVE, relativeTo: &*effect];
                 coat
@@ -100,16 +106,9 @@ impl Glass {
     }
 }
 
-/// The person's resizing keeps the content's shape, `width` by `height`.
-pub fn keep_shape(window: &Window, width: f64, height: f64) {
-    let shape = CGSize { width, height };
-    let _: () =
-        unsafe { msg_send![window.ns_window() as *mut AnyObject, setContentAspectRatio: shape] };
-}
-
-/// Our materials in `window`'s frame view, the first one's state, whether it is opaque, and the
-/// shape its resizing keeps.
-pub fn dressed(window: &Window) -> (usize, isize, bool, f64) {
+/// Our materials in `window`'s frame view, the first one's state, whether it is opaque, the
+/// shape its resizing keeps, and whether a coat is over them.
+pub fn dressed(window: &Window) -> (usize, isize, bool, f64, bool) {
     let native = window.ns_window() as *mut AnyObject;
     let opaque: Bool = unsafe { msg_send![native, isOpaque] };
     let shape: CGSize = unsafe { msg_send![native, contentAspectRatio] };
@@ -119,24 +118,28 @@ pub fn dressed(window: &Window) -> (usize, isize, bool, f64) {
         0.0
     };
     let Some(frame) = frame_view(window) else {
-        return (0, -1, opaque.as_bool(), aspect);
+        return (0, -1, opaque.as_bool(), aspect, false);
     };
-    let mut found = (0, -1);
+    let (mut found, mut coated) = ((0, -1), false);
     unsafe {
         let views: Retained<AnyObject> = msg_send![&*frame, subviews];
         let count: usize = msg_send![&*views, count];
         for at in 0..count {
             let view: Retained<AnyObject> = msg_send![&*views, objectAtIndex: at];
             let named: Option<Retained<AnyObject>> = msg_send![&*view, identifier];
-            let ours: Bool = match &named {
-                Some(named) => msg_send![&**named, isEqualToString: &*name()],
-                None => Bool::NO,
+            let is = |wanted: &AnyObject| -> bool {
+                named.as_ref().is_some_and(|named| {
+                    let same: Bool = msg_send![&**named, isEqualToString: wanted];
+                    same.as_bool()
+                })
             };
+            coated |= is(&coat_name());
+            let ours = Bool::new(is(&name()));
             if ours.as_bool() {
                 let state: isize = msg_send![&*view, state];
                 found = (found.0 + 1, if found.0 == 0 { state } else { found.1 });
             }
         }
     }
-    (found.0, found.1, opaque.as_bool(), aspect)
+    (found.0, found.1, opaque.as_bool(), aspect, coated)
 }

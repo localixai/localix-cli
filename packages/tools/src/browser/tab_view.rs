@@ -23,6 +23,8 @@ pub(super) fn builder<'a>(
     let loads = shared.clone();
     let requests = shared.clone();
     let titles = shared.clone();
+    // A title or a load changes what the strip names the tab.
+    let (titled, loaded) = (proxy.clone(), proxy.clone());
     let mut builder = WebViewBuilder::new()
         .with_url(url)
         .with_incognito(true)
@@ -42,9 +44,13 @@ pub(super) fn builder<'a>(
                 };
                 eprintln!("tab {id} load {kind}: {url}");
             }
-            loads.page_load(id, event, &url)
+            loads.page_load(id, event, &url);
+            let _ = loaded.send_event(Cmd::Strip);
         })
-        .with_document_title_changed_handler(move |title| titles.titled(id, title))
+        .with_document_title_changed_handler(move |title| {
+            titles.titled(id, title);
+            let _ = titled.send_event(Cmd::Strip);
+        })
         .with_navigation_handler(move |url| {
             let allow = allowed(&url) || url == BLANK;
             if std::env::var_os("BROWSER_DEBUG").is_some() {

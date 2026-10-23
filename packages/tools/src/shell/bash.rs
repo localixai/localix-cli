@@ -27,18 +27,16 @@ chain with `&&`. {terminal} The command is killed, with everything it started, a
 background with its output sent to a file. Each stream keeps about 10000 characters, its start \
 and its end. A non-zero exit is reported as output, not as a failure.";
 
+/// Where terminal sessions are the window's tabs, and a command here only runs to its end.
+#[cfg(unix)]
+const TERMINAL: &str = "Input is closed and there is no terminal; prefer flags like `--yes` or \
+`--no-pager`. A program that must ask (a REPL, an installer's questions, a login, another agent's \
+interface) runs in a terminal tab of the window instead.";
+
 /// Where there is no terminal to give a command.
 #[cfg(not(unix))]
 const TERMINAL: &str = "Input is closed and there is no terminal: never start an interactive \
 program (an editor, a pager, a prompt); pass flags like `--yes` or `--no-pager`.";
-/// Where a command can have a terminal of its own, in a session.
-#[cfg(unix)]
-const TERMINAL: &str = "Input is closed and there is no terminal; prefer flags like `--yes` or \
-`--no-pager`. A program that must ask (a REPL, an installer's questions, a login) runs with \
-`tty`: the call returns once its output settles, with a session id while it runs; type into it \
-with `session`, `input` and `keys`, read more with `session` alone, and close it when done. \
-Sessions end with the task. Full-screen programs (editors, `top`, pagers) do not render: use \
-their batch mode.";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -83,8 +81,18 @@ pub struct BashTool<'a> {
     /// Whether the person stopped the task: a running command is killed when it says so, and a
     /// stop during a session's wait kills that session.
     pub stop: &'a (dyn Fn() -> bool + Sync),
-    /// The terminal sessions that stay open between calls, until the task ends.
+    /// The terminal sessions that stay open between calls (and between tasks, in a session).
     pub sessions: &'a Sessions,
+}
+
+impl BashTool<'_> {
+    /// A terminal session's call, for the window's terminal tabs: what it did, and the id of a
+    /// session it started while that session runs.
+    pub fn terminal(&self, arguments: &Value) -> Result<(ToolOutput, Option<u32>), ToolError> {
+        let args: Args = serde_json::from_value(arguments.clone())
+            .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
+        interactive::run(self, &args)
+    }
 }
 
 impl Tool for BashTool<'_> {
@@ -107,8 +115,11 @@ impl Tool for BashTool<'_> {
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
         let args: Args = serde_json::from_value(arguments.clone())
             .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
+        // Terminal sessions are reached through `terminal`: the window's tabs.
         if args.interactive() {
-            return interactive::call(self, &args);
+            return Err(ToolError::Failed(
+                "terminal sessions are tabs of the window: open one there".into(),
+            ));
         }
         let command = args.command.as_deref().unwrap_or_default();
         if command.trim().is_empty() {
@@ -181,8 +192,9 @@ impl BashTool<'_> {
 pub(super) const EMPTY: &str = "the command is empty";
 
 /// The arguments' schema; where there is a terminal, with the fields of a session.
+/// The arguments of a command run to its end.
 fn parameters() -> Value {
-    let mut parameters = json!({
+    json!({
         "type": "object",
         "properties": {
             "command": {"type": "string", "description": "The command to run."},
@@ -193,22 +205,7 @@ fn parameters() -> Value {
         },
         "required": ["command"],
         "additionalProperties": false,
-    });
-    if cfg!(unix) {
-        let properties = &mut parameters["properties"];
-        properties["command"]["description"] =
-            "The command to run. Omit it to continue a session.".into();
-        properties["timeout_ms"]["description"] =
-            "Kill it after this many milliseconds (default 120000). Not with tty.".into();
-        for (name, schema) in interactive::properties() {
-            properties[name] = schema;
-        }
-        // A call that continues a session has no command.
-        parameters
-            .as_object_mut()
-            .map(|object| object.remove("required"));
-    }
-    parameters
+    })
 }
 
 /// The whole command as the gate shows it, on one line: each line break becomes a return sign,

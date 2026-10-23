@@ -12,9 +12,12 @@ fn rect(rect: wry::Rect) -> (f64, f64, f64, f64) {
 #[test]
 fn a_page_fills_its_window_wherever_it_stands() {
     let size = LogicalSize::new(1200.0, 800.0);
-    assert_eq!(rect(fill(size, 0.0)), (0.0, 0.0, 1200.0, 800.0));
+    assert_eq!(rect(fill(size, 0.0, 0.0)), (0.0, 0.0, 1200.0, 800.0));
     // A tab out of sight keeps the window's size.
-    assert_eq!(rect(fill(size, -1300.0)), (-1300.0, 0.0, 1200.0, 800.0));
+    assert_eq!(
+        rect(fill(size, -1300.0, 34.0)),
+        (-1300.0, 34.0, 1200.0, 800.0)
+    );
 }
 
 #[test]
@@ -63,9 +66,22 @@ fn each_appearance_has_its_own_material_and_coat() {
     let (dark_ground, dark_alpha) = coat(None, true);
     let (light_ground, light_alpha) = coat(None, false);
     assert_eq!((dark_ground, light_ground), (DARK, LIGHT));
-    assert!(dark_alpha < light_alpha && dark_alpha >= 0.8 && light_alpha < 1.0);
-    // The person's own ground, whatever the system's appearance.
-    assert_eq!(coat(Some([1, 2, 3]), false), ([1, 2, 3], dark_alpha));
+    // Mostly glass: at most 60% coat, lighter where the text is dark.
+    assert!(dark_alpha < light_alpha && dark_alpha >= 0.4 && light_alpha <= 0.6);
+    // A neutral glass, as Localix's: a terminal's own grey-blue ground only says which
+    // appearance; the coat stays near-black (or near-white), so the material does not read grey.
+    let neutral = |[red, green, blue]: Rgb| red == green && green == blue;
+    let (over_grey_blue, alpha) = coat(Some([0x2a, 0x2b, 0x37]), false);
+    assert!(
+        neutral(over_grey_blue) && over_grey_blue[0] < 0x10,
+        "{over_grey_blue:?}"
+    );
+    assert_eq!(alpha, dark_alpha);
+    let (over_paper, _) = coat(Some([0xee, 0xee, 0xe0]), true);
+    assert!(
+        neutral(over_paper) && over_paper[0] > 0xf0,
+        "{over_paper:?}"
+    );
 }
 
 #[test]
@@ -84,12 +100,11 @@ fn a_page_is_dressed_in_the_frames_stylesheet() {
 }
 
 #[test]
-fn a_pages_shape_is_two_sane_numbers() {
-    assert_eq!(shape("[968,708]"), Some((968.0, 708.0)));
-    assert_eq!(shape("[968.4, 708.6]"), Some((969.0, 709.0)));
-    // Whatever the page says, the window stays a window.
-    assert_eq!(shape("[1e9,5]"), Some((2400.0, 240.0)));
-    for answer in ["null", "\"x\"", "[1]", "[1,\"2\"]", "{}", ""] {
-        assert_eq!(shape(answer), None, "{answer}");
-    }
+fn a_shown_window_opens_at_a_size_fit_for_its_screen() {
+    // A laptop's screen: a good part of it, not all of it.
+    assert_eq!(moderate((1512.0, 945.0)), (960.0, 680.0));
+    // A large screen: no larger than reads well.
+    assert_eq!(moderate((3008.0, 1692.0)), (1440.0, 960.0));
+    // A small one: never smaller than a page needs.
+    assert_eq!(moderate((1024.0, 700.0)), (960.0, 640.0));
 }

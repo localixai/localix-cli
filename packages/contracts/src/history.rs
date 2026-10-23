@@ -24,6 +24,9 @@ pub struct Session {
     /// An agent's short name, as its parent calls it; empty for a session the person started.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,
+    /// What the session is about, as a title made from its first task; empty until one is.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title: String,
     #[serde(default)]
     pub turns: Vec<Turn>,
 }

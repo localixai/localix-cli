@@ -5,7 +5,8 @@
 //! not on a timer.
 
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use super::process::Ending;
@@ -47,7 +48,7 @@ pub enum Until {
     Settled,
     Deadline,
     Exited(Ending),
-    /// The call was stopped: its session was killed.
+    /// The call was stopped: its wait ended, and its session runs on.
     Stopped,
     /// Closed by the call; `killed` once everything it started is known to be gone.
     Closed {
@@ -75,6 +76,9 @@ pub struct Sessions {
     inner: Mutex<Registry>,
     watch: Option<Watch>,
     shown: bool,
+    /// Where ids come from when they are shared (every lane of the app, so a session's id names
+    /// it in the one window too); else the registry counts its own.
+    numbers: Option<Arc<AtomicU32>>,
 }
 
 #[derive(Default)]
@@ -93,7 +97,24 @@ impl Sessions {
             inner: Mutex::default(),
             watch: Some(watch),
             shown,
+            numbers: None,
         }
+    }
+
+    /// Ids from `numbers`, shared with other registries: no two of them give the same id.
+    pub fn numbered(mut self, numbers: Arc<AtomicU32>) -> Self {
+        self.numbers = Some(numbers);
+        self
+    }
+
+    /// Session `id`'s screen now, as a terminal shows it, or why there is none.
+    pub fn screen(&self, id: u32) -> Result<String, String> {
+        let registry = self.registry();
+        let Some(session) = registry.live.iter().find(|session| session.id == id) else {
+            return Err(not_running(id, &registry));
+        };
+        let stream = session.pty.shared.lock();
+        Ok(stream.screen_now())
     }
 
     /// Room for one more session, or why there is none: checked before the person is asked.
@@ -108,6 +129,16 @@ impl Sessions {
             Some(session) => Ok(session.command.clone()),
             None => Err(not_running(id, &registry)),
         }
+    }
+
+    /// The running sessions' ids and commands.
+    pub fn listed(&self) -> Vec<(u32, String)> {
+        let registry = self.registry();
+        registry
+            .live
+            .iter()
+            .map(|s| (s.id, s.command.clone()))
+            .collect()
     }
 
     /// The running sessions, as `1 (`python3 -q`), 3 (`psql`)`, or `none`.
@@ -130,12 +161,14 @@ impl Sessions {
             let mut registry = self.registry();
             room(&registry)?;
             registry.next += 1;
-            let id = registry.next;
+            let id = match &self.numbers {
+                Some(numbers) => numbers.fetch_add(1, Ordering::SeqCst) + 1,
+                None => registry.next,
+            };
             registry.busy.push(id);
             id
         };
-        let screen = self.watch.is_some();
-        let pty = pty::spawn(command, dir, hidden, wait.needle, screen).map_err(|error| {
+        let pty = pty::spawn(command, dir, hidden, wait.needle).map_err(|error| {
             self.release(id);
             format!("the shell could not start: {error}")
         })?;
@@ -199,8 +232,9 @@ impl Sessions {
         let until = session.wait(wait, stop);
         let turn = session.turn(until, begun.elapsed(), stalled);
         match until {
-            // A stop is this call's (an agent's, or the task's, whose end closes the rest).
-            Until::Stopped | Until::Exited(_) | Until::Closed { .. } => drop(session),
+            // A stop ends the wait, not the program: a REPL or a program the person watches goes
+            // on, until it is closed.
+            Until::Exited(_) | Until::Closed { .. } => drop(session),
             _ => {
                 if open {
                     self.show(&session);
@@ -222,7 +256,7 @@ impl Sessions {
         let Some(watch) = self.watch.as_ref().filter(|_| !open()) else {
             return;
         };
-        if let Some(painter) = watch(&watch::title(session.id, &session.command)) {
+        if let Some(painter) = watch(session.id, &watch::title(session.id, &session.command)) {
             session.pty.shared.lock().attach(painter);
         }
     }

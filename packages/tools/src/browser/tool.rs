@@ -3,7 +3,6 @@
 //! say what happened and show the page.
 
 use contracts::gate::Gate;
-use contracts::hands::{Hands, Outcome, Report, Task};
 use contracts::tool::{Image, Tool, ToolError, ToolOutput, ToolSpec};
 use contracts::view::View;
 use serde_json::Value;
@@ -23,7 +22,6 @@ const OUTLINE_LIMIT: usize = 6000;
 const READ_LIMIT: usize = 8000;
 pub struct BrowserTool<'a> {
     pub page: &'a Page,
-    pub hands: &'a dyn Hands,
     /// Asked before a call does anything a page sees (an address, a goal, keys, a script): a page
     /// can send whatever it is given anywhere, and may be signed in as the person.
     pub gate: &'a dyn Gate,
@@ -66,17 +64,6 @@ impl Tool for BrowserTool<'_> {
                 Ok(()) => report.push(format!("Page size {size}.")),
                 Err(error) => report.push(format!("Page size not changed: {error}")),
             }
-        }
-        if let Some(goal) = given(&args.goal) {
-            let task = Task {
-                goal,
-                values: &args.values,
-            };
-            let done = self.hands.carry_out(self.page, task);
-            if let Outcome::Unreachable(why) = &done.outcome {
-                return Err(ToolError::Fatal(why.clone()));
-            }
-            report.push(helper(&done, &args.values));
         }
         let driver = self
             .page
@@ -134,7 +121,7 @@ impl BrowserTool<'_> {
             },
             (None, true) => return,
         };
-        let title = given(&args.goal).unwrap_or(&url).to_string();
+        let title = url.clone();
         match self.page.open(&url, &title, args.show) {
             Ok(()) => report.push(format!("Opened {url}.")),
             Err(error) => report.push(format!("Opening {url} did not finish cleanly ({error}).")),
@@ -245,34 +232,6 @@ fn image(shot: Shot) -> Image {
         width: shot.width,
         height: shot.height,
     }
-}
-
-/// What the helper did, step by step, and the values it never typed.
-fn helper(done: &Report, values: &[String]) -> String {
-    let outcome = match &done.outcome {
-        Outcome::Done { probability } => format!("done ({:.0}% sure)", probability * 100.0),
-        Outcome::Blocked => "blocked: nothing on the page could make progress".into(),
-        Outcome::Exhausted => "out of actions".into(),
-        Outcome::Stopped(why) | Outcome::Unreachable(why) => format!("stopped: {why}"),
-    };
-    let mut out = format!("### Helper: {outcome}");
-    for (i, step) in done.steps.iter().enumerate() {
-        out.push_str(&format!("\n{}. {step}", i + 1));
-    }
-    let unused: Vec<String> = values
-        .iter()
-        .filter(|value| {
-            !done
-                .steps
-                .iter()
-                .any(|step| step.contains(&format!("\"{value}\"")))
-        })
-        .map(|value| format!("\"{value}\""))
-        .collect();
-    if !unused.is_empty() {
-        out.push_str(&format!("\nValues never typed: {}.", unused.join(", ")));
-    }
-    out
 }
 
 /// The outline as a person reads it: ` [ref=e12]` marks dropped.

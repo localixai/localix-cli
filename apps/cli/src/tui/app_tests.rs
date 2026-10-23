@@ -124,25 +124,30 @@ fn a_task_leaves_its_blocks_in_order() {
 }
 
 #[test]
-fn ctrl_c_stops_a_task_clears_the_line_and_quits_only_when_pressed_twice() {
+fn ctrl_c_on_a_draft_keeps_it_in_history_and_a_second_quits() {
     let now = Instant::now();
     let mut app = app();
-    app.event(Event::TaskStarted("x".into()), now);
-    assert_eq!(app.event(ctrl('c'), now), Some(Action::Stop(String::new())));
-    assert_eq!(app.event(key(KeyCode::Esc), now), None, "stopping already");
-    app.event(
-        Event::TaskEnded {
-            status: "interrupted".into(),
-            millis: 0,
-            turns: 0,
-            cost: 0.0,
-        },
-        now,
+    typed(&mut app, "a draft", now);
+    assert_eq!(app.event(ctrl('c'), now), None);
+    let screen = render(&mut app, now);
+    assert!(!screen.contains("a draft"), "{screen}");
+    assert!(
+        screen.contains("↑ brings it back · ctrl-c again to quit"),
+        "{screen}"
     );
-    typed(&mut app, "draft", now);
+    // ↑ brings it back, and a key other than Ctrl-C disarms the quit.
+    app.event(key(KeyCode::Up), now);
+    assert_eq!(app.composer.text(), "a draft");
+    assert_eq!(app.event(ctrl('c'), now), None, "cleared again, not quit");
+    assert_eq!(app.event(ctrl('c'), now), Some(Action::Quit));
+}
+
+#[test]
+fn ctrl_c_at_an_empty_prompt_quits_only_when_pressed_twice_in_time() {
+    let now = Instant::now();
+    let mut app = app();
     assert_eq!(app.event(ctrl('c'), now), None);
-    assert!(app.composer.is_empty());
-    assert_eq!(app.event(ctrl('c'), now), None);
+    assert!(render(&mut app, now).contains("ctrl-c again to quit"));
     assert_eq!(
         app.event(ctrl('c'), now + Duration::from_secs(3)),
         None,
@@ -152,7 +157,38 @@ fn ctrl_c_stops_a_task_clears_the_line_and_quits_only_when_pressed_twice() {
         app.event(ctrl('c'), now + Duration::from_secs(4)),
         Some(Action::Quit)
     );
+}
+
+#[test]
+fn ctrl_c_while_a_task_works_stops_it_and_keeps_the_draft() {
+    let now = Instant::now();
+    let mut app = app();
+    app.event(Event::TaskStarted("x".into()), now);
+    typed(&mut app, "next idea", now);
+    assert_eq!(app.event(ctrl('c'), now), Some(Action::Stop(String::new())));
+    assert_eq!(app.composer.text(), "next idea");
+    assert_eq!(app.event(key(KeyCode::Esc), now), None, "stopping already");
+}
+
+#[test]
+fn ctrl_d_quits_from_an_empty_prompt_and_asks_while_a_task_works() {
+    let now = Instant::now();
+    let mut app = app();
+    typed(&mut app, "x", now);
+    assert_ne!(app.event(ctrl('d'), now), Some(Action::Quit), "a draft");
+    app.composer.clear();
     assert_eq!(app.event(ctrl('d'), now), Some(Action::Quit));
+    app.event(Event::TaskStarted("x".into()), now);
+    assert_eq!(app.event(ctrl('d'), now), None);
+    assert!(render(&mut app, now).contains("Quit llx?"));
+}
+
+#[test]
+fn esc_twice_on_an_empty_prompt_says_what_the_second_does() {
+    let now = Instant::now();
+    let mut app = app();
+    app.event(key(KeyCode::Esc), now);
+    assert!(render(&mut app, now).contains("esc again to rewind"));
 }
 
 #[test]
@@ -239,11 +275,13 @@ fn slash_offers_the_commands_and_enter_takes_the_marked_one() {
       /help       the commands
       /mode       show or switch the mode
       /new        start over
+      default mode · shift+tab to cycle
     ");
     typed(&mut app, "n", now);
     insta::assert_snapshot!(render(&mut app, now), @"
     ❯ /n
       /new        start over
+      default mode · shift+tab to cycle
     ");
     let opened = app.event(key(KeyCode::Enter), now);
     assert_eq!(
@@ -262,6 +300,7 @@ fn slash_offers_the_commands_and_enter_takes_the_marked_one() {
     ❯ /mode plan
       mode  ›  current: default · ↑↓ choose · tab complete · en…
       plan         Investigate and plan: file changes are refus…
+      default mode · shift+tab to cycle
     ");
     app.event(key(KeyCode::Enter), now);
     assert_eq!(entries.try_recv(), Ok(Some("/mode plan".into())));
@@ -295,6 +334,7 @@ fn command_drill_down_shows_modes_and_preserves_argument_entry() {
       plan         Investigate and plan: file changes are refus…
       bypass       Everything runs without asking (-y); questio…
       autonomous   Everything runs without asking, and no quest…
+      default mode · shift+tab to cycle
     ");
     typed(&mut app, "aut", now);
     app.event(key(KeyCode::Tab), now);
@@ -833,4 +873,30 @@ fn a_choice_after_a_dismissed_approval_takes_keys_at_once() {
         Ok(Some(0)),
         "not swallowed by the approval's settling"
     );
+}
+
+#[test]
+fn a_long_history_shows_its_last_tasks_and_counts_the_rest() {
+    let now = Instant::now();
+    let mut app = app();
+    let turns = (1..=25)
+        .map(|n| contracts::history::Turn {
+            goal: format!("task {n}"),
+            answer: format!("answer {n}"),
+            status: "achieved".into(),
+            at: n,
+        })
+        .collect();
+    app.event(Event::Earlier(turns), now);
+    let shown = history(&mut app);
+    assert!(
+        shown.contains("25 earlier tasks · the last 20 shown"),
+        "{shown}"
+    );
+    assert!(!shown.contains("❯ task 5\n"), "{shown}");
+    assert!(
+        shown.contains("❯ task 6") && shown.contains("• answer 25"),
+        "{shown}"
+    );
+    assert_eq!(app.shown().tasks, 25);
 }

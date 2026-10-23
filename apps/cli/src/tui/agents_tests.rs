@@ -53,7 +53,10 @@ fn keys(app: &mut App, codes: &[KeyCode], now: Instant) {
 /// A row of the tree chosen with `❯` (`❯ ○ scout …`): its session's name.
 fn tree_row(line: &str) -> Option<&str> {
     let mut words = line.strip_prefix("❯ ")?.split_whitespace();
-    let glyph = words.next()?;
+    let mut glyph = words.next()?;
+    if ["├", "└"].contains(&glyph) {
+        glyph = words.next()?;
+    }
     (glyph.chars().count() == 1).then_some(())?;
     words.next()
 }
@@ -89,10 +92,10 @@ fn an_agents_transcript_waits_in_its_view_until_it_is_shown() {
     // ↓ from the empty prompt goes into the list, on main; ↓ again to scout, Enter shows it.
     press(&mut app, KeyCode::Down, now);
     let list = term.draw(&mut app, now);
-    assert_eq!(chosen(&list), Some("main"), "{list}");
+    assert_eq!(chosen(&list), Some("New"), "{list}");
     keys(&mut app, &[KeyCode::Down, KeyCode::Enter], now);
     let scout = term.draw(&mut app, now);
-    assert!(scout.starts_with("◆ agent scout  ·  session s1"), "{scout}");
+    assert!(scout.starts_with("◆ agent scout  ·  started by"), "{scout}");
     assert!(
         scout.contains("find it") && scout.contains("Read src/lib.rs"),
         "{scout}"
@@ -150,7 +153,10 @@ fn the_list_takes_the_keys_only_from_an_empty_prompt_and_gives_them_back() {
         Some("scout"),
         "the last row stays chosen:\n{screen}"
     );
-    assert_eq!(hint(&screen), "↑↓ choose · enter view · x stop · esc back");
+    assert_eq!(
+        hint(&screen),
+        "↑↓ select · →/enter open · x stop · esc input"
+    );
     press(&mut app, KeyCode::Right, now);
     let screen = term.draw(&mut app, now);
     assert!(
@@ -164,7 +170,7 @@ fn the_list_takes_the_keys_only_from_an_empty_prompt_and_gives_them_back() {
         None,
         "↑ past the top gives the keys back:\n{screen}"
     );
-    assert_eq!(hint(&screen), "↓ to manage · esc back to main");
+    assert_eq!(hint(&screen), "↓ to manage · esc back to New session");
     press(&mut app, KeyCode::Down, now);
     let screen = term.draw(&mut app, now);
     assert_eq!(
@@ -204,8 +210,7 @@ fn esc_and_a_sent_entry_go_back_to_main() {
         &[KeyCode::Down, KeyCode::Down, KeyCode::Enter],
         now,
     );
-    // The first Esc gives the list's keys back; the second goes back to main.
-    press(&mut app, KeyCode::Esc, now);
+    // Enter gave the keys back to the composer: Esc goes back to main.
     let screen = term.draw(&mut app, now);
     assert!(screen.starts_with("◆ agent scout"), "{screen}");
     press(&mut app, KeyCode::Esc, now);
@@ -246,11 +251,11 @@ fn an_agent_ends_is_closed_and_is_cleared_with_its_conversation() {
     );
     let screen = term.draw(&mut app, now);
     assert!(screen.contains("● Agent \"scout\" finished"), "{screen}");
-    assert!(screen.contains("  ✓ scout  done"), "{screen}");
+    assert!(screen.contains("└ ✓ scout  done"), "{screen}");
     assert!(!app.moving());
     app.event(Event::In("s1".into(), Box::new(Event::Closed)), now);
     let screen = term.draw(&mut app, now);
-    assert!(screen.contains("  ○ scout  closed"), "{screen}");
+    assert!(screen.contains("└ ○ scout  closed"), "{screen}");
     keys(
         &mut app,
         &[KeyCode::Down, KeyCode::Down, KeyCode::Enter],

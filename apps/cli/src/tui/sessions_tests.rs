@@ -48,15 +48,10 @@ fn three(now: Instant) -> App {
 }
 
 fn saved() -> Event {
+    let row = |id: &str, title: &str, meta: &str| (id.into(), title.into(), meta.into());
     Event::Saved(vec![
-        (
-            "B".into(),
-            "   2 h ago   4 tasks  fix the flaky jobs test".into(),
-        ),
-        (
-            "old".into(),
-            "   1 d ago   1 task   make the binary smaller".into(),
-        ),
+        row("B", "fix the flaky jobs test", "2 h ago · 4 tasks"),
+        row("old", "make the binary smaller", "1 d ago · 1 task"),
     ])
 }
 
@@ -92,11 +87,13 @@ fn saved_rows_open_the_list_live_first() {
     insta::assert_snapshot!(list, @"
     • Sessions in this project
 
-      * fix the flaky jobs test  running Ns · 0 tokens
+      * fix the flaky jobs test  running
     ❯ ? add tabs to the browser  waiting for you
-      ✓ refactor the picker      shown · done · Ns · 0 tokens · 1 task
+      ✓ refactor the picker      current · done · Ns · 1 task
       + New session
-         1 d ago   1 task   make the binary smaller
+
+      Earlier
+        make the binary smaller  1 d ago · 1 task
 
       ↑↓ choose · enter open · x stop · esc back
     ");
@@ -200,14 +197,91 @@ fn a_finished_hidden_session_is_marked_unseen_in_the_list() {
 }
 
 #[test]
-fn x_on_a_lanes_tree_row_stops_it() {
+fn opening_a_tree_row_returns_the_keys_to_input() {
+    let now = Instant::now();
+    for open in [KeyCode::Enter, KeyCode::Right] {
+        let mut app = three(now);
+        let scout = Event::Started {
+            id: "s1".into(),
+            name: "scout".into(),
+        };
+        app.event(from("A", scout), now);
+        app.event(
+            from("s1", Event::Note("scout's own transcript".into())),
+            now,
+        );
+        let mut term = Term::new(&app);
+        term.draw(&mut app, now);
+        // ↓ into the tree on A, ↓ to its agent.
+        press(&mut app, KeyCode::Down, now);
+        press(&mut app, KeyCode::Down, now);
+        press(&mut app, open, now);
+        let screen = term.draw(&mut app, now);
+        assert!(screen.contains("scout's own transcript"), "{screen}");
+        assert!(
+            !screen.contains("↑↓ select"),
+            "focus stayed in the tree:\n{screen}"
+        );
+        // Left now opens the project list, rather than silently leaving tree focus.
+        press(&mut app, KeyCode::Esc, now);
+        assert_eq!(press(&mut app, KeyCode::Left, now), Some(Action::Sessions));
+    }
+}
+
+#[test]
+fn an_empty_session_has_a_clear_name_and_current_marker() {
+    let now = Instant::now();
+    let mut app = App::new(80, 30, vec![]);
+    app.event(
+        Event::LaneStarted {
+            id: "empty".into(),
+            name: String::new(),
+        },
+        now,
+    );
+    app.event(
+        Event::LaneStarted {
+            id: "saved".into(),
+            name: "previous task".into(),
+        },
+        now,
+    );
+    press(&mut app, KeyCode::Left, now);
+    let screen = Term::new(&app).draw(&mut app, now);
+    let current = screen.lines().find(|line| line.contains("● New session"));
+    assert!(
+        current.is_some_and(|line| line.contains("current")),
+        "{screen}"
+    );
+    assert!(!screen.contains("main"), "{screen}");
+}
+
+#[test]
+fn a_title_made_in_the_background_renames_the_session_where_it_is_listed() {
     let now = Instant::now();
     let mut app = three(now);
-    // ↓ into the tree on A, the session shown; ↓ to B, working.
-    press(&mut app, KeyCode::Down, now);
-    press(&mut app, KeyCode::Down, now);
-    assert_eq!(
-        press(&mut app, KeyCode::Char('x'), now),
-        Some(Action::Halt("B".into()))
+    let title = crate::meta::Update {
+        title: Some("Fix the flaky jobs test".into()),
+    };
+    app.event(from("B", Event::Updated(title)), now);
+    let mut term = Term::new(&app);
+    term.draw(&mut app, now);
+    press(&mut app, KeyCode::Left, now);
+    let screen = term.draw(&mut app, now);
+    assert!(
+        screen.contains("* Fix the flaky jobs test  running"),
+        "{screen}"
     );
+    assert!(!screen.contains("fix the flaky jobs test"), "{screen}");
+}
+
+#[test]
+fn ctrl_c_in_the_list_closes_it_and_nothing_else() {
+    let now = Instant::now();
+    let mut app = three(now);
+    press(&mut app, KeyCode::Left, now);
+    assert_eq!(app.event(crate::tui::test_support::ctrl('c'), now), None);
+    let screen = Term::new(&app).draw(&mut app, now);
+    assert!(!screen.contains("Sessions in this project"), "{screen}");
+    assert!(!screen.contains("again to quit"), "{screen}");
 }

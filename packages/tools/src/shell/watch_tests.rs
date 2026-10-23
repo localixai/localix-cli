@@ -30,7 +30,7 @@ impl Drop for Dropped {
 impl Windows {
     fn watch(&self) -> Watch {
         let windows = self.clone();
-        Arc::new(move |title: &str| {
+        Arc::new(move |_id: u32, title: &str| {
             windows.titles.lock().unwrap().push(title.to_string());
             let (frames, closed) = (
                 Arc::clone(&windows.frames),
@@ -129,15 +129,12 @@ fn a_kept_session_opens_one_window_that_follows_it() {
 #[test]
 fn every_end_by_a_call_closes_the_window_at_once() {
     type End = fn(&Sessions, u32);
-    let ends: [(&str, End); 4] = [
+    let ends: [(&str, End); 3] = [
         ("close", |sessions, id| {
             let _ = sessions.close(id);
         }),
         ("close_all", |sessions, _| {
             let _ = sessions.close_all();
-        }),
-        ("stop", |sessions, id| {
-            let _ = sessions.send(id, b"", &[], quick(), None, &|| true);
         }),
         ("drop", |_, _| {}),
     ];
@@ -151,6 +148,15 @@ fn every_end_by_a_call_closes_the_window_at_once() {
         }
         assert_eq!(windows.drops(), 1, "{name}");
     }
+}
+
+#[test]
+fn a_stop_leaves_the_window_open() {
+    let windows = Windows::default();
+    let sessions = Sessions::new(windows.watch(), true);
+    let id = start(&sessions, "sleep 30", None);
+    let _ = sessions.send(id, b"", &[], quick(), None, &|| true);
+    assert_eq!(windows.drops(), 0, "the program runs on, and shows");
 }
 
 #[test]

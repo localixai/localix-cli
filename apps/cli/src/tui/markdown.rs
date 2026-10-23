@@ -2,6 +2,9 @@
 //! their markers hanging, quotes behind a rule, code in its own colour with its spaces kept, and a
 //! link's address after its text. No markup characters are left for the person to read past.
 
+#[path = "markdown_table.rs"]
+mod table;
+
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -18,7 +21,7 @@ pub fn render(text: &str, width: usize) -> Vec<Line<'static>> {
     };
     for event in Parser::new_ext(
         text,
-        Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS,
+        Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS | Options::ENABLE_TABLES,
     ) {
         out.event(event);
     }
@@ -41,6 +44,7 @@ struct Renderer {
     links: Vec<(String, usize)>,
     /// A blank row goes before the next block.
     gap: bool,
+    table: Option<table::Table>,
 }
 
 enum Container {
@@ -77,6 +81,15 @@ impl Renderer {
 
     fn start(&mut self, tag: Tag) {
         match tag {
+            Tag::Table(alignments) => {
+                self.block();
+                self.table = Some(table::Table::new(alignments));
+            }
+            Tag::TableHead | Tag::TableRow => {
+                if let Some(table) = &mut self.table {
+                    table.rows.push(vec![]);
+                }
+            }
             Tag::Paragraph => self.block(),
             Tag::Heading { level, .. } => {
                 self.block();
@@ -135,6 +148,21 @@ impl Renderer {
 
     fn end(&mut self, tag: TagEnd) {
         match tag {
+            TagEnd::TableCell => {
+                if let Some(table) = &mut self.table
+                    && let Some(row) = table.rows.last_mut()
+                {
+                    row.push(Line::from(std::mem::take(&mut self.line)));
+                }
+            }
+            TagEnd::Table => {
+                if let Some(table) = self.table.take() {
+                    let (first, rest) = self.prefixes();
+                    self.rows.extend(table.render(self.width, first, rest));
+                    self.marker = None;
+                    self.gap = true;
+                }
+            }
             TagEnd::Paragraph => self.close_block(),
             TagEnd::Heading(_) => {
                 self.styles.pop();

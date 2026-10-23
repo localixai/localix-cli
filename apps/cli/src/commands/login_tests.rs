@@ -32,19 +32,12 @@ fn openrouter() -> Choice {
     Choice::new(Provider::openrouter(), "anthropic/claude-haiku-5.5")
 }
 
-fn names(efforts: &[Effort]) -> Vec<String> {
-    efforts
-        .iter()
-        .map(|effort| effort.name().to_string())
-        .collect()
-}
-
 #[test]
 fn signing_in_to_openai_then_choosing_a_model_and_a_level_it_takes() {
-    // OpenAI, the ChatGPT sign-in, its default model (the one marked), the third level offered.
+    // OpenAI, the ChatGPT sign-in, then its default model and level together.
     let models = Provider::openai().models();
     let luna = models.iter().position(|m| m.id == "gpt-6-luna").unwrap();
-    let mut terminal = Scripted::new(&[Some(0), Some(0), Some(luna), Some(2)]);
+    let mut terminal = Scripted::new(&[Some(0), Some(0), Some(luna)]);
     let (chosen, asked) = steps(&openrouter(), false, &mut terminal);
     let chosen = chosen.unwrap().unwrap();
     assert_eq!(asked, [(Provider::openai(), Method::Browser)]);
@@ -69,28 +62,13 @@ fn signing_in_to_openai_then_choosing_a_model_and_a_level_it_takes() {
         .into_iter()
         .position(|(_, marked)| marked);
     assert_eq!(marked, Some(luna), "the default is the one marked");
-    let offered = terminal.offered("Reasoning");
-    let levels: Vec<String> = offered.iter().map(|(label, _)| label.clone()).collect();
-    assert_eq!(
-        levels,
-        names(chosen.selection.model().offered()),
-        "only the model's own levels"
-    );
-    assert_eq!(
-        chosen.selection.effort(),
-        chosen.selection.model().offered()[2]
-    );
+    assert_eq!(terminal.titles().len(), 3, "no separate reasoning menu");
+    assert_eq!(chosen.selection.effort(), models[luna].default);
 }
 
 #[test]
-fn the_reasoning_step_marks_the_level_to_keep() {
-    // From gpt-6-sol at a level, on to a model and the level picked at that index.
-    for (effort, model, pick, marked, kept) in [
-        // Another model starts at its default and offers only its levels.
-        (Effort::Max, "gpt-5.5", 2, "medium", Effort::Medium),
-        // The same model keeps its level marked.
-        (Effort::High, "gpt-6-sol", 3, "high", Effort::High),
-    ] {
+fn the_model_list_keeps_the_current_level_or_starts_at_the_new_models_default() {
+    for (effort, model) in [(Effort::Max, "gpt-5.5"), (Effort::High, "gpt-6-sol")] {
         let current = Choice::new(Provider::openai(), "gpt-6-sol");
         let current = Choice {
             selection: current.selection.with_effort(effort).unwrap(),
@@ -98,20 +76,21 @@ fn the_reasoning_step_marks_the_level_to_keep() {
         };
         let models = Provider::openai().models();
         let at = models.iter().position(|m| m.id == model).unwrap();
-        // OpenAI (current), keep the sign-in, the model, a level.
-        let mut terminal = Scripted::new(&[Some(0), Some(0), Some(at), Some(pick)]);
+        // OpenAI (current), keep the sign-in, confirm the model and inline level.
+        let mut terminal = Scripted::new(&[Some(0), Some(0), Some(at)]);
         let (chosen, asked) = steps(&current, true, &mut terminal);
         assert!(asked.is_empty(), "{model}: the sign-in was kept");
-        let offered = terminal.offered("Reasoning");
-        let labels: Vec<String> = offered.iter().map(|(label, _)| label.clone()).collect();
-        assert_eq!(labels, names(models[at].offered()), "{model}");
-        let shown: Vec<&str> = offered
-            .iter()
-            .filter(|(_, marked)| *marked)
-            .map(|(label, _)| label.as_str())
-            .collect();
-        assert_eq!(shown, [marked], "{model}");
-        assert_eq!(chosen.unwrap().unwrap().selection.effort(), kept, "{model}");
+        let expected = if model == current.model() {
+            effort
+        } else {
+            models[at].default
+        };
+        assert_eq!(terminal.titles().len(), 3);
+        assert_eq!(
+            chosen.unwrap().unwrap().selection.effort(),
+            expected,
+            "{model}"
+        );
     }
 }
 

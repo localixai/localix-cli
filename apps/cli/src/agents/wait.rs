@@ -21,25 +21,24 @@ impl AgentsTool<'_, '_> {
         let ui = self.kit.output.ui();
         let until = Instant::now() + timeout;
         loop {
-            let mut state = self.registry.lock();
+            let state = self.registry.lock();
+            let queue = &self.registry.queue;
             let targets: Vec<String> = match named.is_empty() {
                 true => state
                     .children
                     .iter()
                     .filter(|c| c.working)
                     .map(|c| c.session.id.clone())
-                    .chain(state.mail.iter().map(|(id, _)| id.clone()))
+                    .chain(queue.keys(crate::arrivals::AGENT_RESULT))
                     .collect(),
                 false => named.clone(),
             };
-            let mut answers = vec![];
-            state.mail.retain(|(id, message)| {
-                let wanted = targets.contains(id);
-                if wanted {
-                    answers.push(message.clone());
-                }
-                !wanted
-            });
+            let keys: Vec<&str> = targets.iter().map(String::as_str).collect();
+            let answers: Vec<String> = queue
+                .take_keyed(crate::arrivals::AGENT_RESULT, &keys)
+                .iter()
+                .map(|e| e.render())
+                .collect();
             let working: Vec<String> = state
                 .children
                 .iter()

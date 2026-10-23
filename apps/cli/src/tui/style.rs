@@ -85,6 +85,7 @@ fn sgr(style: Style) -> String {
         }
     }
     let fg = style.fg.and_then(|colour| match colour {
+        Color::Black => Some("30"),
         Color::Red => Some("31"),
         Color::Green => Some("32"),
         Color::Yellow => Some("33"),
@@ -96,6 +97,11 @@ fn sgr(style: Style) -> String {
         _ => None,
     });
     codes.extend(fg);
+    codes.extend(style.bg.and_then(|colour| match colour {
+        Color::Red => Some("41"),
+        Color::Green => Some("42"),
+        _ => None,
+    }));
     codes.join(";")
 }
 

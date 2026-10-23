@@ -3,21 +3,26 @@
 //! sessions, newest first. ↑↓ choose, Enter or → opens (a lane is shown, a saved session opens
 //! in a lane of its own), `x` stops a lane's task without switching to it, Esc or ← close it.
 //!
+//! Live and saved rows share their columns: a mark, the name, then where it stands.
+//!
 //! ```text
 //! • Sessions in this project
 //!
-//! ❯ ⠹ fix the flaky jobs test   running 1m 12s · 54.1k tokens · 2 agents
+//! ❯ ⠹ fix the flaky jobs test   running · 1m 12s · 54.1k tokens · 2 agents
 //!   ? add tabs to the browser   waiting for you
-//!   ● refactor the picker       shown · idle · 3 tasks
+//!   ● refactor the picker       current · idle · 3 tasks
 //!   + New session
-//!        2 h ago   4 tasks  make the release binary smaller
+//!
+//!   Earlier
+//!     make the release binary   2 h ago · 4 tasks
 //!
 //!   ↑↓ choose · enter open · x stop · esc back
 //! ```
 
 use std::time::Instant;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::app::{Action, App};
@@ -30,13 +35,15 @@ use crate::printable::printable;
 
 /// Rows shown at once; a longer list scrolls with the row chosen.
 const WINDOW: usize = 14;
+/// Columns a name takes at most.
+const NAME: usize = 36;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Row {
     Live(String),
     New,
-    /// A saved session's id, and how it is listed.
-    Saved(String, String),
+    /// A saved session's id, its first task, and when it ran and its tasks.
+    Saved(String, String, String),
 }
 
 /// The list open, and the row chosen.
@@ -70,7 +77,7 @@ impl App {
     }
 
     /// The saved sessions came: the list open lists them, on the row it was on.
-    pub(super) fn saved(&mut self, saved: Vec<(String, String)>) {
+    pub(super) fn saved(&mut self, saved: Vec<(String, String, String)>) {
         self.saved = saved;
         let Some(list) = &self.listing else { return };
         let on = list.rows.get(list.at).cloned();
@@ -102,8 +109,10 @@ impl App {
         let saved = self
             .saved
             .iter()
-            .filter(|(id, _)| self.views.find(id).is_none());
-        rows.extend(saved.map(|(id, label)| Row::Saved(id.clone(), label.clone())));
+            .filter(|(id, ..)| self.views.find(id).is_none());
+        rows.extend(
+            saved.map(|(id, title, meta)| Row::Saved(id.clone(), title.clone(), meta.clone())),
+        );
         rows
     }
 
@@ -124,7 +133,7 @@ impl App {
                         None
                     }
                     Row::New => self.opening(Target::New),
-                    Row::Saved(id, _) => self.opening(Target::Saved(id)),
+                    Row::Saved(id, ..) => self.opening(Target::Saved(id)),
                 };
             }
             KeyCode::Char('x') if key.modifiers.is_empty() => {
@@ -140,7 +149,11 @@ impl App {
                 lane.stopping = true;
                 return Some(Action::Halt(id));
             }
-            // Ctrl-C and the like are the interface's: the list closes first.
+            // Ctrl-C closes the list, and does nothing more.
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.listing = None;
+            }
+            // Ctrl-D and the like are the interface's: the list closes first.
             _ if !key.modifiers.is_empty() => {
                 self.listing = None;
                 return self.key(key, now);
@@ -169,16 +182,25 @@ impl App {
         ];
         let names = (list.rows.iter())
             .filter_map(|row| match row {
-                Row::Live(id) => self.views.find(id),
-                _ => None,
+                Row::Live(id) => self
+                    .views
+                    .find(id)
+                    .map(|at| self.views.sessions[at].title()),
+                Row::Saved(_, title, _) => Some(title.as_str()),
+                Row::New => None,
             })
-            .map(|at| super::wrap::width(self.views.sessions[at].title()))
+            .map(super::wrap::width)
             .max()
             .unwrap_or(0)
-            .clamp(12, 28);
+            .clamp(12, NAME.min(width / 2));
         let start =
             (list.at.saturating_sub(WINDOW / 2)).min(list.rows.len().saturating_sub(WINDOW));
+        let mut earlier = false;
         for (at, row) in list.rows.iter().enumerate().skip(start).take(WINDOW) {
+            if matches!(row, Row::Saved(..)) && !std::mem::replace(&mut earlier, true) {
+                out.push(Line::default());
+                out.push(Line::from(Span::styled("  Earlier", style::dim())));
+            }
             let pointer = match at == list.at {
                 true => Span::styled("❯ ", style::bold()),
                 false => Span::raw("  "),
@@ -187,13 +209,16 @@ impl App {
             match row {
                 Row::Live(id) => spans.extend(self.live_row(id, names, now, spinner)),
                 Row::New => spans.push(Span::styled("+ New session", style::bold())),
-                Row::Saved(_, label) => spans.push(Span::styled(
-                    cut(&printable(label), width.saturating_sub(4)),
-                    style::dim(),
+                Row::Saved(_, title, meta) => spans.extend(columns(
+                    Span::raw(" "),
+                    title,
+                    Style::default(),
+                    meta,
+                    names,
+                    width,
                 )),
             }
-            let line = Line::from(spans);
-            out.push(line);
+            out.push(Line::from(spans));
         }
         out.push(Line::default());
         let hint = "  ↑↓ choose · enter open · x stop · esc back";
@@ -220,15 +245,20 @@ impl App {
             + view
                 .busy
                 .map_or(0, |b| now.duration_since(b).as_millis() as u64);
-        let spent = format!(
-            "{} · {} tokens",
-            cells::clock(worked / 1000),
-            super::tree::tokens(view.tokens)
-        );
+        let spent = match (worked < 1000, view.tokens) {
+            (true, 0) => None,
+            (_, 0) => Some(cells::clock(worked / 1000)),
+            (_, count) => Some(format!(
+                "{} · {} tokens",
+                cells::clock(worked / 1000),
+                super::tree::tokens(count)
+            )),
+        };
         let mut said = vec![];
         let glyph = match (&view.state, view.busy) {
             (_, Some(since)) => {
-                said.push(format!("running {spent}"));
+                said.push("running".into());
+                said.extend(spent);
                 spinner(since)
             }
             _ if self.waits_for_person(at) => {
@@ -241,7 +271,7 @@ impl App {
                 if view.unseen {
                     said.push("unseen".into());
                 }
-                said.push(spent);
+                said.extend(spent);
                 Span::styled(mark, style)
             }
             _ => {
@@ -250,7 +280,7 @@ impl App {
             }
         };
         if at == self.views.home() {
-            said.insert(0, "shown".into());
+            said.insert(0, "current".into());
         }
         if view.tasks > 0 && view.busy.is_none() {
             said.push(cells::count(view.tasks as u64, "task"));
@@ -258,17 +288,30 @@ impl App {
         if agents > 0 {
             said.push(cells::count(agents as u64, "agent"));
         }
-        let name = cut(&printable(view.title()), names);
-        let pad = names.saturating_sub(super::wrap::width(&name));
-        let room = self.width.saturating_sub(names + 8);
-        vec![
-            glyph,
-            Span::raw(" "),
-            Span::styled(name, style::bold()),
-            Span::raw(" ".repeat(pad + 2)),
-            Span::styled(cut(&said.join(" · "), room), style::dim()),
-        ]
+        let said = said.join(" · ");
+        columns(glyph, view.title(), style::bold(), &said, names, self.width)
     }
+}
+
+/// A row after its pointer: a mark, the name in its column, and where it stands, dimmed.
+fn columns(
+    glyph: Span<'static>,
+    name: &str,
+    name_style: Style,
+    said: &str,
+    names: usize,
+    width: usize,
+) -> Vec<Span<'static>> {
+    let name = cut(&printable(name), names);
+    let pad = names.saturating_sub(super::wrap::width(&name));
+    let room = width.saturating_sub(names + 6);
+    vec![
+        glyph,
+        Span::raw(" "),
+        Span::styled(name, name_style),
+        Span::raw(" ".repeat(pad + 2)),
+        Span::styled(cut(&printable(said), room), style::dim()),
+    ]
 }
 
 #[cfg(test)]

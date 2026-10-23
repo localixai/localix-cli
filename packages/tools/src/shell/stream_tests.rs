@@ -130,16 +130,9 @@ impl Window {
     }
 }
 
-fn watched() -> Stream {
-    Stream {
-        screen: Some(Screen::new(40, 120)),
-        ..Stream::default()
-    }
-}
-
 #[test]
 fn a_window_attached_shows_what_was_printed_before() {
-    let (mut stream, window) = (watched(), Window::default());
+    let (mut stream, window) = (Stream::default(), Window::default());
     stream.take_in(b"before\r\n");
     stream.attach(window.painter());
     assert_eq!(window.paints(), 1);
@@ -148,7 +141,7 @@ fn a_window_attached_shows_what_was_printed_before() {
 
 #[test]
 fn output_in_a_burst_is_painted_once_its_time_comes() {
-    let (mut stream, window) = (watched(), Window::default());
+    let (mut stream, window) = (Stream::default(), Window::default());
     stream.attach(window.painter());
     stream.take_in(b"one ");
     stream.take_in(b"two");
@@ -171,7 +164,7 @@ fn output_in_a_burst_is_painted_once_its_time_comes() {
 
 #[test]
 fn a_window_the_person_closed_is_painted_no_more() {
-    let (mut stream, window) = (watched(), Window::default());
+    let (mut stream, window) = (Stream::default(), Window::default());
     window.closed_by_person.store(true, Ordering::SeqCst);
     stream.attach(window.painter());
     assert_eq!(window.drops(), 1, "let go at once");
@@ -184,7 +177,7 @@ fn a_window_the_person_closed_is_painted_no_more() {
 #[test]
 fn no_window_opens_on_an_ended_session() {
     for end in [true, false] {
-        let (mut stream, window) = (watched(), Window::default());
+        let (mut stream, window) = (Stream::default(), Window::default());
         match end {
             true => assert!(stream.finish().is_none(), "no window yet"),
             false => stream.close(),
@@ -196,7 +189,7 @@ fn no_window_opens_on_an_ended_session() {
 
 #[test]
 fn closing_the_session_closes_its_window_once() {
-    let (mut stream, window) = (watched(), Window::default());
+    let (mut stream, window) = (Stream::default(), Window::default());
     stream.attach(window.painter());
     stream.close();
     stream.close();
@@ -205,7 +198,7 @@ fn closing_the_session_closes_its_window_once() {
 
 #[test]
 fn a_detached_window_closes_and_the_end_keeps_nothing() {
-    let (mut stream, window) = (watched(), Window::default());
+    let (mut stream, window) = (Stream::default(), Window::default());
     stream.attach(window.painter());
     stream.detach();
     assert_eq!(window.drops(), 1);
@@ -214,7 +207,7 @@ fn a_detached_window_closes_and_the_end_keeps_nothing() {
 
 #[test]
 fn the_end_hands_over_the_window_and_its_screen() {
-    let (mut stream, window) = (watched(), Window::default());
+    let (mut stream, window) = (Stream::default(), Window::default());
     stream.attach(window.painter());
     stream.take_in(b"bye");
     let (painter, screen) = stream.finish().expect("the window, to say it ended");
@@ -226,11 +219,53 @@ fn the_end_hands_over_the_window_and_its_screen() {
 }
 
 #[test]
-fn without_a_screen_nothing_is_painted_and_nothing_changes() {
-    let (mut stream, window) = (Stream::default(), Window::default());
-    stream.attach(window.painter());
-    assert_eq!((window.paints(), window.drops()), (0, 1));
-    assert_eq!(stream.take_in(b"\x1b[6nhi"), b"\x1b[1;1R");
-    assert_eq!(stream.take().as_deref(), Some("hi"));
-    assert_eq!(stream.paint_wait(), None);
+fn a_full_screen_program_is_read_as_its_screen() {
+    let mut stream = Stream::default();
+    stream.take_in(b"\x1b[?1049h\x1b[H\x1b[2Jhello\x1b[5;3Hworld");
+    let read = stream.take().unwrap();
+    let mut lines = read.lines();
+    assert_eq!(
+        lines.next(),
+        Some("screen 120×40, cursor at row 5 col 8:"),
+        "{read}"
+    );
+    assert_eq!(lines.collect::<Vec<_>>(), ["hello", "", "", "", "  world"]);
+}
+
+#[test]
+fn a_program_that_redraws_in_place_is_read_as_its_screen() {
+    // As Claude Code draws: no alternate screen, but the cursor goes up and lines are erased.
+    let mut stream = Stream::default();
+    stream.take_in(b"> hi\r\n* thinking\r\n");
+    stream.take_in(b"\x1b[1A\x1b[2K\x1b[Ganswer: 42\r\n");
+    let read = stream.take().unwrap();
+    assert!(read.starts_with("screen 120×40"), "{read}");
+    assert!(read.contains("> hi\nanswer: 42"), "{read}");
+    assert!(!read.contains("thinking"), "{read}");
+}
+
+#[test]
+fn a_screen_read_again_unchanged_says_so() {
+    let mut stream = Stream::default();
+    stream.take_in(b"\x1b[?1049h\x1b[Hmenu");
+    stream.take();
+    // A redraw of the same thing (a cursor blink, a timer that did not move).
+    stream.take_in(b"\x1b[Hmenu");
+    assert_eq!(
+        stream.take().as_deref(),
+        Some("screen unchanged (120×40, cursor at row 1 col 5)")
+    );
+}
+
+#[test]
+fn plain_output_stays_a_transcript() {
+    let mut stream = Stream::default();
+    stream.take_in(b"\x1b[32mok\x1b[0m 1\r\nok 2\r\n>>> ");
+    assert_eq!(stream.take().as_deref(), Some("ok 1\nok 2\n>>>"));
+}
+
+#[test]
+fn where_the_cursor_is_is_answered_from_the_screen() {
+    let mut stream = Stream::default();
+    assert_eq!(stream.take_in(b"\r\nabc\x1b[6n"), b"\x1b[2;4R");
 }

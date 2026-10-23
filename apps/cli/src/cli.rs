@@ -30,7 +30,8 @@ and exits, with the answer alone on stdout: for scripts, CI and pipes.
 
 To sign in, type /login in a session: choose a provider (OpenAI, signed in with ChatGPT in \
 your browser, or OpenRouter, with a key), then one of its models and a reasoning level that \
-model takes. The choice is saved as the default for later sessions and for exec. The browser \
+model takes (left/right in the model list, Enter confirms both). The choice is saved as the \
+default for later sessions and for exec. The browser \
 tool's decision model runs on OpenRouter, so it needs an OpenRouter key whichever provider the \
 agent thinks with.
 
@@ -40,7 +41,9 @@ session y, a or n), and refused without one. plan investigates and answers with 
 command (and each input to a terminal session) is asked. bypass (-y) allows everything. \
 autonomous also allows everything, and the agent asks you nothing (in exec, where ask is not \
 offered, it is the same as bypass). In a session, /mode switches it, /plan enters plan mode, \
-Shift+Tab then Enter toggles plan mode, and /status shows the mode. Tab completes a slash command \
+Shift+Tab cycles default, plan, bypass and autonomous (after the task if working); the mode \
+is always shown under the prompt, and /status shows it too. Markdown tables wrap their cells \
+to the terminal width; completed edits show numbered diffs with red/green background bands. Tab completes a slash command \
 (with a space for commands taking an argument); Enter executes the typed command. Pasted text \
 is shown as [Paste] until sent; pasted file paths become file or image marks.
 

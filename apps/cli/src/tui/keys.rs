@@ -15,7 +15,6 @@ impl App {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         if self.questions.is_empty()
             && let Some(row) = self.views.focus
-            && !(ctrl && key.code == KeyCode::Char('c'))
         {
             return self.list_key(key, row, now);
         }
@@ -37,22 +36,23 @@ impl App {
                 if self.busy().is_some() {
                     return Some(self.stop());
                 }
-                if !self.composer.is_empty() {
-                    self.composer.clear();
-                    return None;
+                // A draft goes, kept for ↑; the next Ctrl-C quits, as at an empty prompt.
+                let draft = !self.composer.is_empty();
+                if draft {
+                    self.composer.discard();
                 }
                 let again = self
                     .quitting
                     .is_some_and(|at| now.duration_since(at).as_millis() < QUIT_WINDOW_MS);
-                if again {
+                if again && !draft {
                     self.quitting = None;
                     return self.quit();
                 }
                 self.quitting = Some(now);
+                self.discarded = draft;
             }
-            KeyCode::Char('d') if ctrl && self.composer.is_empty() && self.busy().is_none() => {
-                return self.quit();
-            }
+            // Ctrl-D at an empty prompt quits, asked first while work runs.
+            KeyCode::Char('d') if ctrl && self.composer.is_empty() => return self.quit(),
             // In an agent's view Esc goes back to the main one; Ctrl-C still stops the task.
             KeyCode::Esc if self.shown().parent.is_some() => {
                 let lane = self.lane_id().to_string();
@@ -75,6 +75,10 @@ impl App {
             }
             KeyCode::Esc if self.busy().is_some() && !self.lane().stopping => {
                 return Some(self.stop());
+            }
+            KeyCode::Left if self.shown().parent.is_some() && self.opens_sessions(&key) => {
+                let lane = self.lane_id().to_string();
+                self.show(&lane);
             }
             // ← from an empty prompt lists the sessions in this project.
             KeyCode::Left if self.opens_sessions(&key) => {

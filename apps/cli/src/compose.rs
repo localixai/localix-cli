@@ -12,7 +12,6 @@ use std::sync::{Arc, Mutex};
 use agent::agent::Agent;
 use agent::conversation::Conversation;
 use contracts::chat::Chat;
-use contracts::hands::Hands;
 use contracts::history::Session;
 use contracts::model::Decider;
 use contracts::person::{Person, Question, Reply};
@@ -110,6 +109,10 @@ pub struct Shared {
     pub asks: bool,
     /// How many lanes are in a task now.
     pub working: std::sync::atomic::AtomicUsize,
+    /// Every lane's queue, for what the window says.
+    pub lanes: Arc<crate::arrivals::Lanes>,
+    /// Terminal sessions' ids, shared by the lanes: an id names one session in the one window.
+    pub terminal_ids: Arc<std::sync::atomic::AtomicU32>,
 }
 
 /// What one lane is built from beside what it shares.
@@ -126,6 +129,12 @@ impl Setup {
     /// What the lanes share, with the page on `browser`, and the first lane's seat.
     pub fn split(self, browser: Option<Browser>) -> (Shared, Seat) {
         let shown = self.shown;
+        let lanes = Arc::new(crate::arrivals::Lanes::default());
+        // What the person does in the window reaches the lanes' runs.
+        if let Some(browser) = &browser {
+            let told = lanes.clone();
+            browser.listen(move |tab, what| told.post(tab, what));
+        }
         let shared = Shared {
             page: browser.clone().map(|browser| Page::new(browser, !shown)),
             browser,
@@ -142,6 +151,8 @@ impl Setup {
             terminal: self.terminal,
             asks: self.asks,
             working: Default::default(),
+            lanes,
+            terminal_ids: Arc::default(),
         };
         let seat = Seat {
             context: self.context,
@@ -195,7 +206,8 @@ pub struct Rig<'a> {
     /// The decision model's spend, over all tasks.
     pub meter: &'a Meter,
     pub history: &'a Sessions,
-    /// The terminal sessions `bash` keeps open: closed when each task ends.
+    /// The terminal sessions `bash` keeps open: in a session they outlive its tasks; one task of
+    /// `exec` closes them when it ends.
     pub sessions: &'a tools::shell::Sessions,
     /// The agents the session started: let go with it, and what they spend is the task's.
     pub agents: &'a dyn Delegation,
@@ -229,6 +241,8 @@ pub struct Rig<'a> {
     pub live: Option<&'a Live>,
     /// What commands never see, read at each command.
     pub hidden: &'a Mutex<Vec<String>>,
+    /// What is known of the session beside its tasks, made in the background, not saved yet.
+    pub meta: crate::meta::Pending,
 }
 
 impl Rig<'_> {
@@ -381,19 +395,27 @@ pub fn assemble(
     let ask = AskTool {
         person: person.as_ref(),
     };
+    // The one window as its tabs, where it shows.
+    let tabs = (shared.browser.clone())
+        .filter(|_| shared.shown)
+        .map(crate::windows::Tabs);
     // What commands never see: the variables of the key the models are called with, and of a
     // provider chosen later with `/login` (hiding is no barrier anyway).
     let hidden_names = Mutex::new(choice.provider.hidden());
     let hidden = || lock(&hidden_names).clone();
+    // The lane's queue: what reaches its run from outside its calls.
+    let lane_queue = Arc::new(crate::arrivals::queue(output.ui().cloned()));
+    shared.lanes.join(&lane_queue);
     // Terminal windows open only where windows show; a call can still show or hide one.
     #[cfg(unix)]
     let sessions = windows::terminals(
-        shared
-            .browser
-            .clone()
-            .map(|b| windows::panels(b, shared.theme)),
+        (shared.browser.clone()).map(|b| {
+            let owner = (shared.lanes.clone(), Arc::downgrade(&lane_queue));
+            windows::panels(b, shared.theme, owner)
+        }),
         shared.shown,
-    );
+    )
+    .numbered(shared.terminal_ids.clone());
     #[cfg(not(unix))]
     let sessions = tools::shell::Sessions::default();
     let checkpoints = Checkpoints::default();
@@ -409,7 +431,11 @@ pub fn assemble(
         hidden: &hidden,
         stopped: &stopped,
         sessions: &sessions,
-        browser: page.as_ref().map(|page| (page, &hands as &dyn Hands)),
+        browser: page.as_ref(),
+        hands: &hands,
+        windowed: tabs
+            .as_ref()
+            .map(|tabs| tabs as &dyn tools::window::Windowed),
         browser_lock,
         context: fresh,
         max_turns: options.max_turns,
@@ -431,7 +457,7 @@ pub fn assemble(
         seen: Mutex::new(instructions::chain(workspace.root()).into_iter().collect()),
     };
     let main_tools = Tools::new(&kit, &own);
-    let registry = Registry::default();
+    let registry = Registry::new(lane_queue.clone());
     let jobs = Jobs::of(&session.id);
     let jobs_kit = jobs::Kit {
         workspace,
@@ -439,11 +465,13 @@ pub fn assemble(
         hidden: &hidden,
         output,
         session: asks,
+        queue: &lane_queue,
     };
     // The wait between turns ends at the time limit too; the gates and tools keep `stopped`.
     let waiting = || stopped() || brake.due();
     let inbox = MainInbox {
         registry: &registry,
+        queue: &lane_queue,
         jobs: &jobs,
         jobs_kit: &jobs_kit,
         output,
@@ -516,6 +544,7 @@ pub fn assemble(
                 choice,
                 live: models.live,
                 hidden: &hidden_names,
+                meta: crate::meta::Pending::default(),
             };
             let code = work(&mut rig);
             rig.agents.settle();

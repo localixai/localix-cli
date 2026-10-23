@@ -123,7 +123,7 @@ pub fn answer(open: Open, picked: Picked) -> Option<String> {
                     choices: picked,
                     note: None,
                 }),
-                Picked::Cancelled => None,
+                Picked::Cancelled | Picked::Adjusted(..) => None,
             };
             let _ = reply.send(answer);
         }
@@ -134,6 +134,12 @@ pub fn answer(open: Open, picked: Picked) -> Option<String> {
             });
         }
         Open::Quit => {}
+        Open::Adjustable(reply) => {
+            let _ = reply.send(match picked {
+                Picked::Adjusted(at, value) => Some((at, value)),
+                _ => None,
+            });
+        }
         Open::Choice(reply) => {
             let _ = reply.send(match picked {
                 Picked::Option(at) => Some(at),

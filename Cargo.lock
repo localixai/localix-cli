@@ -1757,6 +1757,7 @@ dependencies = [
  "openrouter",
  "provider-kit",
  "pulldown-cmark",
+ "queue",
  "ratatui",
  "serde_json",
  "session",
@@ -2679,6 +2680,10 @@ dependencies = [
  "memchr",
  "unicase",
 ]
+
+[[package]]
+name = "queue"
+version = "0.1.0"
 
 [[package]]
 name = "quote"

@@ -11,8 +11,8 @@ use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::atomic;
 use super::text::{changed, crlf, excerpt, has_line_numbers};
+use super::{atomic, diff};
 use crate::ask;
 use crate::workspace::Workspace;
 
@@ -101,7 +101,11 @@ impl Tool for EditTool<'_> {
             ask(self.gate, NAME, &summary)?;
             unchanged(&path, &shown, Some(content.as_bytes()))?;
             write(&path, &shown, &change.content)?;
-            change.report(&shown)
+            format!(
+                "{}\n\nDiff:\n{}",
+                change.report(&shown),
+                diff::unified(&content, &change.content)
+            )
         };
         Ok(report.into())
     }
@@ -130,7 +134,11 @@ impl EditTool<'_> {
         )?;
         unchanged(path, shown, existing)?;
         write(path, shown, content)?;
-        Ok(format!("Created {shown} ({}).", count(lines)))
+        Ok(format!(
+            "Created {shown} ({}).\n\nDiff:\n{}",
+            count(lines),
+            diff::unified("", content)
+        ))
     }
 }
 

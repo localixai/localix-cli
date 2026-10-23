@@ -15,10 +15,7 @@ fn what_came_back_from_the_background_reads_as_where_it_came_from() {
 
 #[test]
 fn a_monitor_batch_that_starts_a_task_reads_as_its_monitor_without_the_note_for_the_model() {
-    let goal = format!(
-        "{}<monitor job=\"ticks\">\ntick 2\n</monitor>",
-        crate::jobs::FROM_MONITOR
-    );
+    let goal = crate::arrivals::monitor("ticks", "tick 2").render();
     assert_eq!(shown(&goal), "≋ ticks · tick 2");
 }
 

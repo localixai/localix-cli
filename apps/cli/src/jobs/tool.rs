@@ -97,11 +97,8 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
         let (kit, jobs) = (self.kit, self.jobs);
         let (command, label) = (command.to_string(), name.clone());
         self.scope.spawn(move || {
-            let tag = format!("<monitor job=\"{label}\">");
             let lines = |lines: Vec<String>, dropped: usize| {
-                // A line that closes the tag stays inside it.
-                let lines = lines.join("\n").replace("</monitor", "<\\/monitor");
-                let mut text = format!("{tag}\n{lines}");
+                let mut text = lines.join("\n");
                 if dropped > 0 {
                     text.push_str(&format!("\n… {dropped} more lines"));
                 }
@@ -120,7 +117,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                     ));
                 }
                 drop(state);
-                jobs.post(kit, format!("{text}\n</monitor>"));
+                kit.queue.post(crate::arrivals::monitor(&label, &text));
                 jobs.show(kit);
             };
             let stopped = || stop.load(Ordering::SeqCst);
@@ -144,7 +141,8 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                 Err(why) => why,
             };
             if listed && !jobs.over.load(Ordering::SeqCst) {
-                jobs.post(kit, format!("{tag}\nThe monitor ended: {why}.\n</monitor>"));
+                let ended = format!("The monitor ended: {why}.");
+                kit.queue.post(crate::arrivals::monitor(&label, &ended));
             }
             jobs.show(kit);
         });

@@ -37,8 +37,8 @@
   "goal": "Run python3 setup.py and answer its questions: the project name is orbit and the port is 8123. Then tell me what it wrote.",
   "contains": ["8123"],
   "check": "grep -qx 'name = orbit' config.ini && grep -qx 'port = 8123' config.ini && cmp -s setup.py \"$FIXTURE/setup.py\"",
-  "uses": [{"name": "bash", "arguments": {"tty": true}}, {"name": "bash", "has": ["session", "input"]}],
-  "avoids": [{"name": "edit", "like": {"path": "config\\.ini$"}}, {"name": "bash", "like": {"command": "(>>?\\s*\\S*config\\.ini|\\btee\\s+(-a\\s+)?\\S*config\\.ini|\\b(cp|mv)\\b[^;&|\\n]*config\\.ini|\\bsed\\s+-i[^;&|\\n]*config\\.ini|open\\([^)]*config\\.ini)"}}, {"name": "bash", "like": {"input": "(>>?\\s*\\S*config\\.ini|\\btee\\s+(-a\\s+)?\\S*config\\.ini|\\b(cp|mv)\\b[^;&|\\n]*config\\.ini|\\bsed\\s+-i[^;&|\\n]*config\\.ini|open\\([^)]*config\\.ini)"}}]
+  "uses": [{"name": "window", "arguments": {"action": "open", "kind": "terminal"}}, {"name": "window", "arguments": {"action": "interact"}, "has": ["tab"]}],
+  "avoids": [{"name": "edit", "like": {"path": "config\\.ini$"}}, {"name": "bash", "like": {"command": "(>>?\\s*\\S*config\\.ini|\\btee\\s+(-a\\s+)?\\S*config\\.ini|\\b(cp|mv)\\b[^;&|\\n]*config\\.ini|\\bsed\\s+-i[^;&|\\n]*config\\.ini|open\\([^)]*config\\.ini)"}}, {"name": "window", "like": {"input": "(>>?\\s*\\S*config\\.ini|\\btee\\s+(-a\\s+)?\\S*config\\.ini|\\b(cp|mv)\\b[^;&|\\n]*config\\.ini|\\bsed\\s+-i[^;&|\\n]*config\\.ini|open\\([^)]*config\\.ini)"}}]
  },
  {
   "id": "plan-csv",

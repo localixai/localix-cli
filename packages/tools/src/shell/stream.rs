@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use super::filter::Filter;
 use super::output::Output;
+use super::pty::{COLUMNS, ROWS};
 use super::screen::Screen;
 
 /// A window's painter: a frame in, whether the window is still open out.
@@ -22,17 +23,6 @@ pub struct Shared {
 }
 
 impl Shared {
-    /// Shared output, with `screen` kept for a window when there is one.
-    pub fn new(screen: Option<Screen>) -> Self {
-        Self {
-            state: Mutex::new(Stream {
-                screen,
-                ..Stream::default()
-            }),
-            wake: Condvar::new(),
-        }
-    }
-
     pub fn lock(&self) -> MutexGuard<'_, Stream> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -56,8 +46,11 @@ pub struct Stream {
     pub matched: bool,
     /// The session ended: the reader stops.
     closed: bool,
-    /// The screen, kept only for a window: without one, the output is never parsed twice.
+    /// The screen, as a terminal shows it: what a window paints, and what a call reads of a
+    /// program that draws over its output. Gone once the window says the session ended.
     screen: Option<Screen>,
+    /// The screen as a call last read it: a read that finds it the same says so.
+    last_screen: Option<String>,
     /// The window that shows the screen, while one is open.
     painter: Option<Painter>,
     painted_at: Instant,
@@ -80,7 +73,8 @@ impl Default for Stream {
             carry: vec![],
             matched: false,
             closed: false,
-            screen: None,
+            screen: Some(Screen::new(ROWS, COLUMNS)),
+            last_screen: None,
             painter: None,
             painted_at: Instant::now(),
             dirty: false,
@@ -125,9 +119,31 @@ impl Stream {
         }
         self.bytes = 0;
         let ended = std::mem::take(&mut self.fresh).text();
+        let redrawn = std::mem::take(&mut self.filter.redrawn);
+        if let Some(screen) = self.screen.as_ref().filter(|s| redrawn || s.alternate()) {
+            let (text, (row, column)) = screen.text();
+            let cursor = format!("{COLUMNS}×{ROWS}, cursor at row {row} col {column}");
+            if self.last_screen.as_ref() == Some(&text) {
+                return Some(format!("screen unchanged ({cursor})"));
+            }
+            self.last_screen = Some(text.clone());
+            return Some(format!("screen {cursor}:\n{text}"));
+        }
         let pending = String::from_utf8_lossy(self.filter.pending_line());
         let text = format!("{ended}\n{}", pending.trim_end());
         Some(text.trim().to_string()).filter(|text| !text.is_empty())
+    }
+
+    /// The screen now, whatever was read of it before: `screen 120×40, cursor at row R col C:`
+    /// and its rows.
+    pub fn screen_now(&self) -> String {
+        match &self.screen {
+            Some(screen) => {
+                let (text, (row, column)) = screen.text();
+                format!("screen {COLUMNS}×{ROWS}, cursor at row {row} col {column}:\n{text}")
+            }
+            None => "the session ended: it has no screen".into(),
+        }
     }
 
     /// Take in what the terminal printed; the answers to its queries are returned.
@@ -137,8 +153,15 @@ impl Stream {
         self.bytes += chunk.len();
         self.since_write += chunk.len();
         self.changed_at = Instant::now();
+        let mut replies = vec![];
         if let Some(screen) = &mut self.screen {
             screen.feed(chunk);
+            // Each query answered where the cursor stands after the whole chunk: close enough
+            // for a program that asks once, before it draws.
+            let (row, column) = screen.cursor();
+            for _ in 0..std::mem::take(&mut self.filter.position_asked) {
+                replies.extend_from_slice(format!("\x1b[{row};{column}R").as_bytes());
+            }
             self.dirty = true;
             self.paint_due();
         }
@@ -148,7 +171,8 @@ impl Stream {
             let cut = self.carry.len().saturating_sub(needle.len() - 1);
             self.carry.drain(..cut);
         }
-        self.filter.take_replies()
+        replies.extend(self.filter.take_replies());
+        replies
     }
 
     pub fn application_cursor(&self) -> bool {

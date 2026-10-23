@@ -288,7 +288,7 @@ fn an_agent_has_neither_agents_nor_ask() {
     composed_with(Mode::Bypass, true, &chat, |rig| {
         rig.task("look");
         let tools = chat.tools.lock().unwrap();
-        assert_eq!(tools["a"], ["read", "edit", "bash"]);
+        assert_eq!(tools["a"], ["read", "edit", "bash", "window"]);
         assert!(tools["main"].contains(&"agents".to_string()));
         assert!(tools["main"].contains(&"ask".to_string()));
         0

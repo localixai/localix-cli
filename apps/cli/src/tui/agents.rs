@@ -158,6 +158,22 @@ impl App {
                 }
                 return None;
             }
+            Event::Earlier(turns) => {
+                view.tasks += turns.len();
+                if let Some(last) = turns.last() {
+                    view.state = AgentState::Ended(last.status.clone());
+                }
+                for block in super::cells::earlier(&turns, width) {
+                    self.push(at, block);
+                }
+                return None;
+            }
+            Event::Updated(update) => {
+                if let Some(title) = update.title {
+                    view.name = title;
+                }
+                return None;
+            }
             Event::Closed => {
                 view.state = AgentState::Closed;
                 view.running.clear();
@@ -247,8 +263,8 @@ impl App {
             None => view.blocks.clone(),
             Some(parent) => {
                 let parent = self.views.find(parent).map(|at| &self.views.sessions[at]);
-                let parent = parent.map_or("main", SessionView::title);
-                let mut blocks = vec![heading(&view.name, &view.id, parent)];
+                let parent = parent.map_or("", SessionView::title);
+                let mut blocks = vec![heading(&view.name, parent)];
                 blocks.extend(view.blocks.iter().cloned());
                 blocks
             }
@@ -291,15 +307,16 @@ fn finished_line(kind: &str, name: &str, status: &str, millis: u64, after: &str)
 }
 
 /// The first block of an agent's view: which agent it is, and the session that started it.
-fn heading(name: &str, id: &str, parent: &str) -> Vec<Line<'static>> {
-    vec![Line::from(vec![
+fn heading(name: &str, parent: &str) -> Vec<Line<'static>> {
+    let mut line = vec![
         Span::styled("◆ ", style::code()),
-        Span::styled(format!("agent {name}"), style::bold()),
-        Span::styled(
-            format!("  ·  session {id}  ·  started by {}", printable(parent)),
-            style::dim(),
-        ),
-    ])]
+        Span::styled(format!("agent {}", printable(name)), style::bold()),
+    ];
+    if !parent.is_empty() {
+        let by = format!("  ·  started by {}", printable(parent));
+        line.push(Span::styled(by, style::dim()));
+    }
+    vec![Line::from(line)]
 }
 
 #[cfg(test)]

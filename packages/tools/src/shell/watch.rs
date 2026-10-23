@@ -12,7 +12,7 @@ pub use super::stream::Painter;
 use super::stream::Shared;
 
 /// A window for a session: its title in, a painter out, or none when no window can open.
-pub type Watch = Arc<dyn Fn(&str) -> Option<Painter> + Send + Sync>;
+pub type Watch = Arc<dyn Fn(u32, &str) -> Option<Painter> + Send + Sync>;
 /// How long a session that ended by itself keeps its window.
 pub const LINGER: Duration = Duration::from_secs(3);
 /// How long the end's status is looked for once the terminal closed.

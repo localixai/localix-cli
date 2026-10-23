@@ -22,8 +22,8 @@ pub(super) type Rgb = [u8; 3];
 /// The stylesheet a panel's page is dressed in: its ground, painted once, for each look.
 pub(super) const CSS: &str = include_str!("frame.css");
 /// The system's grounds, when a page has none of its own.
-pub(super) const DARK: Rgb = [0x1e, 0x1e, 0x1e];
-pub(super) const LIGHT: Rgb = [0xff, 0xff, 0xff];
+pub(super) const DARK: Rgb = [0x07, 0x07, 0x07];
+pub(super) const LIGHT: Rgb = [0xf7, 0xf7, 0xf7];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Look {
@@ -52,13 +52,23 @@ pub(super) fn glass_allowed() -> bool {
     false
 }
 
-/// A page's bounds in a window of `size`, `x` points from its left edge.
-pub(super) fn fill(size: LogicalSize<f64>, x: f64) -> wry::Rect {
+/// A page's bounds: `size`, `x` points from the window's left edge and `top` from its top.
+pub(super) fn fill(size: LogicalSize<f64>, x: f64, top: f64) -> wry::Rect {
     use wry::dpi::{LogicalPosition as At, LogicalSize as Size};
     wry::Rect {
-        position: At::new(x, 0.0).into(),
+        position: At::new(x, top).into(),
         size: Size::new(size.width, size.height).into(),
     }
+}
+
+/// The size a shown window opens at on a screen of `(width, height)` points: a good part of the
+/// screen, within what reads well.
+pub(super) fn moderate((width, height): (f64, f64)) -> (f64, f64) {
+    let round = |value: f64| (value / 10.0).round() * 10.0;
+    (
+        round(width * 0.6).clamp(960.0, 1440.0),
+        round(height * 0.72).clamp(640.0, 960.0),
+    )
 }
 
 /// Whether `event` changes the size the pages must fill.
@@ -80,10 +90,16 @@ pub(super) fn material(dark: bool) -> isize {
     if dark { 13 } else { 21 }
 }
 
-/// The coat over the glass: the page's ground, else the system's, and how much of it covers.
+/// The coat over the glass, and how much of it covers: neutral near-black or near-white, as
+/// Localix's window ground (oklch 0.13 and 0.975), never the page's own colour. A terminal's
+/// grey-blue ground over the material read as grey; the page's ground, else the system's, only
+/// says which appearance.
 pub(super) fn coat(ground: Option<Rgb>, system_dark: bool) -> (Rgb, f64) {
-    let ground = ground.unwrap_or(if system_dark { DARK } else { LIGHT });
-    (ground, if dark(ground) { 0.85 } else { 0.92 })
+    match ground.map_or(system_dark, dark) {
+        // Thinner than Localix's 85% and 92%: the desktop shows through, text still reads.
+        true => (DARK, 0.5),
+        false => (LIGHT, 0.6),
+    }
 }
 
 /// `page` in the frame's stylesheet, marked as glass when it is.
@@ -93,15 +109,6 @@ pub(super) fn dress(page: &str, look: Look) -> String {
         Look::Glass => page.replacen("<html", "<html data-glass", 1),
         _ => page,
     }
-}
-
-/// The size a page asks its window to be (`[width, height]`, as its script answers), rounded
-/// up and kept to a window's size. The page's answer is read as data, and only as two numbers.
-pub(super) fn shape(answer: &str) -> Option<(f64, f64)> {
-    let size: [f64; 2] = serde_json::from_str(answer).ok()?;
-    let side =
-        |value: f64, low: f64, high: f64| value.is_finite().then(|| value.ceil().clamp(low, high));
-    Some((side(size[0], 320.0, 2400.0)?, side(size[1], 240.0, 1600.0)?))
 }
 
 /// A window as built here, and its glass.
@@ -176,24 +183,29 @@ impl Frame {
         }
     }
 
-    /// Take `size`, and keep its shape as the person resizes the window (macOS; elsewhere the
-    /// page centres what is left over).
-    pub fn reshape(&self, size: LogicalSize<f64>) {
-        self.native.set_inner_size(size);
-        #[cfg(target_os = "macos")]
-        native::keep_shape(&self.native, size.width, size.height);
+    /// Take `ground` as the window's own (a terminal's colours), its appearance with it.
+    pub fn ground(&mut self, ground: Rgb) {
+        self.coat = Some(Some(ground));
+        let theme = if dark(ground) {
+            Theme::Dark
+        } else {
+            Theme::Light
+        };
+        self.native.set_theme(Some(theme));
+        self.retint();
     }
 }
 
 /// For checks: the materials behind `window`, the first one's state, whether the window is
-/// opaque, and the shape its resizing keeps (width over height; 0 when none).
-pub(super) fn dressed(window: &Window) -> (usize, isize, bool, f64) {
+/// opaque, the shape its resizing keeps (width over height; 0 when none), and whether it is
+/// coated.
+pub(super) fn dressed(window: &Window) -> (usize, isize, bool, f64, bool) {
     #[cfg(target_os = "macos")]
     return native::dressed(window);
     #[cfg(not(target_os = "macos"))]
     {
         let _ = window;
-        (0, -1, true, 0.0)
+        (0, -1, true, 0.0, false)
     }
 }
 

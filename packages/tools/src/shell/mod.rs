@@ -25,6 +25,8 @@ mod stream;
 #[cfg(unix)]
 mod sweep;
 #[cfg(unix)]
+mod view;
+#[cfg(unix)]
 mod watch;
 
 pub use bash::BashTool;
@@ -37,6 +39,8 @@ pub use running::{kill_all_now, running_anywhere};
 pub use screen::{Asset, Emulator, Rgb, Theme, page};
 #[cfg(unix)]
 pub use session::{MAX_SESSIONS, Sessions, Turn, Until, Wait};
+#[cfg(unix)]
+pub use view::TerminalView;
 #[cfg(unix)]
 pub use watch::{Painter, Watch};
 

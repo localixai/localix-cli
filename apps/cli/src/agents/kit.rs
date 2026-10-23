@@ -11,11 +11,11 @@ use contracts::chat::Chat;
 use contracts::gate::Gate;
 use contracts::hands::Hands;
 use contracts::history::History;
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
-use serde_json::Value;
+use contracts::tool::Tool;
 use tools::browser::{BrowserTool, Page};
 use tools::fs::{EditTool, ReadTool};
 use tools::shell::BashTool;
+use tools::window::{Kind, WindowTool, Windowed};
 use tools::workspace::Workspace;
 
 use crate::instructions::Instructed;
@@ -33,7 +33,11 @@ pub struct Kit<'a> {
     /// Whether the task was stopped.
     pub stopped: &'a (dyn Fn() -> bool + Sync),
     pub sessions: &'a tools::shell::Sessions,
-    pub browser: Option<(&'a Page, &'a dyn Hands)>,
+    pub browser: Option<&'a Page>,
+    /// Who carries out a goal on any tab of the window.
+    pub hands: &'a dyn Hands,
+    /// The window the person watches, where it shows.
+    pub windowed: Option<&'a dyn Windowed>,
     /// One browser action at a time, the main session's and every agent's.
     pub browser_lock: &'a Mutex<()>,
     /// The context with no earlier session: an agent knows nothing of the parent's history.
@@ -66,12 +70,17 @@ pub struct Own<'a> {
     pub seen: Mutex<HashSet<PathBuf>>,
 }
 
-/// A session's tools: `read`, `edit`, `bash`, and the browser where there is one.
+/// A session's tools: `read`, `edit`, `bash` (commands run to their end), and `window`, whose
+/// tabs are terminal sessions and the browser's pages where there is one.
 pub struct Tools<'a> {
     read: ReadTool<'a>,
     edit: EditTool<'a>,
     bash: BashTool<'a>,
-    browser: Option<BrowserTool<'a>>,
+    browser: Option<(BrowserTool<'a>, &'a Page)>,
+    hands: &'a dyn Hands,
+    windowed: Option<&'a dyn Windowed>,
+    sessions: &'a tools::shell::Sessions,
+    stop: &'a (dyn Fn() -> bool + Sync),
     root: PathBuf,
     seen: &'a Mutex<HashSet<PathBuf>>,
     lock: &'a Mutex<()>,
@@ -96,11 +105,17 @@ impl<'a> Tools<'a> {
                 stop: own.stop,
                 sessions: kit.sessions,
             },
-            browser: kit.browser.map(|(page, hands)| BrowserTool {
-                page,
-                hands,
-                gate: own.gate,
+            browser: kit.browser.map(|page| {
+                let tool = BrowserTool {
+                    page,
+                    gate: own.gate,
+                };
+                (tool, page)
             }),
+            hands: kit.hands,
+            windowed: kit.windowed,
+            sessions: kit.sessions,
+            stop: own.stop,
             root: kit.root(),
             seen: &own.seen,
             lock: kit.browser_lock,
@@ -126,31 +141,33 @@ impl<'a> Tools<'a> {
             root: self.root.clone(),
             seen: self.seen,
         };
-        let browser = self.browser.as_ref().map(|inner| Exclusive {
-            inner,
+        let browser = (self.browser.as_ref()).map(|(tool, page)| crate::kinds::Browser {
+            tool,
+            page,
             lock: self.lock,
         });
-        let mut tools: Vec<&dyn Tool> = vec![&read, &edit, &self.bash];
+        #[cfg(unix)]
+        let terminal = crate::kinds::Terminal {
+            bash: &self.bash,
+            sessions: self.sessions,
+            stop: self.stop,
+        };
+        let mut kinds: Vec<&dyn Kind> = vec![];
+        #[cfg(unix)]
+        kinds.push(&terminal);
         if let Some(browser) = &browser {
-            tools.push(browser);
+            kinds.push(browser);
+        }
+        let window = WindowTool {
+            kinds,
+            window: self.windowed,
+            hands: Some(self.hands),
+            gate: self.edit.gate,
+        };
+        let mut tools: Vec<&dyn Tool> = vec![&read, &edit, &self.bash];
+        if !window.kinds.is_empty() {
+            tools.push(&window);
         }
         work(&tools)
-    }
-}
-
-/// A tool whose calls run one at a time across every session that has it.
-pub struct Exclusive<'a> {
-    pub inner: &'a dyn Tool,
-    pub lock: &'a Mutex<()>,
-}
-
-impl Tool for Exclusive<'_> {
-    fn spec(&self) -> ToolSpec {
-        self.inner.spec()
-    }
-
-    fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
-        let _turn = crate::output::lock(self.lock);
-        self.inner.call(arguments)
     }
 }

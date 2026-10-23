@@ -10,8 +10,9 @@ not the rules: fix the design, or change this file first and say why in the comm
 apps/cli                 composes everything; the only place that knows every package
   ├─ packages/agent      the loop, the conversation, history strategies       (contracts only)
   ├─ packages/decision-loop  the browser's hands                              (contracts only)
-  ├─ packages/tools      read, edit, bash, browser, ask                       (contracts only)
+  ├─ packages/tools      read, edit, bash, window, ask                        (contracts only)
   ├─ packages/session    the session store                                    (contracts only)
+  ├─ packages/queue      one queue for what reaches a run, a policy per entry (nothing)
   └─ packages/providers/ the models' providers, and what is known of models   (contracts + kit)
        ├─ kit            HTTP, OAuth, loopback, files, SSE: shared, no port   (nothing)
        ├─ models         the model catalog: models.dev's data, typed           (contracts + kit)
@@ -66,6 +67,14 @@ is a design change, never a convenience.
 - **A model:** nothing in llx: it arrives with the catalog's refresh.
 - **A tool capability:** an `action` of an existing tool, or the shell. A new tool is a
   decision recorded here.
+  - `window` (decided by the owner): everything the agent opens to look at and work in is a tab
+    of one window, and each kind of tab is a strategy (`tools::window::Kind`: open, interact,
+    snapshot, screenshot, close, view) the app gives. The browser and `bash`'s terminal sessions
+    are kinds, not tools; a new kind is a `Kind`, with nothing new in the tool or the agent. A
+    `goal` belongs to every tab: the hands act on the tab's view.
+- **Something that reaches a run from outside its calls** (an answer, a monitor, the window, ...):
+  a kind in `apps/cli/src/arrivals.rs` (its policy and tag) and a post to the lane's queue
+  (`packages/queue`). The agent's inbox reads entries and knows no source.
 - **A history stage:** a `Stage` in `agent/src/history.rs`, placed in `Pipeline::default` by its
   value; a test in `history_tests.rs`, and the long-dialogue simulation still passing.
 

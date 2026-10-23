@@ -17,6 +17,9 @@ pub struct Screen<W: Write> {
     colour: bool,
     /// The live row the cursor was left on.
     cursor: usize,
+    /// A successful tool chain can continue in a later frame. Its trailing gap stays live.
+    group: Option<String>,
+    gap: bool,
 }
 
 /// Where the composer's cursor goes: a row of the live area and a column.
@@ -32,6 +35,8 @@ impl<W: Write> Screen<W> {
             out,
             colour,
             cursor: 0,
+            group: None,
+            gap: false,
         }
     }
 
@@ -45,9 +50,25 @@ impl<W: Write> Screen<W> {
         height: usize,
         width: usize,
     ) -> io::Result<()> {
+        let history = self.grouped(history);
         let history: Vec<Line> = history.iter().flat_map(|line| fit(line, width)).collect();
-        // A row split in two moves the rows under it, the cursor's among them.
+        let mut live = live.to_vec();
         let mut cursor = cursor;
+        if self.gap {
+            live.insert(0, Line::default());
+            if let Some(cursor) = &mut cursor {
+                cursor.row += 1;
+            }
+        }
+        // A question must visibly interrupt a chain, even if the next result succeeds.
+        if live
+            .iter()
+            .flat_map(|line| &line.spans)
+            .any(|span| span.style == super::style::waiting())
+        {
+            self.group = None;
+        }
+        // A row split in two moves the rows under it, the cursor's among them.
         let mut split = vec![];
         for (at, line) in live.iter().enumerate() {
             let rows = fit(line, width);
@@ -94,11 +115,55 @@ impl<W: Write> Screen<W> {
         self.out.flush()
     }
 
+    /// Only successful tool heads carry the done bullet and a bold verb. Keep their gap
+    /// redrawable until the next block arrives, so a chain spans frames without rewriting history.
+    fn grouped(&mut self, history: &[Line<'static>]) -> Vec<Line<'static>> {
+        let mut out = vec![];
+        for line in history {
+            if line.spans.is_empty() && self.group.is_some() {
+                self.gap = true;
+                continue;
+            }
+            let head = line.spans.first().is_some_and(|span| span.content == "• ");
+            let kind = line
+                .spans
+                .first()
+                .filter(|span| head && span.style == super::style::done())
+                .and_then(|_| line.spans.get(1))
+                .filter(|span| span.style == super::style::bold())
+                .map(|span| span.content.to_string());
+            let joins = self.gap && kind.is_some() && kind == self.group;
+            if self.gap && !joins {
+                out.push(Line::default());
+            }
+            self.gap = false;
+            let mut line = line.clone();
+            if joins {
+                line.spans[0].content = "  ↳ ".into();
+            }
+            if head
+                || !line
+                    .spans
+                    .first()
+                    .is_some_and(|span| span.content.starts_with("  "))
+            {
+                self.group = kind;
+            }
+            out.push(line);
+        }
+        out
+    }
+
     /// Takes the live area away and leaves the cursor where it started, shown: for leaving the
     /// session, or for handing the terminal to something else for a while.
     pub fn clear(&mut self) -> io::Result<()> {
         let mut out = String::from("\x1b[?2026h");
         self.erase_into(&mut out);
+        if self.gap {
+            out.push_str("\r\n");
+        }
+        self.group = None;
+        self.gap = false;
         out.push_str("\x1b[?25h\x1b[?2026l");
         self.cursor = 0;
         self.out.write_all(out.as_bytes())?;
@@ -109,6 +174,8 @@ impl<W: Write> Screen<W> {
     /// transcript is drawn from the start.
     pub fn reset(&mut self) -> io::Result<()> {
         self.cursor = 0;
+        self.group = None;
+        self.gap = false;
         self.out
             .write_all(b"\x1b[?2026h\x1b[H\x1b[2J\x1b[3J\x1b[?2026l")?;
         self.out.flush()

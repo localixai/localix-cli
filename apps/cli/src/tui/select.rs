@@ -59,6 +59,7 @@ impl Choice {
 #[derive(Debug, PartialEq)]
 pub enum Picked {
     Option(usize),
+    Adjusted(usize, usize),
     /// The options checked, in order, where several may be.
     Many(Vec<usize>),
     /// An option that types, with what was typed.
@@ -82,6 +83,7 @@ pub struct Select {
     checked: Vec<bool>,
     /// Letters filter the list: a long one.
     search: Option<Search>,
+    adjustments: Option<Vec<crate::picker::Adjustment>>,
 }
 
 impl Select {
@@ -89,6 +91,7 @@ impl Select {
         let choices_len = choices.len();
         Self {
             search: None,
+            adjustments: None,
             title,
             choices,
             at: 0,
@@ -100,6 +103,16 @@ impl Select {
             checked: vec![],
         }
         .searchable(choices_len > WINDOW)
+    }
+
+    /// Each original row owns its value even when the search changes its position.
+    pub fn adjustable(mut self, mut adjustments: Vec<crate::picker::Adjustment>) -> Self {
+        adjustments.resize_with(self.choices.len(), Default::default);
+        for adjustment in &mut adjustments {
+            adjustment.at = adjustment.at.min(adjustment.values.len().saturating_sub(1));
+        }
+        self.adjustments = Some(adjustments);
+        self
     }
 
     /// Letters filter the list, and no number picks.
@@ -181,6 +194,19 @@ impl Select {
                 Searched::Ignored => {}
             }
         }
+        if matches!(key.code, KeyCode::Left | KeyCode::Right)
+            && !self.rows().is_empty()
+            && let Some(adjustment) = self
+                .adjustments
+                .as_mut()
+                .and_then(|rows| rows.get_mut(self.at))
+        {
+            adjustment.at = match key.code {
+                KeyCode::Left => adjustment.at.saturating_sub(1),
+                _ => (adjustment.at + 1).min(adjustment.values.len().saturating_sub(1)),
+            };
+            return None;
+        }
         let last = self.choices.len().saturating_sub(1);
         let code = match key.code {
             KeyCode::Char('k') => KeyCode::Up,
@@ -237,7 +263,10 @@ impl Select {
             self.typing = Some(Composer::masked(self.hidden));
             return None;
         }
-        Some(Picked::Option(at))
+        match &self.adjustments {
+            Some(adjustments) => Some(Picked::Adjusted(at, adjustments[at].at)),
+            None => Some(Picked::Option(at)),
+        }
     }
 
     /// The rows at `width`, and the cursor's place among them while typing.
@@ -301,6 +330,14 @@ impl Select {
                     style::dim(),
                 ));
             }
+            if let Some(adjustment) = self.adjustments.as_ref().and_then(|rows| rows.get(at))
+                && let Some(value) = adjustment.values.get(adjustment.at)
+            {
+                line.spans.push(Span::styled(
+                    format!("  ← {} →", printable(value)),
+                    style::dim(),
+                ));
+            }
             out.extend(wrap(
                 &line,
                 width,
@@ -336,7 +373,12 @@ impl Select {
                 } else {
                     ""
                 };
-                format!("  {search}↑↓ to choose · {check}enter to confirm · {escape}")
+                let adjust = if self.adjustments.is_some() {
+                    "←→ reasoning · "
+                } else {
+                    ""
+                };
+                format!("  {search}↑↓ to choose · {adjust}{check}enter to confirm · {escape}")
             }
         };
         out.push(Line::from(Span::styled(hint, style::dim())));

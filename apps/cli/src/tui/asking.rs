@@ -11,7 +11,7 @@ use super::Ui;
 use super::event::Approval;
 use crate::gate::Asker;
 use crate::mode::{AUTONOMOUS, Mode, ModeCell};
-use crate::picker::{Item, Lines, Picker};
+use crate::picker::{Adjustment, Item, Lines, Picker};
 
 /// Approvals asked in the interface; a stopped task closes the question with a no.
 pub struct UiGate<'a> {
@@ -74,6 +74,24 @@ impl Picker for UiTerminal {
             .collect();
         self.ui
             .pick(title, options, items.iter().position(|item| item.marked))
+    }
+
+    fn pick_adjustable(
+        &mut self,
+        title: &str,
+        items: &[Item],
+        adjustments: &[Adjustment],
+    ) -> Option<(usize, usize)> {
+        let options = items
+            .iter()
+            .map(|item| (item.label.clone(), item.detail.clone()))
+            .collect();
+        self.ui.pick_adjustable(
+            title,
+            options,
+            items.iter().position(|item| item.marked),
+            adjustments.to_vec(),
+        )
     }
 }
 

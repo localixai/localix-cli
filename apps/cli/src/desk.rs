@@ -138,10 +138,8 @@ impl<'e> Desk<'e> {
         let saved = crate::commands::sessions::here(self.shared.history.list(), &here);
         let rows = saved.iter().take(SAVED);
         let rows = rows.map(|session| {
-            (
-                session.id.clone(),
-                crate::commands::sessions::brief(session),
-            )
+            let (title, meta) = crate::commands::sessions::brief(session);
+            (session.id.clone(), title, meta)
         });
         self.ui.send(Event::Saved(rows.collect()));
     }
@@ -150,9 +148,12 @@ impl<'e> Desk<'e> {
     fn open<'s>(&self, scope: &'s Scope<'s, 'e>, seat: Seat, task: Option<String>, first: bool) {
         let id = seat.session.id.clone();
         self.lanes.join(&id);
-        // A resumed session is known by its first task.
+        // A resumed session is known by its title, else by its first task.
         let first_task = seat.session.turns.first().map(|turn| turn.goal.clone());
-        let name = first_task.unwrap_or_else(|| seat.session.name.clone());
+        let name = Some(seat.session.title.clone())
+            .filter(|title| !title.is_empty())
+            .or(first_task)
+            .unwrap_or_else(|| seat.session.name.clone());
         self.ui.send(Event::LaneStarted {
             id: id.clone(),
             name,

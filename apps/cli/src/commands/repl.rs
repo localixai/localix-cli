@@ -25,6 +25,9 @@ pub fn run(rig: &mut Rig, ui: &Ui, first: Option<&str>) -> i32 {
         rig.choice.label(),
         super::sessions::home_relative(&rig.workspace.root().display().to_string()),
     ]));
+    if !rig.session.turns.is_empty() {
+        ui.send(Event::Earlier(rig.session.turns.clone()));
+    }
     let signed_out = login::signed_out(&rig.choice);
     if !signed_out.is_empty() {
         ui.send(Event::Note(signed_out));
@@ -80,11 +83,12 @@ fn command(rig: &mut Rig, entry: Entry) -> Option<String> {
             let said = model::step_reasoning(rig, up);
             note(&said);
         }
-        Entry::TogglePlan => {
-            let mode = match rig.mode.get() {
-                Mode::Plan => rig.before_plan,
-                _ => Mode::Plan,
-            };
+        Entry::CycleMode => {
+            let current = Mode::ALL
+                .iter()
+                .position(|&mode| mode == rig.mode.get())
+                .unwrap();
+            let mode = Mode::ALL[(current + 1) % Mode::ALL.len()];
             rig.switch(mode);
             note(&mode::switched(mode));
         }

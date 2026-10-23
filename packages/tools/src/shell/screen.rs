@@ -35,6 +35,33 @@ impl Screen {
         self.parser.process(&kept);
     }
 
+    /// Whether the program drew on the alternate screen (a full-screen program).
+    pub fn alternate(&self) -> bool {
+        self.parser.screen().alternate_screen()
+    }
+
+    /// The screen as text, its blank rows at the end left out, and where the cursor is (row and
+    /// column, from 1).
+    pub fn text(&self) -> (String, (u16, u16)) {
+        let screen = self.parser.screen();
+        let rows: Vec<String> = screen
+            .rows(0, screen.size().1)
+            .map(|row| row.chars().filter(|c| !c.is_control()).collect::<String>())
+            .map(|row| row.trim_end().to_string())
+            .collect();
+        let used = rows
+            .iter()
+            .rposition(|row| !row.is_empty())
+            .map_or(0, |at| at + 1);
+        (rows[..used].join("\n"), self.cursor())
+    }
+
+    /// Where the cursor is: row and column, from 1.
+    pub fn cursor(&self) -> (u16, u16) {
+        let (row, column) = self.parser.screen().cursor_position();
+        (row + 1, column + 1)
+    }
+
     /// The page's call that draws the screen: `F(rows, row, column, hidden, end, drawn)`, each
     /// a JSON value; `end` is what the title gains once the session ended, `drawn` the screen as
     /// a terminal would be told to draw it (for an emulator's page; the grid's reads the rows).

@@ -35,7 +35,7 @@ fn ssh_is_told_by_either_of_its_variables() {
 fn recording() -> (Watch, Arc<Mutex<Vec<String>>>) {
     let titles = Arc::new(Mutex::new(vec![]));
     let seen = Arc::clone(&titles);
-    let watch: Watch = Arc::new(move |title: &str| {
+    let watch: Watch = Arc::new(move |_id: u32, title: &str| {
         seen.lock().unwrap().push(title.to_string());
         Some(Box::new(|_| true) as Painter)
     });

@@ -234,10 +234,11 @@ impl Rig<'_> {
             workspace: &workspace,
         });
         let attached = self.pictures();
+        crate::meta::title::start(self, goal);
         self.brake.arm(Duration::from_secs(self.options.timeout));
         let _working = Working::of(&self.shared.working);
         self.interrupt.begin();
-        self.jobs.begin();
+        self.jobs_kit.queue.begin();
         let at = self.conversation.as_ref().map_or(0, |c| c.messages().len());
         self.checkpoints.begin(goal, at);
         // The model may have changed since the last task: its window decides when to compact.
@@ -250,11 +251,16 @@ impl Rig<'_> {
         };
         self.agents.settle();
         self.jobs.end(self.jobs_kit);
+        self.jobs_kit.queue.end();
         run.spend.absorb(&self.agents.take_spent());
         self.spent.absorb(&run.spend);
         self.context_left(run.used);
         let halt = self.brake.halted();
-        self.sessions.close_all();
+        // In a session the terminals stay for the next task (a REPL, a server's log): they end
+        // when closed, with the session, or on quitting. One task of `exec` takes them with it.
+        if !self.asks {
+            self.sessions.close_all();
+        }
         self.interrupt.end();
         self.conversation = Some(run.conversation);
         let ended = Ended::of(&run.status, run.data.as_ref(), halt, self.options.timeout);
@@ -334,7 +340,7 @@ impl Rig<'_> {
             at: session::now(),
         };
         self.session.record(turn, location.as_deref());
-        if let Err(error) = self.history.save(&self.session) {
+        if let Err(error) = self.meta.save(self.history, &mut self.session) {
             self.output
                 .note(&format!("llx: the session was not saved: {error}\n"));
         }

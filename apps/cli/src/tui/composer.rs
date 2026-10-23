@@ -65,6 +65,16 @@ impl Composer {
         self.set("");
     }
 
+    /// Clear what is typed, kept among the earlier entries so that ↑ brings it back.
+    pub fn discard(&mut self) {
+        let remembered = unpasted(&self.text(), &self.pastes);
+        if !remembered.trim().is_empty() && self.earlier.last() != Some(&remembered) {
+            self.earlier.push(remembered);
+        }
+        self.walking = None;
+        self.clear();
+    }
+
     /// Hide clipboard text behind a numbered mark; restore it when the entry is sent.
     pub fn paste_marked(&mut self, text: &str) {
         let cleaned: String = cleaned(text).collect();

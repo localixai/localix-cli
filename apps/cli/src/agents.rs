@@ -14,7 +14,7 @@ mod tool;
 mod wait;
 pub mod watch;
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
@@ -23,6 +23,7 @@ use std::time::Duration;
 use agent::agent::Spend;
 use agent::conversation::Conversation;
 use contracts::history::Session;
+use queue::Queue;
 
 use self::inbox::Letters;
 pub use self::tool::AgentsTool;
@@ -48,9 +49,10 @@ pub trait Delegation {
 }
 
 /// What the tool and the agents' threads share.
-#[derive(Default)]
 pub struct Registry {
     state: Mutex<State>,
+    /// The lane's queue: an agent's answer is posted there.
+    pub queue: Arc<Queue>,
     /// An agent ended a task.
     changed: Condvar,
     /// The main agent's waiting line last said in its task: it is not said again until it changes.
@@ -62,8 +64,6 @@ struct State {
     /// The session the agents belong to.
     parent: String,
     children: Vec<Child>,
-    /// Answers not yet given to the main agent, oldest first: (session id, the message).
-    mail: VecDeque<(String, String)>,
     spent: Spend,
 }
 
@@ -95,11 +95,6 @@ impl Registry {
         self.lock().children.iter().filter(|c| c.working).count()
     }
 
-    /// The answers waiting for the main agent, given out.
-    pub fn take_mail(&self) -> Vec<String> {
-        self.lock().mail.drain(..).map(|(_, text)| text).collect()
-    }
-
     /// Stop every agent: the session ends.
     pub fn stop_all(&self) {
         for child in &self.lock().children {
@@ -107,10 +102,19 @@ impl Registry {
         }
     }
 
-    /// The task ended, however it ended: an answer that came after its last step is not given
-    /// to the next task, which says its waiting line afresh.
+    /// The agents of the lane whose queue is `queue`.
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self {
+            state: Mutex::default(),
+            queue,
+            changed: Condvar::new(),
+            said: Mutex::default(),
+        }
+    }
+
+    /// The task ended, however it ended: the next one says its waiting line afresh (an answer
+    /// that came after its last step goes with the task, by its kind).
     pub(super) fn settled(&self) {
-        self.lock().mail.clear();
         lock(&self.said).clear();
     }
 
@@ -139,7 +143,7 @@ impl Delegation for AgentsTool<'_, '_> {
             child.stop.store(true, Ordering::SeqCst);
         }
         state.children.clear();
-        state.mail.clear();
+        (self.registry.queue).forget(|entry| entry.tag == crate::arrivals::AGENT_RESULT);
         if had && let Some(ui) = self.kit.output.ui() {
             ui.send(Event::AgentsCleared);
         }

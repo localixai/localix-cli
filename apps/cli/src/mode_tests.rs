@@ -181,7 +181,7 @@ fn the_context_mentions_ask_only_where_someone_answers() {
 /// allow, and with no terminal they are refused. Reading a session and closing it ask nothing.
 #[cfg(unix)]
 mod sessions {
-    use contracts::tool::{Tool, ToolError};
+    use contracts::tool::ToolError;
     use serde_json::{Value, json};
     use tools::shell::{BashTool, Sessions};
     use tools::workspace::Workspace;
@@ -218,10 +218,12 @@ mod sessions {
         };
         let results = calls()
             .iter()
-            .map(|arguments| match bash.call(arguments) {
-                Ok(output) => Ok(output.report),
-                Err(ToolError::Failed(why) | ToolError::Fatal(why)) => Err(why),
-            })
+            .map(
+                |arguments| match bash.terminal(arguments).map(|(output, _)| output) {
+                    Ok(output) => Ok(output.report),
+                    Err(ToolError::Failed(why) | ToolError::Fatal(why)) => Err(why),
+                },
+            )
             .collect();
         (results, scratch.path().join("made").exists())
     }

@@ -19,11 +19,7 @@ fn slash_down_enter_opens_model_which_applies_the_one_chosen() {
     assert!(screen.contains("❯"), "a model is marked:\n{screen}");
     // Off the current model, so a /model that applied nothing would show.
     term.press(key::DOWN).press(key::ENTER);
-    // A model with levels asks for one; Enter takes the one marked.
-    let (shown, _) = term.wait_for_any(&["Reasoning", "Now openrouter"], LONG);
-    if shown == "Reasoning" {
-        term.press(key::ENTER);
-    }
+    // One Enter confirms both the model and its inline reasoning level.
     term.wait_for("Now openrouter", LONG);
     term.type_text("hello").press(key::ENTER);
     term.wait_for("Worked for", LONG);

@@ -155,7 +155,10 @@ fn a_dismissed_question_closes_unanswered_and_the_prompt_comes_back() {
     );
     app.event(Event::Dismiss, now);
     assert_eq!(answer.try_recv(), Ok(None));
-    assert_eq!(live_area(&app, now), "❯ Type a task, / for commands");
+    assert_eq!(
+        live_area(&app, now),
+        "❯ Type a task, / for commands\n  default mode · shift+tab to cycle"
+    );
 }
 
 #[test]

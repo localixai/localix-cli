@@ -21,14 +21,34 @@ fn app() -> App {
 }
 
 #[test]
-fn idle_is_the_prompt_alone() {
+fn idle_shows_the_current_mode_and_cycle_hint() {
     let app = app();
     let (lines, cursor) = render(&app, Instant::now());
     assert_eq!(
         lines.iter().map(style::plain).collect::<Vec<_>>(),
-        ["❯ Type a task, / for commands"]
+        [
+            "❯ Type a task, / for commands",
+            "  default mode · shift+tab to cycle"
+        ]
     );
     assert_eq!(cursor, Some(Cursor { row: 0, column: 2 }));
+}
+
+#[test]
+fn mode_stays_visible_while_typing_and_updates_for_every_mode() {
+    let now = Instant::now();
+    let mut app = app();
+    app.event(Event::TaskStarted("work".into()), now);
+    typed(&mut app, "follow up", now);
+    for mode in crate::mode::Mode::ALL {
+        app.event(Event::Mode(mode.name().into()), now);
+        let screen = shown(&app, now);
+        assert!(
+            screen.contains(&format!("{} mode · shift+tab to cycle", mode.name())),
+            "{screen}"
+        );
+        assert!(screen.contains("❯ follow up"), "{screen}");
+    }
 }
 
 #[test]
@@ -38,8 +58,8 @@ fn working_shows_the_call_its_steps_the_time_and_the_queue() {
     app.event(Event::TaskStarted("check the shop".into()), start);
     app.event(
         Event::Call {
-            name: "browser".into(),
-            args: json!({"url": "http://127.0.0.1:4173/"}),
+            name: "window".into(),
+            args: json!({"action": "interact", "tab": "w1", "goal": "Buy one"}),
         },
         start,
     );
@@ -49,14 +69,14 @@ fn working_shows_the_call_its_steps_the_time_and_the_queue() {
     press(&mut app, KeyCode::Tab, start);
     app.event(Event::Mode("plan".into()), start);
     insta::assert_snapshot!(shown(&app, start + Duration::from_millis(12_300)), @r#"
-    ⠸ Browsing http://127.0.0.1:4173/
+    ⠸ Working in w1: Buy one
       └ click "Buy" [e12]
 
     ⠸ Working (12s · esc to interrupt)
       ⏎ then update the changelog
 
     ❯ Type a task, / for commands
-      plan mode · shift+tab to leave
+      plan mode · shift+tab to cycle
     "#);
 }
 
@@ -69,6 +89,7 @@ fn slash_lists_the_commands_under_the_prompt() {
     ❯ /
       /mode       show or switch the mode
       /model      pick the model
+      default mode · shift+tab to cycle
     ");
 }
 
@@ -164,6 +185,7 @@ fn what_waits_reads_as_the_transcript_shows_it() {
       ≋ m · x
 
     ❯ Type a task, / for commands
+      default mode · shift+tab to cycle
     ");
 }
 
@@ -173,7 +195,10 @@ fn esc_closes_the_commands_slash_offers_and_keeps_other_text() {
     let mut app = app();
     typed(&mut app, "/mo", now);
     press(&mut app, KeyCode::Esc, now);
-    assert_eq!(shown(&app, now), "❯ Type a task, / for commands");
+    assert_eq!(
+        shown(&app, now),
+        "❯ Type a task, / for commands\n  default mode · shift+tab to cycle"
+    );
     // An `@` file list is part of the words: Esc keeps them.
     app.files = crate::tui::mention::Files::with(vec!["src/main.rs".into()]);
     typed(&mut app, "see @sr", now);

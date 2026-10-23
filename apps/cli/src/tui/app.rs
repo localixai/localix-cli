@@ -49,6 +49,7 @@ pub enum Open {
     Approval(Sender<Approval>),
     Question(Sender<Option<Answer>>),
     Choice(Sender<Option<usize>>),
+    Adjustable(Sender<Option<(usize, usize)>>),
     Line(Sender<Option<String>>),
     /// Whether to quit while work runs: the interface's own, nobody waits for it.
     Quit,
@@ -77,6 +78,8 @@ pub struct App {
     pub(super) settling: Option<Instant>,
     /// Ctrl-C at an empty prompt: a second one quits, until this moment.
     pub quitting: Option<Instant>,
+    /// That Ctrl-C cleared a draft, which ↑ brings back.
+    pub(super) discarded: bool,
     /// Esc at an empty prompt: a second one rewinds, until this moment.
     pub(super) escaped: Option<Instant>,
     /// The person left: the sessions' next waits end with nothing.
@@ -84,7 +87,7 @@ pub struct App {
     /// The list of sessions, while it is open.
     pub(super) listing: Option<super::sessions::SessionList>,
     /// This directory's saved sessions, as the desk last listed them.
-    pub(super) saved: Vec<(String, String)>,
+    pub(super) saved: Vec<(String, String, String)>,
     /// A lane closed to make room, said in the next lane that opens.
     pub(super) closed: Option<String>,
     /// How many shells run, in every session: quitting stops them.
@@ -108,6 +111,7 @@ impl App {
             questions: VecDeque::new(),
             settling: None,
             quitting: None,
+            discarded: false,
             escaped: None,
             left: false,
             listing: None,
@@ -212,6 +216,16 @@ impl App {
             } => {
                 let select = questions::choice(&title, &options, marked);
                 self.ask_own(lane, select, Open::Choice(reply), now);
+            }
+            Event::ChooseAdjustable {
+                title,
+                options,
+                marked,
+                adjustments,
+                reply,
+            } => {
+                let select = questions::choice(&title, &options, marked).adjustable(adjustments);
+                self.ask_own(lane, select, Open::Adjustable(reply), now);
             }
             Event::Line {
                 prompt,

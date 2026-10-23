@@ -91,10 +91,10 @@ impl SessionView {
 const NAMED: usize = 48;
 
 impl SessionView {
-    /// What the person knows it by: its name, else `main` for a lane not given a task yet.
+    /// What the person knows it by: its name, else an explicitly new session.
     pub fn title(&self) -> &str {
         match self.name.is_empty() {
-            true => "main",
+            true => "New session",
             false => &self.name,
         }
     }
@@ -176,16 +176,17 @@ impl Views {
         }
     }
 
-    /// The sessions in the order the tree draws them: each lane, then its agents.
+    /// The sessions the tree draws, in its order: the lane shown and the agents it started, or
+    /// none while it has started none. The other lanes are the ← list's.
     pub fn order(&self) -> Vec<usize> {
-        let lanes = (0..self.sessions.len()).filter(|&at| self.sessions[at].lane.is_some());
-        lanes
-            .flat_map(|lane| {
-                let id = &self.sessions[lane].id;
-                let agents = (0..self.sessions.len())
-                    .filter(move |&at| self.sessions[at].parent.as_ref() == Some(id));
-                std::iter::once(lane).chain(agents)
-            })
-            .collect()
+        let lane = self.home();
+        let id = &self.sessions[lane].id;
+        let agents = (0..self.sessions.len())
+            .filter(|&at| self.sessions[at].parent.as_ref() == Some(id))
+            .collect::<Vec<_>>();
+        match agents.is_empty() {
+            true => vec![],
+            false => std::iter::once(lane).chain(agents).collect(),
+        }
     }
 }

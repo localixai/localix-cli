@@ -77,8 +77,7 @@ fn rewinding_puts_back_the_files_and_the_conversation_before_the_task() {
 fn background_tasks_are_listed_as_the_transcript_shows_them_and_not_put_back_in_the_prompt() {
     composed(Mode::Bypass, true, answers(2), |rig| {
         rig.task("(scheduled `hello`) say hello");
-        let batch = "<monitor job=\"ticks\">\ntick 1\n</monitor>";
-        rig.task(&format!("{}{batch}", crate::jobs::FROM_MONITOR));
+        rig.task(&crate::arrivals::monitor("ticks", "tick 1").render());
         let (ui, events) = crate::tui::test_support::fake_ui();
         rig.ui = Some(ui);
         let mut person = picks(&[Some(0), Some(1)]);

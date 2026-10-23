@@ -18,6 +18,8 @@ use ratatui::text::{Line, Span};
 use serde_json::Value;
 
 use super::style;
+#[path = "edit_diff.rs"]
+mod edit_diff;
 use super::wrap::{cut, wrap};
 use crate::printable::printable;
 
@@ -86,6 +88,27 @@ pub fn body(
     outcome: &Result<ToolOutput, ToolError>,
     width: usize,
 ) -> Vec<Line<'static>> {
+    if name == "edit"
+        && let Ok(output) = outcome
+        && let Some(diff) = output
+            .report
+            .split_once("\n\nDiff:\n")
+            .map(|(_, diff)| diff)
+    {
+        let mut out = body(
+            "edit",
+            &Ok(output
+                .report
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .to_string()
+                .into()),
+            width,
+        );
+        out.extend(edit_diff::render(diff, width));
+        return out;
+    }
     let rows = match outcome {
         Err(error) => vec![(printable(&error.to_string()), style::failed())],
         Ok(output) => output_rows(name, &output.report),
@@ -137,16 +160,12 @@ fn describe(name: &str, args: &Value) -> What {
     let flat = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     let what = |verb, subject: String| What { verb, subject };
     match name {
-        "bash" if args.get("session").and_then(Value::as_u64).is_some() => session(args),
         "bash" => {
             let mut subject = flat(text("command"));
             if !text("workdir").is_empty() {
                 subject = format!("{subject} (in {})", text("workdir"));
             }
-            match args.get("tty") == Some(&Value::Bool(true)) {
-                true => what(("Starting", "Started"), subject),
-                false => what(("Running", "Ran"), subject),
-            }
+            what(("Running", "Ran"), subject)
         }
         "read" => {
             let subject = match args.get("offset").and_then(Value::as_u64) {
@@ -169,47 +188,6 @@ fn describe(name: &str, args: &Value) -> What {
                 super::cells::count(n as u64, "question"),
             )
         }
-        "browser" => {
-            let flag = |key: &str| args.get(key) == Some(&Value::Bool(true));
-            let mut parts: Vec<String> = vec![];
-            match args.get("tab") {
-                Some(Value::String(tab)) if tab.trim_matches('"') == "new" => {
-                    parts.push("a new tab".into())
-                }
-                Some(Value::Number(n)) => parts.push(format!("tab {n}")),
-                Some(Value::String(n)) if n.parse::<u64>().is_ok() => {
-                    parts.push(format!("tab {n}"))
-                }
-                _ => {}
-            }
-            parts.extend(
-                [text("url"), text("goal")]
-                    .into_iter()
-                    .filter(|part| !part.is_empty())
-                    .map(str::to_string),
-            );
-            if !text("script").is_empty() {
-                parts.push("a script".into());
-            }
-            if flag("screenshot") {
-                parts.push(match text("selector") {
-                    "" => "a screenshot".into(),
-                    selector => format!("a screenshot of {selector}"),
-                });
-            }
-            if let Some(closed) = args.get("close_tab").filter(|v| !v.is_null()) {
-                let tab = format!("tab {}", closed.to_string().trim_matches('"'));
-                if parts.is_empty() {
-                    return what(("Closing", "Closed"), tab);
-                }
-                parts.push(format!("closing {tab}"));
-            }
-            match (parts.is_empty(), flag("close")) {
-                (true, true) => what(("Closing", "Closed"), "the browser".into()),
-                (true, false) => what(("Reading", "Read"), "the page".into()),
-                (false, _) => what(("Browsing", "Browsed"), flat(&parts.join(" · "))),
-            }
-        }
         "agents" => {
             let (verb, subject) = crate::agents::spec::describe(args);
             what(verb, flat(&subject))
@@ -218,29 +196,80 @@ fn describe(name: &str, args: &Value) -> What {
             let (verb, subject) = crate::jobs::spec::describe(args);
             what(verb, flat(&subject))
         }
+        "window" => window(args),
         _ => what(("Calling", "Called"), name.to_string()),
     }
 }
 
-/// A call on a terminal session: what is typed into it, or that it is read or closed.
-fn session(args: &Value) -> What {
-    let id = args.get("session").map_or(String::new(), Value::to_string);
-    let input = args.get("input").and_then(Value::as_str).unwrap_or("");
-    let keys = args
-        .get("keys")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten();
-    let mut typed = vec![input.trim_end_matches('\n').replace('\n', " \u{23ce} ")];
-    typed.extend(keys.map(|key| format!("[{}]", key.as_str().unwrap_or("?"))));
-    let typed = typed.join(" ").trim().to_string();
-    let what = |verb, subject| What { verb, subject };
-    if args.get("close") == Some(&Value::Bool(true)) {
-        what(("Closing", "Closed"), format!("session {id}"))
-    } else if typed.is_empty() {
-        what(("Reading", "Read"), format!("session {id}"))
-    } else {
-        what(("Typing", "Typed"), format!("into session {id}: {typed}"))
+/// A call on the window: what it opens, which tab it acts in, and how.
+fn window(args: &Value) -> What {
+    let text = |value: &Value, key: &str| {
+        value
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
+    let what = |verb, subject: String| What { verb, subject };
+    let tab = text(args, "tab");
+    match text(args, "action").as_str() {
+        "open" => {
+            let one = [args.clone()];
+            let tabs = args
+                .get("tabs")
+                .and_then(Value::as_array)
+                .map_or(&one[..], Vec::as_slice);
+            let named: Vec<String> = (tabs.iter())
+                .map(|tab| match text(tab, "url").as_str() {
+                    "" => text(tab, "command"),
+                    url => url.to_string(),
+                })
+                .filter(|name| !name.is_empty())
+                .collect();
+            what(("Opening", "Opened"), named.join(", "))
+        }
+        "interact" if !text(args, "goal").is_empty() => what(
+            ("Working in", "Worked in"),
+            format!("{tab}: {}", text(args, "goal")),
+        ),
+        "interact" => {
+            let keys = (args
+                .get("keys")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten())
+            .map(|key| format!("[{}]", key.as_str().unwrap_or("?")));
+            let mut typed: Vec<String> = vec![text(args, "input")];
+            typed.extend(keys);
+            let typed = typed.join(" ").trim().to_string();
+            match typed.is_empty() {
+                true => what(("Reading", "Read"), tab),
+                false => what(("Typing in", "Typed in"), format!("{tab}: {typed}")),
+            }
+        }
+        "show" => what(("Showing", "Showed"), format!("tab {tab}")),
+        "screenshot" => what(("Picturing", "Pictured"), format!("tab {tab}")),
+        "close" => {
+            let tabs: Vec<&str> = (args
+                .get("tabs")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten())
+            .filter_map(Value::as_str)
+            .collect();
+            match tabs.is_empty() {
+                true => what(("Closing", "Closed"), format!("tab {tab}")),
+                false => what(("Closing", "Closed"), format!("tabs {}", tabs.join(", "))),
+            }
+        }
+        "resize" => {
+            let size = |key: &str| args.get(key).and_then(Value::as_u64).unwrap_or(0);
+            what(
+                ("Sizing", "Sized"),
+                format!("the window to {}×{}", size("width"), size("height")),
+            )
+        }
+        _ => what(("Listing", "Listed"), "the window's tabs".into()),
     }
 }
 

@@ -65,3 +65,11 @@ fn here_lists_this_workspace_newest_first_without_agents() {
     // `resume` with no id goes on from the first.
     assert_eq!(ids, ["new", "old"]);
 }
+
+#[test]
+fn a_titled_session_is_listed_by_its_title() {
+    let mut titled = session(&["the jobs test fails one run in ten"]);
+    titled.title = "Fix the flaky jobs test".into();
+    assert!(row(&titled, 0).ends_with("  Fix the flaky jobs test\n"));
+    assert_eq!(brief(&titled).0, "Fix the flaky jobs test");
+}

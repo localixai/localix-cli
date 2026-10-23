@@ -76,10 +76,12 @@ pub fn row(session: &Session, agents: usize) -> String {
     )
 }
 
-/// A session as the interface's list shows it: when, how many tasks, the first one.
-pub fn brief(session: &Session) -> String {
-    let (ago, tasks) = (session::ago(session.updated), tasks(session));
-    format!("{ago:>10}  {tasks:>8}  {}", first_task(session))
+/// A session as the interface's list shows it: its first task, and when it ran and how many tasks
+/// it has (`2 h ago · 4 tasks`).
+pub fn brief(session: &Session) -> (String, String) {
+    let ago = session::ago(session.updated);
+    let tasks = crate::tui::cells::count(session.turns.len() as u64, "task");
+    (first_task(session), format!("{ago} · {tasks}"))
 }
 
 /// `1 task `, `4 tasks`: the same width, for a column.
@@ -90,8 +92,11 @@ fn tasks(session: &Session) -> String {
     }
 }
 
-/// The session's first task on one line, cut.
+/// The session's title, else its first task on one line, cut.
 fn first_task(session: &Session) -> String {
+    if !session.title.is_empty() {
+        return printable(&session.title);
+    }
     let first = session.turns.first().map_or("", |turn| turn.goal.as_str());
     let first = printable(&first.split_whitespace().collect::<Vec<_>>().join(" "));
     let mut shown: String = first.chars().take(TASK_CHARS).collect();

@@ -20,7 +20,7 @@ Every run is `llx exec --json --yes -C <dir> --timeout 240 "<goal>"`, plus `--sc
 - With a `schema`: the event has `data`.
 - Every `contains` string appears in the answer, ignoring case. With a schema, the data counts as part of the answer.
 - Every `matches` pattern is found in the answer: a Python regex, ignoring case. It is used for numbers, where a plain substring would match by accident.
-- Every `uses` entry, `{"name": <tool>, "arguments": {...}, "has": [...], "like": {...}}`, matches at least one `tool.call` event: that tool, called with each of those `arguments`, a non-empty value for each name in `has`, and a value matching each `like` pattern (a Python regex). It holds a task to the way it must be solved (`bash` with `"tty": true`, then a `session` call with `input`), not only to its result.
+- Every `uses` entry, `{"name": <tool>, "arguments": {...}, "has": [...], "like": {...}}`, matches at least one `tool.call` event: that tool, called with each of those `arguments`, a non-empty value for each name in `has`, and a value matching each `like` pattern (a Python regex). It holds a task to the way it must be solved (`window` opening a `terminal` tab, then an `interact` call on it), not only to its result.
 - No `avoids` entry, written the same way, matches any `tool.call` event: a way the task must not be solved, such as writing the file a program should have written.
 - The `check` command (`sh -c`, 60 s at most) exits 0 in the directory afterwards. `$FIXTURE` is the untouched fixture, so a check can make sure a file was left alone.
 
@@ -41,7 +41,7 @@ Every task makes paid OpenRouter calls: a few tenths of a cent each with the def
 
 ## By hand
 
-Terminal windows (a session, on a machine with a display): start one with a task like `run python3 -q in a terminal and compute 2+2 there`. Its window opens at the right edge once the session is kept, while the prompt keeps the keyboard; typing into it does nothing. Close it: the task and the session go on. The next `show: true` opens it again with the current screen. Over SSH, in `exec` and in autonomous mode, none opens.
+Terminal tabs (a session, on a machine with a display): start one with a task like `run python3 -q in a terminal and compute 2+2 there`. It opens as a tab of the one window, shown, while the prompt keeps the keyboard; typing into it does nothing. Close its tab: the task and the session go on. Over SSH, in `exec` and in autonomous mode, no window opens; the terminal still works.
 
 ## Tasks
 
@@ -53,7 +53,7 @@ A task in `tasks.json` has an `id`, a `kind` (`code` or `browser`) and a `goal`.
 | fix-test | code | Find a bug from a failing unittest and fix the code; the test file must stay unchanged |
 | rename | code | Rename a function across two files, then run the program |
 | explain | code | Answer a question that needs two files read and nothing changed (checked against the fixture) |
-| answer-prompts | code | A script that asks two `input()` questions and runs only at a terminal: answered by typing into a `tty` session (`uses`: the start, then a `session` call with `input`), its file written by the script and not by `edit` or a shell redirect (`avoids`), the script left unchanged |
+| answer-prompts | code | A script that asks two `input()` questions and runs only at a terminal: answered by typing into a terminal tab (`uses`: `window` opening a `terminal`, then `interact` on its tab), its file written by the script and not by `edit` or a shell redirect (`avoids`), the script left unchanged |
 | plan-csv | code | `--mode plan` with no terminal: a feature planned from reading the code (a CSV option where item names hold commas), answered as a list that names what only reading finds (the test file `test_report.py`, the header `item,qty,price,value`) and its assumptions, and no file changed |
 | login | browser | A quoted password with punctuation, typed exactly as given and never read back |
 | dynamic | browser | Waiting for content that appears after a delay |

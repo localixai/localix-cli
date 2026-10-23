@@ -1,6 +1,8 @@
 //! A scripted model behind a real HTTP server:
 //! the binary under test calls it as it calls OpenRouter (`OPENROUTER_BASE_URL`), it answers each
 //! chat completion from a script, and it keeps every request for the test to read. No network.
+//! A session's title is asked for beside its tasks: those requests are answered apart (with the
+//! title set, else the task itself), never from the script, and kept apart.
 
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -33,7 +35,14 @@ struct Shared {
     script: VecDeque<Reply>,
     requests: Vec<Value>,
     calls: usize,
+    /// The title a title's request is answered with; `None` echoes the task.
+    title: Option<String>,
+    /// The tasks titles were asked for.
+    titled: Vec<String>,
 }
+
+/// How the title's request starts (`meta::title::INSTRUCTIONS`).
+const TITLE: &str = "Generate a concise, single-line task title";
 
 /// The server; it stops with the test process.
 pub struct Model {
@@ -60,7 +69,19 @@ impl Model {
         Self { base, shared }
     }
 
-    /// Every request the model received, as JSON, in order.
+    /// The same, answering a title's request with `title`.
+    pub fn titling(script: Vec<Reply>, title: &str) -> Self {
+        let model = Self::start(script);
+        model.shared.lock().unwrap().title = Some(title.into());
+        model
+    }
+
+    /// The tasks a title was asked for, in order.
+    pub fn titled(&self) -> Vec<String> {
+        self.shared.lock().unwrap().titled.clone()
+    }
+
+    /// Every request the model received but the titles', as JSON, in order.
     pub fn requests(&self) -> Vec<Value> {
         self.shared.lock().unwrap().requests.clone()
     }
@@ -87,6 +108,22 @@ fn answer(stream: TcpStream, shared: &Mutex<Shared>) {
     let mut body = vec![0; length];
     let _ = reader.read_exact(&mut body);
     let request: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+    if content(&request["messages"][0]).starts_with(TITLE) {
+        let asked = content(&request["messages"][1]);
+        let task = asked
+            .split_once("User prompt:\n")
+            .map_or("", |(_, task)| task);
+        let title = {
+            let mut shared = shared.lock().unwrap();
+            shared.titled.push(task.to_string());
+            shared.title.clone().unwrap_or_else(|| task.to_string())
+        };
+        return respond(
+            stream,
+            200,
+            &completion(Some(Reply::Text(title)), 0, &request),
+        );
+    }
     let (mut next, n) = {
         let mut shared = shared.lock().unwrap();
         shared.requests.push(request.clone());
@@ -109,8 +146,23 @@ fn answer(stream: TcpStream, shared: &Mutex<Shared>) {
             reply => (200, completion(reply, n, &request)),
         }
     };
-    let (status, text) = (reply.0, reply.1.to_string());
-    let mut stream = stream;
+    respond(stream, reply.0, &reply.1);
+}
+
+/// A message's text: a string, or the text of its parts (a cache mark makes it parts).
+fn content(message: &Value) -> String {
+    match &message["content"] {
+        Value::String(text) => text.clone(),
+        Value::Array(parts) => parts
+            .iter()
+            .filter_map(|part| part["text"].as_str())
+            .collect(),
+        _ => String::new(),
+    }
+}
+
+fn respond(mut stream: TcpStream, status: u16, body: &Value) {
+    let text = body.to_string();
     let _ = write!(
         stream,
         "HTTP/1.1 {status} Status\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\

@@ -15,7 +15,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::screen::Screen;
 use super::stream::Shared;
 use super::{keys, process, watch};
 
@@ -38,22 +37,17 @@ pub struct Pty {
 }
 
 /// Start `command` in `dir` in a new terminal, without the `hidden` variables, waiting for
-/// `needle` from its first output on; with `screen`, its screen is kept for a window.
-pub fn spawn(
-    command: &str,
-    dir: &Path,
-    hidden: &[&str],
-    needle: Option<&str>,
-    screen: bool,
-) -> io::Result<Pty> {
+/// `needle` from its first output on.
+pub fn spawn(command: &str, dir: &Path, hidden: &[&str], needle: Option<&str>) -> io::Result<Pty> {
     let (master, slave) = open()?;
     let mut shell = process::shell(command);
     process::quiet_env(&mut shell, hidden);
-    // A plain terminal: no colours, no pager, no line editor drawing on a screen that is not there.
+    // A real terminal, as Localix's: a full-screen program (an editor, Claude Code) draws as it
+    // would anywhere, in colour for the window. What the model reads is text: a transcript, or
+    // the screen when the program draws over it.
     shell
         .current_dir(dir)
-        .env("TERM", "dumb")
-        .env("NO_COLOR", "1")
+        .env("TERM", "xterm-256color")
         .env("COLUMNS", COLUMNS.to_string())
         .env("LINES", ROWS.to_string())
         .stdin(Stdio::from(slave.try_clone()?))
@@ -90,7 +84,7 @@ pub fn spawn(
     )?;
     let writer = File::from(master);
     let reader = writer.try_clone()?;
-    let shared = Arc::new(Shared::new(screen.then(|| Screen::new(ROWS, COLUMNS))));
+    let shared = Arc::new(Shared::default());
     shared.lock().expect(needle, true);
     let stream = Arc::clone(&shared);
     let pid = child.id();

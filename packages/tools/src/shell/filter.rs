@@ -36,6 +36,11 @@ pub struct Filter {
     pub application_cursor: bool,
     /// Answers to the program's queries, for the terminal's input.
     replies: Vec<u8>,
+    /// The program asked where the cursor is: the screen answers.
+    pub position_asked: usize,
+    /// The program drew over what it printed (the cursor up or placed, the screen erased, the
+    /// alternate screen): a transcript would hold fragments, so its screen is read instead.
+    pub redrawn: bool,
 }
 
 impl Filter {
@@ -140,12 +145,19 @@ impl Filter {
     fn csi(&mut self, last: u8) {
         let parameters = self.parameters.as_slice();
         match (parameters, last) {
-            ([b'?', modes @ ..], b'h' | b'l') if modes.split(|&b| b == b';').any(|m| m == b"1") => {
-                self.application_cursor = last == b'h';
+            ([b'?', modes @ ..], b'h' | b'l') => {
+                let modes = || modes.split(|&b| b == b';');
+                if modes().any(|m| m == b"1") {
+                    self.application_cursor = last == b'h';
+                }
+                if last == b'h' && modes().any(|m| [&b"1049"[..], b"1047", b"47"].contains(&m)) {
+                    self.redrawn = true;
+                }
             }
+            (_, b'A' | b'H' | b'f' | b'J' | b'd') => self.redrawn = true,
             // Where the cursor is, and whether the terminal is well: a program that asks waits
-            // for the answer, so the answer is made up.
-            (b"6", b'n') => self.replies.extend_from_slice(b"\x1b[1;1R"),
+            // for the answer (the screen knows where the cursor is).
+            (b"6", b'n') => self.position_asked += 1,
             (b"5", b'n') => self.replies.extend_from_slice(b"\x1b[0n"),
             _ => {}
         }

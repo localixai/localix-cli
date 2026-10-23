@@ -1,5 +1,5 @@
-//! A panel beside the browser, in a real window: a terminal session's page as the shell makes
-//! it, painted from this thread, read back from its page.
+//! A panel as a tab of the one window, beside the browser's tabs: a terminal session's page as
+//! the shell makes it, painted from this thread, read back from its page.
 
 use std::time::{Duration, Instant};
 
@@ -29,6 +29,19 @@ fn lines(text: &[&str]) -> Vec<String> {
     text.iter().map(|line| line.to_string()).collect()
 }
 
+/// The tab the window shows, and every tab's id, as the window lists them.
+fn showing(browser: &Browser) -> Option<(String, Vec<String>)> {
+    let listed = browser.listing()?;
+    let shown = listed
+        .iter()
+        .find(|tab| tab.shown)
+        .map(|tab| tab.id.clone());
+    Some((
+        shown.unwrap_or_default(),
+        listed.into_iter().map(|tab| tab.id).collect(),
+    ))
+}
+
 /// The page once `done` holds of it, within `within`.
 fn shown(
     browser: &Browser,
@@ -49,7 +62,7 @@ fn shown(
 
 pub fn scenario(browser: &Browser, driver: &WebviewDriver) {
     let page = tools::shell::page("session 1 · cat", None, None);
-    let panel = browser.panel("session 1 · cat", page, None);
+    let panel = browser.panel(1, "session 1 · cat", page, None);
     let second = Duration::from_secs(1);
     let wait = Duration::from_secs(10);
 
@@ -73,47 +86,13 @@ pub fn scenario(browser: &Browser, driver: &WebviewDriver) {
     );
     let href = read["href"].clone();
 
-    // The window takes the grid's own shape, so the grid fills it: no empty band beside it,
-    // once open and once resized as the person would (its shape kept).
-    let shape = browser.peek(&panel, "shape()").unwrap();
-    // The window takes it in whole points.
-    let (w, h) = (
-        shape[0].as_f64().unwrap().ceil(),
-        shape[1].as_f64().unwrap().ceil(),
+    // A tab beside the browser's, shown as it opens.
+    let tab = format!("t{}", panel.id());
+    let (shown_now, keys) = showing(browser).expect("the window is open");
+    assert_eq!(
+        (shown_now.as_str(), keys.clone()),
+        (tab.as_str(), vec!["w1".into(), tab.clone()])
     );
-    let filled = |read: &Value, (w, h): (f64, f64)| {
-        let cell = |at: usize| read["cells"][at].as_f64().unwrap_or(f64::NAN);
-        read["width"].as_f64() == Some(w)
-            && read["height"].as_f64() == Some(h)
-            && (w - cell(2)).abs() <= cell(0)
-            && (h - cell(3)).abs() <= cell(1)
-    };
-    shown(browser, &panel, wait, |read| filled(read, (w, h)));
-    let larger = ((w * 1.25).round(), (h * 1.25).round());
-    browser.resize_panel(&panel, larger.0, larger.1);
-    shown(browser, &panel, second, |read| filled(read, larger));
-    // On macOS the person's resizing keeps that shape.
-    if cfg!(target_os = "macos") {
-        let aspect = browser.dressed(Some(&panel)).unwrap().3;
-        assert!((aspect - w / h).abs() < 0.01, "{aspect} for {w} by {h}");
-    }
-
-    // On macOS the panel is glass: one material, active though the window is never key, under
-    // a clear window and a clear page (the coat is the window's). Tinted again, still one.
-    let glass = cfg!(target_os = "macos");
-    for _ in 0..3 {
-        let dressed = browser.dressed(Some(&panel)).map(|d| (d.0, d.1, d.2));
-        let expected = if glass { (1, 1, false) } else { (0, -1, true) };
-        assert_eq!(dressed, Some(expected), "the panel's frame");
-    }
-    if glass {
-        assert_eq!(
-            read["ground"], "rgba(0, 0, 0, 0)",
-            "the page paints over the glass"
-        );
-    }
-    // The headless browser window is never glass.
-    assert_eq!(browser.dressed(None).map(|d| (d.0, d.2)), Some((0, true)));
 
     // What a program prints shows as text: no markup, no script, nothing run.
     let fixture = format!(
@@ -148,6 +127,57 @@ pub fn scenario(browser: &Browser, driver: &WebviewDriver) {
         read["title"] == "session 1 · cat · exited 3"
     });
 
+    // What the agent does in the browser is shown; a click on the strip shows the terminal again.
+    let until_shown = |want: &str| {
+        let deadline = Instant::now() + wait;
+        while showing(browser).map(|s| s.0).as_deref() != Some(want) {
+            assert!(Instant::now() < deadline, "{:?}", showing(browser));
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    };
+    driver.navigate("about:blank").ok();
+    until_shown("w1");
+    browser.click(&format!("show {tab}"));
+    until_shown(&tab);
+    // The agent shows a tab too, and is told when there is none.
+    browser.act("w1", false).unwrap();
+    until_shown("w1");
+    let listed = browser.listing().unwrap();
+    assert_eq!((listed[0].kind, listed[0].acted_on), ("browser", true));
+    assert_eq!(listed[1].kind, "terminal");
+    assert!(listed[1].title.starts_with("session 1 · cat"), "{listed:?}");
+    let missing = browser.act("t999", false).unwrap_err();
+    assert!(
+        missing.starts_with("there is no tab t999: the tabs are w1, t"),
+        "{missing}"
+    );
+    browser.act(&tab, false).unwrap();
+    until_shown(&tab);
+    // Junk from the strip does nothing.
+    browser.click("show t999");
+    browser.click("<script>");
+    until_shown(&tab);
+    // Its × closes the tab: the caller hears so, and so does whoever listens to the window.
+    let heard = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+    let told = heard.clone();
+    browser.listen(move |key, what| {
+        told.lock()
+            .unwrap()
+            .push((key.to_string(), what.to_string()))
+    });
+    browser.click(&format!("close {tab}"));
+    until_shown("w1");
+    let deadline = Instant::now() + wait;
+    while panel.paint(frame(&lines(&["after"]), 0, 0, None)) {
+        assert!(Instant::now() < deadline, "the panel still says it is open");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(showing(browser).map(|s| s.1), Some(vec!["w1".to_string()]));
+    let heard = heard.lock().unwrap().clone();
+    assert_eq!(heard.len(), 1, "{heard:?}");
+    assert_eq!(heard[0].0, tab);
+    assert!(heard[0].1.contains("its program runs on"), "{heard:?}");
+
     // Gone, and the browser carries on.
     drop(panel);
     std::thread::sleep(Duration::from_millis(200));
@@ -173,15 +203,22 @@ pub fn glass(browser: &Browser, driver: &WebviewDriver, window: &Window, origin:
         state.contains("visible") && !state.contains("hidden"),
         "{state}"
     );
+    // Coated as a panel is, so its titlebar and toolbar are not the bare material's grey.
     let expected = if cfg!(target_os = "macos") {
-        (1, 1, false)
+        (1, 1, false, true)
     } else {
-        (0, -1, true)
+        (0, -1, true, false)
     };
-    let dressed = browser.dressed(None).map(|d| (d.0, d.1, d.2));
+    let dressed = browser.dressed().map(|d| (d.0, d.1, d.2, d.4));
     assert_eq!(dressed, Some(expected), "the browser's frame");
     let size = driver.observe().unwrap().viewport;
-    assert_eq!((size.w, size.h), (1280, 860), "the page is the viewport");
+    // A shown window fits the person's screen (960 to 1440 wide), the strip of tabs above it.
+    assert!(
+        (960..=1440).contains(&size.w) && (600..=930).contains(&size.h),
+        "{} by {}",
+        size.w,
+        size.h
+    );
     let white = driver.screenshot(None).unwrap();
     driver
         .navigate(&format!("{origin}/blank-transparent.html"))
@@ -223,7 +260,7 @@ pub fn emulator(browser: &Browser) {
             css: String::new(),
         };
         let page = tools::shell::page("session 3 · sh", None, Some(&emulator));
-        let panel = browser.panel("session 3 · sh", page, None);
+        let panel = browser.panel(3, "session 3 · sh", page, None);
         let mut rows = vec!["$ ls".to_string()];
         rows.resize(40, String::new());
         let drawn = "\u{1b}[?25h\u{1b}[m\u{1b}[H\u{1b}[J$ ls";
@@ -259,7 +296,7 @@ pub fn emulator(browser: &Browser) {
 /// (an emulator draws in them): WebKit must not take it for a hidden one.
 pub fn first(browser: &Browser) {
     let page = tools::shell::page("session 0 · sh", None, None);
-    let panel = browser.panel("session 0 · sh", page, None);
+    let panel = browser.panel(9, "session 0 · sh", page, None);
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     while browser.peek(&panel, "typeof F") != Ok(json!("function")) {
         assert!(
@@ -268,6 +305,9 @@ pub fn first(browser: &Browser) {
         );
         std::thread::sleep(Duration::from_millis(50));
     }
+    // The window opens for it alone: its one tab, shown.
+    let tab = format!("t{}", panel.id());
+    assert_eq!(showing(browser), Some((tab.clone(), vec![tab])));
     // Long enough for WebKit to have settled what it thinks of the window.
     std::thread::sleep(Duration::from_millis(300));
     let count = "window.seen = 0; (function f() { window.seen++; requestAnimationFrame(f); })(); 1";
@@ -277,4 +317,11 @@ pub fn first(browser: &Browser) {
     let seen = browser.peek(&panel, read).unwrap();
     assert_eq!(seen[1], "visible", "{seen}");
     assert!(seen[0].as_u64() > Some(5), "no animation frames: {seen}");
+    // The last tab gone, the window is too.
+    drop(panel);
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while showing(browser).is_some() {
+        assert!(std::time::Instant::now() < deadline, "the window stayed");
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }

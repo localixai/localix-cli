@@ -176,7 +176,7 @@ pub fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cursor>) {
     }
     if let Some(footer) = footer(app, now) {
         out.push(Line::from(Span::styled(
-            format!("  {footer}"),
+            format!("  {}", cut(&footer, width.saturating_sub(2))),
             style::dim(),
         )));
     }
@@ -221,27 +221,34 @@ fn waiting(text: &str) -> String {
 
 fn footer(app: &App, now: Instant) -> Option<String> {
     let window = |at: Instant| now.duration_since(at).as_millis() < super::app::QUIT_WINDOW_MS;
+    let mode = format!("{} mode · shift+tab to cycle", app.lane().mode);
     if app.quitting.is_some_and(window) {
-        return Some("ctrl-c again to quit".into());
+        let back = if app.discarded {
+            "↑ brings it back · "
+        } else {
+            ""
+        };
+        // In place of the mode's line while it lasts: a short window to read it in.
+        return Some(format!("{back}ctrl-c again to quit"));
+    }
+    if app.escaped.is_some_and(window) && app.composer.is_empty() && app.busy().is_none() {
+        return Some("esc again to rewind".into());
     }
     if app.busy().is_some() && !app.composer.is_empty() {
-        return Some("enter tells the task now · tab keeps it for after".into());
+        return Some(format!(
+            "{mode} · enter tells the task now · tab keeps it for after"
+        ));
     }
-    let mode = match app.lane().mode.as_str() {
-        "default" => None,
-        "plan" => Some("plan mode · shift+tab to leave".to_string()),
-        mode => Some(format!("{mode} mode · shift+tab for plan")),
-    };
     // How full the context is, once it matters: below half left.
     let context = app
         .lane()
         .context
         .filter(|&left| left < 50)
         .map(|left| format!("{left}% context left"));
-    match (mode, context) {
-        (Some(mode), Some(context)) => Some(format!("{mode} · {context}")),
-        (mode, context) => mode.or(context),
-    }
+    Some(match context {
+        Some(context) => format!("{mode} · {context}"),
+        None => mode,
+    })
 }
 
 #[cfg(test)]

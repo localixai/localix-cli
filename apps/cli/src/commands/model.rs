@@ -1,5 +1,5 @@
-//! `/model` and the reasoning level: one of the models of the providers signed in to, then a
-//! level it takes; Shift+Up and Shift+Down step the level. A model switch starts at that model's
+//! `/model` and the reasoning level: one list, with Left/Right choosing the level inline.
+//! Shift+Up and Shift+Down also step the level. A model switch starts at that model's
 //! default level, and only its own levels are offered. The choice is put in at once (the chat
 //! model, and its key's variables kept from commands) and saved as the default for later
 //! sessions. `/login` ends with the same model step.
@@ -10,32 +10,13 @@ use contracts::catalog::{ModelEntry, Selection};
 
 use crate::choice::{self, Choice};
 use crate::compose::Rig;
-use crate::picker::{Item, Terminal};
+use crate::picker::{Adjustment, Item, Terminal};
 use crate::providers::{self, Provider};
 use crate::tui::Ui;
 use crate::tui::asking::UiTerminal;
 
-/// A level the model takes; asked only when it takes more than one.
-fn reasoning(selection: Selection, terminal: &mut dyn Terminal) -> Option<Selection> {
-    let offered = selection.model().offered().to_vec();
-    if offered.len() == 1 {
-        return Some(selection);
-    }
-    let default = selection.model().default;
-    let items: Vec<Item> = offered
-        .iter()
-        .map(|&effort| {
-            let note = if effort == default { " (default)" } else { "" };
-            let detail = format!("{}{note}", effort.describe());
-            Item::new(effort.name(), detail, effort == selection.effort())
-        })
-        .collect();
-    let at = terminal.pick(&format!("Reasoning ({})", selection.model().name), &items)?;
-    selection.with_effort(offered[at])
-}
-
-/// `/model`: one of the models of every provider signed in to (the current one marked), then a
-/// level it takes; `None` when the person cancelled, or nobody is signed in.
+/// `/model`: a signed-in provider's model and its level in one list; `None` on cancellation
+/// or when nobody is signed in.
 pub fn pick_model(
     current: &Choice,
     terminal: &mut dyn Terminal,
@@ -48,8 +29,7 @@ pub fn pick_model(
     models(current, terminal, &providers, "Model")
 }
 
-/// One of the models of `providers` under `title`, then a level it takes; `None` when the person
-/// cancelled.
+/// A model of `providers` and its inline level under `title`; `None` when the person cancels.
 pub(super) fn models(
     current: &Choice,
     terminal: &mut dyn Terminal,
@@ -78,22 +58,33 @@ pub(super) fn models(
         .iter()
         .enumerate()
         .map(|(at, (provider, model))| {
-            let levels = choice::levels(&Selection::new(model.clone()));
-            let detail = format!("{} · {}  reasoning: {levels}", provider.name(), model.id);
+            let detail = format!("{} · {}", provider.name(), model.id);
             Item::new(&model.name, detail, Some(at) == marked)
         })
         .collect();
-    let at = terminal.pick(title, &items)?;
-    let kept = now(&offered[at]);
+    let adjustments: Vec<Adjustment> = offered
+        .iter()
+        .map(|entry| {
+            let model = &entry.1;
+            // The same model keeps its level; another starts at its own default.
+            let effort = if now(entry) {
+                current.selection.effort()
+            } else {
+                model.default
+            };
+            let levels = model.offered();
+            Adjustment {
+                values: levels.iter().map(|e| e.name().to_string()).collect(),
+                at: levels.iter().position(|e| *e == effort).unwrap_or(0),
+            }
+        })
+        .collect();
+    let (at, level) = terminal.pick_adjustable(title, &items, &adjustments)?;
     let (provider, model) = offered.swap_remove(at);
-    // The same model keeps its level; another one starts at its own default.
-    let selection = match kept {
-        true => current.selection.clone(),
-        false => Selection::new(model),
-    };
-    reasoning(selection, terminal).map(|selection| Choice {
+    let effort = *model.offered().get(level)?;
+    Some(Choice {
         provider,
-        selection,
+        selection: Selection::new(model).with_effort(effort)?,
     })
 }
 

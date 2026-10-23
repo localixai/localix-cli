@@ -28,7 +28,7 @@ fn in_session(
         stop: &|| false,
         sessions,
     };
-    contracts::tool::Tool::call(&tool, &arguments).map(|output| {
+    tool.terminal(&arguments).map(|(output, _)| {
         assert_eq!(output.state, None);
         output.report
     })
@@ -64,7 +64,7 @@ fn session_arguments_are_checked_before_the_gate() {
         (
             json!({"command": "x", "tty": true, "timeout_ms": 5}),
             "timeout_ms is for commands run to their end; a session waits yield_ms per call and \
-             ends with close or the task",
+             ends with close",
         ),
         (
             json!({"command": "x", "input": "y"}),
@@ -277,7 +277,7 @@ fn a_terminal_is_refused_on_windows() {
 #[cfg(unix)]
 fn watched(frames: &std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> Sessions {
     let frames = std::sync::Arc::clone(frames);
-    let watch = move |_: &str| {
+    let watch = move |_: u32, _: &str| {
         let frames = std::sync::Arc::clone(&frames);
         let painter = move |frame: String| {
             frames.lock().unwrap().push(frame);

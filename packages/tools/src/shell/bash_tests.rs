@@ -255,7 +255,7 @@ fn without_tty_there_is_still_no_terminal() {
 }
 
 #[test]
-fn the_schema_offers_sessions_only_with_a_terminal() {
+fn a_command_runs_to_its_end_and_a_terminal_session_is_the_windows() {
     let workspace = Workspace::new(Scratch::new().path()).unwrap();
     let tool = BashTool {
         workspace: &workspace,
@@ -266,10 +266,13 @@ fn the_schema_offers_sessions_only_with_a_terminal() {
     };
     let spec = tool.spec();
     let properties = &spec.parameters["properties"];
-    assert_eq!(properties.get("session").is_some(), cfg!(unix));
-    assert_eq!(properties.get("tty").is_some(), cfg!(unix));
-    assert_eq!(properties.get("show").is_some(), cfg!(unix));
-    assert_eq!(spec.parameters.get("required").is_none(), cfg!(unix));
-    assert_eq!(spec.description.contains("runs with `tty`"), cfg!(unix));
+    assert!(properties.get("session").is_none() && properties.get("tty").is_none());
+    assert_eq!(spec.parameters["required"], serde_json::json!(["command"]));
+    assert_eq!(
+        spec.description.contains("terminal tab of the window"),
+        cfg!(unix)
+    );
     assert!(!spec.description.contains("{terminal}"));
+    let session = tool.call(&serde_json::json!({"command": "python3", "tty": true}));
+    assert!(matches!(session, Err(ToolError::Failed(why)) if why.contains("tabs of the window")));
 }

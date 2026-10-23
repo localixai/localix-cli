@@ -82,7 +82,11 @@ fn a_query_is_answered() {
     let mut out = Output::default();
     let mut seen = vec![];
     filter.feed(b"\x1b[6nx\x1b[5n", &mut out, &mut seen);
-    assert_eq!(filter.take_replies(), b"\x1b[1;1R\x1b[0n");
+    assert_eq!(filter.take_replies(), b"\x1b[0n");
+    assert_eq!(
+        filter.position_asked, 1,
+        "the screen answers where the cursor is"
+    );
     assert!(filter.take_replies().is_empty());
     assert_eq!(filter.pending_line(), b"x");
 }

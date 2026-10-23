@@ -8,7 +8,7 @@ fn openrouter() -> Choice {
 }
 
 #[test]
-fn model_offers_the_models_of_the_providers_signed_in_to_then_a_level() {
+fn model_offers_signed_in_models_and_confirms_without_a_second_menu() {
     let current = openrouter();
     let openai_only =
         |provider: &Provider| (*provider == Provider::openai()).then(|| "a".to_string());
@@ -24,12 +24,13 @@ fn model_offers_the_models_of_the_providers_signed_in_to_then_a_level() {
         openai_models + openrouter_models,
         "the current provider's models, and those of every provider signed in to"
     );
-    // The first of OpenAI's models (OpenAI comes first), at its first level.
-    let mut terminal = Scripted::new(&[Some(0), Some(0)]);
+    // One confirmation chooses a model at its default level, without another menu.
+    let mut terminal = Scripted::new(&[Some(0)]);
     let chosen = pick_model(&current, &mut terminal, &openai_only).unwrap();
     assert_eq!(chosen.provider, Provider::openai());
     assert_eq!(chosen.model(), Provider::openai().models()[0].id);
-    assert_eq!(terminal.titles()[1].split(' ').next(), Some("Reasoning"));
+    assert_eq!(chosen.selection.effort(), chosen.selection.model().default);
+    assert_eq!(terminal.titles(), ["Model"]);
     let nobody = |_: &Provider| None;
     let mut terminal = Scripted::new(&[None]);
     pick_model(&current, &mut terminal, &nobody);

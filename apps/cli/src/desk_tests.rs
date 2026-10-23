@@ -78,15 +78,19 @@ fn new_lane_leaves_the_old_lanes_agents_running() {
 fn lane_b_task_end_keeps_lane_a_shell() {
     let ((to_a, a), (to_b, b)) = (gated(), gated());
     at_desk(&[&a, &b], Some("start a shell"), |person| {
-        let shell = json!({"command": "sleep 30", "tty": true, "yield_ms": 100});
-        to_a.send(call("bash", shell)).unwrap();
+        let shell = json!({"action": "open", "kind": "terminal", "command": "sleep 30",
+            "yield_ms": 100});
+        to_a.send(call("window", shell)).unwrap();
         person.until("A's shell runs", |_| a.turns() == 2);
         let lane_b = person.new_lane();
         to_b.send(says("B is done.")).unwrap();
         person.enter("b's task");
         person.until("B ends", |app| ended(app, &lane_b));
-        to_a.send(call("bash", json!({"session": 1, "yield_ms": 100})))
-            .unwrap();
+        to_a.send(call(
+            "window",
+            json!({"action": "interact", "tab": "t1", "yield_ms": 100}),
+        ))
+        .unwrap();
         person.until("A reads its shell", |_| a.turns() == 3);
         let read = last_result(&a.asked.lock().unwrap()[2]);
         assert!(read.contains("session 1 running"), "{read}");

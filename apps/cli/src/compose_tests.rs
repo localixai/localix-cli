@@ -56,12 +56,15 @@ fn ask_is_offered_in_a_session_only() {
     composed(Mode::Default, true, vec![], |rig| {
         assert_eq!(
             names(rig),
-            ["read", "edit", "bash", "ask", "agents", "jobs"]
+            ["read", "edit", "bash", "window", "ask", "agents", "jobs"]
         );
         0
     });
     composed(Mode::Autonomous, false, vec![], |rig| {
-        assert_eq!(names(rig), ["read", "edit", "bash", "agents", "jobs"]);
+        assert_eq!(
+            names(rig),
+            ["read", "edit", "bash", "window", "agents", "jobs"]
+        );
         0
     });
 }
@@ -96,20 +99,58 @@ fn plan_mode_changes_no_file() {
     });
 }
 
+/// A task that starts `sleep 30` in a terminal of its own.
 #[cfg(unix)]
-#[test]
-fn a_terminal_session_ends_with_its_task() {
+fn a_terminal_started() -> Vec<Completion> {
     let start = ToolCall {
         id: "c1".into(),
-        name: "bash".into(),
-        arguments: json!({"command": "sleep 30", "tty": true, "yield_ms": 100}),
+        name: "window".into(),
+        arguments: json!({"action": "open", "kind": "terminal", "command": "sleep 30",
+            "yield_ms": 100}),
     };
     let mut replies = vec![Completion {
         calls: vec![start],
         ..Completion::default()
     }];
     replies.extend(answers(1));
-    composed(Mode::Bypass, false, replies, |rig| {
+    replies
+}
+
+#[cfg(unix)]
+#[test]
+fn a_terminal_session_outlives_its_task_in_a_session() {
+    let mut replies = a_terminal_started();
+    // The next task reads it, by the id the first was given.
+    let read = ToolCall {
+        id: "c2".into(),
+        name: "window".into(),
+        arguments: json!({"action": "interact", "tab": "t1", "yield_ms": 50}),
+    };
+    replies.push(Completion {
+        calls: vec![read],
+        ..Completion::default()
+    });
+    replies.extend(answers(1));
+    composed(Mode::Bypass, true, replies, |rig| {
+        rig.task("start a sleep in a terminal");
+        assert!(
+            rig.sessions.running().contains("sleep 30"),
+            "{}",
+            rig.sessions.running()
+        );
+        rig.task("look at it again");
+        let read = rig.conversation.as_ref().unwrap().messages().iter().any(|message| {
+            matches!(message, Message::ToolResult { id, failed: false, .. } if id == "c2")
+        });
+        assert!(read, "{:?}", rig.conversation.as_ref().unwrap().messages());
+        0
+    });
+}
+
+#[cfg(unix)]
+#[test]
+fn a_terminal_session_ends_with_an_exec_task() {
+    composed(Mode::Bypass, false, a_terminal_started(), |rig| {
         rig.task("start a sleep in a terminal");
         let started = rig
             .conversation
@@ -119,7 +160,7 @@ fn a_terminal_session_ends_with_its_task() {
             .iter()
             .any(|message| {
                 matches!(message, Message::ToolResult { content, failed: false, .. }
-                if content.starts_with("session 1 running (`sleep 30`)"))
+                if content.starts_with("t1 (terminal): session 1 running (`sleep 30`)"))
             });
         assert!(
             started,
@@ -315,7 +356,10 @@ fn two_lanes_over_one_shared_share_the_workspace_and_browser_but_keep_their_own(
             assert!(!std::ptr::eq(a.jobs, b.jobs));
             assert_ne!(a.session.id, b.session.id);
             assert_eq!(names(a), names(b));
-            assert_eq!(names(b), ["read", "edit", "bash", "ask", "agents", "jobs"]);
+            assert_eq!(
+                names(b),
+                ["read", "edit", "bash", "window", "ask", "agents", "jobs"]
+            );
             0
         })
     });

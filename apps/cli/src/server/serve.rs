@@ -16,8 +16,8 @@ use crate::desk::Request;
 /// What the server tells an interface of itself when it attaches.
 pub(crate) struct Info {
     pub max_lanes: usize,
-    /// The commands of the terminal sessions running, in every lane.
-    pub shells: fn() -> Vec<String>,
+    /// The commands of the terminal sessions running, in every lane of this interface's desk.
+    pub shells: Arc<dyn Fn() -> Vec<String> + Send + Sync>,
     /// What `/` offers, and the modes, each with what it does.
     pub commands: Vec<(String, String)>,
     pub modes: Vec<(String, String)>,

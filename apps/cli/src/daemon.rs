@@ -44,6 +44,22 @@ pub(crate) struct Status {
     pub attached: usize,
     pub lanes: usize,
     pub working: usize,
+    pub kept: usize,
+    pub jobs: usize,
+}
+
+impl Status {
+    /// Whether nothing needs the daemon: no terminal attached, no session open or moved to the
+    /// background, no task working, no monitor or schedule running.
+    pub(crate) fn idle(&self) -> bool {
+        [
+            self.attached,
+            self.lanes,
+            self.working,
+            self.kept,
+            self.jobs,
+        ] == [0; 5]
+    }
 }
 
 /// The daemon at `path`, if one answers within `wait`.
@@ -56,12 +72,16 @@ pub(crate) fn status(path: &Path, wait: Duration) -> Option<Status> {
             attached,
             lanes,
             working,
+            kept,
+            jobs,
         }) => Some(Status {
             build,
             pid,
             attached,
             lanes,
             working,
+            kept,
+            jobs,
         }),
         _ => None,
     }

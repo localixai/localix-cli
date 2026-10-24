@@ -52,6 +52,7 @@ fn each_question_is_asked_in_turn_and_the_time_taken_is_told() {
         mode: &mode,
         stopped: &|| false,
         waited: &waited,
+        asking: &Default::default(),
     };
     let reply = asking.ask(&[question("db"), question("deadline")]);
     let notes: Vec<String> = match reply {
@@ -78,6 +79,7 @@ fn in_autonomous_mode_or_once_stopped_nobody_is_asked() {
             mode: &mode,
             stopped: &is_stopped,
             waited: &|_| {},
+            asking: &Default::default(),
         };
         assert_eq!(asking.ask(&[question("db")]), expected);
         drop(asking);

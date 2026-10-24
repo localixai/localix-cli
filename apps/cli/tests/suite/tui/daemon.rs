@@ -12,7 +12,7 @@ use crate::common::model::{Model, Reply};
 use crate::common::term::{Term, key};
 
 /// What `llx serve status` says in `term`'s home.
-fn status(term: &Term) -> String {
+pub(super) fn status(term: &Term) -> String {
     term.llx(&["serve", "status"]).0
 }
 
@@ -22,7 +22,7 @@ fn status(term: &Term) -> String {
     clippy::disallowed_methods,
     reason = "a status has no event to wait on: it is asked again every 50 ms, for a bounded time"
 )]
-fn status_with(term: &Term, words: &str) -> String {
+pub(super) fn status_with(term: &Term, words: &str) -> String {
     let end = std::time::Instant::now() + LONG;
     loop {
         let said = status(term);
@@ -87,9 +87,13 @@ fn no_daemon_and_exec_never_start_one() {
 #[test]
 fn an_idle_daemon_of_another_build_is_replaced() {
     let model = Model::start(vec![]);
-    let older = Term::spawn(&model, &[], &[("LLX_BUILD", "0.0.0+older")]);
+    let mut older = Term::spawn(&model, &[], &[("LLX_BUILD", "0.0.0+older")]);
     older.wait_for("❯", LONG);
     assert!(status(&older).contains("build 0.0.0+older"));
+    // Idle: no terminal attached, nothing kept, nothing working.
+    older.press(key::CTRL_D);
+    assert!(older.exited(LONG).is_some(), "{}", older.screen());
+    status_with(&older, "0 attached, 0 sessions open");
     let newer = older.beside(&model, &[]);
     let said = status(&newer);
     assert!(

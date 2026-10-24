@@ -77,6 +77,14 @@ impl Term {
         term
     }
 
+    /// [`Term::beside`], not waited on: for an `llx` that may end before its prompt shows.
+    pub(crate) fn next_to(&self, model: &Model, args: &[&str]) -> Self {
+        let (home, workspace) = (self.home.clone(), self.workspace.clone());
+        let mut term = Self::spawn_at(home, workspace, model, args, &[]);
+        term.owns = false;
+        term
+    }
+
     /// `llx args…` in this session's home, run to its end: what it printed, and its exit code.
     #[allow(
         clippy::disallowed_methods,

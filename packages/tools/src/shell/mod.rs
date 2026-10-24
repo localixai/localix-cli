@@ -31,10 +31,10 @@ mod watch;
 
 pub use bash::BashTool;
 #[cfg(not(unix))]
-pub use none::{Sessions, kill_all_now, running_anywhere};
+pub use none::{Sessions, kill_all_now, kill_with, running_anywhere, running_with};
 pub use process::{Ending, Env, SHELL};
 #[cfg(unix)]
-pub use running::{kill_all_now, running_anywhere};
+pub use running::{kill_all_now, kill_with, running_anywhere, running_with};
 #[cfg(unix)]
 pub use screen::{Asset, Emulator, Rgb, Theme, page};
 #[cfg(unix)]
@@ -65,6 +65,12 @@ mod none {
     pub fn kill_all_now() {}
 
     pub fn running_anywhere() -> Vec<String> {
+        vec![]
+    }
+
+    pub fn kill_with(_: &std::sync::Arc<std::sync::atomic::AtomicU32>) {}
+
+    pub fn running_with(_: &std::sync::Arc<std::sync::atomic::AtomicU32>) -> Vec<String> {
         vec![]
     }
 }

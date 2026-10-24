@@ -1,6 +1,6 @@
 //! A client's way to its daemon (docs/daemon.md, "Lifecycle"): the one that answers, if it is of
-//! this build; one of another build stopped when idle, kept when busy (this session then runs in
-//! process); none, or the one stopped, replaced by `llx serve` started in a session of its own,
+//! this build; one of another build stopped when idle (`Status::idle`), kept while in use (this
+//! session then runs in process); none, or the one stopped, replaced by `llx serve` started in a session of its own,
 //! its ready line awaited.
 
 use std::io::{BufRead, BufReader};
@@ -27,9 +27,12 @@ pub(crate) fn reach(config: &Path) -> Result<PathBuf, String> {
         if found.build == build() {
             return Ok(path);
         }
-        if found.working > 0 {
+        // One still in use is never stopped under a terminal, or under work kept for one.
+        if !found.idle() {
             let (pid, other) = (found.pid, found.build);
-            return Err(format!("the daemon (pid {pid}) is build {other} and busy"));
+            return Err(format!(
+                "the daemon (pid {pid}) is build {other} and in use"
+            ));
         }
         if !stop(&path) {
             return Err(format!("the daemon (pid {}) did not stop", found.pid));

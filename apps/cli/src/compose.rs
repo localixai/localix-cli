@@ -87,6 +87,7 @@ pub(crate) fn assemble(
             let asker = Box::new(UiGate {
                 ui: ui.clone(),
                 stopped,
+                asking: &shared.asking,
             });
             ModeGate::asking(&mode, Some(asker), &waited)
         }
@@ -102,6 +103,7 @@ pub(crate) fn assemble(
             mode: &mode,
             stopped: &stopped,
             waited: &waited,
+            asking: &shared.asking,
         }),
         None => Box::new(Nobody),
     };

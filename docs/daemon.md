@@ -191,3 +191,32 @@ to the sessions moved to the background there (`server::host::Kept`, `serve::rej
 later: the chat model's key from each client's environment rather than the daemon's, `daemon.log`
 rotation, one desk per directory shared by two terminals at once.
 
+### Desks apart
+
+What is the process's in a terminal's own llx is each desk's in the daemon:
+
+- **Questions.** One question at a time per interface, not per process (ARCHITECTURE.md K3): each
+  desk's lanes and agents ask on its own lock (`Shared::asking`); only `exec`'s terminal asks on
+  the process's. A question waiting in sessions moved to the background holds nothing else.
+- **Idle.** A daemon of another build is stopped only when `Status::idle`: no interface attached,
+  no lane open, no desk kept, no task working, no monitor or schedule (`Done::Status`'s `kept`
+  and `jobs`, absent from an older daemon, whose `lanes` still say it is in use). Otherwise the
+  session runs in process, with the note. An interface is attached while its connection lasts
+  (`Host::attach` held by the connection's end, `run::Left`), not while its desk does.
+- **Coming back.** A client is attached to the sessions kept in its directory only when its
+  command line is empty (a plain `llx`): a task, `resume`, `--model`, `--image`, `-C` or any
+  other option opens a new desk built from it, as before, and the kept sessions wait for a plain
+  `llx`. They keep the place they were opened in (environment, colours): their work runs there.
+- **Shells.** A desk's terminal sessions are numbered from its own counter (`Shared::terminal_ids`,
+  made with its server); the quit question counts those (`tools::shell::running_with`), and
+  "Exit and stop tasks" whose lanes do not end within 2 s kills them (`kill_with`) and ends the
+  client; the lanes end as they can, nobody waiting on them. In process it still exits at once.
+- **The window.** Closing it in the daemon stops nothing (`interrupt::window_closed_served`): the
+  person closed a window, not a session. The lanes are told (the window's arrival) and their
+  browser calls fail. In process it stops the tasks, as before.
+- **One desk per session.** The lanes open in every desk are one table (`desk::ending`'s
+  `OPEN`): a session open at one terminal is refused at another (`session … is open at another
+  terminal`), whether resumed on the command line or from the list; in its own desk it is shown.
+- **Waking.** The desk waits on one channel: its requests (forwarded from the connection's) and
+  its lanes' ends (`Leaving`), never a timer.
+

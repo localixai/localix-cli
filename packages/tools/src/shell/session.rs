@@ -172,7 +172,8 @@ impl Sessions {
             self.release(id);
             format!("the shell could not start: {error}")
         })?;
-        let session = Session::new(id, shown(command), pty);
+        let owner = super::running::owner(self.numbers.as_ref());
+        let session = Session::new(id, shown(command), pty, owner);
         Ok(self.go_on(session, wait, stop, None, show.unwrap_or(self.shown)))
     }
 

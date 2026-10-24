@@ -139,6 +139,8 @@ fn every_question_to_the_person_comes_back_the_same_through_json() {
                 attached: 2,
                 lanes: 3,
                 working: 1,
+                kept: 1,
+                jobs: 2,
             },
         },
         ToClient::Done {

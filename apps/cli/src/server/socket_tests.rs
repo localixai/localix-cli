@@ -43,7 +43,7 @@ pub(crate) fn daemon(path: &Path) -> Daemon {
         let _ = peers.send(Arc::clone(&peer));
         let info = Info {
             max_lanes: 3,
-            shells: Vec::new,
+            shells: Arc::new(Vec::new),
             commands: vec![],
             modes: vec![],
             background: false,

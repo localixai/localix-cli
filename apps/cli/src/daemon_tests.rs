@@ -62,7 +62,7 @@ fn a_daemon_says_its_build_and_who_is_attached() {
         let peer = crate::server::Peer::new(c.out);
         let info = crate::server::serve::Info {
             max_lanes: 1,
-            shells: Vec::new,
+            shells: std::sync::Arc::new(Vec::new),
             commands: vec![],
             modes: vec![],
             background: true,
@@ -78,4 +78,31 @@ fn a_daemon_says_its_build_and_who_is_attached() {
         (build(), std::process::id(), 1)
     );
     assert!(build().starts_with(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
+fn a_daemon_is_idle_only_when_nothing_needs_it() {
+    let nothing = Status {
+        build: build(),
+        pid: 1,
+        attached: 0,
+        lanes: 0,
+        working: 0,
+        kept: 0,
+        jobs: 0,
+    };
+    assert!(nothing.idle());
+    let with = |set: fn(&mut Status)| {
+        let mut status = Status {
+            build: build(),
+            ..nothing
+        };
+        set(&mut status);
+        status.idle()
+    };
+    assert!(!with(|s| s.attached = 1), "a terminal attached");
+    assert!(!with(|s| s.lanes = 1), "a session open");
+    assert!(!with(|s| s.kept = 1), "sessions moved to the background");
+    assert!(!with(|s| s.jobs = 1), "a monitor running");
+    assert!(!with(|s| s.working = 1), "a task working");
 }

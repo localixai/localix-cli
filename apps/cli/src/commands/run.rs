@@ -14,6 +14,7 @@ mod task;
 use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::sync::mpsc::Receiver;
 
 use contracts::history::{History, Session};
@@ -118,6 +119,8 @@ pub(crate) struct Served {
     pub requests: Receiver<desk::Request>,
     pub browser: Option<Browser>,
     pub arrivals: Arc<crate::arrivals::Lanes>,
+    /// Its desk's terminal sessions' numbering, which its server counts.
+    pub terminals: Arc<AtomicU32>,
 }
 
 impl Served {
@@ -128,6 +131,7 @@ impl Served {
             ui: self.ui,
             requests: self.requests,
             arrivals: Some(self.arrivals),
+            terminals: self.terminals,
         };
         (attached, self.place, self.browser)
     }
@@ -255,6 +259,8 @@ struct Attached {
     ui: Ui,
     requests: Receiver<desk::Request>,
     arrivals: Option<Arc<crate::arrivals::Lanes>>,
+    /// The numbering of the desk's terminal sessions, which its server counts.
+    terminals: Arc<AtomicU32>,
 }
 
 impl Ready {
@@ -268,26 +274,33 @@ impl Ready {
                     ui,
                     requests,
                     arrivals,
+                    terminals,
                 } = attached;
-                let (shared, seat) = match arrivals {
+                let (mut shared, seat) = match arrivals {
                     Some(lanes) => setup.split_into(browser, lanes),
                     None => setup.split(browser),
                 };
+                shared.terminal_ids = terminals;
                 let seat = Seat {
                     ui: Some(ui.clone()),
                     ..seat
                 };
                 let start = |shared: &Shared, seat, work: desk::Work| lane(shared, seat, work);
                 // Lanes that do not stop in time: the terminal goes back, and the process ends;
-                // in the daemon, the client is told the session is over, and they end there.
+                // in the daemon, which serves other terminals, this desk's terminal sessions are
+                // killed and the client is told the session is over: its lanes end as they can,
+                // with nobody waiting on them.
                 let in_process = running.is_some();
-                let told = ui.clone();
+                let (told, terminals) = (ui.clone(), Arc::clone(&shared.terminal_ids));
                 let quit = move || match in_process {
                     true => {
                         tui::restore();
                         interrupt::quit_now();
                     }
-                    false => told.send(protocol::Event::Quit),
+                    false => {
+                        tools::shell::kill_with(&terminals);
+                        told.send(protocol::Event::Quit);
+                    }
                 };
                 let code = desk::run(&shared, &ui, requests, seat, first, &start, &quit);
                 drop(running);

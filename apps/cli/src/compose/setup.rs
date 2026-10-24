@@ -74,6 +74,9 @@ pub(crate) struct Shared {
     pub lanes: Arc<crate::arrivals::Lanes>,
     /// Terminal sessions' ids, shared by the lanes: an id names one session in the one window.
     pub terminal_ids: Arc<std::sync::atomic::AtomicU32>,
+    /// The person at this interface, asked one question at a time (`gate::one_question`): each
+    /// terminal of the daemon is a person of its own.
+    pub asking: std::sync::Mutex<()>,
 }
 
 /// What one lane is built from beside what it shares.
@@ -119,6 +122,7 @@ impl Setup {
             working: Default::default(),
             lanes,
             terminal_ids: Arc::default(),
+            asking: Default::default(),
         };
         let seat = Seat {
             context: self.context,

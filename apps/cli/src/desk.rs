@@ -9,7 +9,7 @@ mod ending;
 mod test_support;
 
 use std::sync::atomic::Ordering;
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread::Scope;
 use std::time::Duration;
 
@@ -23,7 +23,8 @@ use crate::compose::{Rig, Seat, Shared};
 use crate::server::Ui;
 use protocol::Event;
 
-/// How often the desk looks whether its lanes are gone while nothing is asked of it.
+/// The longest a wait for a lane's end lasts before the desk looks again: the lanes' end wakes
+/// it, this only bounds a wait that began just after a lane ended.
 const POLL: Duration = Duration::from_millis(200);
 /// Lanes open at most: opening another closes the oldest idle one.
 pub(crate) const MAX_LANES: usize = 8;
@@ -48,6 +49,32 @@ pub(crate) enum Request {
     Gone,
 }
 
+/// What wakes the desk: a request, the interface's connection gone, a lane's end.
+pub(super) enum Wake {
+    Asked(Request),
+    Gone,
+    Left,
+}
+
+/// The requests as wakes, on a thread of its own until the interface's connection ends: the
+/// desk waits on one channel for them and for its lanes' ends, and never polls.
+fn forward(requests: Receiver<Request>, wake: Sender<Wake>) {
+    let forwarder = std::thread::Builder::new().name("llx-desk-requests".into());
+    let told = wake.clone();
+    let spawned = forwarder.spawn(move || {
+        for request in requests {
+            if told.send(Wake::Asked(request)).is_err() {
+                return;
+            }
+        }
+        let _ = told.send(Wake::Gone);
+    });
+    // No thread for them: nobody can ask the desk anything, as when the interface is gone.
+    if spawned.is_err() {
+        let _ = wake.send(Wake::Gone);
+    }
+}
+
 /// What a lane does once built: its session at the prompt.
 pub(crate) type Work<'w> = Box<dyn for<'r, 's> FnOnce(&'r mut Rig<'s>) -> i32 + Send + 'w>;
 
@@ -66,6 +93,13 @@ pub(crate) fn run(
     quit: &(dyn Fn() + Sync),
 ) -> i32 {
     let lanes = Lanes::default();
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the desk's wakes: one per request the person makes and per lane's end, each \
+                  taken at once"
+    )]
+    let (wake, woken) = std::sync::mpsc::channel();
+    forward(requests, wake.clone());
     // Moved to the background: the interface's end stops nothing.
     let (mut kept, mut gone) = (false, false);
     std::thread::scope(|scope| {
@@ -75,32 +109,30 @@ pub(crate) fn run(
             lanes: &lanes,
             ui,
             start,
+            wake: &wake,
         };
         desk.open(scope, first, task, true);
         while lanes.count() > 0 && !lanes.panicked.load(Ordering::SeqCst) {
-            match requests.recv_timeout(POLL) {
-                Ok(Request::Open(target)) => desk.target(scope, target),
-                Ok(Request::List) => desk.list(),
-                Ok(Request::Quit) => lanes.quit(ending::QUIT_WAIT, quit),
+            // The desk holds a sender itself: the channel never ends while it waits.
+            let Ok(woke) = woken.recv() else { break };
+            match woke {
+                Wake::Asked(Request::Open(target)) => desk.target(scope, target),
+                Wake::Asked(Request::List) => desk.list(),
+                Wake::Asked(Request::Quit) => lanes.quit(ending::QUIT_WAIT, quit),
                 // The first client's place is the desk's, taken before it began; one per
                 // session is for when several attach (docs/daemon.md, step 4).
-                Ok(Request::Attach(_)) => {}
-                Ok(Request::Background) => kept = true,
-                Ok(Request::Gone) => {
-                    if !std::mem::replace(&mut gone, true) {
+                Wake::Asked(Request::Attach(_)) => {}
+                Wake::Asked(Request::Background) => kept = true,
+                // Said where the requests outlive the connection; else the connection's end
+                // says it. Unless the person moved the session to the background, its work
+                // stops, as "Exit and stop tasks" does.
+                Wake::Asked(Request::Gone) | Wake::Gone => {
+                    let keep = kept && matches!(woke, Wake::Gone);
+                    if !keep && !std::mem::replace(&mut gone, true) {
                         lanes.stop_all();
                     }
                 }
-                Err(RecvTimeoutError::Timeout) => {}
-                // The interface's connection ended: unless the person moved the session to the
-                // background, its work stops, as "Exit and stop tasks" does.
-                Err(RecvTimeoutError::Disconnected) => {
-                    if !kept && !gone {
-                        lanes.stop_all();
-                    }
-                    gone = true;
-                    lanes.wait(POLL);
-                }
+                Wake::Left => {}
             }
         }
     });
@@ -113,6 +145,8 @@ struct Desk<'e> {
     lanes: &'e Lanes,
     ui: &'e Ui,
     start: &'e Start<'e>,
+    /// Told when a lane ends.
+    wake: &'e Sender<Wake>,
 }
 
 impl<'e> Desk<'e> {
@@ -166,7 +200,11 @@ impl<'e> Desk<'e> {
     /// Start a lane on its own thread; one opened after the first is shown at once.
     fn open<'s>(&self, scope: &'s Scope<'s, 'e>, seat: Seat, task: Option<String>, first: bool) {
         let id = seat.session.id.clone();
-        self.lanes.join(&id);
+        if !self.lanes.join(&id) {
+            let said =
+                format!("llx: session {id} is open at another terminal: quit it there first");
+            return self.ui.send(Event::Error(said));
+        }
         // A resumed session is known by its title, else by its first task.
         let first_task = seat.session.turns.first().map(|turn| turn.goal.clone());
         let name = Some(seat.session.title.clone())
@@ -181,10 +219,11 @@ impl<'e> Desk<'e> {
             self.ui.send(Event::Show(id.clone()));
         }
         let (shared, lanes, start) = (self.shared, self.lanes, self.start);
+        let wake = self.wake.clone();
         // The lane's own interface is the desk's, tagged with its id, as `lane` tags it.
         let tagged = self.ui.for_lane(&id);
         scope.spawn(move || {
-            let _leaving = Leaving { lanes, id };
+            let _leaving = Leaving { lanes, id, wake };
             let work: Work = Box::new(move |rig| {
                 // `--image` goes with the first lane's first task.
                 if first {

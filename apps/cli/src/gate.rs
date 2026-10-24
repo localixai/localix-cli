@@ -33,12 +33,14 @@ pub(crate) struct Stoppable<'a> {
 pub(crate) const STOPPED: &str = "the person stopped the task";
 
 /// One question to the person at a time: an approval or an `ask`, from the main session or from
-/// any agent working beside it, waits here for the one open to be answered.
+/// any agent working beside it, waits on its person's lock for the one open to be answered. A
+/// person is one interface's (a desk's, `Shared::asking`), so a question waiting at one terminal
+/// of the daemon never holds another's; the terminal this process runs at has this one.
 static ASKING: Mutex<()> = Mutex::new(());
 
-/// Hold the person's attention for one question.
-pub(crate) fn one_question() -> std::sync::MutexGuard<'static, ()> {
-    crate::output::lock(&ASKING)
+/// Hold `person`'s attention for one question.
+pub(crate) fn one_question(person: &Mutex<()>) -> std::sync::MutexGuard<'_, ()> {
+    crate::output::lock(person)
 }
 
 impl Gate for Stoppable<'_> {
@@ -230,6 +232,7 @@ impl<P: Prompter> Asker for TerminalGate<P> {
             "\n  {tool}: {}\n  allow? [y]es  [n]o (n <why> tells the agent)  [a]lways for {tool} > ",
             printable(effect.summary)
         );
+        let _asking = one_question(&ASKING);
         for _ in 0..TRIES {
             if let Some(approval) = answer(&self.0.ask(&question)?) {
                 return Some(approval);

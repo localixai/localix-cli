@@ -2,7 +2,7 @@
 //! sessions moved to the background waiting for the next, and its end when one asks for it. In
 //! process there is none: `serve` refuses what only a daemon does.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -17,6 +17,8 @@ pub(crate) struct Kept {
     pub cwd: String,
     pub peer: Arc<Peer>,
     pub desk: Sender<Request>,
+    /// The numbering of its terminal sessions, which quitting them would stop.
+    pub terminals: Arc<AtomicU32>,
 }
 
 #[cfg_attr(not(unix), expect(dead_code, reason = "the daemon is unix only"))]
@@ -28,7 +30,8 @@ pub(crate) struct Host {
     ending: Condvar,
 }
 
-/// An interface attached while this lives.
+/// An interface attached while this lives: held by its connection, not its desk, which may go on
+/// in the background once the connection ends.
 pub(crate) struct Attached(Arc<Host>);
 
 impl Drop for Attached {
@@ -79,6 +82,8 @@ impl Host {
             attached: self.attached.load(Ordering::SeqCst),
             lanes: crate::desk::open_anywhere(),
             working: crate::interrupt::working(),
+            kept: lock(&self.kept).len(),
+            jobs: crate::interrupt::jobs(),
         }
     }
 

@@ -3,6 +3,7 @@
 //! client with the same server (`serving`).
 
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use client::Client;
@@ -50,8 +51,10 @@ pub(super) fn attach(
     )]
     let ((to_server, incoming), (out, from_server)) = (channel(), channel());
     // In process the desk ends with the interface: its requests' end stops the work.
-    let (peer, requests) =
-        serving(None, incoming, out, None, Box::new(|_, _, _| {})).map_err(why)?;
+    let terminals = Arc::default();
+    let ended = Box::new(|_, _, _| {});
+    let served = serving(None, incoming, out, None, Arc::clone(&terminals), ended);
+    let (peer, requests) = served.map_err(why)?;
     let connect: tui::Connect =
         Box::new(move |deliver| Client::in_process(to_server, from_server, deliver));
     let running = tui::start(tui::Start {
@@ -73,6 +76,7 @@ pub(super) fn attach(
         ui: Ui::new(peer),
         requests,
         arrivals: None,
+        terminals,
     };
     Ok((attached, place))
 }
@@ -83,12 +87,14 @@ pub(crate) type Left = Box<dyn FnOnce(bool, Arc<Peer>, Sender<desk::Request>) + 
 
 /// A server for one interface, on a thread of its own, from `first` (a frame already read):
 /// what it serves the sessions, and what the interface asks of the desk; `ended` once the
-/// connection is gone. `host`: the daemon it is part of, when it is one.
+/// connection is gone. `host`: the daemon it is part of, when it is one. `terminals`: the
+/// numbering of its desk's terminal sessions, the ones quitting it would stop.
 pub(crate) fn serving(
     first: Option<ToServer>,
     incoming: Receiver<ToServer>,
     out: Sender<ToClient>,
     host: Option<Arc<Host>>,
+    terminals: Arc<AtomicU32>,
     ended: Left,
 ) -> std::io::Result<(Arc<Peer>, Receiver<desk::Request>)> {
     #[allow(
@@ -98,7 +104,7 @@ pub(crate) fn serving(
     let (desk, requests) = channel();
     let peer = Peer::new(out);
     let served = Arc::clone(&peer);
-    let info = info(host);
+    let info = info(host, terminals);
     let server = std::thread::Builder::new().name("llx-serve".into());
     server.spawn(move || {
         let kept = match first {
@@ -110,11 +116,12 @@ pub(crate) fn serving(
     Ok((peer, requests))
 }
 
-/// What a server says of itself: what it offers, and what it can do (a daemon keeps work).
-pub(crate) fn info(host: Option<Arc<Host>>) -> serve::Info {
+/// What a server says of itself: what it offers, what it can do (a daemon keeps work), and its
+/// desk's terminal sessions, numbered from `terminals` (the daemon's other desks have their own).
+pub(crate) fn info(host: Option<Arc<Host>>, terminals: Arc<AtomicU32>) -> serve::Info {
     serve::Info {
         max_lanes: desk::MAX_LANES,
-        shells: tools::shell::running_anywhere,
+        shells: Arc::new(move || tools::shell::running_with(&terminals)),
         commands: repl::commands(),
         modes: Mode::ALL
             .map(|mode| (mode.name().into(), mode.hint()))

@@ -6,6 +6,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
 use clap::Parser;
@@ -42,10 +43,13 @@ pub(crate) fn serve(action: Option<&ServeAction>) -> Result<i32, Failure> {
                     attached,
                     lanes,
                     working,
+                    kept,
+                    jobs,
                 } = found;
                 print(&format!(
                     "llx serve: running, pid {pid}, build {build}, {attached} attached, \
-                     {lanes} sessions open, {working} working\n"
+                     {lanes} sessions open, {working} working, {kept} in the background, \
+                     {jobs} jobs\n"
                 ))?;
                 Ok(exit::OK)
             }
@@ -96,7 +100,9 @@ fn host(config: &Path, path: PathBuf) -> Result<i32, Failure> {
     if !tools::browser::has_display() {
         return Ok(work(None));
     }
-    tools::browser::host(interrupt::window_closed, move |browser| work(Some(browser)))
+    tools::browser::host(interrupt::window_closed_served, move |browser| {
+        work(Some(browser))
+    })
 }
 
 /// The lock, waiting a little for a daemon that is ending to let it go.
@@ -130,19 +136,31 @@ fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, la
     if let Some(kept) = rejoinable(&first, host) {
         return rejoin(first, &incoming, out, kept, host);
     }
+    // An interface is attached while its connection lasts; its desk may outlive it, kept.
+    let attached = placed(&first).is_some().then(|| host.attach());
     // Where the client is, once it says: the work it moves to the background is kept there.
     let at: Arc<std::sync::Mutex<Option<String>>> = Arc::default();
     let (theirs, daemon) = (Arc::clone(&at), Arc::clone(host));
+    let terminals: Arc<AtomicU32> = Arc::default();
+    let kept_terminals = Arc::clone(&terminals);
     let ended: run::Left = Box::new(move |kept, peer, desk| {
+        drop(attached);
         let cwd = crate::output::lock(&theirs).clone();
         match (kept, cwd) {
-            (true, Some(cwd)) => daemon.keep(Kept { cwd, peer, desk }),
+            (true, Some(cwd)) => daemon.keep(Kept {
+                cwd,
+                peer,
+                desk,
+                terminals: kept_terminals,
+            }),
             _ => {
                 let _ = desk.send(Request::Gone);
             }
         }
     });
-    let served = run::serving(Some(first), incoming, out, Some(Arc::clone(host)), ended);
+    let daemon = Some(Arc::clone(host));
+    let numbering = Arc::clone(&terminals);
+    let served = run::serving(Some(first), incoming, out, daemon, numbering, ended);
     let Ok((peer, requests)) = served else {
         return;
     };
@@ -155,33 +173,47 @@ fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, la
     };
     *crate::output::lock(&at) = Some(place.cwd.clone());
     let _forgotten = Forget(Arc::clone(host), Arc::clone(&peer));
-    let _attached = host.attach();
     let ui = Ui::new(peer);
     let arrivals = Arc::clone(lanes);
     let told = ui.clone();
-    if let Err(why) = session(place, ui, requests, browser, arrivals) {
+    let served = Served {
+        place,
+        ui,
+        requests,
+        browser,
+        arrivals,
+        terminals,
+    };
+    if let Err(why) = session(served) {
         told.send(Event::Error(format!("llx: {why}")));
         told.send(Event::Quit);
     }
 }
 
-/// The sessions moved to the background where `first`'s client is, of its build.
+/// The place and build an interface's handshake gives.
+fn placed(first: &ToServer) -> Option<(&Place, &str)> {
+    match first {
+        ToServer::Call {
+            command:
+                protocol::Command::Initialize {
+                    place: Some(place),
+                    build,
+                    ..
+                },
+            ..
+        } => Some((place, build)),
+        _ => None,
+    }
+}
+
+/// The sessions moved to the background where `first`'s client is, of its build, when its
+/// command line asks for nothing but a session: a task, `resume`, a model or any other option is
+/// a new desk's, built from it, and the sessions kept wait for a plain `llx` there. They keep the
+/// place they were opened in (its environment, its colours): their work already runs there.
 fn rejoinable(first: &ToServer, host: &Host) -> Option<Kept> {
-    let ToServer::Call {
-        command:
-            protocol::Command::Initialize {
-                place: Some(place),
-                build,
-                ..
-            },
-        ..
-    } = first
-    else {
-        return None;
-    };
-    (*build == host.build)
-        .then(|| host.take(&place.cwd))
-        .flatten()
+    let (place, build) = placed(first)?;
+    let plain = place.args.is_empty() && build == host.build;
+    plain.then(|| host.take(&place.cwd)).flatten()
 }
 
 /// The client back to `kept`: given what its sessions did meanwhile, then served; kept again if
@@ -194,7 +226,7 @@ fn rejoin(
     host: &Arc<Host>,
 ) {
     let _attached = host.attach();
-    let info = run::info(Some(Arc::clone(host)));
+    let info = run::info(Some(Arc::clone(host)), Arc::clone(&kept.terminals));
     match serve::rejoin(first, incoming, &kept.peer, out, &kept.desk, &info) {
         true => host.keep(kept),
         false => {
@@ -213,13 +245,8 @@ impl Drop for Forget {
 }
 
 /// The session the client's command line asks for, where it is.
-fn session(
-    place: Place,
-    ui: Ui,
-    requests: std::sync::mpsc::Receiver<Request>,
-    browser: Option<Browser>,
-    arrivals: Arc<Lanes>,
-) -> Result<i32, Failure> {
+fn session(served: Served) -> Result<i32, Failure> {
+    let place = &served.place;
     let words = std::iter::once("llx".to_string()).chain(place.args.iter().cloned());
     let mut cli = Cli::try_parse_from(words).map_err(|error| Failure::Usage(error.to_string()))?;
     if cli.print || !matches!(cli.command, None | Some(Command::Resume(_))) {
@@ -231,12 +258,5 @@ fn session(
     for image in &mut options.images {
         *image = Path::new(&place.dir).join(&*image);
     }
-    let served = Served {
-        place,
-        ui,
-        requests,
-        browser,
-        arrivals,
-    };
     crate::commands::dispatch(cli, At::Served(served))
 }

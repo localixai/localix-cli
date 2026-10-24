@@ -84,7 +84,7 @@ fn a_panicking_lane_ends_the_other_lanes() {
             let desk = scope.spawn(|| run(&shared, &ui, asked, seat, None, &start, &|| {}));
             let info = Info {
                 max_lanes: crate::desk::MAX_LANES,
-                shells: Vec::new,
+                shells: Arc::new(Vec::new),
                 commands: vec![],
                 modes: vec![],
                 background: false,

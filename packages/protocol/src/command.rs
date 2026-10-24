@@ -135,13 +135,19 @@ pub enum Done {
     Attached {
         seq: u64,
     },
-    /// The daemon: its build and process, the interfaces attached, the lanes open and working.
+    /// The daemon: its build and process, the interfaces attached, the lanes open and working,
+    /// the desks moved to the background, and the monitors and schedules running.
     Status {
         build: String,
         pid: u32,
         attached: usize,
         lanes: usize,
         working: usize,
+        /// Absent from an older daemon: its lanes open still say whether it is in use.
+        #[serde(default)]
+        kept: usize,
+        #[serde(default)]
+        jobs: usize,
     },
     /// The command could not be done, and why.
     Failed {

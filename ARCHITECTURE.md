@@ -144,7 +144,9 @@ every new file already goes where its target crate will be.
   server's; keys, the composer, drawing, `$EDITOR`, the clipboard and the terminal's colours the
   interface's.
 - **K3**: one person, one question at a time: every approval and `ask` goes through
-  `gate::one_question`, whichever thread asks.
+  `gate::one_question`, whichever thread asks. A person is one interface: a desk's lock
+  (`Shared::asking`), or the process's own for the terminal it asks at; a question waiting at
+  one terminal of the daemon (or in sessions moved to the background) never holds another's.
 - **K4**: something that reaches a run from outside its calls is a kind in `arrivals.rs` (its
   policy and tag) posted to the lane's queue; the agent's inbox knows no source.
 - **K5**: a mode changes only what the gate and the person answer and the context's `Mode:`

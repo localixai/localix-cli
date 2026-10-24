@@ -254,8 +254,8 @@ impl Gate for ModeGate<'_> {
         if lock(always).contains(effect.tool) {
             return Verdict::Allow;
         }
+        // The asker holds its person for the question (`gate::one_question`).
         let asked = Instant::now();
-        let _asking = crate::gate::one_question();
         let approval = asker.approve(&effect);
         (self.waited)(asked.elapsed());
         match approval {

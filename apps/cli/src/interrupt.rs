@@ -153,7 +153,16 @@ pub(crate) fn register_flag(id: &str, flag: Arc<AtomicBool>) -> Known {
 
 /// What job `id` of lane `lane` is known by: each lane's jobs are numbered from one.
 pub(crate) fn job_key(lane: &str, id: &str) -> String {
-    format!("{lane}/{id}")
+    format!("{lane}{JOB}{id}")
+}
+
+/// What sets a job's key apart: no session's or agent's id has it.
+const JOB: char = '/';
+
+/// The monitors and schedules running, in every lane of the process.
+pub(crate) fn jobs() -> usize {
+    let stops = lock(&STOPS);
+    stops.iter().filter(|(id, _, _)| id.contains(JOB)).count()
 }
 
 /// Stop session `id`'s task: whether to quit instead (it was stopped already); an unknown one
@@ -177,6 +186,11 @@ pub(crate) fn working() -> usize {
 pub(crate) fn window_closed() {
     PROCESS.stop();
 }
+
+/// The daemon's window was closed: it shows every terminal's tabs, and the person closed a
+/// window, not a session, so nothing stops. A task working in it is told (`arrivals`, the
+/// window's entry) and its browser calls fail; the window opens again when one is next used.
+pub(crate) fn window_closed_served() {}
 
 /// Quit now, as a second Ctrl-C does: the terminal sessions are killed first.
 pub(crate) fn quit_now() -> ! {

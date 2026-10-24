@@ -2,7 +2,7 @@
 //! desk; the desk's own end stops every lane; and quitting while lanes work stops them all and
 //! waits a bounded time before the process ends anyway.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -13,11 +13,12 @@ use protocol::Event;
 /// How long "Exit and stop tasks" waits for the lanes it stopped.
 pub(super) const QUIT_WAIT: Duration = Duration::from_secs(2);
 
-/// Lanes open in every desk of the process, for what a daemon says of itself.
-static OPEN: AtomicUsize = AtomicUsize::new(0);
+/// The lanes open in every desk of the process, by session id: what a daemon says of itself, and
+/// a session never open at two terminals at once (stops are by id, and the newest would win).
+static OPEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 pub(crate) fn open_anywhere() -> usize {
-    OPEN.load(Ordering::SeqCst)
+    lock(&OPEN).len()
 }
 
 /// The lanes open, by session id, oldest first.
@@ -38,9 +39,15 @@ impl Lanes {
         lock(&self.live).len()
     }
 
-    pub(super) fn join(&self, id: &str) {
+    /// Open lane `id` here; false when it is open in another desk.
+    pub(super) fn join(&self, id: &str) -> bool {
+        let mut open = lock(&OPEN);
+        if open.iter().any(|known| known == id) {
+            return false;
+        }
+        open.push(id.to_string());
         lock(&self.live).push(id.to_string());
-        OPEN.fetch_add(1, Ordering::SeqCst);
+        true
     }
 
     /// Wait up to `timeout` for a lane to end.
@@ -87,6 +94,8 @@ impl Lanes {
 pub(super) struct Leaving<'a> {
     pub lanes: &'a Lanes,
     pub id: String,
+    /// The desk, woken to look whether lanes are left.
+    pub wake: std::sync::mpsc::Sender<super::Wake>,
 }
 
 impl Drop for Leaving<'_> {
@@ -95,8 +104,9 @@ impl Drop for Leaving<'_> {
             self.lanes.panicked.store(true, Ordering::SeqCst);
         }
         lock(&self.lanes.live).retain(|live| *live != self.id);
-        OPEN.fetch_sub(1, Ordering::SeqCst);
+        lock(&OPEN).retain(|open| *open != self.id);
         self.lanes.ended.notify_all();
+        let _ = self.wake.send(super::Wake::Left);
     }
 }
 

@@ -244,7 +244,7 @@ pub(crate) fn connected(
         let desk = scope.spawn(|| run(&shared, &ui, asked, seat, task, &start, quit));
         let info = Info {
             max_lanes: super::MAX_LANES,
-            shells: Vec::new,
+            shells: Arc::new(Vec::new),
             commands: vec![],
             modes: vec![],
             background: false,

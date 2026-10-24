@@ -38,7 +38,7 @@ fn served_by(host: Option<Arc<Host>>) -> Served {
     std::thread::spawn(move || {
         let info = Info {
             max_lanes: 3,
-            shells: || vec!["cargo build".into()],
+            shells: Arc::new(|| vec!["cargo build".into()]),
             commands: vec![("help".into(), "the commands".into())],
             modes: vec![("plan".into(), "plan first".into())],
             background: true,
@@ -216,7 +216,7 @@ fn another(served: &Served) -> (Sender<ToServer>, Receiver<ToClient>) {
     std::thread::spawn(move || {
         let info = Info {
             max_lanes: 3,
-            shells: Vec::new,
+            shells: Arc::new(Vec::new),
             commands: vec![],
             modes: vec![],
             background: true,

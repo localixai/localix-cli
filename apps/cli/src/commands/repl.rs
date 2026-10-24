@@ -29,7 +29,7 @@ pub(crate) fn run(rig: &mut Rig, ui: &Ui, first: Option<&str>) -> i32 {
         let turns = rig.session.turns.iter().map(crate::server::wire::turn);
         ui.send(Event::Earlier(turns.collect()));
     }
-    let signed_out = login::signed_out(&rig.choice);
+    let signed_out = login::signed_out(&rig.choice, rig.workspace.env());
     if !signed_out.is_empty() {
         ui.send(Event::Note(signed_out));
     }
@@ -142,7 +142,7 @@ pub(crate) fn status(rig: &Rig) -> String {
         "model      {} ({})\ndecision   {}\nworkspace  {}\nmode       {}\nsession    {} ({} tasks)\n\
          terminals  {}\n",
         rig.choice.label(),
-        login::signed(&rig.choice),
+        login::signed(&rig.choice, rig.workspace.env()),
         rig.options.models.decision_model,
         rig.workspace.root().display(),
         rig.mode.get().name(),

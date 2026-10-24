@@ -154,7 +154,9 @@ pub(crate) fn run(
     if kind == Kind::Session && served.is_none() {
         session_allowed(prompt, &options, std::io::stdin().is_terminal())?;
     }
-    let choice = choice::resolve(&options.models, choice::saved())?;
+    // Served, the session thinks with its client's keys, not the daemon's.
+    let vars = served.as_ref().map(|served| served.place.env.as_slice());
+    let choice = choice::resolve(&options.models, choice::saved(), vars)?;
     // A session starts signed out too, so that /login can sign in; one task cannot.
     if kind == Kind::Exec && choice.provider.signed_in().is_none() {
         return Err(Failure::SignedOut(choice.provider.how_to_sign_in()));

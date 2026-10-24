@@ -1,12 +1,13 @@
 //! The session's side of the seam: what it reports, and how it asks and waits. Each report is a
 //! frame to the interface, in the session's name; each question goes out with an id and waits
-//! for the reply under it (W5), and a stopped task withdraws it. Entries come from the server's
-//! own queue ([`Inputs`]), never from the interface's state.
+//! for the reply under it (W5); a stopped task withdraws it, and so does the person leaving or
+//! the lane closing. Entries come from the server's own queue ([`Inputs`]), never from the
+//! interface's state.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, SyncSender, sync_channel};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
+use std::sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError, sync_channel};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, Weak};
 use std::time::Duration;
 
 use protocol::{Adjustment, Approval, Asked, Event, Reply, ToClient};
@@ -18,14 +19,37 @@ use super::work::Work;
 /// The client [`Peer::new`] attaches.
 pub(crate) const FIRST: ClientId = 0;
 
-/// How often a waiting question checks whether the task was stopped.
-const POLL: Duration = Duration::from_millis(100);
+/// How often a waiting question looks at its stop on its own: a stop by id rings [`ring`], but a
+/// stop of the whole process (SIGTERM, the window closed) cannot, from a signal handler.
+const STOP_FALLBACK: Duration = Duration::from_secs(1);
+
+/// How often a line asked until something else comes (a sign-in's browser) looks at it: that
+/// something rings nothing, and the person is waiting on it.
+const DONE_POLL: Duration = Duration::from_millis(100);
+
+/// Rung, with [`BELL`], whenever a waiting question may be over: a reply, a withdrawal, a stop.
+#[allow(
+    clippy::mutex_integer,
+    reason = "the count is what the bell's Condvar waits on: it needs the Mutex"
+)]
+static RUNG: Mutex<u64> = Mutex::new(0);
+static BELL: Condvar = Condvar::new();
+
+/// Wake every question waiting, to look again at its reply and its stop.
+pub(crate) fn ring() {
+    let mut rung = RUNG.lock().unwrap_or_else(PoisonError::into_inner);
+    *rung = rung.wrapping_add(1);
+    BELL.notify_all();
+}
+
+/// A question waiting: the session it is in, and where its reply goes.
+type Waiting = (Option<Arc<str>>, SyncSender<Reply>);
 
 /// What the server holds of its interfaces: every client attached and what they were told
 /// ([`Hub`]), the questions waiting for a reply, and every lane's entries.
 pub(crate) struct Peer {
     hub: Hub,
-    asked: Mutex<HashMap<u64, SyncSender<Reply>>>,
+    asked: Mutex<HashMap<u64, Waiting>>,
     next: AtomicU64,
     pub(crate) inputs: Inputs,
     /// What runs in the lanes, for the question asked before quitting.
@@ -84,10 +108,29 @@ impl Peer {
     /// longer waits (W5); a later one is let go.
     pub(crate) fn replied(&self, id: u64, reply: Reply) {
         let waiting = self.waiting().remove(&id);
-        if let Some(waiting) = waiting {
+        if let Some((_, waiting)) = waiting {
             let _ = waiting.send(reply);
             self.send(ToClient::Resolved { id });
+            ring();
         }
+    }
+
+    /// Nobody will answer what session `lane` (every session, for `None`) waits for: the person
+    /// left, or the lane was closed. Its questions end with nothing, and the clients are told.
+    pub(crate) fn abandon(&self, lane: Option<&str>) {
+        let mut gone = vec![];
+        self.waiting().retain(|id, (session, _)| {
+            let keep = lane.is_some_and(|lane| session.as_deref() != Some(lane));
+            if !keep {
+                gone.push(*id);
+            }
+            keep
+        });
+        gone.sort_unstable();
+        for id in gone {
+            self.send(ToClient::Resolved { id });
+        }
+        ring();
     }
 
     /// `frame` to every client attached.
@@ -100,7 +143,7 @@ impl Peer {
         self.hub.to(id, frame);
     }
 
-    fn waiting(&self) -> MutexGuard<'_, HashMap<u64, SyncSender<Reply>>> {
+    fn waiting(&self) -> MutexGuard<'_, HashMap<u64, Waiting>> {
         self.asked.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
@@ -181,7 +224,7 @@ impl Ui {
             tool: tool.into(),
             summary: summary.into(),
         };
-        match self.ask(asked, stopped) {
+        match self.ask(asked, Some((stopped, STOP_FALLBACK))) {
             Some(Reply::Approval(approval)) => approval,
             _ => Approval::No(None),
         }
@@ -196,6 +239,7 @@ impl Ui {
         stopped: &dyn Fn() -> bool,
     ) -> Option<contracts::person::Answer> {
         let question = super::wire::question(question);
+        let stopped = Some((stopped, STOP_FALLBACK));
         match self.ask(Asked::Question { question, at, of }, stopped) {
             Some(Reply::Question(answer)) => answer.map(super::wire::answer),
             _ => None,
@@ -216,7 +260,7 @@ impl Ui {
                 options,
                 marked,
             },
-            &|| false,
+            None,
         ) {
             Some(Reply::Choice(picked)) => picked,
             _ => None,
@@ -238,7 +282,7 @@ impl Ui {
             marked,
             adjustments,
         };
-        match self.ask(asked, &|| false) {
+        match self.ask(asked, None) {
             Some(Reply::Adjusted(picked)) => picked,
             _ => None,
         }
@@ -253,23 +297,26 @@ impl Ui {
         done: Option<&dyn Fn() -> bool>,
     ) -> Option<String> {
         let prompt = prompt.into();
-        match self.ask(Asked::Line { prompt, hidden }, done.unwrap_or(&|| false)) {
+        let done = done.map(|done| (done, DONE_POLL));
+        match self.ask(Asked::Line { prompt, hidden }, done) {
             Some(Reply::Line(line)) => line,
             _ => None,
         }
     }
 
-    /// `asked`, and its reply; `None` when the interface is gone, or once `stopped` says so,
-    /// which withdraws it.
-    fn ask(&self, asked: Asked, stopped: &dyn Fn() -> bool) -> Option<Reply> {
+    /// `asked`, and its reply; `None` once it was withdrawn ([`Peer::abandon`]), or once
+    /// `until` says so (looked at when rung, and at least as often as it says), which
+    /// withdraws it.
+    fn ask(&self, asked: Asked, until: Until<'_>) -> Option<Reply> {
         let id = self.peer.next.fetch_add(1, Ordering::Relaxed);
         let (reply, answer) = sync_channel(1);
-        self.peer.waiting().insert(id, reply);
+        let lane = self.lane.clone();
+        self.peer.waiting().insert(id, (lane, reply));
         let session = self.session();
         self.peer.send(ToClient::Ask { id, session, asked });
-        let reply = wait(&answer, stopped);
-        if reply.is_none() {
-            self.peer.waiting().remove(&id);
+        let reply = wait(&answer, until);
+        // Withdrawn by its stop: the clients are told here; by `abandon`, they were already.
+        if reply.is_none() && self.peer.waiting().remove(&id).is_some() {
             self.peer.send(ToClient::Resolved { id });
         }
         reply
@@ -286,13 +333,29 @@ impl Drop for Ends {
     }
 }
 
-fn wait(answer: &Receiver<Reply>, stopped: &dyn Fn() -> bool) -> Option<Reply> {
+/// What ends a question besides its reply, and how often it is looked at unrung.
+type Until<'a> = Option<(&'a dyn Fn() -> bool, Duration)>;
+
+/// The reply to the question `answer` waits on: asleep until [`ring`] rings (a reply, a
+/// withdrawal, a stop), or `until`'s interval passes.
+fn wait(answer: &Receiver<Reply>, until: Until<'_>) -> Option<Reply> {
     loop {
-        match answer.recv_timeout(POLL) {
+        // Read before looking, so a ring between the look and the wait is not missed.
+        let rung = *RUNG.lock().unwrap_or_else(PoisonError::into_inner);
+        match answer.try_recv() {
             Ok(reply) => return Some(reply),
-            Err(RecvTimeoutError::Disconnected) => return None,
-            Err(RecvTimeoutError::Timeout) if stopped() => return None,
-            Err(RecvTimeoutError::Timeout) => {}
+            Err(TryRecvError::Disconnected) => return None,
+            Err(TryRecvError::Empty) => {}
+        }
+        if until.is_some_and(|(over, _)| over()) {
+            return None;
+        }
+        let quiet = |now: &mut u64| *now == rung;
+        let bell = RUNG.lock().unwrap_or_else(PoisonError::into_inner);
+        // A poisoned bell still rings: the next look reads the state again.
+        match until {
+            Some((_, every)) => drop(BELL.wait_timeout_while(bell, every, quiet)),
+            None => drop(BELL.wait_while(bell, quiet)),
         }
     }
 }

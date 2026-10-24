@@ -35,6 +35,14 @@ pub fn load(app: App) -> Catalog {
     }
 }
 
+/// When the fetched catalog was last written (or found unchanged); `None` when there is none.
+pub fn written(app: App) -> Option<SystemTime> {
+    let (cache, _) = paths(app)?;
+    std::fs::metadata(cache)
+        .and_then(|meta| meta.modified())
+        .ok()
+}
+
 /// Ask models.dev for its catalog when the one fetched last is a day old; whether a new one
 /// was kept.
 pub fn refresh(app: App) -> Result<bool, String> {

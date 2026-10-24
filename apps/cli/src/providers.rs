@@ -5,7 +5,7 @@
 //! chat completions at the address the catalog gives (OpenRouter with its own extras).
 
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use contracts::catalog::{Effort, ModelEntry, Selection};
@@ -14,6 +14,23 @@ use contracts::model::Decider;
 use models::{CHAT_COMPLETIONS, Catalog, RESPONSES};
 
 use crate::compose::APP;
+
+mod kept;
+
+/// Where a key's variables are read: a session's environment (its client's, in the daemon),
+/// else, for `None`, this process's.
+pub(crate) type Vars<'a> = Option<&'a [(String, String)]>;
+
+/// Variable `name` in `vars`.
+fn var(vars: Vars, name: &str) -> Option<String> {
+    match vars {
+        Some(vars) => vars
+            .iter()
+            .find(|(set, _)| set == name)
+            .map(|(_, v)| v.clone()),
+        None => std::env::var(name).ok(),
+    }
+}
 
 /// A provider, by its catalog id (`openai`, `openrouter`, `deepseek`…).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,14 +56,24 @@ const DEFAULTS: [(&str, &str); 2] = [
 /// The browser's decision model llx starts with: a policy, by catalog id (OpenRouter's).
 pub(crate) const DECISION_DEFAULT: &str = "~typesafe/jev-latest";
 
-/// The catalog: the built-in files under the last fetched one, read once (unit tests see the
-/// built-in files only, the same on every machine).
-pub(crate) fn catalog() -> &'static Catalog {
-    static CATALOG: OnceLock<Catalog> = OnceLock::new();
-    CATALOG.get_or_init(|| match cfg!(test) {
-        true => Catalog::built_in(),
-        false => models::source::load(APP),
-    })
+/// How often a long-lived process looks for a newer catalog (the refresh itself asks models.dev
+/// at most once a day).
+const LOOK: Duration = Duration::from_secs(3600);
+
+/// The catalog: the built-in files under the last fetched one, read again when a refresh wrote
+/// a newer one (unit tests see the built-in files only, the same on every machine).
+pub(crate) fn catalog() -> Arc<Catalog> {
+    if cfg!(test) {
+        static BUILT_IN: OnceLock<Arc<Catalog>> = OnceLock::new();
+        return Arc::clone(BUILT_IN.get_or_init(|| Arc::new(Catalog::built_in())));
+    }
+    static KEPT: kept::Kept = kept::Kept::new(LOOK);
+    let written = || models::source::written(APP);
+    let (catalog, ask) = KEPT.get(written, || models::source::load(APP));
+    if ask {
+        refresh_catalog();
+    }
+    catalog
 }
 
 impl Provider {
@@ -136,19 +163,24 @@ impl Provider {
 
     /// Where the sign-in comes from, in words with no secret in them; `None` when signed out.
     pub(crate) fn signed_in(&self) -> Option<String> {
+        self.signed_in_by(None)
+    }
+
+    /// [`Provider::signed_in`], its key's variables read in `vars`.
+    pub(crate) fn signed_in_by(&self, vars: Vars) -> Option<String> {
         if self.0 == "openai"
             && let Some(tokens) = openai::tokens::load(APP)
         {
             return Some(format!("ChatGPT account {}", tokens.account));
         }
-        self.key().map(|(_, from)| from)
+        self.key_in(vars).map(|(_, from)| from)
     }
 
-    /// The key and where it comes from: its variable (as the catalog names them), else the one
-    /// saved for llx.
-    pub(crate) fn key(&self) -> Option<(String, String)> {
+    /// The key and where it comes from: its variable (as the catalog names them) in `vars`, else
+    /// the one saved for llx.
+    pub(crate) fn key_in(&self, vars: Vars) -> Option<(String, String)> {
         if let Some((name, key)) = self.variables().into_iter().find_map(|name| {
-            let key = std::env::var(&name).ok().filter(|k| !k.trim().is_empty())?;
+            let key = var(vars, &name).filter(|k| !k.trim().is_empty())?;
             Some((name, key.trim().to_string()))
         }) {
             return Some((key, name));
@@ -212,7 +244,12 @@ impl Provider {
 
     /// The chat model for `selection`, each request priced; `None` when not signed in.
     pub(crate) fn chat(&self, selection: &Selection) -> Option<Box<dyn Chat>> {
-        let inner = self.unpriced(selection)?;
+        self.chat_in(selection, None)
+    }
+
+    /// [`Provider::chat`], its key read in `vars`.
+    pub(crate) fn chat_in(&self, selection: &Selection, vars: Vars) -> Option<Box<dyn Chat>> {
+        let inner = self.unpriced(selection, vars)?;
         Some(Box::new(Priced {
             inner,
             provider: self.0.clone(),
@@ -220,7 +257,7 @@ impl Provider {
         }))
     }
 
-    fn unpriced(&self, selection: &Selection) -> Option<Box<dyn Chat>> {
+    fn unpriced(&self, selection: &Selection, vars: Vars) -> Option<Box<dyn Chat>> {
         let selection = selection.clone();
         if self.0 == "openai"
             && let Some(tokens) = openai::tokens::load(APP)
@@ -236,18 +273,19 @@ impl Provider {
             );
             return Some(Box::new(model));
         }
-        let (key, _) = self.key()?;
+        let (key, _) = self.key_in(vars)?;
         let client = match self.0.as_str() {
             "openrouter" => openrouter::client::OpenRouter::new(key, APP),
             id => {
-                let model = catalog().model(id, &selection.model().id);
+                let catalog = catalog();
+                let model = catalog.model(id, &selection.model().id);
                 let address = model
                     .and_then(|m| m.address(CHAT_COMPLETIONS))
                     .or_else(|| {
-                        let first = catalog().provider(id)?.models.values();
+                        let first = catalog.provider(id)?.models.values();
                         first.filter_map(|m| m.address(CHAT_COMPLETIONS)).next()
                     })?;
-                let name = catalog().provider(id).map_or(id, |p| p.name.as_str());
+                let name = catalog.provider(id).map_or(id, |p| p.name.as_str());
                 openrouter::client::OpenRouter::at(address, key, APP, name)
             }
         };
@@ -293,7 +331,12 @@ impl Chat for Priced {
 /// The browser's decision model: OpenRouter's, the one provider that serves decision models,
 /// so it needs an OpenRouter key whichever provider the agent thinks with.
 pub(crate) fn decider(model: &str) -> Option<Box<dyn Decider>> {
-    let (key, _) = Provider::openrouter().key()?;
+    decider_in(model, None)
+}
+
+/// [`decider`], OpenRouter's key read in `vars`.
+pub(crate) fn decider_in(model: &str, vars: Vars) -> Option<Box<dyn Decider>> {
+    let (key, _) = Provider::openrouter().key_in(vars)?;
     let client = openrouter::client::OpenRouter::deciding(key, APP);
     Some(Box::new(openrouter::system_one::SystemOne {
         client,

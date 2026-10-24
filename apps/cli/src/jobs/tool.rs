@@ -205,6 +205,8 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
             });
             (id, name)
         };
+        // The scheduler waits for the soonest it knew of: this one may be sooner.
+        self.jobs.bell.ring();
         self.jobs.show(self.kit);
         Ok(ToolOutput::from(format!(
             "Scheduled `{name}` ({id}), {said}: next at {}. It comes to you as a task of its own, \

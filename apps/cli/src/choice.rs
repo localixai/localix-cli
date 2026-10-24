@@ -82,7 +82,11 @@ pub(crate) fn save(choice: &Choice) -> std::io::Result<PathBuf> {
 
 /// The choice a run starts with: the options, else what was saved, else the first provider
 /// signed in to (OpenRouter when none is) with its default model.
-pub(crate) fn resolve(options: &ModelOptions, saved: Option<Choice>) -> Result<Choice, Failure> {
+pub(crate) fn resolve(
+    options: &ModelOptions,
+    saved: Option<Choice>,
+    vars: crate::providers::Vars,
+) -> Result<Choice, Failure> {
     let provider = match &options.provider {
         Some(id) => Provider::named(id).ok_or_else(|| {
             Failure::Usage(format!(
@@ -94,7 +98,7 @@ pub(crate) fn resolve(options: &ModelOptions, saved: Option<Choice>) -> Result<C
             None => {
                 let first = [Provider::openrouter(), Provider::openai()];
                 let first = first.into_iter().chain(Provider::all());
-                let signed = first.into_iter().find(|p| p.signed_in().is_some());
+                let signed = first.into_iter().find(|p| p.signed_in_by(vars).is_some());
                 signed.unwrap_or_else(Provider::openrouter)
             }
         },

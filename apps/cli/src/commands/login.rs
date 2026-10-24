@@ -141,16 +141,16 @@ fn steps(rig: &mut Rig, terminal: &mut dyn Terminal, shown: &dyn Fn(&str)) {
 }
 
 /// How the session stands with its provider, for `/status`.
-pub(crate) fn signed(choice: &Choice) -> String {
-    match choice.provider.signed_in() {
+pub(crate) fn signed(choice: &Choice, vars: crate::providers::Vars) -> String {
+    match choice.provider.signed_in_by(vars) {
         Some(from) => format!("signed in: {from}"),
         None => format!("not signed in to {}: type /login", choice.provider.name()),
     }
 }
 
 /// A line for the banner when the session is signed out, else nothing.
-pub(crate) fn signed_out(choice: &Choice) -> String {
-    match choice.provider.signed_in() {
+pub(crate) fn signed_out(choice: &Choice, vars: crate::providers::Vars) -> String {
+    match choice.provider.signed_in_by(vars) {
         Some(_) => String::new(),
         None => format!(
             "Not signed in to {}: type /login.\n",

@@ -50,11 +50,22 @@ impl Term {
     /// `llx resume ID`, where session `id` was saved in the workspace with the tasks `turns`
     /// (their JSON array).
     pub(crate) fn resuming(model: &Model, id: &str, turns: &str) -> Self {
+        Self::resuming_from(model, id, turns, None)
+    }
+
+    /// [`Term::resuming`], the session saved as having run in `ran_in` (else the workspace).
+    pub(crate) fn resuming_from(
+        model: &Model,
+        id: &str,
+        turns: &str,
+        ran_in: Option<&str>,
+    ) -> Self {
         let (home, workspace) = place();
         let dir = home.join("sessions");
         std::fs::create_dir_all(&dir).unwrap();
+        let ran_in = ran_in.map_or_else(|| workspace.display().to_string(), str::to_string);
         let session = serde_json::json!({"id": id, "created": 1700000000, "updated": 1700000000,
-            "workspace": workspace.display().to_string(),
+            "workspace": ran_in,
             "turns": serde_json::from_str::<serde_json::Value>(turns).unwrap()});
         std::fs::write(dir.join(format!("{id}.json")), session.to_string()).unwrap();
         let term = Self::spawn_at(home, workspace, model, &["resume", id], &[]);
@@ -295,6 +306,30 @@ impl Term {
     /// A file of the workspace the session runs in.
     pub(crate) fn file(&self, name: &str) -> PathBuf {
         self.workspace.join(name)
+    }
+
+    /// Send llx `signal`, as a closed window (SIGHUP) or `kill` (SIGTERM) does.
+    pub(crate) fn signal(&self, signal: libc::c_int) {
+        let pid = libc::pid_t::try_from(self.child.id()).unwrap();
+        // SAFETY: kill only sends a signal, to the child this harness started.
+        unsafe { libc::kill(pid, signal) };
+    }
+
+    /// Whether the terminal reads lines again, echoed: not left raw.
+    pub(crate) fn cooked(&self) -> bool {
+        // SAFETY: an all-zero termios is a valid value for tcgetattr to fill.
+        let mut modes: libc::termios = unsafe { std::mem::zeroed() };
+        // SAFETY: tcgetattr writes `modes`, which outlives the call; the descriptor is ours.
+        let read =
+            unsafe { libc::tcgetattr(std::os::fd::AsRawFd::as_raw_fd(&self.input), &mut modes) };
+        assert_eq!(read, 0, "the terminal's modes could not be read");
+        modes.c_lflag & (libc::ICANON | libc::ECHO) == (libc::ICANON | libc::ECHO)
+    }
+
+    /// What the daemon of this home wrote to its log so far.
+    pub(crate) fn daemon_log(&self) -> String {
+        let log = self.home.join("config").join("llx").join("daemon.log");
+        std::fs::read_to_string(log).unwrap_or_default()
     }
 }
 

@@ -34,7 +34,9 @@ pub(crate) fn compose(
 /// One lane over `shared`: its models, its stop (found by its session id), its events tagged
 /// with that id (the desk told the interface of it); `work` runs with it.
 pub(crate) fn lane(shared: &Shared, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
-    let live = Live::of(&seat.choice, &shared.options.models.decision_model);
+    // The session's environment: in the daemon, its client's, whose keys it thinks with.
+    let vars = shared.workspace.env();
+    let live = Live::of(&seat.choice, &shared.options.models.decision_model, vars);
     let models = Models {
         chat: &live.chat,
         decider: &live.decider,

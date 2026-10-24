@@ -29,6 +29,7 @@ pub(crate) fn start(rig: &Rig, goal: &str) {
         return;
     };
     let (provider, selection) = (rig.choice.provider.clone(), lowest(&rig.choice.selection));
+    let vars = rig.workspace.env().map(<[_]>::to_vec);
     let (pending, id, goal) = (rig.meta.clone(), rig.session.id.clone(), goal.to_string());
     let history = session::Sessions {
         dir: rig.history.dir.clone(),
@@ -36,7 +37,7 @@ pub(crate) fn start(rig: &Rig, goal: &str) {
     let naming_thread = std::thread::Builder::new().name("llx-title".into());
     let started = naming_thread.spawn(move || {
         let _naming = naming;
-        let Some(chat) = provider.chat(&selection) else {
+        let Some(chat) = provider.chat_in(&selection, vars.as_deref()) else {
             return;
         };
         let Some(title) = ask(chat.as_ref(), &goal) else {

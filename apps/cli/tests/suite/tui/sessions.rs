@@ -227,6 +227,20 @@ fn a_resumed_session_shows_its_earlier_tasks() {
 }
 
 #[test]
+fn a_session_resumed_from_another_directory_says_so_on_the_screen() {
+    // Served by the daemon, a note on stderr would go to its log, not to the person.
+    let model = Model::start(vec![]);
+    let turns =
+        r#"[{"goal": "fix the parser", "answer": "Fixed.", "status": "achieved", "at": 1}]"#;
+    let term = Term::resuming_from(&model, "1700000000-ef56", turns, Some("/elsewhere/repo"));
+    let screen = term.wait_for("ran in /elsewhere/repo", LONG);
+    assert!(screen.contains("session 1700000000-ef56"), "{screen}");
+    // Said once, by the client: not again in the daemon's log.
+    let log = term.daemon_log();
+    assert!(!log.contains("ran in"), "{log}");
+}
+
+#[test]
 fn a_resumed_session_shows_what_it_spent_before() {
     let model = Model::start(vec![]);
     let turns = r#"[

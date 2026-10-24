@@ -164,7 +164,10 @@ pub(crate) fn stop(id: &str) -> bool {
         .rev()
         .find(|(known, _, _)| known == id)
         .map(|(_, _, stop)| Arc::clone(stop));
-    found.is_some_and(|stop| stop())
+    let quit = found.is_some_and(|stop| stop());
+    // A question the task waits on withdraws now, not at its next look.
+    crate::server::ui::ring();
+    quit
 }
 
 /// Tasks running in the process, in every session.
@@ -176,6 +179,7 @@ pub(crate) fn working() -> usize {
 /// it (at the prompt line, the window opens again on the next task).
 pub(crate) fn window_closed() {
     PROCESS.stop();
+    crate::server::ui::ring();
 }
 
 /// Quit now, as a second Ctrl-C does: the terminal sessions are killed first.

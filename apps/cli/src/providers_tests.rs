@@ -72,7 +72,8 @@ fn commands_never_see_the_key_of_the_provider_in_use_nor_openrouters() {
 
 #[test]
 fn the_decision_default_is_a_decision_model_of_the_catalog() {
-    let model = catalog().model("openrouter", DECISION_DEFAULT);
+    let catalog = catalog();
+    let model = catalog.model("openrouter", DECISION_DEFAULT);
     assert_eq!(
         model.and_then(|m| m.kind.as_deref()),
         Some("decision"),
@@ -95,4 +96,18 @@ fn a_chatgpt_sign_in_offers_the_models_the_backend_serves_alone() {
     assert!(!completions.contains(&"gpt-5.3-codex".to_string()));
     let openrouter = Provider::openrouter();
     assert_eq!(openrouter.served(true), openrouter.served(false));
+}
+
+#[test]
+fn a_served_session_reads_its_key_from_its_clients_environment() {
+    // The daemon's own environment is whatever terminal started it: a key set only in the
+    // client's (its place) is the one the session thinks with.
+    let provider = Provider::named("deepseek").unwrap();
+    let variable = provider.variables().into_iter().next().unwrap();
+    let client = vec![(variable.clone(), " sk-from-the-client ".to_string())];
+    let found = provider.key_in(Some(&client));
+    assert_eq!(found, Some(("sk-from-the-client".into(), variable)));
+    let selection = Selection::new(provider.entry(&provider.default_model()));
+    assert!(provider.chat_in(&selection, Some(&client)).is_some());
+    assert!(provider.signed_in_by(Some(&client)).is_some());
 }

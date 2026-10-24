@@ -46,7 +46,7 @@ pub(crate) fn doctor(models: &ModelOptions) -> Result<i32, Failure> {
             "browser: no display, so the browser tool is left out (run under xvfb-run for it)",
         )?;
     }
-    let choice = choice::resolve(models, choice::saved())?;
+    let choice = choice::resolve(models, choice::saved(), None)?;
     // The provider in use, and every other one signed in to: the catalog lists hundreds.
     let listed = Provider::all()
         .into_iter()

@@ -187,7 +187,11 @@ interface speaks only the protocol (L7), over a socket or channels. A session ta
 from the client; questions belong to it (any number of interfaces, the first reply wins, replayed
 on attach); its events are numbered and kept in a ring. Quitting while work runs asks: stop,
 move to the background (only in the daemon), or stay; the next `llx` in a directory comes back
-to the sessions moved to the background there (`server::host::Kept`, `serve::rejoin`). Left for
-later: the chat model's key from each client's environment rather than the daemon's, `daemon.log`
-rotation, one desk per directory shared by two terminals at once.
+to the sessions moved to the background there (`server::host::Kept`, `serve::rejoin`). A served
+session's providers' keys come from its client's environment (`providers::Vars`, the place's);
+the catalog is read again when a refresh wrote a newer one (looked at hourly, models.dev asked at
+most daily). Left for later: the `LLX_*` model variables (`LLX_PROVIDER`, `LLX_MODEL`,
+`LLX_REASONING`, `LLX_DECISION_MODEL`), which clap still reads from the daemon's environment when
+it parses the client's command line again; `daemon.log` rotation; one desk per directory shared
+by two terminals at once.
 

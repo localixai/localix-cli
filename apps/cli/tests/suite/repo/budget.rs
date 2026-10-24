@@ -9,8 +9,9 @@ use super::{root, walk};
 /// Lines of working code in the whole workspace, at most. Hard: not to be raised. It was 17,000;
 /// agents, parallel calls, steering, monitors and schedules took it to 20,000; the model catalog's
 /// build script, background sessions and the terminal window to 25,000, then to 30,000 for the window's tabs
-/// of every kind and the lanes' queue: the owner's raises.
-const LIMIT: usize = 30_000;
+/// of every kind and the lanes' queue, then to 35,000 for the daemon and its thin client: the owner's
+/// raises.
+const LIMIT: usize = 35_000;
 
 /// Test code does not count: sibling `*_tests.rs` files and the test-only helpers (`testing.rs`,
 /// `fakes.rs`, the interface's `test_support.rs`).

@@ -205,7 +205,7 @@ every new file already goes where its target crate will be.
   `budget.rs`), for every file of `src/` and every build script. A file that would go past it is
   split by what it does before the change lands, never let through. Test files do not count, and
   split by feature when they grow hard to read.
-- **S2** _checked_: at most 30,000 lines of working code in all; new code is paid for by cuts
+- **S2** _checked_: at most 35,000 lines of working code in all; new code is paid for by cuts
   first, and going over needs the owner's approval, asked with the numbers and the alternatives.
 - **S3** _checked_: unit tests live beside the code: `x.rs` ends with
   `#[cfg(test)] #[path = "x_tests.rs"] mod tests;`. The ports are faked, never a network.
@@ -263,6 +263,6 @@ every new file already goes where its target crate will be.
 
 ## Budgets
 
-- 30,000 lines of working code (S2), 300 per file (S1).
+- 35,000 lines of working code (S2), 300 per file (S1).
 - The release binary under 3 MiB (CI); a bundled data file counts.
 - Line coverage at least 85% (`scripts/coverage.sh`), raised with coverage, never lowered.

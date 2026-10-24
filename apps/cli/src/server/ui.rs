@@ -6,50 +6,97 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, SyncSender, sync_channel};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::time::Duration;
 
 use protocol::{Adjustment, Approval, Asked, Event, Reply, ToClient};
 
+use super::hub::{ClientId, Hub};
 use super::inputs::{Inputs, Typed};
+
+/// The client [`Peer::new`] attaches.
+pub(crate) const FIRST: ClientId = 0;
 
 /// How often a waiting question checks whether the task was stopped.
 const POLL: Duration = Duration::from_millis(100);
 
-/// What the server holds of the interface: where frames go, the questions waiting for a reply,
-/// and every lane's entries.
+/// What the server holds of its interfaces: every client attached and what they were told
+/// ([`Hub`]), the questions waiting for a reply, and every lane's entries.
 pub(crate) struct Peer {
-    out: Sender<ToClient>,
+    hub: Hub,
     asked: Mutex<HashMap<u64, SyncSender<Reply>>>,
     next: AtomicU64,
     pub(crate) inputs: Inputs,
 }
 
 impl Peer {
+    /// A peer with one client attached, `out`, as its first ([`FIRST`]).
     pub(crate) fn new(out: Sender<ToClient>) -> Arc<Self> {
-        let told = out.clone();
-        let inputs = Inputs::new(move |lane, event| {
-            let session = Some(lane.to_string());
-            let _ = told.send(ToClient::Event { session, event });
+        let peer = Arc::new_cyclic(|peer: &Weak<Self>| {
+            let told = Weak::clone(peer);
+            let inputs = Inputs::new(move |lane, event| {
+                if let Some(peer) = told.upgrade() {
+                    let session = Some(lane.to_string());
+                    peer.send(ToClient::Event {
+                        session,
+                        event,
+                        seq: None,
+                    });
+                }
+            });
+            Self {
+                hub: Hub::new(super::hub::KEPT),
+                asked: Mutex::default(),
+                next: AtomicU64::new(1),
+                inputs,
+            }
         });
-        Arc::new(Self {
-            out,
-            asked: Mutex::default(),
-            next: AtomicU64::new(1),
-            inputs,
-        })
+        peer.hub.attach(out, None);
+        peer
     }
 
-    /// The person's reply to question `id`; one no longer waiting is let go.
+    /// Attach another client: what came after `cursor` first, then the questions waiting
+    /// (W5, W6). Its id, and the number its replay went up to.
+    pub(crate) fn attach(&self, out: Sender<ToClient>, cursor: Option<u64>) -> (ClientId, u64) {
+        self.hub.attach(out, cursor)
+    }
+
+    /// Client `id` again from `cursor`; `None` once it is gone.
+    pub(crate) fn rewind(&self, id: ClientId, cursor: Option<u64>) -> Option<u64> {
+        self.hub.rewind(id, cursor)
+    }
+
+    /// Client `id` hears nothing more; how many are still attached.
+    pub(crate) fn detach(&self, id: ClientId) -> usize {
+        self.hub.detach(id)
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "D4: whether a backgrounded desk has an interface")
+    )]
+    pub(crate) fn attached(&self) -> usize {
+        self.hub.attached()
+    }
+
+    /// The person's reply to question `id`: the first wins, and every client is told it no
+    /// longer waits (W5); a later one is let go.
     pub(crate) fn replied(&self, id: u64, reply: Reply) {
         let waiting = self.waiting().remove(&id);
         if let Some(waiting) = waiting {
             let _ = waiting.send(reply);
+            self.send(ToClient::Resolved { id });
         }
     }
 
+    /// `frame` to every client attached.
     pub(crate) fn send(&self, frame: ToClient) {
-        let _ = self.out.send(frame);
+        self.hub.send(frame);
+    }
+
+    /// `frame` to client `id` alone.
+    pub(crate) fn to(&self, id: ClientId, frame: ToClient) {
+        self.hub.to(id, frame);
     }
 
     fn waiting(&self) -> MutexGuard<'_, HashMap<u64, SyncSender<Reply>>> {
@@ -92,7 +139,11 @@ impl Ui {
             }
         }
         let session = self.lane.as_deref().map(str::to_string);
-        self.peer.send(ToClient::Event { session, event });
+        self.peer.send(ToClient::Event {
+            session,
+            event,
+            seq: None,
+        });
     }
 
     /// The person's next entry; `None` when they leave or the lane is closed.

@@ -73,6 +73,7 @@ fn what_else_the_server_says_reaches_the_interface_in_order_past_a_bad_line() {
     let note = |text: &str| ToClient::Event {
         session: None,
         event: Event::Note(text.into()),
+        seq: None,
     };
     server.write_all(&line(&note("one"))).unwrap();
     server.write_all(b"not a frame\n").unwrap();

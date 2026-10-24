@@ -35,6 +35,12 @@ pub enum Command {
     Leave,
     /// What still runs, for the question asked before quitting.
     Work,
+    /// Attach this connection: every event numbered after `cursor` first (all that is kept for
+    /// `None`), then the questions waiting, then what happens (W5, W6).
+    Attach {
+        #[serde(default)]
+        cursor: Option<u64>,
+    },
 }
 
 /// What the person sent: the text, and the pictures attached to it.
@@ -94,6 +100,10 @@ pub enum Done {
     /// Terminal sessions running, in every lane.
     Work {
         shells: usize,
+    },
+    /// Attached: the replay went up to event `seq`, the cursor to come back with.
+    Attached {
+        seq: u64,
     },
     /// The command could not be done, and why.
     Failed {

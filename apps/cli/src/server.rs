@@ -4,6 +4,7 @@
 //! `apps/server`.
 
 pub(crate) mod asking;
+pub(crate) mod hub;
 pub(crate) mod inputs;
 pub(crate) mod label;
 pub(crate) mod place;

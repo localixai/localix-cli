@@ -178,3 +178,145 @@ fn the_place_an_interface_attaches_from_goes_to_the_desk() {
     assert!(matches!(served.done(1), Done::Initialized { .. }));
     assert_eq!(served.desk.recv_timeout(WAIT), Ok(Request::Attach(place)));
 }
+
+/// Another connection to the same sessions: where its frames go in, what comes out to it.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the in-process transport's channels, as the binary makes them"
+)]
+fn another(served: &Served) -> (Sender<ToServer>, Receiver<ToClient>) {
+    let (to_server, incoming) = channel();
+    let (out, from_server) = channel();
+    let (desk, _requests) = channel();
+    let peer = Arc::clone(&served.peer);
+    std::thread::spawn(move || {
+        let info = Info {
+            max_lanes: 3,
+            shells: || 0,
+            commands: vec![],
+            modes: vec![],
+        };
+        connection(&incoming, &peer, out, &desk, &info);
+    });
+    (to_server, from_server)
+}
+
+/// What came of command `id` on a connection, and the frames before it.
+fn until_done(frames: &Receiver<ToClient>, id: u64) -> (Vec<ToClient>, Done) {
+    let mut before = vec![];
+    loop {
+        match frames.recv_timeout(WAIT).unwrap() {
+            ToClient::Done { id: of, done } if of == id => return (before, done),
+            frame => before.push(frame),
+        }
+    }
+}
+
+fn attach(to_server: &Sender<ToServer>, id: u64, cursor: Option<u64>) {
+    let command = Command::Attach { cursor };
+    to_server.send(ToServer::Call { id, command }).unwrap();
+}
+
+#[test]
+fn a_connection_that_attaches_later_gets_what_it_missed_then_what_waits_then_the_rest() {
+    let served = served();
+    let ui = Ui::new(Arc::clone(&served.peer)).for_lane("s1");
+    ui.send(protocol::Event::Note("one".into()));
+    ui.send(protocol::Event::Note("two".into()));
+    let asker = ui.clone();
+    let asking = std::thread::Builder::new().name("asking".into());
+    let asking = asking
+        .spawn(move || asker.approve("bash", "ls", &|| false))
+        .unwrap();
+    let id = loop {
+        if let ToClient::Ask { id, .. } = served.out.recv_timeout(WAIT).unwrap() {
+            break id;
+        }
+    };
+    let (to_server, frames) = another(&served);
+    attach(&to_server, 1, Some(1));
+    let (before, done) = until_done(&frames, 1);
+    assert_eq!(done, Done::Attached { seq: 2 });
+    assert_eq!(before.len(), 2, "{before:?}");
+    assert!(matches!(&before[0], ToClient::Event { seq: Some(2), .. }));
+    assert!(matches!(&before[1], ToClient::Ask { id: asked, .. } if *asked == id));
+    // The first reply wins, from the later client; both are told it no longer waits.
+    let reply = Reply::Approval(Approval::Always);
+    to_server.send(ToServer::Reply { id, reply }).unwrap();
+    assert_eq!(asking.join().unwrap(), Approval::Always);
+    let late = Reply::Approval(Approval::No(None));
+    served
+        .to_server
+        .send(ToServer::Reply { id, reply: late })
+        .unwrap();
+    let resolved = ToClient::Resolved { id };
+    assert_eq!(frames.recv_timeout(WAIT).unwrap(), resolved);
+    let first = served.out.recv_timeout(WAIT).unwrap();
+    assert_eq!(first, resolved);
+    ui.send(protocol::Event::Note("three".into()));
+    for out in [&served.out, &frames] {
+        let three = out.recv_timeout(WAIT).unwrap();
+        assert!(
+            matches!(three, ToClient::Event { seq: Some(3), .. }),
+            "{three:?}"
+        );
+    }
+}
+
+#[test]
+fn a_connection_is_told_only_what_came_of_its_own_commands() {
+    let served = served();
+    let (to_server, frames) = another(&served);
+    attach(&to_server, 1, None);
+    assert_eq!(until_done(&frames, 1).1, Done::Attached { seq: 0 });
+    served.call(5, Command::Work);
+    assert_eq!(served.done(5), Done::Work { shells: 2 });
+    let call = ToServer::Call {
+        id: 6,
+        command: Command::Work,
+    };
+    to_server.send(call).unwrap();
+    let (before, done) = until_done(&frames, 6);
+    assert!(before.is_empty(), "{before:?}");
+    assert_eq!(done, Done::Work { shells: 0 });
+}
+
+#[test]
+fn the_person_is_given_up_on_only_when_the_last_connection_is_gone() {
+    let served = served();
+    let peer = Arc::clone(&served.peer);
+    let (to_server, frames) = another(&served);
+    attach(&to_server, 1, None);
+    until_done(&frames, 1);
+    let first = Input {
+        session: "s1".into(),
+        text: "first".into(),
+        ..Input::default()
+    };
+    served.call(9, Command::Input(first));
+    served.done(9);
+    drop(served);
+    let deadline = std::time::Instant::now() + WAIT;
+    while peer.attached() > 1 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the first never detached"
+        );
+        std::thread::yield_now();
+    }
+    let entry = Input {
+        session: "s1".into(),
+        text: "still here".into(),
+        ..Input::default()
+    };
+    let call = ToServer::Call {
+        id: 2,
+        command: Command::Input(entry),
+    };
+    to_server.send(call).unwrap();
+    until_done(&frames, 2);
+    assert_eq!(peer.inputs.next("s1").unwrap().text, "first");
+    assert_eq!(peer.inputs.next("s1").unwrap().text, "still here");
+    drop(to_server);
+    assert_eq!(peer.inputs.next("s1"), None);
+}

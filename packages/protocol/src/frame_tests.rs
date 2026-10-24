@@ -16,6 +16,7 @@ fn event(event: Event) -> ToClient {
     ToClient::Event {
         session: Some("s1".into()),
         event,
+        seq: Some(3),
     }
 }
 
@@ -86,7 +87,9 @@ fn every_frame_to_the_interface_comes_back_the_same_through_json() {
         ToClient::Event {
             session: None,
             event: Event::Quit,
+            seq: None,
         },
+        ToClient::Gap,
     ];
     for frame in &frames {
         assert_eq!(&through_json(frame), frame);
@@ -124,6 +127,10 @@ fn every_question_to_the_person_comes_back_the_same_through_json() {
             },
         },
         ToClient::Resolved { id: 7 },
+        ToClient::Done {
+            id: 2,
+            done: Done::Attached { seq: 40 },
+        },
         ToClient::Done {
             id: 1,
             done: Done::Initialized {
@@ -171,6 +178,10 @@ fn every_frame_to_the_server_comes_back_the_same_through_json() {
         ToServer::Reply {
             id: 9,
             reply: Reply::Adjusted(Some((0, 2))),
+        },
+        ToServer::Call {
+            id: 11,
+            command: Command::Attach { cursor: Some(39) },
         },
         ToServer::Call {
             id: 10,
@@ -227,4 +238,15 @@ fn a_client_that_gives_no_place_still_initializes() {
             }
         }
     );
+}
+
+#[test]
+fn an_event_from_a_server_that_numbers_nothing_still_reads() {
+    let line = r#"{"method":"session/event","params":{"session":null,"event":{"type":"quit"}}}"#;
+    let quit = ToClient::Event {
+        session: None,
+        event: Event::Quit,
+        seq: None,
+    };
+    assert_eq!(serde_json::from_str::<ToClient>(line).unwrap(), quit);
 }

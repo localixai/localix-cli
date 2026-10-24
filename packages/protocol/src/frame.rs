@@ -9,12 +9,19 @@ use crate::{Asked, Command, Done, Event, Reply};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params")]
 pub enum ToClient {
-    /// What happened in `session` (a lane or an agent), or in the server when `None`.
+    /// What happened in `session` (a lane or an agent), or in the server when `None`. `seq`
+    /// numbers what is kept for a client that attaches later (W6); a live-only event has none.
     #[serde(rename = "session/event")]
     Event {
         session: Option<String>,
         event: Event,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seq: Option<u64>,
     },
+    /// What follows is not all that happened since the client's cursor: what it shows may be
+    /// incomplete, and it starts again from what follows (W6).
+    #[serde(rename = "session/gap")]
+    Gap,
     /// A question for the person, from `session`'s task; answered by [`ToServer::Reply`].
     #[serde(rename = "person/ask")]
     Ask {

@@ -214,10 +214,12 @@ impl App {
             ToClient::Event {
                 session: Some(id),
                 event,
+                ..
             } => self.event_in(&id, event, now),
             ToClient::Event {
                 session: None,
                 event,
+                ..
             } => self.event(event, now),
             ToClient::Ask { id, session, asked } => {
                 self.asked(id, &session, asked, now);
@@ -229,6 +231,10 @@ impl App {
             }
             // What a command came to is the client's.
             ToClient::Done { .. } => None,
+            ToClient::Gap => {
+                self.gap();
+                None
+            }
         }
     }
 

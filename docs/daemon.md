@@ -124,6 +124,20 @@ process environment): commands run in the environment of the client that opened 
    checks, the window host in the daemon, pty tests with a daemon per test home.
 4. **Attach and detach.** The event ring and cursors, pending requests replayed, the quit
    question (stop, move to the background, stay), `status`/`stop`, version restart.
+   Built, the server's side: a `Peer` serves any number of clients (`server/hub.rs`). Every
+   event goes to each attached client, numbered per peer (`ToClient::Event { seq }`) and kept in
+   a ring of the last 2,000, unless live only: a hands' step, a copy, a quit, a prefill and a
+   list are never kept (a queue and a total are sent whole, so the last replayed is right).
+   `Command::Attach { cursor }` (answered `Done::Attached { seq }`) replays what came after the
+   cursor, a `ToClient::Gap` first when the ring no longer holds all of it (or the cursor is not
+   this server's), then the questions waiting. A question goes to every client; the first reply
+   wins and every client gets `Resolved`. A closed client is dropped, never waited for; what
+   came of a command goes to its connection alone. `serve` serves `Peer::new`'s client as before;
+   `serve::connection(&incoming, &peer, out, &desk, &info)` serves a later connection to the same
+   peer, detached when it is gone; the person is given up on when the last client is. On a gap
+   the interface clears its transcripts, jobs and questions and draws again from what follows.
+   Still to come: the client keeping its cursor and attaching with it, the quit question,
+   `status`/`stop`, version restart.
 5. **The window by project.** Tab groups in the strip per session's directory. Built: each tab
    has a group (`Browser::group`, by key; a page's own new tab takes its opener's), named by the
    app per lane (`windows::group`, the session's directory's last component): a lane's `Tabs`

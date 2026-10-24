@@ -163,6 +163,7 @@ impl Drop for Running {
         let _ = (self.inbox).send(Input::Frame(ToClient::Event {
             session: None,
             event,
+            seq: None,
         }));
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();

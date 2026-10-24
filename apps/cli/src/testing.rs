@@ -445,7 +445,7 @@ pub(crate) fn events(
     frames: &std::sync::mpsc::Receiver<protocol::ToClient>,
 ) -> Vec<(Option<String>, protocol::Event)> {
     let events = frames.try_iter().filter_map(|frame| match frame {
-        protocol::ToClient::Event { session, event } => Some((session, event)),
+        protocol::ToClient::Event { session, event, .. } => Some((session, event)),
         _ => None,
     });
     events.collect()

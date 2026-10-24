@@ -160,6 +160,7 @@ fn a_client_that_never_reads_is_cut_off_and_never_waited_for() {
         peer.send(ToClient::Event {
             session: None,
             event: Event::Note("x".repeat(1_000)),
+            seq: None,
         });
     }
     assert!(started.elapsed() < WAIT, "the server waited on the client");

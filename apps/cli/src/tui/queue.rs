@@ -159,6 +159,24 @@ impl App {
         }
     }
 
+    /// What is shown may be incomplete (the server no longer kept all since the client's
+    /// cursor): every transcript, the jobs and the questions start again from what follows.
+    pub(super) fn gap(&mut self) {
+        for view in &mut self.views.sessions {
+            view.blocks.clear();
+            view.running.clear();
+            view.busy = None;
+            if let Some(state) = view.lane.as_deref_mut() {
+                state.held.clear();
+            }
+        }
+        self.views.jobs.clear();
+        self.questions.clear();
+        self.settling = None;
+        self.pending.clear();
+        self.views.replay = true;
+    }
+
     /// A key while a question is open: Ctrl-C says no and stops the lane that asked.
     pub(super) fn question_key(
         &mut self,

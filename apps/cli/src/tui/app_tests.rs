@@ -809,3 +809,23 @@ fn a_sessions_copy_is_the_interfaces_to_do() {
     let copied = app.frame(from("", Event::Copy("the answer".into())), now);
     assert_eq!(copied, Some(Action::Copy("the answer".into())));
 }
+
+#[test]
+fn a_gap_clears_what_is_shown_and_draws_again_from_what_follows() {
+    let now = Instant::now();
+    let mut app = app();
+    let mut term = crate::tui::test_support::Term::new(&app);
+    app.event(Event::TaskStarted("the old task".into()), now);
+    let _asked = approve(&mut app, "", "rm -rf build", now);
+    let before = term.draw(&mut app, now);
+    assert!(
+        before.contains("the old task") && before.contains("rm -rf build"),
+        "{before}"
+    );
+    app.frame(ToClient::Gap, now);
+    app.event(Event::Note("what came after".into()), now);
+    let after = term.draw(&mut app, now);
+    assert!(after.contains("what came after"), "{after}");
+    assert!(!after.contains("the old task"), "{after}");
+    assert!(!after.contains("rm -rf build"), "{after}");
+}

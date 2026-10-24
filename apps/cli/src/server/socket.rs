@@ -105,6 +105,7 @@ fn read(stream: UnixStream, to_server: &SyncSender<ToServer>, told: &Sender<ToCl
                 let _ = told.send(ToClient::Event {
                     session: None,
                     event,
+                    seq: None,
                 });
             }
         }

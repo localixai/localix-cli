@@ -75,6 +75,7 @@ fn everything_else_the_server_says_reaches_the_interface_in_order() {
             .send(ToClient::Event {
                 session: None,
                 event,
+                seq: None,
             })
             .unwrap();
     }

@@ -43,9 +43,10 @@ pub(crate) fn daemon(path: &Path) -> Daemon {
         let _ = peers.send(Arc::clone(&peer));
         let info = Info {
             max_lanes: 3,
-            shells: || 0,
+            shells: Vec::new,
             commands: vec![],
             modes: vec![],
+            background: false,
         };
         serve(&connection.incoming, &peer, &desk, &info);
         let _ = ended.send(());
@@ -91,6 +92,7 @@ fn a_client_over_the_socket_speaks_to_serve_as_one_in_process_does() {
             max_lanes: 3,
             commands: vec![],
             modes: vec![],
+            background: false,
         })
     );
     let peer = daemon.peers.recv_timeout(WAIT).unwrap();
@@ -145,7 +147,10 @@ fn a_line_that_is_not_a_frame_is_dropped_and_said() {
         matches!(&frames[0], ToClient::Event { event: Event::Note(note), .. } if note.contains("dropped")),
         "{frames:?}"
     );
-    let done = Done::Work { shells: 0 };
+    let done = Done::Work {
+        shells: 0,
+        running: vec![],
+    };
     assert_eq!(frames[1], ToClient::Done { id: 7, done });
 }
 

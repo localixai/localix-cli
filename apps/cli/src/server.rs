@@ -19,5 +19,6 @@ pub(crate) mod serve;
 pub(crate) mod socket;
 pub(crate) mod ui;
 pub(crate) mod wire;
+pub(crate) mod work;
 
 pub(crate) use self::ui::{Peer, Ui};

@@ -12,6 +12,7 @@ use std::time::Duration;
 use protocol::{Adjustment, Approval, Asked, Event, Reply, ToClient};
 
 use super::inputs::{Inputs, Typed};
+use super::work::Work;
 
 /// How often a waiting question checks whether the task was stopped.
 const POLL: Duration = Duration::from_millis(100);
@@ -23,6 +24,8 @@ pub(crate) struct Peer {
     asked: Mutex<HashMap<u64, SyncSender<Reply>>>,
     next: AtomicU64,
     pub(crate) inputs: Inputs,
+    /// What runs in the lanes, for the question asked before quitting.
+    pub(crate) work: Work,
 }
 
 impl Peer {
@@ -37,6 +40,7 @@ impl Peer {
             asked: Mutex::default(),
             next: AtomicU64::new(1),
             inputs,
+            work: Work::default(),
         })
     }
 
@@ -91,6 +95,7 @@ impl Ui {
                 _ => {}
             }
         }
+        self.peer.work.saw(self.lane.as_deref(), &event);
         let session = self.lane.as_deref().map(str::to_string);
         self.peer.send(ToClient::Event { session, event });
     }
@@ -229,6 +234,7 @@ pub(crate) struct Ends(Ui);
 impl Drop for Ends {
     fn drop(&mut self) {
         self.0.peer.inputs.forget(&self.0.session());
+        self.0.peer.work.ended(&self.0.session());
     }
 }
 

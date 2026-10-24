@@ -124,6 +124,15 @@ process environment): commands run in the environment of the client that opened 
    checks, the window host in the daemon, pty tests with a daemon per test home.
 4. **Attach and detach.** The event ring and cursors, pending requests replayed, the quit
    question (stop, move to the background, stay), `status`/`stop`, version restart.
+   Built: the quit question. `Command::Work`'s `Done::Work` lists what runs (`running`: each
+   lane working by its title, each terminal session by its command from `tools::shell`'s table,
+   each monitor and schedule by name; `server/work.rs` keeps the lanes' part from their events);
+   `Done::Initialized`'s `background` says whether the server keeps work once the interface
+   leaves (false in process, so only "Exit and stop tasks" and "Stay" are offered).
+   `Command::Background` posts `desk::Request::Background` and makes `serve` leave the prompts
+   waiting when the connection ends (it returns whether it did). The hook for a desk per
+   connection: the desk stops every lane's work when its requests' sender is dropped (the
+   connection ended) unless `Request::Background` came first; a host needs to do nothing else.
 5. **The window by project.** Tab groups in the strip per session's directory. Built: each tab
    has a group (`Browser::group`, by key; a page's own new tab takes its opener's), named by the
    app per lane (`windows::group`, the session's directory's last component): a lane's `Tabs`

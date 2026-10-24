@@ -50,8 +50,8 @@ is shown as [Paste] until sent; pasted file paths become file or image marks.
 Sessions run side by side: /new opens another and shows it while the one before goes on in the \
 background. The Left arrow on an empty prompt lists the sessions in this project (those open, a \
 new one, then the saved ones): Enter opens one, x stops its task, Esc closes the list. A question \
-from a session not shown names it. Quitting while a session works or a shell or monitor runs \
-asks first: Quit anyway stops them all.
+from a session not shown names it. Quitting while a session works or a shell, monitor or \
+schedule runs asks first, naming them: Exit and stop tasks stops them all.
 
 Ctrl-C stops the task of the session shown (the command running and every terminal session are \
 killed, and an open question or approval ends); a second Ctrl-C quits.";

@@ -43,11 +43,17 @@ fn kill_all_now_reaches_more_than_four() {
         assert_eq!(turn.until, Until::Matched, "{turn:?}");
         started.push((sessions, turn.id));
     }
-    assert_eq!(running_anywhere(), 5);
+    let running = running_anywhere();
+    assert_eq!(running.len(), 5, "{running:?}");
+    assert!(
+        running
+            .iter()
+            .all(|command| command.contains("exec sleep 60"))
+    );
 
     kill_all_now();
 
-    assert_eq!(running_anywhere(), 0);
+    assert_eq!(running_anywhere(), Vec::<String>::new());
     let poll = Wait {
         needle: None,
         yield_ms: Some(2_000),

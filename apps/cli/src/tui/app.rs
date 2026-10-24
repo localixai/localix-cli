@@ -37,8 +37,10 @@ pub(crate) enum Action {
     Sessions,
     /// Stop the task of the lane named, and never quit for it (`x` on its row).
     Halt(String),
-    /// Quit although work runs: every lane is stopped first ("Quit anyway").
+    /// Quit although work runs: every lane is stopped first ("Exit and stop tasks").
     QuitNow,
+    /// Quit, the work left running in the server ("Move to background and exit").
+    Background,
 }
 
 /// What Shift+Tab sends: the session reads it as the plan-mode switch.
@@ -105,8 +107,10 @@ pub(crate) struct App {
     pub(super) saved: Vec<(String, String, String)>,
     /// A lane closed to make room, said in the next lane that opens.
     pub(super) closed: Option<String>,
-    /// How many shells run, in every session (asked of the server): quitting stops them.
-    pub shells: Box<dyn Fn() -> usize + Send>,
+    /// What runs, in every session (asked of the server): quitting stops it.
+    pub work: Box<dyn Fn() -> Vec<protocol::Running> + Send>,
+    /// Whether the server keeps work once the interface leaves: quitting may leave it there.
+    pub background: bool,
     /// The modes `/mode` offers, each with what it does, as the server says them.
     pub modes: Vec<(String, String)>,
     /// Lanes the server keeps open at most.
@@ -138,7 +142,8 @@ impl App {
             listing: None,
             saved: vec![],
             closed: None,
-            shells: Box::new(|| 0),
+            work: Box::new(Vec::new),
+            background: false,
             modes: vec![],
             max_lanes: 8,
             outbox: vec![],

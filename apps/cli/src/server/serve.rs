@@ -13,32 +13,41 @@ use crate::desk::Request;
 /// What the server tells an interface of itself when it attaches.
 pub(crate) struct Info {
     pub max_lanes: usize,
-    /// Terminal sessions running, in every lane.
-    pub shells: fn() -> usize,
+    /// The commands of the terminal sessions running, in every lane.
+    pub shells: fn() -> Vec<String>,
     /// What `/` offers, and the modes, each with what it does.
     pub commands: Vec<(String, String)>,
     pub modes: Vec<(String, String)>,
+    /// Whether work may go on once the interface leaves (`Command::Background`).
+    pub background: bool,
 }
 
 /// Serve `incoming` until the interface is gone: replies to their questions, lanes' commands to
-/// the desk, the person's entries to the lanes' queues.
+/// the desk, the person's entries to the lanes' queues. Whether the person moved the session to
+/// the background: then its prompts wait for the next interface. Otherwise they end with nothing,
+/// and the desk, its requests' sender dropped with this connection, stops the lanes' work.
 pub(crate) fn serve(
     incoming: &Receiver<ToServer>,
     peer: &Arc<Peer>,
     desk: &Sender<Request>,
     info: &Info,
-) {
+) -> bool {
+    let mut kept = false;
     for frame in incoming {
         match frame {
             ToServer::Reply { id, reply } => peer.replied(id, reply),
             ToServer::Call { id, command } => {
+                kept |= command == Command::Background;
                 let done = done(command, peer, desk, info);
                 peer.send(ToClient::Done { id, done });
             }
         }
     }
-    // The interface is gone: nobody will answer what waits for the person.
-    peer.inputs.leave();
+    if !kept {
+        // The interface is gone: nobody will answer what waits for the person.
+        peer.inputs.leave();
+    }
+    kept
 }
 
 fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> Done {
@@ -59,6 +68,7 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
                 max_lanes: info.max_lanes,
                 commands: info.commands.clone(),
                 modes: info.modes.clone(),
+                background: info.background,
             }
         }
         Command::Input(input) => {
@@ -87,9 +97,14 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
             peer.inputs.leave();
             Done::Ok
         }
-        Command::Work => Done::Work {
-            shells: (info.shells)(),
-        },
+        Command::Work => {
+            let shells = (info.shells)();
+            Done::Work {
+                shells: shells.len(),
+                running: peer.work.running(shells),
+            }
+        }
+        Command::Background => to_desk(Request::Background),
     }
 }
 

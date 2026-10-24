@@ -29,12 +29,15 @@ pub enum Command {
     Open { target: Target },
     /// This directory's saved sessions, for the list.
     List,
-    /// "Quit anyway": every lane is stopped, then the work ends.
+    /// "Exit and stop tasks": every lane is stopped, then the work ends.
     QuitAll,
     /// The person left: what waits for them ends with nothing.
     Leave,
     /// What still runs, for the question asked before quitting.
     Work,
+    /// "Move to background and exit": the lanes go on with no interface, their prompts and
+    /// questions waiting for the next; the connection's end then stops nothing.
+    Background,
 }
 
 /// What the person sent: the text, and the pictures attached to it.
@@ -74,6 +77,14 @@ pub enum Target {
     Saved(String),
 }
 
+/// Something running that quitting stops: its kind (`session`, `shell`, `monitor`,
+/// `schedule`) and its name (a session's title, a shell's command, a job's name).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Running {
+    pub kind: String,
+    pub name: String,
+}
+
 /// What came of a command.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -86,14 +97,21 @@ pub enum Done {
         max_lanes: usize,
         commands: Vec<(String, String)>,
         modes: Vec<(String, String)>,
+        /// Whether work may go on once this interface leaves (a daemon's), so quitting may
+        /// move it to the background.
+        #[serde(default)]
+        background: bool,
     },
     /// The task was stopped; `again` when it was asked a second time in a row.
     Interrupted {
         again: bool,
     },
-    /// Terminal sessions running, in every lane.
+    /// What quitting would stop: the terminal sessions running, in every lane, and each thing
+    /// running by name.
     Work {
         shells: usize,
+        #[serde(default)]
+        running: Vec<Running>,
     },
     /// The command could not be done, and why.
     Failed {

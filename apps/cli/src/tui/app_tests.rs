@@ -123,8 +123,13 @@ fn ctrl_d_quits_from_an_empty_prompt_and_asks_while_a_task_works() {
     app.composer.clear();
     assert_eq!(app.input(ctrl('d'), now), Some(Action::Quit));
     app.event(Event::TaskStarted("x".into()), now);
+    // The server says the task runs.
+    app.work = Box::new(|| {
+        let (kind, name) = ("session".into(), "x".into());
+        vec![protocol::Running { kind, name }]
+    });
     assert_eq!(app.input(ctrl('d'), now), None);
-    assert!(render(&mut app, now).contains("Quit llx?"));
+    assert!(render(&mut app, now).contains("Background work is running"));
 }
 
 #[test]

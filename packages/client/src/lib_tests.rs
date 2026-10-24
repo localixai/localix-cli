@@ -45,10 +45,20 @@ fn answering(at_server: Receiver<ToServer>, from_server: Sender<ToClient>, done:
 #[test]
 fn a_command_waits_for_what_is_done_with_it() {
     let (client, at_server, from_server, _seen) = connected();
-    answering(at_server, from_server, Done::Work { shells: 2 });
+    answering(
+        at_server,
+        from_server,
+        Done::Work {
+            shells: 2,
+            running: vec![],
+        },
+    );
     assert_eq!(
         client.call(Command::Work, WAIT),
-        Ok(Done::Work { shells: 2 })
+        Ok(Done::Work {
+            shells: 2,
+            running: vec![],
+        })
     );
 }
 

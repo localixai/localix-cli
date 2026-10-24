@@ -2,8 +2,8 @@
 //! which is also its first process group's) is mirrored in a static table, so a signal handler
 //! that quits at once can still kill them all (see [`kill_all_now`]).
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use super::process::{self, Ending};
@@ -22,6 +22,8 @@ const DRAIN: Duration = Duration::from_millis(100);
 const KILL_SLOTS: usize = 32;
 /// The sessions' ids, for [`kill_all_now`]: a signal handler may read only atomics.
 static GROUPS: [AtomicI32; KILL_SLOTS] = [const { AtomicI32::new(0) }; KILL_SLOTS];
+/// Each slot's command, for what quitting would stop; read only where its group is mirrored.
+static COMMANDS: Mutex<[Option<String>; KILL_SLOTS]> = Mutex::new([const { None }; KILL_SLOTS]);
 
 pub(super) struct Session {
     pub id: u32,
@@ -38,6 +40,9 @@ pub(super) struct Session {
 impl Session {
     pub(super) fn new(id: u32, command: String, pty: Pty) -> Self {
         let slot = mirror(pty.child.id());
+        if let Some(slot) = slot {
+            commands()[slot] = Some(command.clone());
+        }
         Self {
             id,
             command,
@@ -118,6 +123,8 @@ impl Session {
         }
         // Unmirrored first: once the shell is reaped, its pid may be given to another process.
         if let Some(slot) = self.slot.take() {
+            // Before the slot is free: the next session's command is never the one cleared.
+            commands()[slot] = None;
             // A pid the system gave: it is a pid_t, which `id` widened.
             let group = self.pty.child.id().cast_signed();
             let _ = GROUPS[slot].compare_exchange(group, 0, Ordering::SeqCst, Ordering::SeqCst);
@@ -168,12 +175,16 @@ pub fn kill_all_now() {
     }
 }
 
-/// How many sessions are running, in every registry of the process.
-pub fn running_anywhere() -> usize {
-    GROUPS
-        .iter()
-        .filter(|slot| slot.load(Ordering::SeqCst) != 0)
-        .count()
+/// The commands of the sessions running, in every registry of the process.
+pub fn running_anywhere() -> Vec<String> {
+    let commands = commands();
+    let running = GROUPS.iter().zip(commands.iter());
+    let running = running.filter(|(group, _)| group.load(Ordering::SeqCst) != 0);
+    running.filter_map(|(_, command)| command.clone()).collect()
+}
+
+fn commands() -> MutexGuard<'static, [Option<String>; KILL_SLOTS]> {
+    COMMANDS.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// Mirror `group` in a free slot of [`GROUPS`]; with none free, only the normal ending kills it.

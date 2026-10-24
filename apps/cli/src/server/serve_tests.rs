@@ -30,6 +30,15 @@ fn served() -> Served {
     reason = "the in-process transport's channels, as the binary makes them"
 )]
 fn served_by(host: Option<Arc<Host>>) -> Served {
+    served_with(host, || vec!["cargo build".into()])
+}
+
+/// [`served_by`], its terminal sessions listed by `shells`.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the in-process transport's channels, as the binary makes them"
+)]
+fn served_with(host: Option<Arc<Host>>, shells: fn() -> Vec<String>) -> Served {
     let (to_server, incoming) = channel();
     let (out, from_server) = channel();
     let (desk, requests) = channel();
@@ -38,7 +47,7 @@ fn served_by(host: Option<Arc<Host>>) -> Served {
     std::thread::spawn(move || {
         let info = Info {
             max_lanes: 3,
-            shells: Arc::new(|| vec!["cargo build".into()]),
+            shells: Arc::new(shells),
             commands: vec![("help".into(), "the commands".into())],
             modes: vec![("plan".into(), "plan first".into())],
             background: true,
@@ -105,9 +114,16 @@ fn an_interface_that_attaches_is_told_what_the_server_allows() {
     assert_eq!(served.done(2), Done::Work { shells: 1, running });
 }
 
+/// Lane `id` open, as the desk says it.
+fn open(served: &Served, id: &str) {
+    let (id, name) = (id.to_string(), "first".to_string());
+    Ui::new(Arc::clone(&served.peer)).send(protocol::Event::LaneStarted { id, name });
+}
+
 #[test]
 fn what_the_person_types_is_the_lanes_next_entry() {
     let served = served();
+    open(&served, "s1");
     let input = Input {
         session: "s1".into(),
         text: "fix it".into(),
@@ -314,6 +330,7 @@ fn the_person_is_given_up_on_only_when_the_last_connection_is_gone() {
     let (to_server, frames) = another(&served);
     attach(&to_server, 1, None);
     until_done(&frames, 1);
+    open(&served, "s1");
     let first = Input {
         session: "s1".into(),
         text: "first".into(),
@@ -416,4 +433,37 @@ fn in_process_there_is_no_daemon_to_ask_or_stop() {
         served.call(id, command);
         assert!(matches!(served.done(id), Done::Failed { .. }));
     }
+}
+
+#[test]
+fn what_is_typed_for_a_session_not_open_is_refused_and_kept_nowhere() {
+    let served = served();
+    let input = Input {
+        session: "gone".into(),
+        text: "fix it".into(),
+        ..Input::default()
+    };
+    served.call(1, Command::Input(input));
+    assert!(matches!(served.done(1), Done::Failed { why } if why.contains("gone")));
+    served.call(
+        2,
+        Command::Close {
+            session: "gone".into(),
+        },
+    );
+    assert!(matches!(served.done(2), Done::Failed { .. }));
+}
+
+#[test]
+fn a_command_that_panics_is_answered_failed_and_the_server_goes_on() {
+    let served = served_with(None, || -> Vec<String> {
+        panic!("a bug in the shells' table")
+    });
+    served.call(1, Command::Work);
+    assert!(
+        matches!(served.done(1), Done::Failed { why } if why.contains("a bug")),
+        "the panic is the command's error"
+    );
+    served.call(2, Command::List);
+    assert_eq!(served.done(2), Done::Ok, "the server still serves");
 }

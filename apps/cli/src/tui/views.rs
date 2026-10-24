@@ -191,6 +191,25 @@ impl Views {
         }
     }
 
+    /// Lane `id` ended: it goes, with its agents and jobs, and the lane to show instead when it
+    /// was shown. The last lane stays: the interface ends with it.
+    pub(crate) fn lane_ended(&mut self, id: &str) -> Option<String> {
+        let at = self
+            .find(id)
+            .filter(|&at| self.sessions[at].parent.is_none())?;
+        let lanes = self.sessions.iter().filter(|view| view.parent.is_none());
+        if lanes.count() < 2 {
+            return None;
+        }
+        let shown = self.home() == at;
+        let theirs = |view: &SessionView| view.id == id || view.parent.as_deref() == Some(id);
+        self.sessions.retain(|view| !theirs(view));
+        self.jobs.retain(|row| row.lane != id);
+        self.focus = None;
+        let next = self.sessions.iter().find(|view| view.parent.is_none());
+        next.filter(|_| shown).map(|view| view.id.clone())
+    }
+
     /// The lane of the session shown: itself, or the agent's parent.
     pub(crate) fn home(&self) -> usize {
         let at = self.find(&self.shown).unwrap_or(0);

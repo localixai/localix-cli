@@ -1,6 +1,8 @@
 //! Every interface attached to the sessions, and what they were told (W5, W6). An event goes to
-//! every client attached and, unless it is live only, into a bounded ring under its number, so a
-//! client that attaches later gets what came after its cursor, then the questions still waiting.
+//! every client attached and, unless it is live only, into a bounded ring under its number
+//! ([`ring`]), so a client that attaches later gets what came after its cursor (or, when the
+//! ring no longer reaches it, a gap and every session's state first), then the questions still
+//! waiting.
 //! A client whose channel is closed is dropped; none is waited for (the socket cuts slow ones).
 //!
 //! Frames leave in the order they were posted, the same for every client, yet no lock is held
@@ -10,9 +12,13 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use protocol::{Event, ToClient};
+
+use self::ring::{Frame, KEPT_BYTES, Ring};
+
+mod ring;
 
 /// An attached client, by the hub that knows it.
 pub(crate) type ClientId = u64;
@@ -22,7 +28,7 @@ pub(crate) const KEPT: usize = 2_000;
 
 /// Whether `event` is worth giving again to a client that attaches. A hands' step is drawn as a
 /// passing line (W6); a copy, a quit, a prefill and a list are what one client asked for once.
-/// The rest is replayed: a queue or a total is sent whole, so the last replayed is right.
+/// The rest is replayed: a queue or a total is sent whole, so only the latest is kept.
 fn replayable(event: &Event) -> bool {
     !matches!(
         event,
@@ -38,7 +44,7 @@ struct Client {
 }
 
 /// A frame posted: its post's number, for whom, and the frame.
-type Post = (u64, To, ToClient);
+type Post = (u64, To, Frame);
 /// A client as a flush sees it: its id, its channel, and its last post replayed.
 type Seen = (ClientId, Sender<ToClient>, u64);
 
@@ -48,15 +54,11 @@ enum To {
     One(ClientId),
 }
 
-#[derive(Default)]
 struct State {
     clients: Vec<Client>,
-    /// The numbered events kept, oldest first.
-    ring: VecDeque<(u64, ToClient)>,
-    room: usize,
-    seq: u64,
+    ring: Ring,
     /// The questions waiting for a reply, in the order asked.
-    asked: Vec<(u64, ToClient)>,
+    asked: Vec<(u64, Frame)>,
     /// What is posted and not yet sent, each with its post's number.
     outbox: VecDeque<Post>,
     posted: u64,
@@ -69,10 +71,20 @@ pub(crate) struct Hub {
 }
 
 impl Hub {
+    /// A hub that keeps the last `room` events.
     pub(crate) fn new(room: usize) -> Self {
+        Self::with_bytes(room, KEPT_BYTES)
+    }
+
+    /// A hub that keeps the last `room` events, of `bytes` at most.
+    pub(crate) fn with_bytes(room: usize, bytes: usize) -> Self {
         let state = State {
-            room,
-            ..State::default()
+            clients: vec![],
+            ring: Ring::new(room, bytes),
+            asked: vec![],
+            outbox: VecDeque::new(),
+            posted: 0,
+            next_client: 0,
         };
         Self {
             state: Mutex::new(state),
@@ -92,7 +104,7 @@ impl Hub {
 
     /// `frame` to client `id` alone (what came of its command), in order with the rest.
     pub(crate) fn to(&self, id: ClientId, frame: ToClient) {
-        self.lock().post(To::One(id), frame);
+        self.lock().post(To::One(id), Arc::new(frame));
         self.flush();
     }
 
@@ -175,64 +187,40 @@ impl Hub {
 }
 
 impl State {
-    fn post(&mut self, to: To, frame: ToClient) {
+    fn post(&mut self, to: To, frame: Frame) {
         self.posted += 1;
         self.outbox.push_back((self.posted, to, frame));
     }
 
     /// `frame` as it is sent: an event numbered and kept unless live only; a question kept
     /// while it waits.
-    fn keep(&mut self, frame: ToClient) -> ToClient {
+    fn keep(&mut self, frame: ToClient) -> Frame {
         match frame {
             ToClient::Event { session, event, .. } if replayable(&event) => {
-                self.seq += 1;
-                let seq = Some(self.seq);
-                let frame = ToClient::Event {
-                    session,
-                    event,
-                    seq,
-                };
-                self.ring.push_back((self.seq, frame.clone()));
-                while self.ring.len() > self.room {
-                    self.ring.pop_front();
-                }
-                frame
+                self.ring.keep(session, event)
             }
             ToClient::Ask { id, .. } => {
-                self.asked.push((id, frame.clone()));
+                let frame = Arc::new(frame);
+                self.asked.push((id, Arc::clone(&frame)));
                 frame
             }
             ToClient::Resolved { id } => {
                 self.asked.retain(|(of, _)| *of != id);
-                frame
+                Arc::new(frame)
             }
-            frame => frame,
+            frame => Arc::new(frame),
         }
     }
 
-    /// Post to `id` what came after `cursor`, a gap first when some of it is no longer kept or
-    /// the cursor is not this server's, then the questions waiting. The last number replayed.
+    /// Post to `id` what came after `cursor` ([`Ring::replay`]), then the questions waiting.
+    /// The last number replayed.
     fn replay(&mut self, id: ClientId, cursor: Option<u64>) -> u64 {
-        let stale = cursor.is_some_and(|cursor| cursor > self.seq);
-        let from = match stale {
-            true => 0,
-            false => cursor.unwrap_or(0),
-        };
-        let oldest = self.ring.front().map_or(self.seq + 1, |(seq, _)| *seq);
-        let mut frames = Vec::new();
-        if stale || from + 1 < oldest {
-            frames.push(ToClient::Gap);
-        }
-        frames.extend(
-            (self.ring.iter())
-                .filter(|(seq, _)| *seq > from)
-                .map(|(_, frame)| frame.clone()),
-        );
-        frames.extend(self.asked.iter().map(|(_, frame)| frame.clone()));
+        let mut frames = self.ring.replay(cursor);
+        frames.extend(self.asked.iter().map(|(_, frame)| Arc::clone(frame)));
         for frame in frames {
             self.post(To::One(id), frame);
         }
-        self.seq
+        self.ring.seq()
     }
 }
 
@@ -245,7 +233,7 @@ fn send(batch: Vec<Post>, clients: &[Seen]) -> Vec<ClientId> {
                 To::All => posted > *since,
                 To::One(one) => one == *id,
             };
-            if wanted && !gone.contains(id) && out.send(frame.clone()).is_err() {
+            if wanted && !gone.contains(id) && out.send(ToClient::clone(&frame)).is_err() {
                 gone.push(*id);
             }
         }

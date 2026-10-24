@@ -12,6 +12,16 @@ use crate::tui::printable::printable;
 use crate::tui::style;
 
 impl App {
+    /// The lane at `at` ended: it goes, another shown in its place; not as the person quits,
+    /// when every lane ends and the screen stays as they left it.
+    pub(super) fn lane_ended(&mut self, at: usize) -> Option<super::Action> {
+        let id = self.views.sessions[at].id.clone();
+        if let Some(next) = (!self.left).then(|| self.views.lane_ended(&id)).flatten() {
+            self.show(&next);
+        }
+        None
+    }
+
     /// A call of the session at `at` ended: its row, with how long it took.
     pub(super) fn call_ended(
         &mut self,

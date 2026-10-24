@@ -49,6 +49,11 @@ impl Work {
         }
     }
 
+    /// Whether lane `lane` is open: started, and not ended.
+    pub(crate) fn open(&self, lane: &str) -> bool {
+        self.lock().iter().any(|known| known.id == lane)
+    }
+
     /// The lane ended: nothing of it runs.
     pub(crate) fn ended(&self, lane: &str) {
         self.lock().retain(|known| known.id != lane);

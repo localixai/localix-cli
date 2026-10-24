@@ -116,7 +116,8 @@ process environment): commands run in the environment of the client that opened 
    Built so far, not yet used by `llx`: `Client::connect` (the same reader loop as in process; a
    writer thread with a 10 s write timeout, so a server that stops reading is gone), and on the
    server `server/socket.rs` (`bind`, `accept`, `connection`: a reader, a pump and a writer per
-   client; 1,024 frames queued for a client before it is cut off; 64 read and not yet served
+   client; a whole replay and 1,024 live frames queued for a client, or a write stalled 10 s,
+   before it is cut off; a call it cannot read answered `Failed` under its id; 64 read and not yet served
    before its reader waits) and `daemon.rs` (`socket_path`, `lock` on `<config>/daemon.lock`
    where `<config>` is the credential store's directory, `probe`). A connection's ends are those
    `serve` and `Peer::new` take in process; a test drives `serve` over a real socket.
@@ -148,11 +149,18 @@ process environment): commands run in the environment of the client that opened 
    question (stop, move to the background, stay), `status`/`stop`, version restart.
    Built, the server's side: a `Peer` serves any number of clients (`server/hub.rs`). Every
    event goes to each attached client, numbered per peer (`ToClient::Event { seq }`) and kept in
-   a ring of the last 2,000, unless live only: a hands' step, a copy, a quit, a prefill and a
-   list are never kept (a queue and a total are sent whole, so the last replayed is right).
+   a ring of the last 2,000 (and 8 MiB), unless live only: a hands' step, a copy, a quit, a
+   prefill and a list are never kept (`server/hub/ring.rs`). Each open session's state is kept
+   outside the ring too, whole: a lane's start, header and mode, an agent's start and close, the
+   latest queue, total, jobs, context and facts; a newer one replaces the one before, in the ring
+   too. A lane that ends says so (`Event::LaneEnded`, from its queue's end) and takes all of
+   its own and its agents' with it; the interface lets it go, and what is typed for it is refused.
    `Command::Attach { cursor }` (answered `Done::Attached { seq }`) replays what came after the
-   cursor, a `ToClient::Gap` first when the ring no longer holds all of it (or the cursor is not
-   this server's), then the questions waiting. A question goes to every client; the first reply
+   cursor; when the ring no longer holds all of it (or the cursor is not this server's), a
+   `ToClient::Gap` first, then the state of every session the ring no longer holds, so a lane
+   moved to the background long ago is drawn and typed into again; then the questions waiting.
+   A queue is told only when it changes. A command that panics is answered `Failed` (W8; in a
+   debug build only: the release build aborts on a panic). A question goes to every client; the first reply
    wins and every client gets `Resolved`. A closed client is dropped, never waited for; what
    came of a command goes to its connection alone. `serve` serves `Peer::new`'s client as before;
    `serve::connection(&incoming, &peer, out, &desk, &info)` serves a later connection to the same

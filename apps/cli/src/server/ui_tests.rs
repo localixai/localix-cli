@@ -144,6 +144,11 @@ fn a_line_waiting_when_the_last_interface_is_gone_is_withdrawn() {
 fn closing_a_lane_withdraws_its_questions_and_leaves_the_others() {
     let (ui, peer, frames) = crate::testing::fake_peer();
     let to_server = serving(&peer);
+    // The desk opened both lanes: only an open lane is closed.
+    for id in ["s1", "s2"] {
+        let (id, name) = (id.to_string(), id.to_string());
+        ui.send(Event::LaneStarted { id, name });
+    }
     let first = pick(&ui.for_lane("s1"));
     let one = asked(&frames);
     let second = pick(&ui.for_lane("s2"));

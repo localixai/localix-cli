@@ -140,18 +140,29 @@ fn quit_with_work_running_asks() {
     term.wait_for("Running echo", LONG);
     new_session(&mut term, "❯ first task");
     term.press(key::CTRL_D);
-    let screen = term.wait_for("Quit llx?", LONG);
-    assert!(screen.contains("1 session still working"), "{screen}");
+    let screen = term.wait_for("Background work is running", LONG);
+    for said in [
+        "will stop when you exit",
+        "session · ",
+        "1. Exit and stop tasks",
+        "2. Stay",
+    ] {
+        assert!(screen.contains(said), "{said}: {screen}");
+    }
+    assert!(
+        !screen.contains("Move to background"),
+        "in process: {screen}"
+    );
     // Stay: nothing stops.
-    term.press(key::DOWN).press(key::ENTER);
-    wait_gone(&term, "Quit llx?");
+    term.type_text("2");
+    wait_gone(&term, "Background work is running");
     assert_eq!(term.exited(Duration::from_millis(300)), None);
     term.press(key::LEFT);
     term.wait_for("running", LONG);
     term.press(key::ESC);
     term.press(key::CTRL_D);
-    term.wait_for("Quit anyway", LONG);
-    term.press(key::ENTER);
+    term.wait_for("Exit and stop tasks", LONG);
+    term.type_text("1");
     assert!(term.exited(Duration::from_secs(3)).is_some(), "it quit");
     let pid: i32 = std::fs::read_to_string(term.file("pid"))
         .unwrap()

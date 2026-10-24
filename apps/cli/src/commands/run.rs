@@ -285,6 +285,8 @@ fn serving() -> std::io::Result<Serving> {
         modes: Mode::ALL
             .map(|mode| (mode.name().into(), mode.hint()))
             .to_vec(),
+        // In process, the work ends with the interface.
+        background: false,
     };
     let server = std::thread::Builder::new().name("llx-serve".into());
     server.spawn(move || serve::serve(&incoming, &served, &desk, &info))?;

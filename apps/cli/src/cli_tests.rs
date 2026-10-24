@@ -243,7 +243,7 @@ fn a_prompt_needs_no_quotes_and_commands_still_parse() {
 #[test]
 fn the_help_says_how_sessions_run_side_by_side() {
     let help = Cli::command().render_long_help().to_string();
-    for said in ["/new", "Left arrow", "Quit anyway", "x stops"] {
+    for said in ["/new", "Left arrow", "Exit and stop tasks", "x stops"] {
         assert!(help.contains(said), "{said}: {help}");
     }
 }

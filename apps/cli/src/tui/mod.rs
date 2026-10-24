@@ -118,6 +118,7 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
         max_lanes,
         commands,
         modes,
+        background,
         ..
     }) = client.call(hello, drawing::ANSWER)
     else {
@@ -127,10 +128,11 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
     app.files = mention::Files::new(Some(start.root.to_path_buf()));
     let asking = client.clone();
     // Asked only when the quit question needs it.
-    app.shells = Box::new(move || match asking.call(Command::Work, drawing::ANSWER) {
-        Ok(Done::Work { shells }) => shells,
-        _ => 0,
+    app.work = Box::new(move || match asking.call(Command::Work, drawing::ANSWER) {
+        Ok(Done::Work { running, .. }) => running,
+        _ => vec![],
     });
+    app.background = background;
     app.max_lanes = max_lanes;
     app.modes = modes;
     let seat = drawing::Seat {

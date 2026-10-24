@@ -10,7 +10,7 @@ use crate::output::lock;
 use crate::server::Ui;
 use protocol::Event;
 
-/// How long "Quit anyway" waits for the lanes it stopped.
+/// How long "Exit and stop tasks" waits for the lanes it stopped.
 pub(super) const QUIT_WAIT: Duration = Duration::from_secs(2);
 
 /// The lanes open, by session id, oldest first.
@@ -64,7 +64,7 @@ impl Lanes {
         }
     }
 
-    /// "Quit anyway": every lane is stopped; those that do not end within `bound` are left to
+    /// "Exit and stop tasks": every lane is stopped; those that do not end within `bound` are left to
     /// `quit`, which ends the process.
     pub(super) fn quit(&self, bound: Duration, quit: &dyn Fn()) {
         self.stop_all();

@@ -36,10 +36,12 @@ pub(crate) enum Request {
     Open(Target),
     /// This directory's saved sessions, for the list.
     List,
-    /// "Quit anyway": every lane is stopped, then the process ends.
+    /// "Exit and stop tasks": every lane is stopped, then the process ends.
     Quit,
     /// A client attached from this place: its directory, environment and colours.
     Attach(protocol::Place),
+    /// "Move to background and exit": the lanes go on when the interface's connection ends.
+    Background,
 }
 
 /// What a lane does once built: its session at the prompt.
@@ -60,6 +62,8 @@ pub(crate) fn run(
     quit: &(dyn Fn() + Sync),
 ) -> i32 {
     let lanes = Lanes::default();
+    // Moved to the background: the interface's end stops nothing.
+    let (mut kept, mut gone) = (false, false);
     std::thread::scope(|scope| {
         let _all = AllLanes { lanes: &lanes, ui };
         let desk = Desk {
@@ -77,9 +81,17 @@ pub(crate) fn run(
                 // The first client's place is the desk's, taken before it began; one per
                 // session is for when several attach (docs/daemon.md, step 4).
                 Ok(Request::Attach(_)) => {}
+                Ok(Request::Background) => kept = true,
                 Err(RecvTimeoutError::Timeout) => {}
-                // No interface to ask: the lanes end by themselves.
-                Err(RecvTimeoutError::Disconnected) => lanes.wait(POLL),
+                // The interface's connection ended: unless the person moved the session to the
+                // background, its work stops, as "Exit and stop tasks" does.
+                Err(RecvTimeoutError::Disconnected) => {
+                    if !kept && !gone {
+                        lanes.stop_all();
+                    }
+                    gone = true;
+                    lanes.wait(POLL);
+                }
             }
         }
     });

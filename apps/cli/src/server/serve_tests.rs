@@ -29,9 +29,10 @@ fn served() -> Served {
     std::thread::spawn(move || {
         let info = Info {
             max_lanes: 3,
-            shells: || 2,
+            shells: || vec!["cargo build".into()],
             commands: vec![("help".into(), "the commands".into())],
             modes: vec![("plan".into(), "plan first".into())],
+            background: true,
         };
         serve(&incoming, &theirs, &desk, &info);
     });
@@ -76,10 +77,21 @@ fn an_interface_that_attaches_is_told_what_the_server_allows() {
             max_lanes: 3,
             commands: vec![("help".into(), "the commands".into())],
             modes: vec![("plan".into(), "plan first".into())],
+            background: true,
         }
     );
+    let ui = Ui::new(Arc::clone(&served.peer));
+    let (id, name) = ("s1".to_string(), "first".to_string());
+    ui.send(protocol::Event::LaneStarted { id, name });
+    ui.for_lane("s1")
+        .send(protocol::Event::TaskStarted("fix it".into()));
     served.call(2, Command::Work);
-    assert_eq!(served.done(2), Done::Work { shells: 2 });
+    let running = |kind: &str, name: &str| protocol::Running {
+        kind: kind.into(),
+        name: name.into(),
+    };
+    let running = vec![running("session", "first"), running("shell", "cargo build")];
+    assert_eq!(served.done(2), Done::Work { shells: 1, running });
 }
 
 #[test]
@@ -192,9 +204,10 @@ fn another(served: &Served) -> (Sender<ToServer>, Receiver<ToClient>) {
     std::thread::spawn(move || {
         let info = Info {
             max_lanes: 3,
-            shells: || 0,
+            shells: Vec::new,
             commands: vec![],
             modes: vec![],
+            background: true,
         };
         connection(&incoming, &peer, out, &desk, &info);
     });
@@ -270,7 +283,7 @@ fn a_connection_is_told_only_what_came_of_its_own_commands() {
     attach(&to_server, 1, None);
     assert_eq!(until_done(&frames, 1).1, Done::Attached { seq: 0 });
     served.call(5, Command::Work);
-    assert_eq!(served.done(5), Done::Work { shells: 2 });
+    assert!(matches!(served.done(5), Done::Work { shells: 1, .. }));
     let call = ToServer::Call {
         id: 6,
         command: Command::Work,
@@ -278,7 +291,7 @@ fn a_connection_is_told_only_what_came_of_its_own_commands() {
     to_server.send(call).unwrap();
     let (before, done) = until_done(&frames, 6);
     assert!(before.is_empty(), "{before:?}");
-    assert_eq!(done, Done::Work { shells: 0 });
+    assert!(matches!(done, Done::Work { shells: 0, .. }), "{done:?}");
 }
 
 #[test]
@@ -319,4 +332,28 @@ fn the_person_is_given_up_on_only_when_the_last_connection_is_gone() {
     assert_eq!(peer.inputs.next("s1").unwrap().text, "still here");
     drop(to_server);
     assert_eq!(peer.inputs.next("s1"), None);
+}
+
+#[test]
+fn moved_to_the_background_the_connections_end_leaves_the_prompts_waiting() {
+    let served = served();
+    served.call(1, Command::Background);
+    assert_eq!(served.done(1), Done::Ok);
+    let Served {
+        desk,
+        peer,
+        to_server,
+        ..
+    } = served;
+    // The desk is told, and then the connection is gone.
+    drop(to_server);
+    let asked: Vec<Request> = desk.iter().collect();
+    assert_eq!(asked, [Request::Background]);
+    peer.inputs.input(Input {
+        session: "s1".into(),
+        text: "from the next interface".into(),
+        ..Input::default()
+    });
+    let entry = peer.inputs.next("s1").map(|entry| entry.text);
+    assert_eq!(entry.as_deref(), Some("from the next interface"));
 }

@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use serde_json::json;
 
 use crate::compose::{Models, Seat, Shared, lane_with};
-use crate::desk::test_support::{Person, at_desk, at_desk_with, call, ended, state};
+use crate::desk::test_support::{Person, at_desk, at_desk_with, call, connected, ended, state};
 use crate::desk::{Work, run};
 use crate::mode::Mode;
 use crate::server::serve::{Info, serve};
@@ -14,6 +14,7 @@ use crate::server::{Peer, Ui};
 use crate::testing::{NoDecider, Scratch, gated, says, setup};
 use crate::tui::app::{Action, App};
 use crate::tui::views::AgentState;
+use protocol::Command;
 
 #[test]
 fn stopping_lane_b_leaves_lane_a_running() {
@@ -83,9 +84,10 @@ fn a_panicking_lane_ends_the_other_lanes() {
             let desk = scope.spawn(|| run(&shared, &ui, asked, seat, None, &start, &|| {}));
             let info = Info {
                 max_lanes: crate::desk::MAX_LANES,
-                shells: || 0,
+                shells: Vec::new,
                 commands: vec![],
                 modes: vec![],
+                background: false,
             };
             scope.spawn(move || serve(&incoming, &peer, &to_desk, &info));
             let mut person = Person {
@@ -146,4 +148,78 @@ fn quit_with_lanes_that_stop_ends_without_the_hard_exit() {
         to_a.send(call("read", json!({"path": "."}))).unwrap();
         person.until_over();
     });
+}
+
+#[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "nothing tells a lane that it was not asked: time passing does, bounded"
+)]
+fn a_connection_that_ends_without_background_stops_the_work() {
+    let (to_a, a) = gated();
+    connected(
+        &[&a],
+        Some("work"),
+        &|| panic!("no hard exit"),
+        |mut person, _| {
+            person.until("A asks its model", |_| a.turns() == 1);
+            // The terminal closed, nothing chosen: as "Exit and stop tasks".
+            drop(person);
+            std::thread::sleep(Duration::from_millis(300));
+            to_a.send(call("read", json!({"path": "."}))).unwrap();
+            std::thread::sleep(Duration::from_millis(500));
+            let turns = a.turns();
+            if turns > 1 {
+                // Let the lane end, so the failure is told rather than waited on.
+                to_a.send(says("Done.")).unwrap();
+            }
+            assert_eq!(turns, 1, "the task was stopped, not asked to go on");
+        },
+    );
+}
+
+#[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "nothing tells a lane that it was not asked: time passing does, bounded"
+)]
+fn moved_to_the_background_a_lane_waits_for_the_next_interface_and_keeps_its_jobs() {
+    let (to_a, a) = gated();
+    connected(
+        &[&a],
+        Some("remind me"),
+        &|| panic!("no hard exit"),
+        |mut person, peer| {
+            let later =
+                json!({"action": "schedule", "prompt": "check", "in": "2h", "name": "later"});
+            to_a.send(call("jobs", later)).unwrap();
+            to_a.send(says("Scheduled.")).unwrap();
+            let lane = person.first();
+            person.until("A waits", |app| ended(app, &lane) && app.lane().ready);
+            person.command(Command::Background);
+            drop(person);
+            std::thread::sleep(Duration::from_millis(500));
+            let kept = peer.work.running(vec![]);
+            let schedule = protocol::Running {
+                kind: "schedule".into(),
+                name: "later".into(),
+            };
+            // An entry from the next interface reaches the lane: its prompt still waits.
+            to_a.send(says("Again.")).unwrap();
+            let again = protocol::Input {
+                session: lane,
+                text: "again".into(),
+                ..protocol::Input::default()
+            };
+            peer.inputs.input(again);
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while a.turns() < 3 && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let turns = a.turns();
+            peer.inputs.leave();
+            assert_eq!(kept, [schedule], "its schedule runs on");
+            assert_eq!(turns, 3, "the lane took the next interface's entry");
+        },
+    );
 }

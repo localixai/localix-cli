@@ -193,6 +193,27 @@ pub(crate) fn at_desk_with(
     quit: &(dyn Fn() + Sync),
     person: impl FnOnce(&mut Person),
 ) -> Scratch {
+    connected(chats, task, quit, |mut at, _| {
+        person(&mut at);
+        at.app.leave();
+        at.flush();
+        at.until_over();
+    })
+}
+
+/// A session at the desk as [`at_desk_with`] makes it, `person` given the connection to end it
+/// as they choose, and the server's side of it; the desk must end within 10 s after.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the desk's end is looked at again for a bounded time: with the person gone, no \
+              frame says it"
+)]
+pub(crate) fn connected(
+    chats: &[&Gated],
+    task: Option<&str>,
+    quit: &(dyn Fn() + Sync),
+    person: impl FnOnce(Person, &Arc<Peer>),
+) -> Scratch {
     let scratch = Scratch::new();
     let (shared, seat) = setup(&scratch, Mode::Bypass, true).split(None);
     #[allow(
@@ -223,11 +244,13 @@ pub(crate) fn at_desk_with(
         let desk = scope.spawn(|| run(&shared, &ui, asked, seat, task, &start, quit));
         let info = Info {
             max_lanes: super::MAX_LANES,
-            shells: || 0,
+            shells: Vec::new,
             commands: vec![],
             modes: vec![],
+            background: false,
         };
-        scope.spawn(move || serve(&incoming, &peer, &to_desk, &info));
+        let served = Arc::clone(&peer);
+        scope.spawn(move || serve(&incoming, &served, &to_desk, &info));
         let mut at = Person {
             app: App::new(80, 24, vec![]),
             frames,
@@ -235,10 +258,15 @@ pub(crate) fn at_desk_with(
             over: false,
         };
         at.app.max_lanes = super::MAX_LANES;
-        person(&mut at);
-        at.app.leave();
-        at.flush();
-        at.until("the desk to end", |_| desk.is_finished());
+        person(at, &peer);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !desk.is_finished() {
+            assert!(
+                Instant::now() < deadline,
+                "waited too long for the desk to end"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
         assert_eq!(desk.join().unwrap(), crate::exit::OK);
     });
     scratch

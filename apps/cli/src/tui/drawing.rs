@@ -118,6 +118,11 @@ fn act(
             app.leave();
             app.outbox.push(Out::Call(Command::QuitAll));
         }
+        // The server keeps the work; told before the connection ends, which then stops nothing.
+        Some(Action::Background) => {
+            let _ = seat.client.call(Command::Background, ANSWER);
+            return true;
+        }
         Some(Action::Halt(id)) => app.outbox.push(Out::Call(Command::Halt { id })),
         Some(Action::Quit) if ended => return true,
         Some(Action::Quit) => app.leave(),

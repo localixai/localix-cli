@@ -2,8 +2,8 @@ use serde_json::json;
 
 use super::*;
 use crate::{
-    Adjustment, Answer, Approval, Input, JobRow, Label, Outcome, Place, Question, Saved, Target,
-    Theme, Turn,
+    Adjustment, Answer, Approval, Input, JobRow, Label, Outcome, Place, Question, Running, Saved,
+    Target, Theme, Turn,
 };
 
 fn through_json<T: Serialize + for<'de> Deserialize<'de>>(frame: &T) -> T {
@@ -138,6 +138,17 @@ fn every_question_to_the_person_comes_back_the_same_through_json() {
                 max_lanes: 8,
                 commands: vec![("help".into(), "the commands".into())],
                 modes: vec![("plan".into(), "plan first".into())],
+                background: true,
+            },
+        },
+        ToClient::Done {
+            id: 2,
+            done: Done::Work {
+                shells: 1,
+                running: vec![Running {
+                    kind: "shell".into(),
+                    name: "cargo build".into(),
+                }],
             },
         },
     ];
@@ -163,6 +174,10 @@ fn every_frame_to_the_server_comes_back_the_same_through_json() {
             command: Command::Open {
                 target: Target::Saved("x".into()),
             },
+        },
+        ToServer::Call {
+            id: 3,
+            command: Command::Background,
         },
         ToServer::Reply {
             id: 7,
@@ -249,4 +264,19 @@ fn an_event_from_a_server_that_numbers_nothing_still_reads() {
         seq: None,
     };
     assert_eq!(serde_json::from_str::<ToClient>(line).unwrap(), quit);
+}
+
+#[test]
+fn a_server_that_says_less_of_its_work_still_reads() {
+    let said = r#"{"type":"work","shells":2}"#;
+    let work = Done::Work {
+        shells: 2,
+        running: vec![],
+    };
+    assert_eq!(serde_json::from_str::<Done>(said).unwrap(), work);
+    let said = r#"{"type":"initialized","version":1,"max_lanes":8,"commands":[],"modes":[]}"#;
+    let Done::Initialized { background, .. } = serde_json::from_str(said).unwrap() else {
+        panic!("{said}");
+    };
+    assert!(!background, "no background unless the server says so");
 }

@@ -13,6 +13,7 @@ use protocol::{Adjustment, Approval, Asked, Event, Reply, ToClient};
 
 use super::hub::{ClientId, Hub};
 use super::inputs::{Inputs, Typed};
+use super::work::Work;
 
 /// The client [`Peer::new`] attaches.
 pub(crate) const FIRST: ClientId = 0;
@@ -27,6 +28,8 @@ pub(crate) struct Peer {
     asked: Mutex<HashMap<u64, SyncSender<Reply>>>,
     next: AtomicU64,
     pub(crate) inputs: Inputs,
+    /// What runs in the lanes, for the question asked before quitting.
+    pub(crate) work: Work,
 }
 
 impl Peer {
@@ -49,6 +52,7 @@ impl Peer {
                 asked: Mutex::default(),
                 next: AtomicU64::new(1),
                 inputs,
+                work: Work::default(),
             }
         });
         peer.hub.attach(out, None);
@@ -71,10 +75,7 @@ impl Peer {
         self.hub.detach(id)
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "D4: whether a backgrounded desk has an interface")
-    )]
+    /// How many interfaces are attached.
     pub(crate) fn attached(&self) -> usize {
         self.hub.attached()
     }
@@ -138,6 +139,7 @@ impl Ui {
                 _ => {}
             }
         }
+        self.peer.work.saw(self.lane.as_deref(), &event);
         let session = self.lane.as_deref().map(str::to_string);
         self.peer.send(ToClient::Event {
             session,
@@ -280,6 +282,7 @@ pub(crate) struct Ends(Ui);
 impl Drop for Ends {
     fn drop(&mut self) {
         self.0.peer.inputs.forget(&self.0.session());
+        self.0.peer.work.ended(&self.0.session());
     }
 }
 

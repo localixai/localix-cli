@@ -64,7 +64,7 @@ mod none {
 
     pub fn kill_all_now() {}
 
-    pub fn running_anywhere() -> usize {
-        0
+    pub fn running_anywhere() -> Vec<String> {
+        vec![]
     }
 }

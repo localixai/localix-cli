@@ -15,11 +15,13 @@ use crate::desk::Request;
 /// What the server tells an interface of itself when it attaches.
 pub(crate) struct Info {
     pub max_lanes: usize,
-    /// Terminal sessions running, in every lane.
-    pub shells: fn() -> usize,
+    /// The commands of the terminal sessions running, in every lane.
+    pub shells: fn() -> Vec<String>,
     /// What `/` offers, and the modes, each with what it does.
     pub commands: Vec<(String, String)>,
     pub modes: Vec<(String, String)>,
+    /// Whether work may go on once the interface leaves (`Command::Background`).
+    pub background: bool,
 }
 
 /// Who a connection is to the peer: a client attached, or one that has not said `Attach` yet,
@@ -30,14 +32,17 @@ enum Link {
 }
 
 /// Serve the peer's first client ([`Peer::new`]'s) until it is gone: replies to their
-/// questions, lanes' commands to the desk, the person's entries to the lanes' queues.
+/// questions, lanes' commands to the desk, the person's entries to the lanes' queues. Whether
+/// the person moved the session to the background: then its prompts wait for the next interface.
+/// Otherwise, once the last interface is gone, they end with nothing, and the desk, its
+/// requests' sender dropped with this connection, stops the lanes' work.
 pub(crate) fn serve(
     incoming: &Receiver<ToServer>,
     peer: &Arc<Peer>,
     desk: &Sender<Request>,
     info: &Info,
-) {
-    serving(incoming, peer, Link::Attached(FIRST), desk, info);
+) -> bool {
+    serving(incoming, peer, Link::Attached(FIRST), desk, info)
 }
 
 /// Serve a later connection to `peer`, whose frames go to `out`: it hears the sessions once it
@@ -52,8 +57,8 @@ pub(crate) fn connection(
     out: Sender<ToClient>,
     desk: &Sender<Request>,
     info: &Info,
-) {
-    serving(incoming, peer, Link::Waiting(out), desk, info);
+) -> bool {
+    serving(incoming, peer, Link::Waiting(out), desk, info)
 }
 
 fn serving(
@@ -62,7 +67,8 @@ fn serving(
     mut link: Link,
     desk: &Sender<Request>,
     info: &Info,
-) {
+) -> bool {
+    let mut kept = false;
     for frame in incoming {
         match frame {
             ToServer::Reply { id, reply } => peer.replied(id, reply),
@@ -75,6 +81,7 @@ fn serving(
                 peer.to(attached, ToClient::Done { id, done });
             }
             ToServer::Call { id, command } => {
+                kept |= command == Command::Background;
                 let done = ToClient::Done {
                     id,
                     done: done(command, peer, desk, info),
@@ -88,12 +95,16 @@ fn serving(
             }
         }
     }
-    // The last interface is gone: nobody will answer what waits for the person.
-    if let Link::Attached(me) = link
-        && peer.detach(me) == 0
-    {
+    // The last interface is gone, and the work was not kept: nobody will answer what waits for
+    // the person.
+    let left = match link {
+        Link::Attached(me) => peer.detach(me),
+        Link::Waiting(_) => peer.attached(),
+    };
+    if !kept && left == 0 {
         peer.inputs.leave();
     }
+    kept
 }
 
 /// The connection attached from `cursor`: replayed to, if it was attached already.
@@ -133,6 +144,7 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
                 max_lanes: info.max_lanes,
                 commands: info.commands.clone(),
                 modes: info.modes.clone(),
+                background: info.background,
             }
         }
         Command::Input(input) => {
@@ -161,9 +173,14 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
             peer.inputs.leave();
             Done::Ok
         }
-        Command::Work => Done::Work {
-            shells: (info.shells)(),
-        },
+        Command::Work => {
+            let shells = (info.shells)();
+            Done::Work {
+                shells: shells.len(),
+                running: peer.work.running(shells),
+            }
+        }
+        Command::Background => to_desk(Request::Background),
         // Served by `serving`, which knows the connection.
         Command::Attach { .. } => Done::Ok,
     }

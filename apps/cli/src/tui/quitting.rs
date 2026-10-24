@@ -1,13 +1,16 @@
-//! Quitting while work runs: Ctrl-C twice, Ctrl-D and `/exit` ask first when a session works or
-//! a shell or a monitor runs, since quitting stops them all. "Quit anyway" stops every session
-//! and ends llx; "Stay" (or Esc) closes the question.
+//! Quitting while work runs: Ctrl-C twice, Ctrl-D and `/exit` ask first when something runs (a
+//! session's task, a shell, a monitor, a schedule), naming each as the server says it. "Exit and
+//! stop tasks" stops every session and ends llx; "Move to background and exit", offered only by a
+//! server that keeps work once the interface leaves (a daemon's), leaves it running there; "Stay"
+//! (or Esc) closes the question.
 //!
 //! ```text
-//! • Quit llx?
-//!   2 sessions still working · 3 shells and 1 monitor running — they will be stopped.
-//!
-//! ❯ 1. Quit anyway
-//!   2. Stay
+//! Background work is running
+//! The following will stop when you exit:
+//!   shell · Build Electron with siso remote cache
+//! ❯ 1. Exit and stop tasks
+//!   2. Move to background and exit
+//!   3. Stay
 //! ```
 
 use std::time::Instant;
@@ -15,7 +18,6 @@ use std::time::Instant;
 use ratatui::text::{Line, Span};
 
 use super::app::{Action, App, Open};
-use super::cells::count;
 use super::queue::Asked;
 use super::select::{Choice, Picked, Select};
 use super::style;
@@ -23,20 +25,29 @@ use super::style;
 impl App {
     /// The person asks to quit: at once when nothing would be stopped, else asked first.
     pub(super) fn quit(&mut self) -> Option<Action> {
-        let Some(said) = self.running_work() else {
+        let running = (self.work)();
+        if running.is_empty() {
             return Some(Action::Quit);
-        };
+        }
         if self.questions.iter().any(|q| matches!(q.open, Open::Quit)) {
             return None;
         }
-        let title = vec![
-            Line::from(vec![
-                Span::styled("• ", style::waiting()),
-                Span::styled("Quit llx?", style::bold()),
-            ]),
-            Line::from(Span::styled(format!("  {said}"), style::dim())),
+        let mut title = vec![
+            Line::from(Span::styled("Background work is running", style::bold())),
+            Line::from(Span::styled(
+                "The following will stop when you exit:",
+                style::dim(),
+            )),
         ];
-        let choices = vec![Choice::new("Quit anyway"), Choice::new("Stay")];
+        let named = running
+            .iter()
+            .map(|run| format!("  {} · {}", run.kind, run.name));
+        title.extend(named.map(|text| Line::from(Span::styled(text, style::dim()))));
+        let mut choices = vec![Choice::new("Exit and stop tasks")];
+        if self.background {
+            choices.push(Choice::new("Move to background and exit"));
+        }
+        choices.push(Choice::new("Stay"));
         let select = Select::new(title, choices, "esc to stay");
         self.questions.push_back(Asked::new(select, Open::Quit));
         if self.questions.len() == 1 {
@@ -52,50 +63,15 @@ impl App {
         lanes.any(|(at, view)| at != home && view.lane.is_some() && view.busy.is_some())
     }
 
-    /// What quitting would stop, said as the question says it; `None` when nothing.
-    fn running_work(&self) -> Option<String> {
-        let lanes = self
-            .views
-            .sessions
-            .iter()
-            .filter(|view| view.lane.is_some());
-        let working = lanes.filter(|view| view.busy.is_some()).count();
-        let shells = (self.shells)();
-        let monitors = self
-            .views
-            .jobs
-            .iter()
-            .filter(|job| job.until_at.is_some())
-            .count();
-        if working + shells + monitors == 0 {
-            return None;
-        }
-        let mut parts = vec![];
-        if working > 0 {
-            parts.push(format!(
-                "{} still working",
-                count(working as u64, "session")
-            ));
-        }
-        let running: Vec<String> = [(shells, "shell"), (monitors, "monitor")]
-            .into_iter()
-            .filter(|(n, _)| *n > 0)
-            .map(|(n, noun)| count(n as u64, noun))
-            .collect();
-        if !running.is_empty() {
-            parts.push(format!("{} running", running.join(" and ")));
-        }
-        let them = match working + shells + monitors {
-            1 => "it",
-            _ => "they",
-        };
-        Some(format!("{} — {them} will be stopped.", parts.join(" · ")))
-    }
-
-    /// The quit question took `picked`: "Quit anyway" quits, anything else stays.
+    /// The quit question took `picked`: the first exits and stops everything, the second (when
+    /// offered) moves the work to the background, anything else stays.
     pub(super) fn quit_answered(&mut self, picked: &Picked, now: Instant) -> Option<Action> {
         self.answer_open(Picked::Cancelled, now);
-        (*picked == Picked::Option(0)).then_some(Action::QuitNow)
+        match picked {
+            Picked::Option(0) => Some(Action::QuitNow),
+            Picked::Option(1) if self.background => Some(Action::Background),
+            _ => None,
+        }
     }
 }
 

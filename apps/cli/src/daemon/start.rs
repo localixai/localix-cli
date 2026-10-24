@@ -15,7 +15,7 @@ use super::{build, probe, socket_path, status};
 const ASK: Duration = Duration::from_secs(2);
 /// How long a daemon has to start, and to end when asked.
 const READY: Duration = Duration::from_secs(10);
-const ENDING: Duration = Duration::from_secs(5);
+const ENDING: Duration = Duration::from_secs(10);
 /// What `llx serve` says on stdout once clients may connect.
 pub(crate) const READY_LINE: &str = "llx serve: ready";
 
@@ -53,7 +53,8 @@ pub(crate) fn stop(path: &Path) -> bool {
     }) else {
         return true;
     };
-    if client.call(protocol::Command::Shutdown, ASK).is_err() {
+    // A daemon under load answers late: a stop is given as long as the daemon has to end.
+    if client.call(protocol::Command::Shutdown, ENDING).is_err() {
         return false;
     }
     matches!(
@@ -80,6 +81,11 @@ fn spawn(config: &Path, path: &Path) -> Result<(), String> {
         .open(config.join("daemon.log"))
         .map_err(why)?;
     let mut command = Command::new(std::env::current_exe().map_err(why)?);
+    // Which model a session uses is its client's to say (`server::place::words`), never what
+    // the terminal that happened to start the daemon had set.
+    for (name, _, _) in crate::server::place::MODEL_VARS {
+        command.env_remove(name);
+    }
     command
         .arg("serve")
         .current_dir("/")

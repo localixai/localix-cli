@@ -134,7 +134,7 @@ every new file already goes where its target crate will be.
   choice uses, in `apps/cli/src/providers.rs` (the server's, later) only.
 - **A6**: a data file (JSON, TOML) lives in the package that owns its meaning.
 - **A7**: a heavy dependency stays in the one adapter that needs it (wry and tao in `tools`'s
-  browser, TLS in the kit); std first, and the release binary under 3 MiB.
+  browser, TLS in the kit); std first, and the release binary under 5 MiB.
 
 ## Composition rules (the apps)
 
@@ -267,5 +267,6 @@ every new file already goes where its target crate will be.
 ## Budgets
 
 - 50,000 lines of working code (S2), 300 per file (S1).
-- The release binary under 3 MiB (CI); a bundled data file counts.
+- The release binary under 5 MiB (CI; raised from 3 MiB by the owner for the daemon and a release
+  that unwinds a panic, W8); a bundled data file counts.
 - Line coverage at least 85% (`scripts/coverage.sh`), raised with coverage, never lowered.

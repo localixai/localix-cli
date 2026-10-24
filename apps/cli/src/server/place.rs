@@ -39,6 +39,37 @@ pub(crate) fn theme(place: &Place) -> Option<tools::shell::Theme> {
     })
 }
 
+/// The variables that name a session's model, each with the option it stands for (its short
+/// spelling too): read from the client's environment, never the daemon's.
+pub(crate) const MODEL_VARS: [(&str, &str, Option<&str>); 4] = [
+    ("LLX_PROVIDER", "--provider", None),
+    ("LLX_MODEL", "--model", Some("-m")),
+    ("LLX_REASONING", "--reasoning", None),
+    ("LLX_DECISION_MODEL", "--decision-model", None),
+];
+
+/// What the client's environment says of its sessions' model that its command line does not
+/// say itself, each by its variable: clap read the daemon's environment, not the client's.
+pub(crate) fn chosen(place: &Place) -> Vec<(&'static str, String)> {
+    let says = |long: &str, short: Option<&str>| {
+        place.args.iter().any(|arg| {
+            arg == long
+                || arg.starts_with(&format!("{long}="))
+                || short.is_some_and(|short| arg.starts_with(short))
+        })
+    };
+    let mut chosen = vec![];
+    for (name, long, short) in MODEL_VARS {
+        let value = place.env.iter().find(|(var, _)| var == name);
+        if let Some((_, value)) = value.filter(|(_, value)| !value.is_empty())
+            && !says(long, short)
+        {
+            chosen.push((name, value.clone()));
+        }
+    }
+    chosen
+}
+
 #[cfg(test)]
 #[path = "place_tests.rs"]
 mod tests;

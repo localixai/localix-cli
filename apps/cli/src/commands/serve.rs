@@ -255,6 +255,16 @@ fn session(served: Served) -> Result<i32, Failure> {
     // Its paths are the client's: the directory it works in, the pictures it attached.
     let options = cli.options();
     options.cd = Some(PathBuf::from(&place.cwd));
+    // The model the client's environment names, not what the daemon's had.
+    for (var, value) in crate::server::place::chosen(place) {
+        let models = &mut options.models;
+        match var {
+            "LLX_PROVIDER" => models.provider = Some(value),
+            "LLX_MODEL" => models.model = Some(value),
+            "LLX_REASONING" => models.reasoning = Some(value),
+            _ => models.decision_model = value,
+        }
+    }
     for image in &mut options.images {
         *image = Path::new(&place.dir).join(&*image);
     }

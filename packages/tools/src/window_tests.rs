@@ -228,10 +228,16 @@ fn open_takes_several_tabs_of_any_kind_and_gives_each_ones_snapshot() {
         ]}),
     )
     .unwrap();
-    assert_eq!(
-        done.report,
-        "w1 (browser): opened \"a\"\nt1 (terminal): opened \"b\"\nw2 (browser): opened \"c\""
-    );
+    // The reports keep the order asked; which browser tab got which number is theirs to race for.
+    let lines: Vec<&str> = done.report.lines().collect();
+    let (first, second) = (lines[0], lines[2]);
+    assert_eq!(lines[1], "t1 (terminal): opened \"b\"");
+    assert!(first.ends_with("(browser): opened \"a\""), "{first}");
+    assert!(second.ends_with("(browser): opened \"c\""), "{second}");
+    let name = |line: &str| line.split(' ').next().unwrap_or_default().to_string();
+    let mut browsers = [name(first), name(second)];
+    browsers.sort_unstable();
+    assert_eq!(browsers, ["w1", "w2"], "{}", done.report);
     let state = done.state.unwrap();
     assert!(
         state.contains("### w1\nsnapshot of 1") && state.contains("### w2\nsnapshot of 2"),
@@ -284,14 +290,23 @@ fn show_puts_a_tab_in_front_and_reads_it_and_close_takes_several() {
         hands: None,
         gate: &Open,
     };
-    call(
+    let opened = call(
         &tool,
         json!({"action": "open", "tabs": [{"kind": "terminal"}, {"kind": "terminal"}]}),
     )
     .unwrap();
-    let shown = call(&tool, json!({"action": "show", "tab": "t2"})).unwrap();
-    assert_eq!(shown.report, "Showing t2.");
-    assert_eq!(shown.state.as_deref(), Some("snapshot of 2"));
+    // The tabs open at once: which gets which number is theirs to race for; the report says.
+    let tabs: Vec<&str> = (opened.report.lines())
+        .filter_map(|line| line.split_once(' ').map(|(tab, _)| tab))
+        .collect();
+    let mut numbered = tabs.clone();
+    numbered.sort_unstable();
+    assert_eq!(numbered, ["t1", "t2"], "{}", opened.report);
+    let second = tabs[1];
+    let shown = call(&tool, json!({"action": "show", "tab": second})).unwrap();
+    assert_eq!(shown.report, format!("Showing {second}."));
+    let number = second.trim_start_matches('t');
+    assert_eq!(shown.state, Some(format!("snapshot of {number}")));
     let closed = call(&tool, json!({"action": "close", "tabs": ["t1", "t2"]})).unwrap();
     assert_eq!(closed.report, "t1: closed 1\nt2: closed 2");
     call(
@@ -301,7 +316,12 @@ fn show_puts_a_tab_in_front_and_reads_it_and_close_takes_several() {
     .unwrap();
     assert_eq!(
         *window.asked.lock().unwrap(),
-        ["opened t1", "opened t2", "Show t2", "resize 1100×760"]
+        [
+            format!("opened {}", tabs[0]),
+            format!("opened {second}"),
+            format!("Show {second}"),
+            "resize 1100×760".to_string()
+        ]
     );
 }
 

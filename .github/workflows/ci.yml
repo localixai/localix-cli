@@ -125,9 +125,9 @@ jobs:
     name: size
     runs-on: ubuntu-latest
     env:
-      # 3 MiB. The binary is about 2.6 MB: a jump past this means a dependency that has not
-      # earned its size (AGENTS.md).
-      LIMIT_BYTES: 3145728
+      # 5 MiB (the owner's raise, for the daemon and a release that unwinds a panic). The binary
+      # is about 3 MB: a jump past this means a dependency that has not earned its size (AGENTS.md).
+      LIMIT_BYTES: 5242880
     steps:
       - uses: actions/checkout@v7
         with:

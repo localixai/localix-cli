@@ -100,8 +100,9 @@ fn a_server_that_hangs_up_is_gone_and_a_client_dropped_hangs_up() {
     assert_eq!(client.call(Command::List, WAIT), Err(CallError::Gone));
 
     let (client, mut server, _seen) = connected("drop");
-    drop(client);
+    // Set while the client is there: macOS refuses it on a socket its peer has shut down.
     server.set_read_timeout(Some(WAIT)).unwrap();
+    drop(client);
     assert_eq!(
         server.read(&mut [0; 8]).unwrap(),
         0,

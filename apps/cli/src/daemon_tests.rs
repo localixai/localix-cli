@@ -106,3 +106,37 @@ fn a_daemon_is_idle_only_when_nothing_needs_it() {
     assert!(!with(|s| s.jobs = 1), "a monitor running");
     assert!(!with(|s| s.working = 1), "a task working");
 }
+
+/// A daemon that answers `shutdown` only after `late`, then ends: one under load.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the test's own slow daemon: it waits on purpose before it answers"
+)]
+fn slow_daemon(path: &Path, late: Duration) {
+    use std::io::{BufRead, BufReader, Write};
+    let listener = crate::server::socket::bind(path).unwrap();
+    let serving = std::thread::Builder::new().name("slow".into());
+    serving
+        .spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut line = String::new();
+            BufReader::new(&stream).read_line(&mut line).unwrap();
+            let call: protocol::ToServer = serde_json::from_str(&line).unwrap();
+            let protocol::ToServer::Call { id, .. } = call else {
+                panic!("{line}")
+            };
+            std::thread::sleep(late);
+            let done = protocol::ToClient::Done { id, done: Done::Ok };
+            let mut out = &stream;
+            writeln!(out, "{}", serde_json::to_string(&done).unwrap()).unwrap();
+            // The daemon ends: its connection goes with it.
+        })
+        .unwrap();
+}
+
+#[test]
+fn a_daemon_slow_to_answer_its_stop_under_load_is_still_stopped() {
+    let path = place("slow-stop");
+    slow_daemon(&path, Duration::from_secs(3));
+    assert!(stop(&path), "a stop answered in 3 s is a stop");
+}

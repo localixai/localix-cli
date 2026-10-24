@@ -141,9 +141,9 @@ process environment): commands run in the environment of the client that opened 
    `tui::Start` takes a `Connect` (channels or the socket); a server that is gone ends the
    interface. Pty tests run through a daemon per test home; the harness stops it (`llx serve
    stop`, then a kill by the pid in the lock file).
-   Still the daemon's, not the client's: the `LLX_*` model variables and the providers' keys
-   (the environment of the terminal that started it). Not built: `--no-daemon` aside, Windows
-   runs in process.
+   The model a session uses is its client's: the providers' keys from its environment, the
+   `LLX_*` model variables as options added to its command line (`server::place::words`; a
+   daemon is started without them). Not built: `--no-daemon` aside, Windows runs in process.
 
 4. **Attach and detach.** The event ring and cursors, pending requests replayed, the quit
    question (stop, move to the background, stay), `status`/`stop`, version restart.
@@ -159,8 +159,8 @@ process environment): commands run in the environment of the client that opened 
    cursor; when the ring no longer holds all of it (or the cursor is not this server's), a
    `ToClient::Gap` first, then the state of every session the ring no longer holds, so a lane
    moved to the background long ago is drawn and typed into again; then the questions waiting.
-   A queue is told only when it changes. A command that panics is answered `Failed` (W8; in a
-   debug build only: the release build aborts on a panic). A question goes to every client; the first reply
+   A queue is told only when it changes. A command that panics is answered `Failed` (W8; the release build unwinds, so this
+   holds there too). A question goes to every client; the first reply
    wins and every client gets `Resolved`. A closed client is dropped, never waited for; what
    came of a command goes to its connection alone. `serve` serves `Peer::new`'s client as before;
    `serve::connection(&incoming, &peer, out, &desk, &info)` serves a later connection to the same
@@ -198,10 +198,9 @@ move to the background (only in the daemon), or stay; the next `llx` in a direct
 to the sessions moved to the background there (`server::host::Kept`, `serve::rejoin`). A served
 session's providers' keys come from its client's environment (`providers::Vars`, the place's);
 the catalog is read again when a refresh wrote a newer one (looked at hourly, models.dev asked at
-most daily). Left for later: the `LLX_*` model variables (`LLX_PROVIDER`, `LLX_MODEL`,
-`LLX_REASONING`, `LLX_DECISION_MODEL`), which clap still reads from the daemon's environment when
-it parses the client's command line again; `daemon.log` rotation; one desk per directory shared
-by two terminals at once.
+most daily); the `LLX_*` model variables are the client's too, its command line saying them
+unless it says another. Left for later: `daemon.log` rotation; one desk per directory shared by
+two terminals at once.
 
 ### Desks apart
 

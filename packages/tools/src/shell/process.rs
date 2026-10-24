@@ -35,9 +35,7 @@ pub(super) struct Job<'a> {
     pub command: &'a str,
     pub dir: &'a Path,
     pub timeout: Duration,
-    /// Environment variables left out of the command's environment: the app's own secrets. A
-    /// command can still read them from its parent's environment (see `BashTool::hidden`).
-    pub hidden: &'a [&'a str],
+    pub env: Env<'a>,
     /// Whether the person stopped the task: the command is killed as soon as it says so.
     pub stop: &'a (dyn Fn() -> bool + Sync),
 }
@@ -74,7 +72,7 @@ pub(super) struct Finished {
 /// Run `job` in a shell, with no input.
 pub(super) fn run(job: &Job) -> io::Result<Finished> {
     let mut shell = shell(job.command);
-    quiet_env(&mut shell, job.hidden);
+    quiet_env(&mut shell, job.env);
     let mut child = shell
         .current_dir(job.dir)
         .stdin(Stdio::null())
@@ -97,12 +95,32 @@ pub(super) fn run(job: &Job) -> io::Result<Finished> {
     })
 }
 
-/// The environment every command runs in: without `hidden`, and with nothing that waits for an
-/// answer or a pager, since there is no one to type or page.
-pub(super) fn quiet_env(shell: &mut Command, hidden: &[&str]) {
-    for name in hidden {
-        shell.env_remove(name);
+/// The environment a command runs with: the variables of the place it runs for (the client's,
+/// not this process's), else this process's own; without `hidden`, the app's own secrets. A
+/// command can still read those from its parent's environment (see `BashTool::hidden`).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Env<'a> {
+    pub vars: Option<&'a [(String, String)]>,
+    pub hidden: &'a [&'a str],
+}
+
+impl Env<'_> {
+    pub fn apply(self, command: &mut Command) {
+        if let Some(vars) = self.vars {
+            command
+                .env_clear()
+                .envs(vars.iter().map(|(name, value)| (name, value)));
+        }
+        for name in self.hidden {
+            command.env_remove(name);
+        }
     }
+}
+
+/// The environment every command runs in: `env`, with nothing that waits for an answer or a
+/// pager, since there is no one to type or page.
+pub(super) fn quiet_env(shell: &mut Command, env: Env) {
+    env.apply(shell);
     shell
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GIT_PAGER", "cat")

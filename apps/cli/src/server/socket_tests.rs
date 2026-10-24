@@ -82,6 +82,7 @@ fn a_client_over_the_socket_speaks_to_serve_as_one_in_process_does() {
     .unwrap();
     let handshake = Command::Initialize {
         version: protocol::VERSION,
+        place: None,
     };
     assert_eq!(
         client.call(handshake, WAIT),

@@ -36,17 +36,17 @@ pub(super) struct Pty {
     pub shared: Arc<Shared>,
 }
 
-/// Start `command` in `dir` in a new terminal, without the `hidden` variables, waiting for
-/// `needle` from its first output on.
+/// Start `command` in `dir` in a new terminal with `env`, waiting for `needle` from its first
+/// output on.
 pub(super) fn spawn(
     command: &str,
     dir: &Path,
-    hidden: &[&str],
+    env: process::Env,
     needle: Option<&str>,
 ) -> io::Result<Pty> {
     let (master, slave) = open()?;
     let mut shell = process::shell(command);
-    process::quiet_env(&mut shell, hidden);
+    process::quiet_env(&mut shell, env);
     // A real terminal, as Localix's: a full-screen program (an editor, Claude Code) draws as it
     // would anywhere, in colour for the window. What the model reads is text: a transcript, or
     // the screen when the program draws over it.

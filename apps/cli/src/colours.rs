@@ -9,7 +9,10 @@ use std::io::{IsTerminal, Read, Write};
 use std::os::fd::AsRawFd;
 use std::time::{Duration, Instant};
 
-use tools::shell::{Rgb, Theme};
+use protocol::Theme;
+
+/// A colour as red, green and blue.
+type Rgb = [u8; 3];
 
 /// The three colours, each ended by ST, then the device attributes.
 const QUERY: &[u8] = b"\x1b]10;?\x1b\\\x1b]11;?\x1b\\\x1b]12;?\x1b\\\x1b[c";

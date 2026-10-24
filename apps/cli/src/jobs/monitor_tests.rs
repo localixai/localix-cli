@@ -2,9 +2,10 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use super::*;
+use tools::shell::Env;
 
 fn run(command: &str, seconds: u64, stopped: &dyn Fn() -> bool) -> (Vec<Vec<String>>, String) {
-    hiding(command, &[], seconds, stopped)
+    with(command, Env::default(), seconds, stopped)
 }
 
 fn hiding(
@@ -13,10 +14,20 @@ fn hiding(
     seconds: u64,
     stopped: &dyn Fn() -> bool,
 ) -> (Vec<Vec<String>>, String) {
+    let env = Env { vars: None, hidden };
+    with(command, env, seconds, stopped)
+}
+
+fn with(
+    command: &str,
+    env: Env,
+    seconds: u64,
+    stopped: &dyn Fn() -> bool,
+) -> (Vec<Vec<String>>, String) {
     let batches = Mutex::new(vec![]);
     let deadline = Instant::now() + Duration::from_secs(seconds);
     let dir = std::env::temp_dir();
-    let ended = watch(command, &dir, hidden, deadline, stopped, &|lines, _| {
+    let ended = watch(command, &dir, env, deadline, stopped, &|lines, _| {
         batches.lock().unwrap().push(lines);
     })
     .unwrap();
@@ -71,4 +82,22 @@ fn the_apps_secrets_are_not_in_its_environment() {
     assert_eq!(shown, [vec!["[set]"]], "{name} is passed on unless hidden");
     let (hidden, _) = hiding(&command, &[name.as_str()], 10, &|| false);
     assert_eq!(hidden, [vec!["[]"]], "{name} was hidden");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_monitor_runs_with_the_environment_of_the_client() {
+    let vars = [
+        (
+            "PATH".to_string(),
+            std::env::var("PATH").unwrap_or_default(),
+        ),
+        ("LLX_PLACE".to_string(), "client".to_string()),
+    ];
+    let env = Env {
+        vars: Some(&vars),
+        hidden: &[],
+    };
+    let (lines, _) = with(r#"echo "$LLX_PLACE ${HOME-none}""#, env, 10, &|| false);
+    assert_eq!(lines, [vec!["client none"]]);
 }

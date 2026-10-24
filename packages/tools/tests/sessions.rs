@@ -34,7 +34,7 @@ fn kill_all_now_reaches_more_than_four() {
             .start(
                 "echo started; exec sleep 60",
                 &dir,
-                &[],
+                Default::default(),
                 wait,
                 None,
                 &|| false,
@@ -71,7 +71,7 @@ fn kill_all_now_kills_a_live_session() {
     // only the sweep of the session's processes reaches it.
     let command = "set -m; sleep 60 & echo started $!; wait";
     let turn = sessions
-        .start(command, &dir, &[], wait, None, &|| false)
+        .start(command, &dir, Default::default(), wait, None, &|| false)
         .unwrap();
     assert_eq!(turn.until, Until::Matched, "{turn:?}");
     let poll = Wait {

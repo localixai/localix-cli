@@ -4,6 +4,7 @@
 
 use std::io;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
 use contracts::tool::ToolError;
 
@@ -14,6 +15,8 @@ pub struct Workspace {
     /// Files and directories no tool may read or change, however they are reached (the app's own
     /// key and records): canonical where they exist.
     denied: Vec<PathBuf>,
+    /// The environment commands run with, when it is not this process's: the client's.
+    env: Option<Arc<[(String, String)]>>,
 }
 
 impl Workspace {
@@ -22,6 +25,7 @@ impl Workspace {
         Ok(Self {
             root: canonical(root.as_ref())?,
             denied: vec![],
+            env: None,
         })
     }
 
@@ -30,6 +34,16 @@ impl Workspace {
         self.denied
             .extend(paths.into_iter().map(|path| real(&path)));
         self
+    }
+
+    /// The same workspace, its commands run with `env` instead of this process's environment.
+    pub fn with_env(mut self, env: Vec<(String, String)>) -> Self {
+        self.env = Some(env.into());
+        self
+    }
+
+    pub fn env(&self) -> Option<&[(String, String)]> {
+        self.env.as_deref()
     }
 
     pub fn root(&self) -> &Path {

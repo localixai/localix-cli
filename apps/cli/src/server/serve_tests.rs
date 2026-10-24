@@ -66,6 +66,7 @@ fn an_interface_that_attaches_is_told_what_the_server_allows() {
         1,
         Command::Initialize {
             version: protocol::VERSION,
+            place: None,
         },
     );
     assert_eq!(
@@ -158,4 +159,22 @@ fn once_the_interface_is_gone_nothing_waits_for_the_person() {
     let peer = Arc::clone(&served.peer);
     drop(served);
     assert_eq!(peer.inputs.next("s1"), None);
+}
+
+#[test]
+fn the_place_an_interface_attaches_from_goes_to_the_desk() {
+    let served = served();
+    let place = protocol::Place {
+        cwd: "/work/a".into(),
+        env: vec![("VIRTUAL_ENV".into(), "/work/a/.venv".into())],
+        theme: None,
+    };
+    let version = protocol::VERSION;
+    let initialize = Command::Initialize {
+        version,
+        place: Some(place.clone()),
+    };
+    served.call(1, initialize);
+    assert!(matches!(served.done(1), Done::Initialized { .. }));
+    assert_eq!(served.desk.recv_timeout(WAIT), Ok(Request::Attach(place)));
 }

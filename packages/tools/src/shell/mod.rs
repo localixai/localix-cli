@@ -32,7 +32,7 @@ mod watch;
 pub use bash::BashTool;
 #[cfg(not(unix))]
 pub use none::{Sessions, kill_all_now, running_anywhere};
-pub use process::{Ending, SHELL};
+pub use process::{Ending, Env, SHELL};
 #[cfg(unix)]
 pub use running::{kill_all_now, running_anywhere};
 #[cfg(unix)]

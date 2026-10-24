@@ -49,12 +49,18 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
         },
     };
     match command {
-        Command::Initialize { .. } => Done::Initialized {
-            version: protocol::VERSION,
-            max_lanes: info.max_lanes,
-            commands: info.commands.clone(),
-            modes: info.modes.clone(),
-        },
+        Command::Initialize { place, .. } => {
+            // The sessions this client opens work where it is.
+            if let Some(place) = place {
+                let _ = desk.send(Request::Attach(place));
+            }
+            Done::Initialized {
+                version: protocol::VERSION,
+                max_lanes: info.max_lanes,
+                commands: info.commands.clone(),
+                modes: info.modes.clone(),
+            }
+        }
         Command::Input(input) => {
             peer.inputs.input(input);
             Done::Ok

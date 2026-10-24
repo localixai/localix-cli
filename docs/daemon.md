@@ -104,7 +104,13 @@ process environment): commands run in the environment of the client that opened 
    channels become requests with ids and the daemon-side input queue. No behaviour changes; every
    test stays.
 2. **Sessions carry their place.** Directory, environment, hidden variables and theme per
-   session; `/copy` and the clipboard on the client.
+   session; `/copy` and the clipboard on the client. Built: `initialize` carries the client's
+   `Place {cwd, env, theme}`; the server posts it to the desk (`Request::Attach`), which builds
+   its workspace there (`server/place.rs`, `Workspace::with_env`), so `bash`, terminal sessions
+   and monitors run with the client's environment less the hidden key variables; the colours go
+   to the terminal windows; `/copy` is `Event::Copy`, written by the interface. Still the
+   process's: the desk's place is the first client's (one per session, with step 4), and the
+   chat model's key is read from the daemon's environment.
 3. **The socket.** `llx serve`, discovery, spawn, lock, handshake, the remote transport; the
    window host in the daemon. Pty tests get a daemon per test home.
    Built so far, not yet used by `llx`: `Client::connect` (the same reader loop as in process; a

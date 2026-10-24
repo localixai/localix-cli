@@ -72,7 +72,11 @@ fn command(rig: &mut Rig, entry: Entry) -> Option<String> {
         }
         Entry::Help => note(HELP),
         Entry::Diff => note(&super::extras::diff(rig.workspace.root())),
-        Entry::Copy => note(&super::extras::copy(rig)),
+        Entry::Copy => {
+            if let Some(said) = super::extras::copy(rig) {
+                note(said);
+            }
+        }
         Entry::Usage => note(&super::extras::usage(rig)),
         Entry::Status => note(&status(rig)),
         Entry::Modes => note(&mode::list(rig.mode.get())),

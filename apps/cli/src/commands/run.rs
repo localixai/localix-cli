@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use contracts::history::{History, Session};
+use protocol::Place;
 use tools::browser::Browser;
 use tools::workspace::Workspace;
 
@@ -19,7 +20,7 @@ use crate::attach;
 use crate::choice;
 use crate::cli::RunOptions;
 use crate::commands::{repl, sessions};
-use crate::compose::{APP, Seat, Setup, Shared, compose, lane};
+use crate::compose::{Seat, Setup, Shared, compose, lane};
 use crate::context::{self, Environment};
 use crate::desk;
 use crate::error::Failure;
@@ -27,24 +28,17 @@ use crate::gate::Tty;
 use crate::input::{self, Prompt};
 use crate::interrupt;
 use crate::mode::{self, Mode};
-use crate::server::{Peer, Ui, serve};
+use crate::server::{Peer, Ui, place, serve};
 use crate::tui;
 use crate::windows;
 
 pub(crate) use super::ended::{Ended, since};
 
-/// The workspace `options` name (`-C`, else the current directory), with llx's config (keys,
-/// tokens) and sessions off limits to the tools: a prompt injection must not read them.
+/// The workspace `options` name (`-C`, else the current directory), with what is llx's own off
+/// limits to the tools (`place::at`).
 pub(crate) fn root(options: &RunOptions) -> Result<Workspace, Failure> {
     let root = options.cd.as_deref().unwrap_or(Path::new("."));
-    let workspace = Workspace::new(root)
-        .map_err(|error| Failure::Usage(format!("-C {}: {error}", root.display())))?;
-    if !workspace.root().is_dir() {
-        let why = format!("-C {}: not a directory", root.display());
-        return Err(Failure::Usage(why));
-    }
-    let private = provider_kit::store::dir(APP).into_iter();
-    Ok(workspace.denying(private.chain([sessions::store().dir])))
+    place::at(root).map_err(|why| Failure::Usage(format!("-C {}: {why}", root.display())))
 }
 
 /// How a run takes its tasks.
@@ -107,7 +101,7 @@ pub(crate) fn run(
     resumed: Option<Session>,
     kind: Kind,
 ) -> Result<i32, Failure> {
-    let workspace = root(&options)?;
+    let mut workspace = root(&options)?;
     let schema = options.schema.as_deref().map(input::schema).transpose()?;
     // A picture asked for that cannot be attached stops the run before a model is paid for.
     for path in &options.images {
@@ -127,6 +121,15 @@ pub(crate) fn run(
     let browser = tools::browser::has_display();
     let remote = windows::remote(|name| std::env::var_os(name).is_some());
     let shown = windows::shown(&options, asks, mode, remote);
+    // A session's interface attaches first: its sessions work where it is.
+    let (ready, place) = match work {
+        Work::Session(first) => {
+            let (attached, place) = interface(&workspace, browser && shown)?;
+            workspace = place::workspace(&place).map_err(Failure::Usage)?;
+            (Ready::Session(first, attached), Some(place))
+        }
+        Work::One(task) => (Ready::One(task), None),
+    };
     let environment = Environment {
         root: workspace.root(),
         mode: &mode::describe(mode, terminal, asks),
@@ -140,7 +143,7 @@ pub(crate) fn run(
     if session.workspace.is_empty() {
         session.workspace = workspace.root().display().to_string();
     }
-    let mut setup = Setup {
+    let setup = Setup {
         options,
         choice,
         workspace,
@@ -155,16 +158,10 @@ pub(crate) fn run(
         ui: None,
         shown,
         #[cfg(unix)]
-        theme: None,
+        theme: place.as_ref().and_then(place::theme),
     };
-    let ready = match work {
-        // The person's colours are asked only where terminal windows will show them.
-        Work::Session(first) => {
-            let attached = interface(&mut setup, browser && shown)?;
-            Ready::Session(first, attached)
-        }
-        Work::One(task) => Ready::One(task),
-    };
+    #[cfg(not(unix))]
+    let _ = place;
     let work = move |browser| ready.run(setup, browser);
     interrupt::install();
     if !browser {
@@ -222,20 +219,23 @@ impl Ready {
 }
 
 /// A session takes the terminal for its interface; one that cannot draw there (no size to draw
-/// at) is a usage error, as having no terminal is. `windowed`: terminal windows will show.
-fn interface(setup: &mut Setup, windowed: bool) -> Result<Attached, Failure> {
-    // Before the interface reads the keys, which would take the terminal's answers.
+/// at) is a usage error, as having no terminal is. `windowed`: terminal windows will show. The
+/// place the interface attached from comes with it.
+fn interface(root: &Workspace, windowed: bool) -> Result<(Attached, Place), Failure> {
+    // Before the interface reads the keys, which would take the terminal's answers; only where
+    // terminal windows will show them.
     #[cfg(unix)]
-    if windowed {
-        setup.theme = crate::colours::ask();
-    }
+    let theme = windowed.then(crate::colours::ask).flatten();
+    #[cfg(not(unix))]
+    let theme = {
+        let _ = windowed;
+        None
+    };
     // xterm.js for the terminal windows, once: until it is kept they show a grid.
     #[cfg(unix)]
     if crate::xterm::wanted(true, windowed, |name| std::env::var(name).ok()) {
         crate::xterm::prefetch();
     }
-    #[cfg(not(unix))]
-    let _ = windowed;
     let why = |error| Failure::Usage(format!("{NO_INTERFACE} ({error}): {RUN_EXEC}"));
     let Serving {
         peer,
@@ -246,17 +246,23 @@ fn interface(setup: &mut Setup, windowed: bool) -> Result<Attached, Failure> {
     let running = tui::start(tui::Start {
         to_server,
         from_server,
-        root: setup.workspace.root(),
+        root: root.root(),
+        theme,
         quit_now: interrupt::quit_now,
     });
     let running = running.map_err(why)?;
+    // Said before the interface was told it is attached: the first of the desk's requests.
+    let Ok(desk::Request::Attach(place)) = requests.try_recv() else {
+        return Err(Failure::Usage(format!("{NO_INTERFACE}: it gave no place")));
+    };
     // A newer model catalog, for the next session: nothing here waits on it.
     crate::providers::refresh_catalog();
-    Ok(Attached {
+    let attached = Attached {
         running,
         ui: Ui::new(peer),
         requests,
-    })
+    };
+    Ok((attached, place))
 }
 
 /// The server, in this process: what it serves the interface on its own thread, the desk's

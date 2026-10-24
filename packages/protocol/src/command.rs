@@ -8,8 +8,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
-    /// The handshake, first and once (W3).
-    Initialize { version: u32 },
+    /// The handshake, first and once (W3), with where the client is: the sessions it opens run
+    /// there.
+    Initialize {
+        version: u32,
+        #[serde(default)]
+        place: Option<Place>,
+    },
     /// What the person sent a session: its next task, words for the task running, or a command.
     Input(Input),
     /// Ctrl-C: stop the session's task; asked again soon after, the person wants out.
@@ -40,6 +45,24 @@ pub struct Input {
     pub images: Vec<PathBuf>,
     /// For after the task running (Tab), not for it.
     pub later: bool,
+}
+
+/// Where a client is: its directory, the environment its commands run with (its `PATH`, an
+/// activated virtualenv, its keys), and its terminal's colours.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Place {
+    pub cwd: String,
+    pub env: Vec<(String, String)>,
+    #[serde(default)]
+    pub theme: Option<Theme>,
+}
+
+/// A terminal's colours, each red, green and blue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Theme {
+    pub fg: [u8; 3],
+    pub bg: [u8; 3],
+    pub cursor: [u8; 3],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

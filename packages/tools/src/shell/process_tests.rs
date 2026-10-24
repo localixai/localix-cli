@@ -12,7 +12,7 @@ fn job<'a>(command: &'a str, dir: &'a Path, timeout: Duration) -> Job<'a> {
         command,
         dir,
         timeout,
-        hidden: &[],
+        env: Env::default(),
         stop: &never,
     }
 }
@@ -46,7 +46,10 @@ fn hidden_variables_never_reach_the_command() {
     let shown = run(&job(command, dir.path(), LONG)).unwrap();
     assert_eq!(shown.stdout, "seen");
     let hidden = run(&Job {
-        hidden: &[name],
+        env: Env {
+            vars: None,
+            hidden: &[name],
+        },
         ..job(command, dir.path(), LONG)
     })
     .unwrap();

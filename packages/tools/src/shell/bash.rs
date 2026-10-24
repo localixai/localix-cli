@@ -9,7 +9,7 @@ use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::process::{self, Ending, Finished, Job};
+use super::process::{self, Ending, Env, Finished, Job};
 use super::{SHELL, Sessions, interactive};
 use crate::ask;
 use crate::workspace::Workspace;
@@ -141,7 +141,10 @@ impl Tool for BashTool<'_> {
             command,
             dir: &dir,
             timeout: Duration::from_millis(timeout),
-            hidden: &hidden,
+            env: Env {
+                vars: self.workspace.env(),
+                hidden: &hidden,
+            },
             stop: self.stop,
         };
         let finished = process::run(&job)

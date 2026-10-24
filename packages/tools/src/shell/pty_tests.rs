@@ -17,7 +17,14 @@ fn a_program_that_reads_nothing_stalls_the_typing() {
     };
     let never = || false;
     let turn = sessions
-        .start("sleep 30", dir.path(), &[], quick, None, &never)
+        .start(
+            "sleep 30",
+            dir.path(),
+            Default::default(),
+            quick,
+            None,
+            &never,
+        )
         .unwrap();
     // Whole lines, which a terminal queues until it is full (one too long it drops instead), and
     // far more than any terminal's queue holds.
@@ -58,7 +65,7 @@ fn input_a_program_reads_does_not_stall() {
         yield_ms: Some(300),
     };
     let turn = sessions
-        .start("cat", dir.path(), &[], quick, None, &never)
+        .start("cat", dir.path(), Default::default(), quick, None, &never)
         .unwrap();
     let input = format!("{}\r", "x".repeat(99)).repeat(40);
     let typed = sessions
@@ -80,7 +87,14 @@ fn ctrl_c_reaches_a_program_whose_parent_ignored_it() {
             yield_ms: Some(300),
         };
         let turn = sessions
-            .start("sleep 30", dir.path(), &[], quick, None, &never)
+            .start(
+                "sleep 30",
+                dir.path(),
+                Default::default(),
+                quick,
+                None,
+                &never,
+            )
             .unwrap();
         let keys = ["Ctrl-C".to_string()];
         let turn = sessions

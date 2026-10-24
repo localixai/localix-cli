@@ -185,7 +185,7 @@ fn status_shows_the_mode_and_the_terminals() {
         let root = rig.workspace.root().to_path_buf();
         let turn = rig
             .sessions
-            .start("sleep 30", &root, &[], wait, None, &|| false)
+            .start("sleep 30", &root, Default::default(), wait, None, &|| false)
             .unwrap();
         assert_eq!(turn.id, 1);
         let status = crate::commands::repl::status(rig);

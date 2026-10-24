@@ -802,3 +802,10 @@ fn a_choice_after_a_withdrawn_approval_takes_keys_at_once() {
         "not swallowed by the approval's settling"
     );
 }
+
+#[test]
+fn a_sessions_copy_is_the_interfaces_to_do() {
+    let (mut app, now) = (app(), Instant::now());
+    let copied = app.frame(from("", Event::Copy("the answer".into())), now);
+    assert_eq!(copied, Some(Action::Copy("the answer".into())));
+}

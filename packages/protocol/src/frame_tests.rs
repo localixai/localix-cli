@@ -2,7 +2,8 @@ use serde_json::json;
 
 use super::*;
 use crate::{
-    Adjustment, Answer, Approval, Input, JobRow, Label, Outcome, Question, Saved, Target, Turn,
+    Adjustment, Answer, Approval, Input, JobRow, Label, Outcome, Place, Question, Saved, Target,
+    Theme, Turn,
 };
 
 fn through_json<T: Serialize + for<'de> Deserialize<'de>>(frame: &T) -> T {
@@ -23,6 +24,7 @@ fn every_frame_to_the_interface_comes_back_the_same_through_json() {
     let frames = [
         event(Event::Header(vec!["llx 0.1".into(), "gpt".into()])),
         event(Event::TaskStarted("hi".into())),
+        event(Event::Copy("the answer".into())),
         event(Event::Call {
             call: "c1".into(),
             name: "bash".into(),
@@ -170,6 +172,21 @@ fn every_frame_to_the_server_comes_back_the_same_through_json() {
             id: 9,
             reply: Reply::Adjusted(Some((0, 2))),
         },
+        ToServer::Call {
+            id: 10,
+            command: Command::Initialize {
+                version: crate::VERSION,
+                place: Some(Place {
+                    cwd: "/work/a".into(),
+                    env: vec![("PATH".into(), "/venv/bin:/usr/bin".into())],
+                    theme: Some(Theme {
+                        fg: [1, 2, 3],
+                        bg: [4, 5, 6],
+                        cursor: [7, 8, 9],
+                    }),
+                }),
+            },
+        },
     ];
     for frame in &frames {
         assert_eq!(&through_json(frame), frame);
@@ -194,5 +211,20 @@ fn what_a_reader_does_not_know_it_ignores() {
     assert_eq!(
         serde_json::from_str::<ToClient>(line).unwrap(),
         ToClient::Resolved { id: 4 }
+    );
+}
+
+#[test]
+fn a_client_that_gives_no_place_still_initializes() {
+    let line = r#"{"method":"command/call","params":{"id":1,"command":{"type":"initialize","version":1}}}"#;
+    assert_eq!(
+        serde_json::from_str::<ToServer>(line).unwrap(),
+        ToServer::Call {
+            id: 1,
+            command: Command::Initialize {
+                version: 1,
+                place: None
+            }
+        }
     );
 }

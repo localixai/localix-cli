@@ -38,6 +38,8 @@ pub(crate) enum Request {
     List,
     /// "Quit anyway": every lane is stopped, then the process ends.
     Quit,
+    /// A client attached from this place: its directory, environment and colours.
+    Attach(protocol::Place),
 }
 
 /// What a lane does once built: its session at the prompt.
@@ -72,6 +74,9 @@ pub(crate) fn run(
                 Ok(Request::Open(target)) => desk.target(scope, target),
                 Ok(Request::List) => desk.list(),
                 Ok(Request::Quit) => lanes.quit(ending::QUIT_WAIT, quit),
+                // The first client's place is the desk's, taken before it began; one per
+                // session is for when several attach (docs/daemon.md, step 4).
+                Ok(Request::Attach(_)) => {}
                 Err(RecvTimeoutError::Timeout) => {}
                 // No interface to ask: the lanes end by themselves.
                 Err(RecvTimeoutError::Disconnected) => lanes.wait(POLL),

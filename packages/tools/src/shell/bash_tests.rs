@@ -285,3 +285,33 @@ fn a_command_runs_to_its_end_and_a_terminal_session_is_the_windows() {
     let session = tool.call(&serde_json::json!({"command": "python3", "tty": true}));
     assert!(matches!(session, Err(ToolError::Failed(why)) if why.contains("tabs of the window")));
 }
+
+#[cfg(unix)]
+#[test]
+fn a_command_runs_with_the_workspaces_environment_and_never_its_hidden_variables() {
+    let dir = Scratch::new();
+    let path = std::env::var("PATH").unwrap_or_default();
+    let env = vec![
+        ("PATH".to_string(), path),
+        (
+            "LLX_ONLY_THE_CLIENT_HAS".to_string(),
+            "from the client".to_string(),
+        ),
+        ("SECRET_KEY".to_string(), "sk-1".to_string()),
+    ];
+    let workspace = Workspace::new(dir.path()).unwrap().with_env(env);
+    let tool = BashTool {
+        workspace: &workspace,
+        gate: &Recorder::default(),
+        hidden: &|| vec!["SECRET_KEY".to_string()],
+        stop: &|| false,
+        sessions: &Sessions::default(),
+    };
+    let command = r#"echo "$LLX_ONLY_THE_CLIENT_HAS|${SECRET_KEY-none}|${HOME-none}""#;
+    let report = tool.call(&json!({"command": command})).unwrap().report;
+    // The process's own HOME is not the client's: only what the client gave reaches it.
+    assert!(
+        report.ends_with("### stdout\nfrom the client|none|none"),
+        "{report}"
+    );
+}

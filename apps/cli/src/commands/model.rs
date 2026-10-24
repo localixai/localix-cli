@@ -141,15 +141,18 @@ fn stepped(selection: &Selection, up: bool) -> Result<Selection, String> {
 /// Think with `choice` from the next task on, and save it as the default: where it was saved,
 /// or why not; `Err` with what to say when its provider is not signed in.
 fn adopt(rig: &mut Rig, choice: Choice) -> Result<std::io::Result<PathBuf>, String> {
-    let Some(chat) = choice.provider.chat(&choice.selection) else {
+    let vars = rig.workspace.env();
+    let Some(chat) = choice.provider.chat_in(&choice.selection, vars) else {
         let name = choice.provider.name();
         return Err(format!("Not signed in to {name}: nothing changed.\n"));
     };
     rig.hide_for(&choice.provider);
     if let Some(live) = rig.live {
         live.chat.set(chat);
-        live.decider
-            .set(providers::decider(&rig.options.models.decision_model));
+        live.decider.set(providers::decider_in(
+            &rig.options.models.decision_model,
+            vars,
+        ));
     }
     let saved = choice::save(&choice);
     rig.choice = choice;

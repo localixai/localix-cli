@@ -1,5 +1,10 @@
 use super::*;
 
+/// [`super::resolve`] with no key in any variable: the same on every machine.
+fn resolve(options: &ModelOptions, saved: Option<Choice>) -> Result<Choice, Failure> {
+    super::resolve(options, saved, Some(&[]))
+}
+
 fn options(provider: Provider, model: Option<&str>, reasoning: Option<&str>) -> ModelOptions {
     ModelOptions {
         provider: Some(provider.id().to_string()),

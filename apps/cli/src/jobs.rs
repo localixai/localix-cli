@@ -10,7 +10,7 @@ pub(crate) mod spec;
 mod tool;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use contracts::gate::Gate;
@@ -41,7 +41,46 @@ pub(crate) struct Jobs {
     over: AtomicBool,
     /// The session's id: its jobs' stops are known under it (every session has a `job-1`).
     owner: String,
+    /// Wakes the scheduler: a schedule added or stopped, the session over.
+    bell: Arc<Bell>,
 }
+
+/// A count rung with a notification, so a ring between a look and the wait is not missed.
+#[derive(Default)]
+struct Bell {
+    #[allow(
+        clippy::mutex_integer,
+        reason = "the count is what `rang` waits on: a Condvar needs the Mutex"
+    )]
+    rung: Mutex<u64>,
+    rang: Condvar,
+}
+
+impl Bell {
+    fn ring(&self) {
+        let mut rung = self.rung.lock().unwrap_or_else(PoisonError::into_inner);
+        *rung = rung.wrapping_add(1);
+        self.rang.notify_all();
+    }
+
+    fn rung(&self) -> u64 {
+        *self.rung.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Until it rings past `seen`, or `most` passes (forever for `None`).
+    fn wait(&self, seen: u64, most: Option<Duration>) {
+        let rung = self.rung.lock().unwrap_or_else(PoisonError::into_inner);
+        let quiet = |now: &mut u64| *now == seen;
+        match most {
+            Some(most) => drop(self.rang.wait_timeout_while(rung, most, quiet)),
+            None => drop(self.rang.wait_while(rung, quiet)),
+        }
+    }
+}
+
+/// The longest the scheduler waits for a schedule unwoken: the wall clock may jump (the machine
+/// slept), and a schedule is due by it.
+const LONGEST: Duration = Duration::from_secs(60);
 
 #[derive(Default)]
 struct State {
@@ -86,7 +125,12 @@ impl Jobs {
     /// Know `stop` as job `id`'s stop, under the session's id.
     fn known(&self, id: &str, stop: &Arc<AtomicBool>) -> crate::interrupt::Known {
         let key = crate::interrupt::job_key(&self.owner, id);
-        crate::interrupt::register_flag(&key, Arc::clone(stop))
+        let (stop, bell) = (Arc::clone(stop), Arc::clone(&self.bell));
+        crate::interrupt::register(&key, move || {
+            stop.store(true, Ordering::SeqCst);
+            bell.ring();
+            false
+        })
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
@@ -118,6 +162,7 @@ impl Jobs {
         for job in &self.lock().jobs {
             job.stop.store(true, Ordering::SeqCst);
         }
+        self.bell.ring();
     }
 
     /// The rows the interface lists, sent whenever they change.
@@ -129,17 +174,16 @@ impl Jobs {
         ui.send(Event::Jobs(rows));
     }
 
-    /// The scheduler: each second, the schedules that are due give their prompt.
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "a clock: schedules fall due by the second, and the session's end is looked at \
-                  each tick"
-    )]
+    /// The scheduler: the schedules that are due give their prompt. It sleeps until the soonest
+    /// is due, or a schedule is added or stopped, or the session is over.
     pub(crate) fn tick(&self, kit: &Kit) {
-        while !self.over.load(Ordering::SeqCst) {
-            std::thread::sleep(Duration::from_secs(1));
+        loop {
+            let seen = self.bell.rung();
+            if self.over.load(Ordering::SeqCst) {
+                return;
+            }
             let now = session::now();
-            let (mut due, mut changed) = (vec![], false);
+            let (mut due, mut changed, mut soonest) = (vec![], false, None::<u64>);
             let mut state = self.lock();
             state.jobs.retain_mut(|job| {
                 let What::Schedule {
@@ -155,17 +199,15 @@ impl Jobs {
                     changed = true;
                     return false;
                 }
-                if now < *next {
-                    return true;
-                }
-                due.push(crate::arrivals::schedule(&job.name, prompt));
-                match cron.as_ref().and_then(|cron| cron.next(now)) {
-                    Some(at) if at <= *expires => {
-                        *next = at;
-                        true
+                if now >= *next {
+                    due.push(crate::arrivals::schedule(&job.name, prompt));
+                    match cron.as_ref().and_then(|cron| cron.next(now)) {
+                        Some(at) if at <= *expires => *next = at,
+                        _ => return false,
                     }
-                    _ => false,
                 }
+                soonest = Some(soonest.map_or(*next, |soonest| soonest.min(*next)));
+                true
             });
             drop(state);
             changed |= !due.is_empty();
@@ -175,6 +217,11 @@ impl Jobs {
             if changed {
                 self.show(kit);
             }
+            let wait = soonest.map(|next| {
+                let left = Duration::from_secs(next.saturating_sub(session::now()).max(1));
+                left.min(LONGEST)
+            });
+            self.bell.wait(seen, wait);
         }
     }
 }

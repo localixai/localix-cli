@@ -220,3 +220,72 @@ fn a_schedule_stopped_from_its_row_leaves_the_list() {
         assert_eq!(sent(events), (vec![], Some(vec![])));
     });
 }
+
+/// A schedule `name`, due in ten minutes, stopped by `stop`.
+fn schedule(jobs: &Jobs, name: &str, stop: Arc<AtomicBool>) {
+    let known = Some(jobs.known("job-1", &stop));
+    jobs.lock().jobs.push(Job {
+        id: "job-1".into(),
+        name: name.into(),
+        what: What::Schedule {
+            prompt: "say it".into(),
+            cron: None,
+            next: session::now() + 600,
+            expires: session::now() + 86_400,
+        },
+        stop,
+        events: 0,
+        _known: known,
+    });
+}
+
+/// Wait `ms` milliseconds, as a deadline (R9).
+fn pause(ms: u64) {
+    let (_keep, never) = std::sync::mpsc::sync_channel::<()>(0);
+    let _ = never.recv_timeout(Duration::from_millis(ms));
+}
+
+/// Closes the jobs when dropped, so a failed assertion does not leave the scheduler running and
+/// the scope waiting for it.
+struct Closing<'a>(&'a Jobs);
+
+impl Drop for Closing<'_> {
+    fn drop(&mut self) {
+        self.0.close();
+    }
+}
+
+#[test]
+fn closing_the_session_ends_its_scheduler_at_once() {
+    // A lane's thread joins its scheduler when it closes: nothing due must not keep it.
+    in_session(|jobs, kit, _| {
+        let closed = std::thread::scope(|scope| {
+            let _closing = Closing(jobs);
+            scope.spawn(|| jobs.tick(kit));
+            pause(100);
+            Instant::now()
+        });
+        let took = closed.elapsed();
+        assert!(took < Duration::from_millis(400), "{took:?}");
+    });
+}
+
+#[test]
+fn a_schedule_stopped_by_its_key_leaves_the_list_at_once() {
+    in_session(|_, kit, events| {
+        let owner = Jobs::of("jobs-key-lane");
+        schedule(&owner, "bye", Arc::new(AtomicBool::new(false)));
+        std::thread::scope(|scope| {
+            let _closing = Closing(&owner);
+            scope.spawn(|| owner.tick(kit));
+            pause(100);
+            let at = Instant::now();
+            crate::interrupt::stop(&crate::interrupt::job_key("jobs-key-lane", "job-1"));
+            while !owner.lock().jobs.is_empty() {
+                assert!(at.elapsed() < Duration::from_millis(400), "still listed");
+                pause(10);
+            }
+        });
+        assert_eq!(sent(events).1, Some(vec![]));
+    });
+}

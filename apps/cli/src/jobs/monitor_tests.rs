@@ -101,3 +101,18 @@ fn a_monitor_runs_with_the_environment_of_the_client() {
     let (lines, _) = with(r#"echo "$LLX_PLACE ${HOME-none}""#, env, 10, &|| false);
     assert_eq!(lines, [vec!["client none"]]);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_command_that_closes_its_output_still_ends_at_its_deadline_and_its_stop() {
+    let begun = Instant::now();
+    let (_, ended) = run("exec >/dev/null 2>&1; sleep 30", 1, &|| false);
+    assert_eq!(ended, "deadline");
+    assert!(begun.elapsed() < Duration::from_secs(5));
+    let begun = Instant::now();
+    let (_, ended) = run("exec >/dev/null 2>&1; sleep 30", 30, &|| {
+        begun.elapsed() > Duration::from_millis(300)
+    });
+    assert_eq!(ended, "stopped");
+    assert!(begun.elapsed() < Duration::from_secs(5));
+}

@@ -20,6 +20,57 @@ pub(crate) fn restore() {
     let _ = out.write_all(LEAVE.as_bytes()).and_then(|()| out.flush());
 }
 
+/// The terminal's modes before the interface made it raw, for a signal handler to put back.
+#[cfg(unix)]
+static SAVED: std::sync::OnceLock<libc::termios> = std::sync::OnceLock::new();
+
+/// How the process ends at once, given by the app; called from the signal handler, so it must
+/// be async-signal-safe.
+#[cfg(unix)]
+static QUIT: std::sync::OnceLock<fn() -> !> = std::sync::OnceLock::new();
+
+/// SIGTERM and SIGHUP end the process with `quit` once the terminal is given back: its modes as
+/// they were, the cursor shown, nothing more reported (the client has no other handler; in
+/// process, `interrupt::install` replaces SIGTERM's with stopping the task). Called before the
+/// terminal is made raw, whose modes it keeps.
+#[cfg(unix)]
+pub(super) fn on_signals(quit: fn() -> !) {
+    extern "C" fn given_back(_: libc::c_int) {
+        if let Some(modes) = SAVED.get() {
+            // SAFETY: tcsetattr is async-signal-safe and only reads `modes`, which is static.
+            unsafe { libc::tcsetattr(0, libc::TCSANOW, modes) };
+        }
+        // SAFETY: write is async-signal-safe, and LEAVE is static.
+        unsafe { libc::write(1, LEAVE.as_ptr().cast(), LEAVE.len()) };
+        if let Some(quit) = QUIT.get() {
+            quit();
+        }
+        // SAFETY: _exit is async-signal-safe. Not reached: `quit` is set before the handler is.
+        unsafe { libc::_exit(1) };
+    }
+    let _ = QUIT.set(quit);
+    // SAFETY: isatty only looks at the descriptor.
+    if unsafe { libc::isatty(0) } == 1 {
+        // SAFETY: a termios is integers and arrays of them: all zero is one, for tcgetattr to fill.
+        let mut modes: libc::termios = unsafe { std::mem::zeroed() };
+        // SAFETY: tcgetattr writes only `modes`, which outlives the call.
+        if unsafe { libc::tcgetattr(0, &mut modes) } == 0 {
+            let _ = SAVED.set(modes);
+        }
+    }
+    // SAFETY: a sigaction is integers, a mask and a handler's address: all zero is one, with no
+    // handler, until it is set below.
+    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+    action.sa_sigaction = given_back as extern "C" fn(libc::c_int) as libc::sighandler_t;
+    // SAFETY: sigemptyset writes only the mask, which lives here.
+    unsafe { libc::sigemptyset(&mut action.sa_mask) };
+    for signal in [libc::SIGTERM, libc::SIGHUP] {
+        // SAFETY: the action is whole and outlives the call, which copies it; the handler does
+        // only what a signal handler may (tcsetattr, write, kill, _exit).
+        unsafe { libc::sigaction(signal, &action, std::ptr::null_mut()) };
+    }
+}
+
 /// The editor has the terminal: the keys are its, not the interface's.
 static PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 

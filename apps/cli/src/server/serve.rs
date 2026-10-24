@@ -140,6 +140,7 @@ fn serving(
     };
     if !kept && left == 0 {
         peer.inputs.leave();
+        peer.abandon(None);
     }
     kept
 }
@@ -206,6 +207,7 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
         }
         Command::Close { session } => {
             peer.inputs.close(&session);
+            peer.abandon(Some(&session));
             Done::Ok
         }
         Command::Open { target } => to_desk(Request::Open(target)),
@@ -213,6 +215,7 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
         Command::QuitAll => to_desk(Request::Quit),
         Command::Leave => {
             peer.inputs.leave();
+            peer.abandon(None);
             Done::Ok
         }
         Command::Work => {

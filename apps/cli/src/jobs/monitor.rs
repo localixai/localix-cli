@@ -13,6 +13,8 @@ const GATHER: Duration = Duration::from_millis(400);
 /// Lines in one message at most, and characters in one line.
 const LINES: usize = 40;
 const LINE_CHARS: usize = 400;
+/// How often the stop and the deadline are looked at.
+const TICK: Duration = Duration::from_millis(100);
 
 /// How a watch ended.
 pub(super) enum Ended {
@@ -81,6 +83,8 @@ pub(super) fn watch(
             lines(std::mem::take(batch), std::mem::take(dropped));
         }
     };
+    // Both streams closed: the command is done, or about to be, or went on without them.
+    let mut closed = false;
     let ended = loop {
         if stopped() {
             break Ended::Stopped;
@@ -88,7 +92,22 @@ pub(super) fn watch(
         if Instant::now() >= deadline {
             break Ended::Deadline;
         }
-        match received.recv_timeout(Duration::from_millis(100)) {
+        if closed {
+            if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
+                break Ended::Exit(match status.code() {
+                    Some(code) => format!("exit {code}"),
+                    None => "killed by a signal".into(),
+                });
+            }
+            // Nothing says when a child exits: looked at as often as the stop is below.
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "a poll's backoff, as recv_timeout's"
+            )]
+            std::thread::sleep(TICK);
+            continue;
+        }
+        match received.recv_timeout(TICK) {
             Ok(line) => {
                 since.get_or_insert_with(Instant::now);
                 match batch.len() < LINES {
@@ -97,14 +116,9 @@ pub(super) fn watch(
                 }
             }
             Err(RecvTimeoutError::Timeout) => {}
-            // Both streams closed: the command is done, or about to be.
             Err(RecvTimeoutError::Disconnected) => {
                 flush(&mut batch, &mut dropped);
-                let status = child.wait().map_err(|error| error.to_string())?;
-                break Ended::Exit(match status.code() {
-                    Some(code) => format!("exit {code}"),
-                    None => "killed by a signal".into(),
-                });
+                closed = true;
             }
         }
         if since.is_some_and(|at| at.elapsed() >= GATHER) {

@@ -162,3 +162,18 @@ fn moved_to_the_background_the_work_goes_on_and_the_next_terminal_shows_it() {
         "{asked}"
     );
 }
+
+#[test]
+fn a_client_killed_or_hung_up_on_gives_the_terminal_back() {
+    for signal in [libc::SIGTERM, libc::SIGHUP] {
+        let model = Model::start(vec![]);
+        let mut term = Term::start(&model, &[]);
+        assert!(!term.cooked(), "the interface has the terminal raw");
+        term.signal(signal);
+        assert!(
+            term.exited(LONG).is_some(),
+            "signal {signal} did not end it"
+        );
+        assert!(term.cooked(), "signal {signal} left the terminal raw");
+    }
+}

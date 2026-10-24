@@ -19,15 +19,15 @@ pub(crate) struct Live {
 
 impl Live {
     /// The models of `choice` (one that asks to sign in, when there is no sign-in yet) and the
-    /// decision model `decision`, where there is a key for it.
-    pub(crate) fn of(choice: &Choice, decision: &str) -> Self {
+    /// decision model `decision`, where there is a key for it; keys read in `vars`.
+    pub(crate) fn of(choice: &Choice, decision: &str, vars: providers::Vars) -> Self {
         let chat = choice
             .provider
-            .chat(&choice.selection)
+            .chat_in(&choice.selection, vars)
             .unwrap_or_else(|| Box::new(SignedOut(choice.provider.clone())));
         Self {
             chat: LiveChat::new(chat),
-            decider: LiveDecider::new(providers::decider(decision)),
+            decider: LiveDecider::new(providers::decider_in(decision, vars)),
         }
     }
 }

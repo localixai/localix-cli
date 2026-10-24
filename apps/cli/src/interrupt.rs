@@ -167,6 +167,11 @@ pub(crate) fn stop(id: &str) -> bool {
     found.is_some_and(|stop| stop())
 }
 
+/// Tasks running in the process, in every session.
+pub(crate) fn working() -> usize {
+    PROCESS.busy.load(Ordering::SeqCst)
+}
+
 /// The browser window was closed: the tasks stop as on Ctrl-C, and the process never quits for
 /// it (at the prompt line, the window opens again on the next task).
 pub(crate) fn window_closed() {

@@ -226,6 +226,7 @@ pub(crate) fn at_desk_with(
             shells: || 0,
             commands: vec![],
             modes: vec![],
+            host: None,
         };
         scope.spawn(move || serve(&incoming, &peer, &to_desk, &info));
         let mut at = Person {

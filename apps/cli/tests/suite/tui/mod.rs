@@ -10,6 +10,7 @@ use std::time::Duration;
 mod agents;
 mod approval;
 mod commands;
+mod daemon;
 mod picker;
 mod quit;
 mod rewind;

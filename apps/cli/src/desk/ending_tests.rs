@@ -86,6 +86,7 @@ fn a_panicking_lane_ends_the_other_lanes() {
                 shells: || 0,
                 commands: vec![],
                 modes: vec![],
+                host: None,
             };
             scope.spawn(move || serve(&incoming, &peer, &to_desk, &info));
             let mut person = Person {
@@ -143,7 +144,36 @@ fn quit_with_lanes_that_stop_ends_without_the_hard_exit() {
     at_desk_with(&[&a], Some("work"), &quit, |person| {
         person.until("A asks its model", |_| a.turns() == 1);
         person.act(Some(Action::QuitNow), false);
-        to_a.send(call("read", json!({"path": "."}))).unwrap();
+        // A call that outlasts the stop however late it lands (a quick one raced it to a turn).
+        let long = match cfg!(unix) {
+            true => call("bash", json!({"command": "sleep 30"})),
+            false => call("read", json!({"path": "."})),
+        };
+        to_a.send(long).unwrap();
+        person.until_over();
+    });
+}
+
+/// The command outlasts the stop, however late it lands: it is killed, and no turn comes after.
+#[cfg(unix)]
+#[test]
+fn an_interface_that_goes_without_quitting_stops_its_lanes_tasks() {
+    let (to_a, a) = gated();
+    at_desk(&[&a], Some("a's task"), |person| {
+        person.until("A asks its model", |_| a.turns() == 1);
+        to_a.send(call("bash", json!({"command": "sleep 30"})))
+            .unwrap();
+        let lane = person.first();
+        // The terminal closes: nothing more comes from it.
+        #[allow(clippy::disallowed_methods, reason = "a sender that is never used")]
+        let closed = channel().0;
+        person.to_server = closed;
+        person.until("the task ends", |app| ended(app, &lane));
+        assert_eq!(
+            state(&person.app, &lane),
+            AgentState::Ended("interrupted".into())
+        );
+        assert_eq!(a.turns(), 1, "the task went on with nobody attached");
         person.until_over();
     });
 }

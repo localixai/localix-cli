@@ -135,6 +135,7 @@ pub(crate) fn resume(
     prompt: Option<&str>,
     options: RunOptions,
     kind: Kind,
+    at: run::At,
 ) -> Result<i32, Failure> {
     let root = run::root(&options)?;
     let here = root.root().display().to_string();
@@ -156,7 +157,7 @@ pub(crate) fn resume(
             printable(&session.workspace)
         ));
     }
-    run::run(prompt, options, Some(session), kind)
+    run::run(prompt, options, Some(session), kind, at)
 }
 
 #[cfg(test)]

@@ -35,6 +35,8 @@ pub(crate) struct Term {
     raw: Arc<Mutex<Vec<u8>>>,
     home: PathBuf,
     workspace: PathBuf,
+    /// The home is this session's own: its daemon stops, and the home goes, with it.
+    owns: bool,
 }
 
 impl Term {
@@ -64,6 +66,28 @@ impl Term {
     pub(crate) fn spawn(model: &Model, args: &[&str], env: &[(&str, &str)]) -> Self {
         let (home, workspace) = place();
         Self::spawn_at(home, workspace, model, args, env)
+    }
+
+    /// Another terminal's `llx` with `args`, in this one's home and workspace, at its prompt.
+    pub(crate) fn beside(&self, model: &Model, args: &[&str]) -> Self {
+        let (home, workspace) = (self.home.clone(), self.workspace.clone());
+        let mut term = Self::spawn_at(home, workspace, model, args, &[]);
+        term.owns = false;
+        term.wait_for("❯", Duration::from_secs(10));
+        term
+    }
+
+    /// `llx args…` in this session's home, run to its end: what it printed, and its exit code.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test runs `llx serve status` or `stop` to its end; both answer in seconds"
+    )]
+    pub(crate) fn llx(&self, args: &[&str]) -> (String, i32) {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_llx"));
+        super::home::isolate(&mut command, &self.home);
+        let output = command.args(args).stdin(Stdio::null()).output().unwrap();
+        let said = super::home::text(&output.stdout) + &super::home::text(&output.stderr);
+        (said, output.status.code().unwrap_or(-1))
     }
 
     fn spawn_at(
@@ -143,6 +167,7 @@ impl Term {
             raw,
             home,
             workspace,
+            owns: true,
         }
     }
 
@@ -305,7 +330,10 @@ impl Drop for Term {
         }
         let _ = self.child.kill();
         let _ = self.child.wait();
-        let _ = std::fs::remove_dir_all(&self.home);
+        if self.owns {
+            super::home::stop_daemon(&self.home);
+            let _ = std::fs::remove_dir_all(&self.home);
+        }
     }
 }
 

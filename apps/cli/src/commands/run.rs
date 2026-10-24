@@ -1,15 +1,20 @@
 //! A run, as a session at the terminal or one `exec` task: all is checked and read on the main
 //! thread first (workspace, schema, key, prompt), then the session is composed, with the browser's
-//! event loop on the main thread where a window can be shown. Each task is run, reported, recorded
+//! event loop on the main thread where a window can be shown. A session at the terminal is the
+//! daemon's (`llx serve`, docs/daemon.md) unless `--no-daemon`: this process is then its client,
+//! and the daemon runs the same code for it (`At::Served`). Each task is run, reported, recorded
 //! and its terminal sessions closed; Ctrl-C or closing the window stops it (see `interrupt`), not
 //! the process.
 
+mod interface;
+#[cfg(unix)]
+mod remote;
 mod task;
 
 use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::Receiver;
 
 use contracts::history::{History, Session};
 use protocol::Place;
@@ -19,7 +24,7 @@ use tools::workspace::Workspace;
 use crate::attach;
 use crate::choice;
 use crate::cli::RunOptions;
-use crate::commands::{repl, sessions};
+use crate::commands::sessions;
 use crate::compose::{Seat, Setup, Shared, compose, lane};
 use crate::context::{self, Environment};
 use crate::desk;
@@ -28,10 +33,11 @@ use crate::gate::Tty;
 use crate::input::{self, Prompt};
 use crate::interrupt;
 use crate::mode::{self, Mode};
-use crate::server::{Peer, Ui, place, serve};
+use crate::server::{Ui, place};
 use crate::tui;
 use crate::windows;
 
+pub(crate) use self::interface::serving;
 pub(crate) use super::ended::{Ended, since};
 
 /// The workspace `options` name (`-C`, else the current directory), with what is llx's own off
@@ -94,12 +100,46 @@ pub(crate) fn session_allowed(
     Ok(())
 }
 
-/// Run `prompt` with `options` as `kind`, in `resumed` when a session goes on.
+/// Where a run's session is shown.
+pub(crate) enum At {
+    /// At this process's terminal: through the daemon, else in this process.
+    Terminal,
+    /// Served by the daemon to the client that attached from its place.
+    #[cfg_attr(not(unix), expect(dead_code, reason = "the daemon is unix only"))]
+    Served(Served),
+}
+
+/// A session the daemon serves: where its client is, the client's interface and what it asks of
+/// the desk, the daemon's window, and the lanes it tells what the person does there.
+#[cfg_attr(not(unix), expect(dead_code, reason = "the daemon is unix only"))]
+pub(crate) struct Served {
+    pub place: Place,
+    pub ui: Ui,
+    pub requests: Receiver<desk::Request>,
+    pub browser: Option<Browser>,
+    pub arrivals: Arc<crate::arrivals::Lanes>,
+}
+
+impl Served {
+    /// Its client's interface as a session's, with where the client is, and the window.
+    fn attached(self) -> (Attached, Place, Option<Browser>) {
+        let attached = Attached {
+            running: None,
+            ui: self.ui,
+            requests: self.requests,
+            arrivals: Some(self.arrivals),
+        };
+        (attached, self.place, self.browser)
+    }
+}
+
+/// Run `prompt` with `options` as `kind`, in `resumed` when a session goes on, shown `at`.
 pub(crate) fn run(
     prompt: Option<&str>,
     options: RunOptions,
     resumed: Option<Session>,
     kind: Kind,
+    at: At,
 ) -> Result<i32, Failure> {
     let mut workspace = root(&options)?;
     let schema = options.schema.as_deref().map(input::schema).transpose()?;
@@ -107,7 +147,11 @@ pub(crate) fn run(
     for path in &options.images {
         attach::read(path).map_err(|why| Failure::Usage(format!("--image {why}")))?;
     }
-    if kind == Kind::Session {
+    let served = match at {
+        At::Terminal => None,
+        At::Served(served) => Some(served),
+    };
+    if kind == Kind::Session && served.is_none() {
         session_allowed(prompt, &options, std::io::stdin().is_terminal())?;
     }
     let choice = choice::resolve(&options.models, choice::saved())?;
@@ -117,19 +161,39 @@ pub(crate) fn run(
     }
     let work = work(prompt, kind)?;
     let mode = Mode::choose(options.mode, options.yes);
-    let (terminal, asks) = (Tty::available(), kind == Kind::Session);
-    let browser = tools::browser::has_display();
-    let remote = windows::remote(|name| std::env::var_os(name).is_some());
-    let shown = windows::shown(&options, asks, mode, remote);
-    // A session's interface attaches first: its sessions work where it is.
-    let (ready, place) = match work {
-        Work::Session(first) => {
-            let (attached, place) = interface(&workspace, browser && shown)?;
-            workspace = place::workspace(&place).map_err(Failure::Usage)?;
-            (Ready::Session(first, attached), Some(place))
-        }
-        Work::One(task) => (Ready::One(task), None),
+    // The daemon's client has the terminal the person is asked at.
+    let (terminal, asks) = (served.is_some() || Tty::available(), kind == Kind::Session);
+    let set = |name: &str| match &served {
+        Some(served) => served.place.env.iter().any(|(set, _)| set == name),
+        None => std::env::var_os(name).is_some(),
     };
+    let shown = windows::shown(&options, asks, mode, windows::remote(set));
+    let browser =
+        (served.as_ref()).map_or_else(tools::browser::has_display, |s| s.browser.is_some());
+    // A session's interface attaches first: its sessions work where it is.
+    let (ready, place, hosted) = match (work, served) {
+        (Work::One(_), Some(_)) => return Err(Failure::Usage(RUN_EXEC.into())),
+        (Work::One(task), None) => (Ready::One(task), None, None),
+        (Work::Session(first), Some(served)) => {
+            let (attached, place, browser) = served.attached();
+            (Ready::Session(first, attached), Some(place), Some(browser))
+        }
+        (Work::Session(first), None) => {
+            let theme = interface::colours(browser && shown);
+            #[cfg(unix)]
+            if !options.no_daemon {
+                match remote::run(&workspace, theme) {
+                    Ok(code) => return Ok(code),
+                    Err(why) => crate::error::note(&format!("llx: {why}: {IN_PROCESS}\n")),
+                }
+            }
+            let (attached, place) = interface::attach(&workspace, theme)?;
+            (Ready::Session(first, attached), Some(place), None)
+        }
+    };
+    if let Some(place) = &place {
+        workspace = place::workspace(place).map_err(Failure::Usage)?;
+    }
     let environment = Environment {
         root: workspace.root(),
         mode: &mode::describe(mode, terminal, asks),
@@ -163,6 +227,10 @@ pub(crate) fn run(
     #[cfg(not(unix))]
     let _ = place;
     let work = move |browser| ready.run(setup, browser);
+    // The daemon's window, on its main thread already.
+    if let Some(browser) = hosted {
+        return Ok(work(browser));
+    }
     interrupt::install();
     if !browser {
         return Ok(work(None));
@@ -170,18 +238,23 @@ pub(crate) fn run(
     tools::browser::host(interrupt::window_closed, move |b| work(Some(b)))
 }
 
+/// Said when the daemon cannot serve this session.
+const IN_PROCESS: &str = "this session runs in this process";
+
 /// A run's work with what it runs in: a session with its interface, or one task.
 enum Ready {
     Session(Option<String>, Attached),
     One(String),
 }
 
-/// A session's interface attached to its server: the terminal's, the sessions' port, and what
-/// the person asks of the desk.
+/// A session's interface attached to its server: the terminal's (none when the daemon serves a
+/// client), the sessions' port, what the person asks of the desk, and the lanes the window's
+/// events go to when they are the daemon's.
 struct Attached {
-    running: tui::Running,
+    running: Option<tui::Running>,
     ui: Ui,
     requests: Receiver<desk::Request>,
+    arrivals: Option<Arc<crate::arrivals::Lanes>>,
 }
 
 impl Ready {
@@ -194,17 +267,27 @@ impl Ready {
                     running,
                     ui,
                     requests,
+                    arrivals,
                 } = attached;
-                let (shared, seat) = setup.split(browser);
+                let (shared, seat) = match arrivals {
+                    Some(lanes) => setup.split_into(browser, lanes),
+                    None => setup.split(browser),
+                };
                 let seat = Seat {
                     ui: Some(ui.clone()),
                     ..seat
                 };
                 let start = |shared: &Shared, seat, work: desk::Work| lane(shared, seat, work);
-                // Lanes that do not stop in time: the terminal goes back, and the process ends.
-                let quit = || {
-                    tui::restore();
-                    interrupt::quit_now();
+                // Lanes that do not stop in time: the terminal goes back, and the process ends;
+                // in the daemon, the client is told the session is over, and they end there.
+                let in_process = running.is_some();
+                let told = ui.clone();
+                let quit = move || match in_process {
+                    true => {
+                        tui::restore();
+                        interrupt::quit_now();
+                    }
+                    false => told.send(protocol::Event::Quit),
                 };
                 let code = desk::run(&shared, &ui, requests, seat, first, &start, &quit);
                 drop(running);
@@ -216,92 +299,6 @@ impl Ready {
             }),
         }
     }
-}
-
-/// A session takes the terminal for its interface; one that cannot draw there (no size to draw
-/// at) is a usage error, as having no terminal is. `windowed`: terminal windows will show. The
-/// place the interface attached from comes with it.
-fn interface(root: &Workspace, windowed: bool) -> Result<(Attached, Place), Failure> {
-    // Before the interface reads the keys, which would take the terminal's answers; only where
-    // terminal windows will show them.
-    #[cfg(unix)]
-    let theme = windowed.then(crate::colours::ask).flatten();
-    #[cfg(not(unix))]
-    let theme = {
-        let _ = windowed;
-        None
-    };
-    // xterm.js for the terminal windows, once: until it is kept they show a grid.
-    #[cfg(unix)]
-    if crate::xterm::wanted(true, windowed, |name| std::env::var(name).ok()) {
-        crate::xterm::prefetch();
-    }
-    let why = |error| Failure::Usage(format!("{NO_INTERFACE} ({error}): {RUN_EXEC}"));
-    let Serving {
-        peer,
-        requests,
-        to_server,
-        from_server,
-    } = serving().map_err(why)?;
-    let running = tui::start(tui::Start {
-        to_server,
-        from_server,
-        root: root.root(),
-        theme,
-        quit_now: interrupt::quit_now,
-    });
-    let running = running.map_err(why)?;
-    // Said before the interface was told it is attached: the first of the desk's requests.
-    let Ok(desk::Request::Attach(place)) = requests.try_recv() else {
-        return Err(Failure::Usage(format!("{NO_INTERFACE}: it gave no place")));
-    };
-    // A newer model catalog, for the next session: nothing here waits on it.
-    crate::providers::refresh_catalog();
-    let attached = Attached {
-        running,
-        ui: Ui::new(peer),
-        requests,
-    };
-    Ok((attached, place))
-}
-
-/// The server, in this process: what it serves the interface on its own thread, the desk's
-/// requests, and the interface's ends of the frames.
-#[allow(
-    clippy::disallowed_methods,
-    reason = "the in-process transport: the server never waits on the interface (W6), the \
-              interface never on the desk; one frame per thing done or key pressed"
-)]
-fn serving() -> std::io::Result<Serving> {
-    let (to_server, incoming) = channel();
-    let (out, from_server) = channel();
-    let (desk, requests) = channel();
-    let peer = Peer::new(out);
-    let served = Arc::clone(&peer);
-    let info = serve::Info {
-        max_lanes: desk::MAX_LANES,
-        shells: tools::shell::running_anywhere,
-        commands: repl::commands(),
-        modes: Mode::ALL
-            .map(|mode| (mode.name().into(), mode.hint()))
-            .to_vec(),
-    };
-    let server = std::thread::Builder::new().name("llx-serve".into());
-    server.spawn(move || serve::serve(&incoming, &served, &desk, &info))?;
-    Ok(Serving {
-        peer,
-        requests,
-        to_server,
-        from_server,
-    })
-}
-
-/// The server running: the sessions' side of it, the desk's requests, and the interface's ends.
-struct Serving {
-    peer: Arc<Peer>,
-    requests: Receiver<desk::Request>,
-    to_server: Sender<protocol::ToServer>,
-    from_server: Receiver<protocol::ToClient>,
 }
 
 #[cfg(test)]

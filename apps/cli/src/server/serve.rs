@@ -7,6 +7,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use protocol::{Command, Done, ToClient, ToServer};
 
+use super::host::Host;
 use super::ui::Peer;
 use crate::desk::Request;
 
@@ -18,6 +19,8 @@ pub(crate) struct Info {
     /// What `/` offers, and the modes, each with what it does.
     pub commands: Vec<(String, String)>,
     pub modes: Vec<(String, String)>,
+    /// The daemon this server is, when it is one.
+    pub host: Option<Arc<Host>>,
 }
 
 /// Serve `incoming` until the interface is gone: replies to their questions, lanes' commands to
@@ -49,7 +52,12 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
         },
     };
     match command {
-        Command::Initialize { place, .. } => {
+        Command::Initialize { place, build, .. } => {
+            // A daemon of another build may not speak the same frames: the client starts its own.
+            if let Some(host) = info.host.as_ref().filter(|host| host.build != build) {
+                let why = format!("the daemon is build {}, this llx {build}", host.build);
+                return Done::Failed { why };
+            }
             // The sessions this client opens work where it is.
             if let Some(place) = place {
                 let _ = desk.send(Request::Attach(place));
@@ -90,6 +98,20 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
         Command::Work => Done::Work {
             shells: (info.shells)(),
         },
+        Command::Status => info
+            .host
+            .as_ref()
+            .map_or_else(not_a_daemon, |host| host.status()),
+        Command::Shutdown => info.host.as_ref().map_or_else(not_a_daemon, |host| {
+            host.end();
+            Done::Ok
+        }),
+    }
+}
+
+fn not_a_daemon() -> Done {
+    Done::Failed {
+        why: "not a daemon: this llx runs its sessions itself".into(),
     }
 }
 

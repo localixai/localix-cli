@@ -103,6 +103,7 @@ In a session, what you type is the next task, in the same conversation. While a 
 | `--max-turns N` | Model turns for one task (50; 1 to 10000). |
 | `--max-steps N` | Actions for one browser task of the decision model (40; 1 to 10000). |
 | `--timeout SECONDS` | Seconds one task may take (1800; at most 86400). It stops at the first model turn past them, or while the task waits on its monitors or agents. Time spent waiting on you (an approval, a question) does not count. |
+| `--no-daemon` | Run the session in this process instead of the daemon (`llx serve`). Env `LLX_NO_DAEMON=1`. `exec` always runs in process. |
 | `--show-browser` | Show the browser window, and a window for each terminal session `bash` keeps. By default they show in a session, and stay hidden in `exec`, in autonomous mode and over SSH (`SSH_CONNECTION` or `SSH_TTY` set; the browser then works without a window). The browser window opens only when the browser is first used. A shown window is an ordinary one: it comes to the front when it opens, without taking the keyboard, and goes behind other windows like any other. |
 
 Commands:
@@ -112,6 +113,9 @@ Commands:
 - `exec [PROMPT | -]` (alias `e`): run one task without a session and exit, with the answer alone on stdout. `exec resume [ID | --last] [PROMPT]` runs one more task in a saved session.
 - `resume [ID | --last] [PROMPT]`: go on with a session at the terminal. `--last` is the newest session that ran in this workspace (else the newest of all, with a note).
 - `doctor`: check that everything a run needs is in place.
+- `serve`: the daemon the sessions run in (unix). `serve status` says whether it runs (its pid, its build, the terminals attached, the sessions open and working; exit 1 when none runs), `serve stop` ends it, stopping every session's task first.
+
+A session at the terminal runs in a daemon, `llx serve`: one per config directory, found at a socket in `$TMPDIR/llx-<uid>/` (a directory only you may enter), started by the first `llx` (detached, in a session of its own, its errors in `daemon.log` beside the sign-ins) and attached to by every later one. The daemon holds the sessions with their agents, jobs and terminal sessions, the models, and the one window; `llx` draws, reads the keys and speaks to it over the socket. Each terminal's sessions work in its directory, with its environment, and with the options its command line gave. Closing a terminal stops its sessions' work; the daemon itself lives on until `llx serve stop`. A daemon of another build is stopped and replaced when nothing works in it; when it is busy, the session runs in this process, and llx says so, as it does when the daemon cannot be reached. `--no-daemon` (or `LLX_NO_DAEMON=1`) always runs in process, and so does `exec`.
 
 Successful `edit` calls show an inline diff with old/new line numbers, surrounding context, red background bands for removals and green bands for additions. The bands fill the row and its continuations, including in terminal scrollback. Long code lines wrap instead of being clipped. Large previews are bounded and explicitly marked when truncated; the diff is shown after the edit succeeds.
 

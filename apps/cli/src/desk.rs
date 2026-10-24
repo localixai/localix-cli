@@ -16,7 +16,8 @@ use std::time::Duration;
 use contracts::history::History;
 use protocol::Target;
 
-use self::ending::{AllLanes, Lanes, Leaving};
+pub(crate) use self::ending::open_anywhere;
+use self::ending::{AllLanes, Detached, Lanes, Leaving};
 use crate::commands::repl;
 use crate::compose::{Rig, Seat, Shared};
 use crate::server::Ui;
@@ -69,6 +70,7 @@ pub(crate) fn run(
             start,
         };
         desk.open(scope, first, task, true);
+        let mut detached = false;
         while lanes.count() > 0 && !lanes.panicked.load(Ordering::SeqCst) {
             match requests.recv_timeout(POLL) {
                 Ok(Request::Open(target)) => desk.target(scope, target),
@@ -78,8 +80,14 @@ pub(crate) fn run(
                 // session is for when several attach (docs/daemon.md, step 4).
                 Ok(Request::Attach(_)) => {}
                 Err(RecvTimeoutError::Timeout) => {}
-                // No interface to ask: the lanes end by themselves.
-                Err(RecvTimeoutError::Disconnected) => lanes.wait(POLL),
+                // The interface went without quitting: its lanes' work stops, once, then they
+                // end by themselves (their prompts get nothing).
+                Err(RecvTimeoutError::Disconnected) => {
+                    if !std::mem::replace(&mut detached, true) {
+                        lanes.detached(&Detached::Stop);
+                    }
+                    lanes.wait(POLL);
+                }
             }
         }
     });

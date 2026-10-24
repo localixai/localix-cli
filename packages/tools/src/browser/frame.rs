@@ -20,7 +20,15 @@ pub(super) type Rgb = [u8; 3];
 /// The stylesheet a panel's page is dressed in: its ground, painted once, for each look.
 pub(super) const CSS: &str = include_str!("frame.css");
 /// The system's grounds, when a page has none of its own.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "the glass under a window is macOS's only")
+)]
 pub(super) const DARK: Rgb = [0x07, 0x07, 0x07];
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "the glass under a window is macOS's only")
+)]
 pub(super) const LIGHT: Rgb = [0xf7, 0xf7, 0xf7];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,6 +92,10 @@ pub(super) fn dark([red, green, blue]: Rgb) -> bool {
 
 /// The material for an appearance (NSVisualEffectMaterial): HUD, which is dark, under a dark
 /// ground; under-window background, which reads light, under a light one.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "the glass under a window is macOS's only")
+)]
 pub(super) fn material(dark: bool) -> isize {
     if dark { 13 } else { 21 }
 }
@@ -92,6 +104,10 @@ pub(super) fn material(dark: bool) -> isize {
 /// Localix's window ground (oklch 0.13 and 0.975), never the page's own colour. A terminal's
 /// grey-blue ground over the material read as grey; the page's ground, else the system's, only
 /// says which appearance.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "the glass under a window is macOS's only")
+)]
 pub(super) fn coat(ground: Option<Rgb>, system_dark: bool) -> (Rgb, f64) {
     match ground.map_or(system_dark, dark) {
         // Thinner than Localix's 85% and 92%: the desktop shows through, text still reads.
@@ -171,6 +187,13 @@ impl Frame {
     }
 
     /// Tint the glass for the system's appearance now, unless its ground is the page's own.
+    #[cfg_attr(
+        not(target_os = "macos"),
+        allow(
+            clippy::unused_self,
+            reason = "the glass under a window is macOS's only"
+        )
+    )]
     pub(super) fn retint(&self) {
         #[cfg(target_os = "macos")]
         if let Some(glass) = &self.glass {
@@ -213,7 +236,7 @@ mod native;
 
 #[cfg(not(target_os = "macos"))]
 mod native {
-    pub fn clear(builder: tao::window::WindowBuilder) -> tao::window::WindowBuilder {
+    pub(super) fn clear(builder: tao::window::WindowBuilder) -> tao::window::WindowBuilder {
         builder
     }
 }

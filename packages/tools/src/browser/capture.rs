@@ -5,6 +5,10 @@
 use std::sync::mpsc::SyncSender;
 
 /// The long side of a picture, in pixels.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "the compositor's picture is taken only on macOS")
+)]
 pub(super) const MAX_EDGE: f64 = 1280.0;
 /// JPEG quality: text stays legible, a full page stays near 150 KB.
 #[cfg_attr(
@@ -31,6 +35,10 @@ pub struct Shot {
 }
 
 /// The size to draw `width`×`height` at so its long side is at most `MAX_EDGE`.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "the compositor's picture is taken only on macOS")
+)]
 pub(super) fn fitted(width: f64, height: f64) -> (f64, f64) {
     let scale = (MAX_EDGE / width.max(height)).min(1.0);
     ((width * scale).round(), (height * scale).round())

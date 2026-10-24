@@ -46,7 +46,7 @@ detect_target() {
       esac
       ;;
     MINGW* | MSYS* | CYGWIN*)
-      fail "on Windows, run in PowerShell: irm https://raw.githubusercontent.com/$repo/main/scripts/install.ps1 | iex"
+      fail "Windows is not supported for now: llx runs on macOS and Linux"
       ;;
     *) fail "no build for $os $arch" ;;
   esac

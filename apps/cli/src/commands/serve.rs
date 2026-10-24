@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use clap::Parser;
-use protocol::{Event, Place};
+use protocol::{Event, Place, ToServer};
 use tools::browser::Browser;
 
 use crate::arrivals::Lanes;
@@ -21,7 +21,8 @@ use crate::error::{Failure, print};
 use crate::exit;
 use crate::interrupt;
 use crate::server::Ui;
-use crate::server::host::Host;
+use crate::server::host::{Host, Kept};
+use crate::server::serve;
 use crate::server::socket::{self, Connection};
 
 /// How long the daemon waits for its lanes to end once stopped; and for another daemon's lock
@@ -118,11 +119,31 @@ fn backoff() {
     std::thread::sleep(Duration::from_millis(50));
 }
 
-/// One client: its server, then, once it says where it is, its desk until the desk ends. A
-/// client that only asks (`status`, `stop`) says nothing of where it is, and gets no desk.
+/// One client: back to the sessions moved to the background where it is, else its server and,
+/// once it says where it is, its desk until the desk ends. A client that only asks (`status`,
+/// `stop`) says nothing of where it is, and gets no desk.
 fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, lanes: &Arc<Lanes>) {
     let Connection { incoming, out } = connection;
-    let Ok((peer, requests)) = run::serving(incoming, out, Some(Arc::clone(host))) else {
+    let Ok(first) = incoming.recv() else {
+        return;
+    };
+    if let Some(kept) = rejoinable(&first, host) {
+        return rejoin(first, &incoming, out, kept, host);
+    }
+    // Where the client is, once it says: the work it moves to the background is kept there.
+    let at: Arc<std::sync::Mutex<Option<String>>> = Arc::default();
+    let (theirs, daemon) = (Arc::clone(&at), Arc::clone(host));
+    let ended: run::Left = Box::new(move |kept, peer, desk| {
+        let cwd = crate::output::lock(&theirs).clone();
+        match (kept, cwd) {
+            (true, Some(cwd)) => daemon.keep(Kept { cwd, peer, desk }),
+            _ => {
+                let _ = desk.send(Request::Gone);
+            }
+        }
+    });
+    let served = run::serving(Some(first), incoming, out, Some(Arc::clone(host)), ended);
+    let Ok((peer, requests)) = served else {
         return;
     };
     let place = loop {
@@ -132,6 +153,8 @@ fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, la
             Err(_gone) => return,
         }
     };
+    *crate::output::lock(&at) = Some(place.cwd.clone());
+    let _forgotten = Forget(Arc::clone(host), Arc::clone(&peer));
     let _attached = host.attach();
     let ui = Ui::new(peer);
     let arrivals = Arc::clone(lanes);
@@ -139,6 +162,53 @@ fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, la
     if let Err(why) = session(place, ui, requests, browser, arrivals) {
         told.send(Event::Error(format!("llx: {why}")));
         told.send(Event::Quit);
+    }
+}
+
+/// The sessions moved to the background where `first`'s client is, of its build.
+fn rejoinable(first: &ToServer, host: &Host) -> Option<Kept> {
+    let ToServer::Call {
+        command:
+            protocol::Command::Initialize {
+                place: Some(place),
+                build,
+                ..
+            },
+        ..
+    } = first
+    else {
+        return None;
+    };
+    (*build == host.build)
+        .then(|| host.take(&place.cwd))
+        .flatten()
+}
+
+/// The client back to `kept`: given what its sessions did meanwhile, then served; kept again if
+/// it moves them to the background once more, else their work stops.
+fn rejoin(
+    first: ToServer,
+    incoming: &std::sync::mpsc::Receiver<ToServer>,
+    out: std::sync::mpsc::Sender<protocol::ToClient>,
+    kept: Kept,
+    host: &Arc<Host>,
+) {
+    let _attached = host.attach();
+    let info = run::info(Some(Arc::clone(host)));
+    match serve::rejoin(first, incoming, &kept.peer, out, &kept.desk, &info) {
+        true => host.keep(kept),
+        false => {
+            let _ = kept.desk.send(Request::Gone);
+        }
+    }
+}
+
+/// A desk's end, however it ends: nothing of it is kept for a later client.
+struct Forget(Arc<Host>, Arc<crate::server::Peer>);
+
+impl Drop for Forget {
+    fn drop(&mut self) {
+        self.0.forget(&self.1);
     }
 }
 

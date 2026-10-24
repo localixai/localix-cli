@@ -43,6 +43,9 @@ pub(crate) enum Request {
     Attach(protocol::Place),
     /// "Move to background and exit": the lanes go on when the interface's connection ends.
     Background,
+    /// The interface left without keeping the work: it stops, as "Exit and stop tasks" does.
+    /// Said where the desk's requests outlive the connection (a daemon keeps them for the next).
+    Gone,
 }
 
 /// What a lane does once built: its session at the prompt.
@@ -83,6 +86,11 @@ pub(crate) fn run(
                 // session is for when several attach (docs/daemon.md, step 4).
                 Ok(Request::Attach(_)) => {}
                 Ok(Request::Background) => kept = true,
+                Ok(Request::Gone) => {
+                    if !std::mem::replace(&mut gone, true) {
+                        lanes.stop_all();
+                    }
+                }
                 Err(RecvTimeoutError::Timeout) => {}
                 // The interface's connection ended: unless the person moved the session to the
                 // background, its work stops, as "Exit and stop tasks" does.

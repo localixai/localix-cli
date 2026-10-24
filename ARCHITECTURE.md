@@ -256,10 +256,11 @@ every new file already goes where its target crate will be.
 
 - **D1** (done): the seam as the protocol, in process: `protocol` and `client` exist; the
   interface speaks only through them. L6-L8 are checked.
-- **D2**: sessions carry their place (directory, environment, theme).
-- **D3**: the socket and `llx serve`.
-- **D4**: attach and detach: the ring, replayed questions, the quit question.
-- **D5**: the window grouped by project.
+- **D2** (done): sessions carry their place (directory, environment, theme).
+- **D3** (done): the socket and `llx serve`.
+- **D4** (done): attach and detach: the ring, replayed questions, the quit question, back to
+  the sessions moved to the background.
+- **D5** (done): the window grouped by project.
 
 ## Budgets
 

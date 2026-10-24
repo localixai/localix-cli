@@ -122,3 +122,39 @@ fn a_busy_daemon_of_another_build_is_left_working() {
         "the older works on"
     );
 }
+
+#[test]
+fn moved_to_the_background_the_work_goes_on_and_the_next_terminal_shows_it() {
+    let wait = "until [ -e go ]; do sleep 0.1; done; echo went";
+    let model = Model::start(vec![
+        Reply::call("bash", json!({"command": wait})),
+        Reply::text("Finished while you were away.\nRESULT: achieved"),
+        Reply::text("And this too.\nRESULT: achieved"),
+    ]);
+    let mut first = Term::start(&model, &["-y"]);
+    first.type_text("a long task").press(key::ENTER);
+    first.wait_for("Running until", LONG);
+    first.press(key::CTRL_D);
+    first.wait_for("Move to background and exit", LONG);
+    first.type_text("2");
+    assert!(first.exited(LONG).is_some(), "the terminal is let go");
+    // The task goes on in the daemon with nobody attached, and ends.
+    std::fs::write(first.file("go"), "").unwrap();
+    let end = std::time::Instant::now() + LONG;
+    while model.requests().len() < 2 {
+        assert!(std::time::Instant::now() < end, "the task did not go on");
+        std::thread::yield_now();
+    }
+    // The next `llx` here shows the session as it went on.
+    let mut second = first.beside(&model, &[]);
+    let screen = second.wait_for("Finished while you were away.", LONG);
+    assert!(screen.contains("❯ a long task"), "{screen}");
+    // And the person goes on in it: the same conversation.
+    second.type_text("one more thing").press(key::ENTER);
+    second.wait_for("And this too.", LONG);
+    let asked = crate::common::model::said(&model, 2);
+    assert!(
+        asked.contains("a long task") && asked.contains("one more thing"),
+        "{asked}"
+    );
+}

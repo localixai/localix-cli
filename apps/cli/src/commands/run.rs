@@ -37,7 +37,7 @@ use crate::server::{Ui, place};
 use crate::tui;
 use crate::windows;
 
-pub(crate) use self::interface::serving;
+pub(crate) use self::interface::{Left, info, serving};
 pub(crate) use super::ended::{Ended, since};
 
 /// The workspace `options` name (`-C`, else the current directory), with what is llx's own off

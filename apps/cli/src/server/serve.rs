@@ -45,7 +45,40 @@ pub(crate) fn serve(
     desk: &Sender<Request>,
     info: &Info,
 ) -> bool {
-    serving(incoming, peer, Link::Attached(FIRST), desk, info)
+    serving(None, incoming, peer, Link::Attached(FIRST), desk, info)
+}
+
+/// [`serve`], from `first`, a frame already read from the connection (the daemon reads its
+/// handshake to know where the client is).
+pub(crate) fn serve_from(
+    first: ToServer,
+    incoming: &Receiver<ToServer>,
+    peer: &Arc<Peer>,
+    desk: &Sender<Request>,
+    info: &Info,
+) -> bool {
+    serving(
+        Some(first),
+        incoming,
+        peer,
+        Link::Attached(FIRST),
+        desk,
+        info,
+    )
+}
+
+/// A connection back to sessions moved to the background: attached at once, so it is given
+/// what they did meanwhile (the ring, then the questions waiting), then served from `first`.
+pub(crate) fn rejoin(
+    first: ToServer,
+    incoming: &Receiver<ToServer>,
+    peer: &Arc<Peer>,
+    out: Sender<ToClient>,
+    desk: &Sender<Request>,
+    info: &Info,
+) -> bool {
+    let (me, _) = peer.attach(out, None);
+    serving(Some(first), incoming, peer, Link::Attached(me), desk, info)
 }
 
 /// Serve a later connection to `peer`, whose frames go to `out`: it hears the sessions once it
@@ -61,10 +94,11 @@ pub(crate) fn connection(
     desk: &Sender<Request>,
     info: &Info,
 ) -> bool {
-    serving(incoming, peer, Link::Waiting(out), desk, info)
+    serving(None, incoming, peer, Link::Waiting(out), desk, info)
 }
 
 fn serving(
+    first: Option<ToServer>,
     incoming: &Receiver<ToServer>,
     peer: &Peer,
     mut link: Link,
@@ -72,7 +106,7 @@ fn serving(
     info: &Info,
 ) -> bool {
     let mut kept = false;
-    for frame in incoming {
+    for frame in first.into_iter().chain(incoming) {
         match frame {
             ToServer::Reply { id, reply } => peer.replied(id, reply),
             ToServer::Call {

@@ -178,3 +178,16 @@ process environment): commands run in the environment of the client that opened 
    knows no project. Left for D3/D4: a daemon's lanes from several directories feed it.
 
 Estimated 2,500 to 3,500 lines; the budget has 5,000 left.
+
+## Built (all five steps)
+
+`llx` at a terminal runs its sessions in one daemon per config directory (`llx serve`, found or
+started, replaced when of another build and idle); `--no-daemon` and `exec` run in process. The
+interface speaks only the protocol (L7), over a socket or channels. A session takes its place
+from the client; questions belong to it (any number of interfaces, the first reply wins, replayed
+on attach); its events are numbered and kept in a ring. Quitting while work runs asks: stop,
+move to the background (only in the daemon), or stay; the next `llx` in a directory comes back
+to the sessions moved to the background there (`server::host::Kept`, `serve::rejoin`). Left for
+later: the chat model's key from each client's environment rather than the daemon's, `daemon.log`
+rotation, one desk per directory shared by two terminals at once.
+

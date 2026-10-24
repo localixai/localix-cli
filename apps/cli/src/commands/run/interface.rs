@@ -49,7 +49,9 @@ pub(super) fn attach(
                   interface never on the desk; one frame per thing done or key pressed"
     )]
     let ((to_server, incoming), (out, from_server)) = (channel(), channel());
-    let (peer, requests) = serving(incoming, out, None).map_err(why)?;
+    // In process the desk ends with the interface: its requests' end stops the work.
+    let (peer, requests) =
+        serving(None, incoming, out, None, Box::new(|_, _, _| {})).map_err(why)?;
     let connect: tui::Connect =
         Box::new(move |deliver| Client::in_process(to_server, from_server, deliver));
     let running = tui::start(tui::Start {
@@ -75,12 +77,19 @@ pub(super) fn attach(
     Ok((attached, place))
 }
 
-/// A server for one interface, on a thread of its own: what it serves the sessions, and what the
-/// interface asks of the desk. `host`: the daemon it is part of, when it is one.
+/// What becomes of a desk once its interface's connection ends: whether the person kept the work
+/// (moved it to the background), its peer, and its requests' sender.
+pub(crate) type Left = Box<dyn FnOnce(bool, Arc<Peer>, Sender<desk::Request>) + Send>;
+
+/// A server for one interface, on a thread of its own, from `first` (a frame already read):
+/// what it serves the sessions, and what the interface asks of the desk; `ended` once the
+/// connection is gone. `host`: the daemon it is part of, when it is one.
 pub(crate) fn serving(
+    first: Option<ToServer>,
     incoming: Receiver<ToServer>,
     out: Sender<ToClient>,
     host: Option<Arc<Host>>,
+    ended: Left,
 ) -> std::io::Result<(Arc<Peer>, Receiver<desk::Request>)> {
     #[allow(
         clippy::disallowed_methods,
@@ -89,7 +98,21 @@ pub(crate) fn serving(
     let (desk, requests) = channel();
     let peer = Peer::new(out);
     let served = Arc::clone(&peer);
-    let info = serve::Info {
+    let info = info(host);
+    let server = std::thread::Builder::new().name("llx-serve".into());
+    server.spawn(move || {
+        let kept = match first {
+            Some(first) => serve::serve_from(first, &incoming, &served, &desk, &info),
+            None => serve::serve(&incoming, &served, &desk, &info),
+        };
+        ended(kept, served, desk);
+    })?;
+    Ok((peer, requests))
+}
+
+/// What a server says of itself: what it offers, and what it can do (a daemon keeps work).
+pub(crate) fn info(host: Option<Arc<Host>>) -> serve::Info {
+    serve::Info {
         max_lanes: desk::MAX_LANES,
         shells: tools::shell::running_anywhere,
         commands: repl::commands(),
@@ -99,8 +122,5 @@ pub(crate) fn serving(
         // Only a daemon keeps the work once the interface leaves; in process it ends with it.
         background: host.is_some(),
         host,
-    };
-    let server = std::thread::Builder::new().name("llx-serve".into());
-    server.spawn(move || serve::serve(&incoming, &served, &desk, &info))?;
-    Ok((peer, requests))
+    }
 }

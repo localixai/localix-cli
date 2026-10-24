@@ -1,0 +1,245 @@
+//! What a hub keeps for a client that attaches later (W6): the last events, numbered, in a ring
+//! bounded by count and by bytes; and outside it each open session's whole state (a lane's start,
+//! header and mode, an agent's start and close, the latest queue, total, jobs, context and
+//! facts), so a client whose cursor the ring no longer reaches still rebuilds every session. A
+//! whole state replaces the one before it, in the ring too; a lane that ends takes all of its
+//! own, its agents' included, with it.
+
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
+
+use protocol::{Event, Outcome, ToClient, Update};
+
+/// A frame as it is kept and posted: shared, so keeping it and replaying it copy nothing.
+pub(super) type Frame = Arc<ToClient>;
+
+/// Bytes the ring keeps at most, about: long tool reports are replayed only while they fit.
+pub(crate) const KEPT_BYTES: usize = 8 << 20;
+
+/// A part of a session's state that an event gives whole.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Lane,
+    Header,
+    Mode,
+    Agent,
+    Closed,
+    Queue,
+    Total,
+    Jobs,
+    Context,
+    Updated,
+}
+
+/// A session's state as its latest events gave it, and the lane that started it, for an agent.
+#[derive(Default)]
+struct Session {
+    parent: Option<String>,
+    kept: Vec<(Kind, u64, Frame)>,
+}
+
+pub(super) struct Ring {
+    /// The numbered events kept, oldest first, each with its weight.
+    frames: VecDeque<(u64, Frame, usize)>,
+    room: usize,
+    bytes: usize,
+    held: usize,
+    seq: u64,
+    /// The newest number the bounds pushed out: a cursor before it missed something.
+    dropped: u64,
+    sessions: HashMap<String, Session>,
+}
+
+impl Ring {
+    pub(super) fn new(room: usize, bytes: usize) -> Self {
+        Self {
+            frames: VecDeque::new(),
+            room,
+            bytes,
+            held: 0,
+            seq: 0,
+            dropped: 0,
+            sessions: HashMap::new(),
+        }
+    }
+
+    /// The number of the newest event.
+    pub(super) fn seq(&self) -> u64 {
+        self.seq
+    }
+
+    /// `event` of `session`, numbered and kept: the frame as it is sent.
+    pub(super) fn keep(&mut self, session: Option<String>, event: Event) -> Frame {
+        self.seq += 1;
+        match (&event, &session) {
+            (Event::LaneEnded, Some(lane)) => self.end(lane),
+            (Event::AgentsCleared, Some(lane)) => self
+                .sessions
+                .retain(|_, session| session.parent.as_deref() != Some(lane.as_str())),
+            _ => {}
+        }
+        let whole = whole(session.as_deref(), &event);
+        let event = match (&whole, event) {
+            (Some((owner, Kind::Updated, _)), Event::Updated(update)) => {
+                Event::Updated(self.merged(owner, update))
+            }
+            (_, event) => event,
+        };
+        let weight = weight(&event);
+        let seq = self.seq;
+        let frame = Arc::new(ToClient::Event {
+            session,
+            event,
+            seq: Some(seq),
+        });
+        if let Some((owner, kind, parent)) = whole {
+            self.hold(owner, kind, parent, Arc::clone(&frame));
+        }
+        self.frames.push_back((seq, Arc::clone(&frame), weight));
+        self.held += weight;
+        while self.frames.len() > self.room || self.held > self.bytes {
+            let Some((seq, _, weight)) = self.frames.pop_front() else {
+                break;
+            };
+            self.dropped = seq;
+            self.held -= weight;
+        }
+        frame
+    }
+
+    /// What a client gets that has seen up to `cursor` (`None`: nothing): when the ring no
+    /// longer holds all that came after, or the cursor is not this server's, a gap, then every
+    /// session's state that the ring no longer holds; then the ring after the cursor.
+    pub(super) fn replay(&self, cursor: Option<u64>) -> Vec<Frame> {
+        let stale = cursor.is_some_and(|cursor| cursor > self.seq);
+        let from = match stale {
+            true => 0,
+            false => cursor.unwrap_or(0),
+        };
+        let mut frames = vec![];
+        if stale || from < self.dropped {
+            frames.push(Arc::new(ToClient::Gap));
+            let mut state: Vec<(u64, Frame)> = (self.sessions.values())
+                .flat_map(|session| &session.kept)
+                .filter(|(_, seq, _)| *seq <= self.dropped)
+                .map(|(_, seq, frame)| (*seq, Arc::clone(frame)))
+                .collect();
+            state.sort_by_key(|(seq, _)| *seq);
+            frames.extend(state.into_iter().map(|(_, frame)| frame));
+        }
+        let after = self.frames.iter().filter(|(seq, ..)| *seq > from);
+        frames.extend(after.map(|(_, frame, _)| Arc::clone(frame)));
+        frames
+    }
+
+    /// `frame` as `owner`'s `kind` now; the one before it leaves the ring.
+    fn hold(&mut self, owner: String, kind: Kind, parent: Option<String>, frame: Frame) {
+        let seq = self.seq;
+        let session = self.sessions.entry(owner).or_default();
+        if parent.is_some() {
+            session.parent = parent;
+        }
+        let before = session.kept.iter().position(|(of, ..)| *of == kind);
+        let before = before.map(|at| session.kept.remove(at).1);
+        session.kept.push((kind, seq, frame));
+        if let Some(before) = before
+            && let Ok(at) = self.frames.binary_search_by_key(&before, |(seq, ..)| *seq)
+            && let Some((_, _, weight)) = self.frames.remove(at)
+        {
+            self.held -= weight;
+        }
+    }
+
+    /// `update` over what `owner`'s facts were: a field it leaves out stays as it was.
+    fn merged(&self, owner: &str, update: Update) -> Update {
+        let before = (self.sessions.get(owner).into_iter())
+            .flat_map(|session| &session.kept)
+            .find_map(|(kind, _, frame)| match (kind, &**frame) {
+                (
+                    Kind::Updated,
+                    ToClient::Event {
+                        event: Event::Updated(before),
+                        ..
+                    },
+                ) => Some(before.clone()),
+                _ => None,
+            });
+        let before = before.unwrap_or_default();
+        Update {
+            title: update.title.or(before.title),
+        }
+    }
+
+    /// Lane `lane` ended: nothing of it or of its agents is given again.
+    fn end(&mut self, lane: &str) {
+        let mut gone: Vec<String> = (self.sessions.iter())
+            .filter(|(_, session)| session.parent.as_deref() == Some(lane))
+            .map(|(id, _)| id.clone())
+            .collect();
+        gone.push(lane.to_string());
+        self.sessions.retain(|id, _| !gone.contains(id));
+        let theirs = |frame: &ToClient| match frame {
+            ToClient::Event {
+                event: Event::LaneStarted { id, .. } | Event::Show(id),
+                ..
+            } => id == lane,
+            ToClient::Event {
+                session: Some(session),
+                ..
+            } => gone.contains(session),
+            _ => false,
+        };
+        let mut held = self.held;
+        self.frames.retain(|(_, frame, weight)| {
+            let keep = !theirs(frame);
+            if !keep {
+                held -= weight;
+            }
+            keep
+        });
+        self.held = held;
+    }
+}
+
+/// Whose state `event` gives whole and which part of it, with the lane that started an agent.
+fn whole(session: Option<&str>, event: &Event) -> Option<(String, Kind, Option<String>)> {
+    let kind = match event {
+        Event::LaneStarted { id, .. } => return Some((id.clone(), Kind::Lane, None)),
+        Event::Started { id, .. } => {
+            let parent = session.map(str::to_string);
+            return Some((id.clone(), Kind::Agent, parent));
+        }
+        Event::Header(_) => Kind::Header,
+        Event::Mode(_) => Kind::Mode,
+        Event::Closed => Kind::Closed,
+        Event::Queue { .. } => Kind::Queue,
+        Event::Total(_) => Kind::Total,
+        Event::Jobs(_) => Kind::Jobs,
+        Event::Context(_) => Kind::Context,
+        Event::Updated(_) => Kind::Updated,
+        _ => return None,
+    };
+    session.map(|session| (session.to_string(), kind, None))
+}
+
+/// About how many bytes `event` holds: its text, and a little for the rest.
+fn weight(event: &Event) -> usize {
+    let texts = |texts: &[String]| texts.iter().map(String::len).sum::<usize>();
+    let text = match event {
+        Event::Note(text)
+        | Event::Error(text)
+        | Event::Answer(text)
+        | Event::TaskStarted(text)
+        | Event::Show(text) => text.len(),
+        Event::Header(rows) | Event::Steered(rows) => texts(rows),
+        Event::Result { outcome, .. } => match outcome {
+            Outcome::Done { report } => report.len(),
+            Outcome::Failed { why, .. } | Outcome::Fatal { why } => why.len(),
+        },
+        Event::Earlier(turns) => (turns.iter())
+            .map(|turn| turn.goal.len() + turn.answer.len())
+            .sum(),
+        _ => 0,
+    };
+    text + 64
+}

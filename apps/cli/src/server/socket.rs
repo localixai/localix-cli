@@ -1,7 +1,8 @@
 //! The server's end of the socket (W1, W4, W6): a listener in the person's own directory, and
 //! for each connection the same two ends as in process, a stream of frames in and a sender out,
-//! so `serve` cannot tell them apart. A line that is not a frame is dropped and said (W8); a
-//! client that does not read is cut off when its bounded queue fills, never waited for (W6).
+//! so `serve` cannot tell them apart. A line that is not a frame is dropped and said, a call the
+//! server cannot read is answered failed (W1, W8); a client that does not read is cut off when
+//! its bounded queue fills or a write stalls, never waited for (W6).
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::Shutdown;
@@ -10,11 +11,19 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::sync::mpsc::{Receiver, Sender, SyncSender, TrySendError, sync_channel};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
-use protocol::{Event, ToClient, ToServer};
+use protocol::{Done, Event, ToClient, ToServer};
 
-/// Frames waiting for a client before it is taken for one that does not read.
-const ROOM: usize = 1024;
+/// Frames waiting for a client before it is taken for one that does not read: room for a whole
+/// replay (the ring, every session's state, the questions) and as many live frames again, so
+/// attaching never cuts a client that reads.
+const ROOM: usize = 2 * super::hub::KEPT + LIVE;
+const LIVE: usize = 1024;
+/// A client that takes nothing of a frame for this long does not read.
+const STALLED: Duration = Duration::from_secs(10);
+/// The longest pause between accepts that keep failing (too many files open, say).
+const BACKOFF: Duration = Duration::from_secs(1);
 /// Frames read from a client and not yet served: past this, its reader waits, and it does.
 const INCOMING: usize = 64;
 
@@ -52,20 +61,54 @@ pub(crate) fn accept(
     std::thread::Builder::new()
         .name("llx-accept".into())
         .spawn(move || {
-            for stream in listener.incoming() {
-                let Ok(stream) = stream else { continue };
-                let each = each.clone();
-                let served = std::thread::Builder::new()
-                    .name("llx-connection".into())
-                    .spawn(move || {
-                        if let Ok(connection) = connection(stream) {
-                            each(connection);
-                        }
-                    });
-                // No thread for it: the connection drops, and the client sees it gone.
-                drop(served);
-            }
+            accepting(
+                listener.incoming(),
+                |stream| {
+                    let each = each.clone();
+                    let served = std::thread::Builder::new()
+                        .name("llx-connection".into())
+                        .spawn(move || {
+                            if let Ok(connection) = connection(stream) {
+                                each(connection);
+                            }
+                        });
+                    // No thread for it: the connection drops, and the client sees it gone.
+                    drop(served);
+                },
+                pause,
+            );
         })
+}
+
+/// Each stream accepted to `each`; after an accept that failed, a pause that doubles while they
+/// keep failing (up to [`BACKOFF`]), so a lasting error does not spin.
+fn accepting<S>(
+    incoming: impl IntoIterator<Item = std::io::Result<S>>,
+    each: impl Fn(S),
+    pause: impl Fn(Duration),
+) {
+    let first = Duration::from_millis(10);
+    let mut wait = first;
+    for stream in incoming {
+        match stream {
+            Ok(stream) => {
+                wait = first;
+                each(stream);
+            }
+            Err(_) => {
+                pause(wait);
+                wait = (wait * 2).min(BACKOFF);
+            }
+        }
+    }
+}
+
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a backoff: the accept failed, and nothing to wait on says when it will not"
+)]
+fn pause(wait: Duration) {
+    std::thread::sleep(wait);
 }
 
 /// A connection's ends, with its three threads: the reader, the writer, and between `out` and
@@ -78,6 +121,7 @@ pub(crate) fn connection(stream: UnixStream) -> std::io::Result<Connection> {
     )]
     let (out, outgoing) = std::sync::mpsc::channel();
     let (to_writer, writing) = sync_channel(ROOM);
+    stream.set_write_timeout(Some(STALLED))?;
     let reading = stream.try_clone()?;
     let cut = stream.try_clone()?;
     let told = out.clone();
@@ -94,24 +138,52 @@ fn read(stream: UnixStream, to_server: &SyncSender<ToServer>, told: &Sender<ToCl
     let shut = stream.try_clone();
     for line in BufReader::new(stream).lines() {
         let Ok(line) = line else { break };
-        match serde_json::from_str(&line) {
+        match read_frame(&line) {
             Ok(frame) => {
                 if to_server.send(frame).is_err() {
                     break;
                 }
             }
-            Err(error) => {
-                let event = Event::Note(format!("a line that is not a frame was dropped: {error}"));
-                let _ = told.send(ToClient::Event {
-                    session: None,
-                    event,
-                    seq: None,
-                });
+            Err(said) => {
+                let _ = told.send(*said);
             }
         }
     }
     if let Ok(shut) = shut {
         let _ = shut.shutdown(Shutdown::Both);
+    }
+}
+
+/// `line` as a frame; else what the client is told: a call it cannot read is answered failed
+/// under its id (W1: every call gets its answer), any other line is said dropped.
+fn read_frame(line: &str) -> Result<ToServer, Box<ToClient>> {
+    let value: serde_json::Value = match serde_json::from_str(line) {
+        Ok(value) => value,
+        Err(error) => return Err(Box::new(dropped(&error))),
+    };
+    let id = (value.get("method").and_then(serde_json::Value::as_str) == Some("command/call"))
+        .then(|| {
+            value
+                .pointer("/params/id")
+                .and_then(serde_json::Value::as_u64)
+        })
+        .flatten();
+    serde_json::from_value(value).map_err(|error| match id {
+        Some(id) => Box::new(ToClient::Done {
+            id,
+            done: Done::Failed {
+                why: format!("the server cannot read this call: {error}"),
+            },
+        }),
+        None => Box::new(dropped(&error)),
+    })
+}
+
+fn dropped(error: &serde_json::Error) -> ToClient {
+    ToClient::Event {
+        session: None,
+        event: Event::Note(format!("a line that is not a frame was dropped: {error}")),
+        seq: None,
     }
 }
 

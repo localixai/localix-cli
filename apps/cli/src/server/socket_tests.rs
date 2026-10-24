@@ -98,6 +98,8 @@ fn a_client_over_the_socket_speaks_to_serve_as_one_in_process_does() {
         })
     );
     let peer = daemon.peers.recv_timeout(WAIT).unwrap();
+    let (id, name) = ("s1".to_string(), "first".to_string());
+    Ui::new(Arc::clone(&peer)).send(Event::LaneStarted { id, name });
 
     let input = Input {
         session: "s1".into(),
@@ -172,4 +174,81 @@ fn a_client_that_never_reads_is_cut_off_and_never_waited_for() {
     }
     assert!(started.elapsed() < WAIT, "the server waited on the client");
     daemon.ended.recv_timeout(WAIT).unwrap();
+}
+
+#[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the first client's channel, read by no one; the test's late reader's pause"
+)]
+fn a_replay_longer_than_the_queue_never_cuts_the_client() {
+    let (first, _unread) = std::sync::mpsc::channel();
+    let peer = Peer::new(first);
+    let kept = crate::server::hub::KEPT;
+    for at in 0..kept + 500 {
+        peer.send(ToClient::Event {
+            session: Some("s1".into()),
+            event: Event::Note(format!("{at:0>100}")),
+            seq: None,
+        });
+    }
+    let (ours, theirs) = UnixStream::pair().unwrap();
+    ours.set_read_timeout(Some(WAIT)).unwrap();
+    let connection = connection(theirs).unwrap();
+    peer.attach(connection.out, None);
+    // The client reads only once the whole replay is posted, as a terminal busy drawing does.
+    std::thread::sleep(Duration::from_millis(300));
+    let mut lines = BufReader::new(ours).lines();
+    let replayed = (lines.by_ref().take(kept + 1))
+        .filter(|line| {
+            line.as_ref()
+                .is_ok_and(|line| line.contains("session/event"))
+        })
+        .count();
+    assert_eq!(replayed, kept, "the whole ring, after its gap");
+    peer.send(ToClient::Event {
+        session: None,
+        event: Event::Note("still here".into()),
+        seq: None,
+    });
+    let live = lines.next().unwrap().unwrap();
+    assert!(live.contains("still here"), "{live}");
+}
+
+#[test]
+fn a_call_the_server_cannot_read_is_answered_failed_under_its_id() {
+    let path = place("unknown");
+    let _daemon = daemon(&path);
+    let mut stream = UnixStream::connect(&path).unwrap();
+    let call = r#"{"method":"command/call","params":{"id":9,"command":{"type":"fly"}}}"#;
+    stream.write_all(format!("{call}\n").as_bytes()).unwrap();
+    stream.set_read_timeout(Some(WAIT)).unwrap();
+    let line = BufReader::new(stream).lines().next().unwrap().unwrap();
+    let frame: ToClient = serde_json::from_str(&line).unwrap();
+    assert!(
+        matches!(&frame, ToClient::Done { id: 9, done: Done::Failed { why } } if why.contains("fly")),
+        "{frame:?}"
+    );
+}
+
+#[test]
+fn an_accept_that_keeps_failing_backs_off_and_a_success_starts_again() {
+    let error = || Err(std::io::Error::other("too many open files"));
+    let (ours, theirs) = UnixStream::pair().unwrap();
+    drop(ours);
+    let incoming = vec![error(), error(), error(), Ok(theirs), error()];
+    let paused = std::sync::Mutex::new(vec![]);
+    let served = std::sync::atomic::AtomicUsize::new(0);
+    accepting(
+        incoming,
+        |_stream| {
+            served.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        },
+        |pause| paused.lock().unwrap().push(pause),
+    );
+    let paused = paused.into_inner().unwrap();
+    assert_eq!(served.into_inner(), 1);
+    assert_eq!(paused.len(), 4, "{paused:?}");
+    assert!(paused[0] < paused[1] && paused[1] < paused[2], "{paused:?}");
+    assert_eq!(paused[3], paused[0], "{paused:?}");
 }

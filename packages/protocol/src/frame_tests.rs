@@ -25,6 +25,7 @@ fn every_frame_to_the_interface_comes_back_the_same_through_json() {
     let frames = [
         event(Event::Header(vec!["llx 0.1".into(), "gpt".into()])),
         event(Event::TaskStarted("hi".into())),
+        event(Event::LaneEnded),
         event(Event::Copy("the answer".into())),
         event(Event::Call {
             call: "c1".into(),

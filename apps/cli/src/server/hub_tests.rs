@@ -213,3 +213,131 @@ fn an_event_still_on_its_way_reaches_a_client_attaching_meanwhile_once() {
     hub.flush();
     assert_eq!(notes(&seen), [("one".into(), Some(1))]);
 }
+
+fn said(session: Option<&str>, event: Event) -> ToClient {
+    ToClient::Event {
+        session: session.map(str::to_string),
+        event,
+        seq: None,
+    }
+}
+
+fn queue(queued: &[&str]) -> Event {
+    Event::Queue {
+        ready: true,
+        steered: vec![],
+        queued: queued.iter().map(|text| text.to_string()).collect(),
+        background: vec![],
+    }
+}
+
+/// The events a client was sent, without their numbers; a gap as `None`.
+fn events(frames: &Receiver<ToClient>) -> Vec<Option<(Option<String>, Event)>> {
+    (frames.try_iter())
+        .filter_map(|frame| match frame {
+            ToClient::Event { session, event, .. } => Some(Some((session, event))),
+            ToClient::Gap => Some(None),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A lane `s1` with a mode, a queue, a total and an agent `a1`, then `notes` notes.
+fn a_lane_then(hub: &Hub, notes: usize) {
+    let (id, name) = ("s1".to_string(), "fix it".to_string());
+    hub.send(said(None, Event::LaneStarted { id, name }));
+    hub.send(said(Some("s1"), Event::Header(vec!["llx".into()])));
+    hub.send(said(Some("s1"), Event::Mode("plan".into())));
+    hub.send(said(Some("s1"), queue(&["later"])));
+    hub.send(said(Some("s1"), Event::Total(protocol::Total::default())));
+    let (id, name) = ("a1".to_string(), "scout".to_string());
+    hub.send(said(Some("s1"), Event::Started { id, name }));
+    hub.send(said(Some("a1"), Event::Closed));
+    for at in 0..notes {
+        hub.send(note(&format!("n{at}")));
+    }
+}
+
+#[test]
+fn a_ring_that_wrapped_still_gives_each_lane_whole_then_what_it_kept() {
+    let hub = Hub::new(3);
+    a_lane_then(&hub, 10);
+    let (out, seen) = client();
+    hub.attach(out, None);
+    let seen = events(&seen);
+    let (id, name) = ("s1".to_string(), "fix it".to_string());
+    let s1 = |event| Some((Some("s1".to_string()), event));
+    let mut wanted = vec![
+        None,
+        Some((None, Event::LaneStarted { id, name })),
+        s1(Event::Header(vec!["llx".into()])),
+        s1(Event::Mode("plan".into())),
+        s1(queue(&["later"])),
+        s1(Event::Total(protocol::Total::default())),
+    ];
+    let (id, name) = ("a1".to_string(), "scout".to_string());
+    wanted.push(s1(Event::Started { id, name }));
+    wanted.push(Some((Some("a1".to_string()), Event::Closed)));
+    for at in 7..10 {
+        wanted.push(s1(Event::Note(format!("n{at}"))));
+    }
+    assert_eq!(seen, wanted);
+}
+
+#[test]
+fn of_a_whole_state_only_the_latest_is_kept() {
+    let hub = Hub::new(100);
+    for queued in [&["a"][..], &["a", "b"], &[]] {
+        hub.send(said(Some("s1"), queue(queued)));
+    }
+    let (out, seen) = client();
+    hub.attach(out, None);
+    assert_eq!(events(&seen), [Some((Some("s1".into()), queue(&[])))]);
+}
+
+#[test]
+fn a_lane_that_ended_is_not_given_again_nor_its_agents() {
+    let hub = Hub::new(100);
+    a_lane_then(&hub, 2);
+    let (id, name) = ("s2".to_string(), "other".to_string());
+    hub.send(said(None, Event::LaneStarted { id, name }));
+    hub.send(said(Some("s1"), Event::LaneEnded));
+    let (out, seen) = client();
+    hub.attach(out, None);
+    let sessions: Vec<_> = (events(&seen).into_iter().flatten())
+        .filter(|(_, event)| *event != Event::LaneEnded)
+        .map(|(session, event)| match event {
+            Event::LaneStarted { id, .. } => id,
+            _ => session.unwrap_or_default(),
+        })
+        .collect();
+    assert_eq!(sessions, ["s2"]);
+}
+
+#[test]
+fn the_ring_keeps_no_more_than_its_bytes_and_says_the_gap() {
+    let hub = Hub::with_bytes(100, 10_000);
+    let report = "x".repeat(3_000);
+    for call in 0..10 {
+        hub.send(said(
+            Some("s1"),
+            Event::Result {
+                call: call.to_string(),
+                name: "bash".into(),
+                label: protocol::Label::default(),
+                outcome: protocol::Outcome::Done {
+                    report: report.clone(),
+                },
+            },
+        ));
+    }
+    let (out, seen) = client();
+    hub.attach(out, None);
+    let seen = events(&seen);
+    assert_eq!(seen[0], None, "a gap first");
+    let kept = seen.len() - 1;
+    assert!(
+        (1..=3).contains(&kept),
+        "{kept} reports of 3,000 bytes kept in 10,000"
+    );
+}

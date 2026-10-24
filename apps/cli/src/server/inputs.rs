@@ -2,7 +2,8 @@
 //! server's, the interface only shows it). An entry goes to the lane waiting for one; words sent
 //! while a task works go to that task at its next step (steering); a command, a picture or Tab
 //! waits for the task to end; what comes back from the background waits behind the person's own.
-//! Every change is told to the interface as the lane's [`Event::Queue`].
+//! Every change, and only a change, is told to the interface as the lane's [`Event::Queue`]; a
+//! lane's end as its [`Event::LaneEnded`].
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -52,8 +53,15 @@ struct Lane {
 type Tell = Box<dyn Fn(&str, Event) + Send + Sync>;
 
 /// Every lane's entries; `tell` shows a lane's queue (and what it read) in the interface.
+#[derive(Default)]
+struct Table {
+    lanes: HashMap<String, Lane>,
+    /// The person left: every prompt, a lane's first included, gets nothing until one is back.
+    left: bool,
+}
+
 pub(crate) struct Inputs {
-    lanes: Mutex<HashMap<String, Lane>>,
+    lanes: Mutex<Table>,
     arrived: Condvar,
     tell: Tell,
 }
@@ -71,15 +79,16 @@ impl Inputs {
     /// before did not get to read is the first thing given.
     pub(crate) fn next(&self, lane: &str) -> Option<Typed> {
         let mut lanes = self.lock();
-        let state = lanes.entry(lane.into()).or_default();
+        let state = lanes.lanes.entry(lane.into()).or_default();
         for entry in std::mem::take(&mut state.steered).into_iter().rev() {
             state.queued.push_front(entry);
         }
         state.ready = true;
         let mut told = None;
         loop {
-            let state = lanes.entry(lane.into()).or_default();
-            let taken = match state.over {
+            let left = lanes.left;
+            let state = lanes.lanes.entry(lane.into()).or_default();
+            let taken = match state.over || left {
                 true => Some(None),
                 false => state
                     .queued
@@ -141,7 +150,7 @@ impl Inputs {
             }
         };
         if peek {
-            take(self.lock().entry(lane.into()).or_default());
+            take(self.lock().lanes.entry(lane.into()).or_default());
             return texts;
         }
         self.change(lane, take);
@@ -153,44 +162,51 @@ impl Inputs {
 
     /// A task of the lane began or ended: words sent meanwhile are for it.
     pub(crate) fn working(&self, lane: &str, busy: bool) {
-        self.lock().entry(lane.into()).or_default().busy = busy;
+        self.lock().lanes.entry(lane.into()).or_default().busy = busy;
     }
 
-    /// The lane's prompt gets nothing more: it ends at its next wait.
+    /// The lane's prompt gets nothing more: it ends at its next wait. Only a lane that waited
+    /// once is closed: the interface closes a lane at its prompt, and one gone is not made again.
     pub(crate) fn close(&self, lane: &str) {
-        self.lock().entry(lane.into()).or_default().over = true;
-        self.arrived.notify_all();
-    }
-
-    /// The person left: every prompt gets nothing more.
-    #[allow(
-        clippy::iter_over_hash_type,
-        reason = "every lane is told the same, in whatever order"
-    )]
-    pub(crate) fn leave(&self) {
-        for state in self.lock().values_mut() {
+        if let Some(state) = self.lock().lanes.get_mut(lane) {
             state.over = true;
         }
         self.arrived.notify_all();
     }
 
-    /// The lane ended: what it had waiting goes with it.
-    pub(crate) fn forget(&self, lane: &str) {
-        self.lock().remove(lane);
+    /// The person left: every prompt gets nothing more, a lane's first one included.
+    pub(crate) fn leave(&self) {
+        self.lock().left = true;
+        self.arrived.notify_all();
     }
 
-    /// `change` the lane's entries, then tell the interface and wake its prompt, outside the lock.
+    /// An interface is back (the sessions moved to the background): the prompts wait again.
+    pub(crate) fn back(&self) {
+        self.lock().left = false;
+    }
+
+    /// The lane ended: what it had waiting goes with it, and the interface lets it go.
+    pub(crate) fn forget(&self, lane: &str) {
+        self.lock().lanes.remove(lane);
+        (self.tell)(lane, Event::LaneEnded);
+    }
+
+    /// `change` the lane's entries, then wake its prompt and, when its queue changed, tell the
+    /// interface, outside the lock: a read that took nothing tells nothing.
     fn change(&self, lane: &str, change: impl FnOnce(&mut Lane)) {
         let mut lanes = self.lock();
-        let state = lanes.entry(lane.into()).or_default();
+        let state = lanes.lanes.entry(lane.into()).or_default();
+        let before = queue(state);
         change(state);
         let queue = queue(state);
         drop(lanes);
         self.arrived.notify_all();
-        (self.tell)(lane, queue);
+        if queue != before {
+            (self.tell)(lane, queue);
+        }
     }
 
-    fn lock(&self) -> MutexGuard<'_, HashMap<String, Lane>> {
+    fn lock(&self) -> MutexGuard<'_, Table> {
         self.lanes.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }

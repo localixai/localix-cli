@@ -834,3 +834,74 @@ fn a_gap_clears_what_is_shown_and_draws_again_from_what_follows() {
     assert!(!after.contains("the old task"), "{after}");
     assert!(!after.contains("rm -rf build"), "{after}");
 }
+
+#[test]
+fn a_lane_that_ended_leaves_the_interface_with_its_agents_and_jobs() {
+    let now = Instant::now();
+    let mut app = lanes(now);
+    let (id, name) = ("a1".to_string(), "scout".to_string());
+    app.frame(from("B", Event::Started { id, name }), now);
+    app.show("B");
+    app.frame(from("B", Event::LaneEnded), now);
+    let ids: Vec<&str> = app.views.sessions.iter().map(|v| v.id.as_str()).collect();
+    assert_eq!(ids, ["A"]);
+    assert_eq!(app.lane_id(), "A", "the lane left shows another");
+    typed(&mut app, "for a", now);
+    app.input(key(KeyCode::Enter), now);
+    let sessions: Vec<String> = sent(&mut app).into_iter().map(|i| i.session).collect();
+    assert_eq!(sessions, ["A"]);
+    app.frame(from("A", Event::LaneEnded), now);
+    assert_eq!(
+        app.views.sessions.len(),
+        1,
+        "the last lane stays until the end"
+    );
+}
+
+/// What the server replays to an interface back to a lane whose start the ring no longer holds
+/// (`server::hub`'s `a_ring_that_wrapped_still_gives_each_lane_whole_then_what_it_kept`): a gap,
+/// the lane's state, then the events it kept.
+#[test]
+fn a_ring_that_wrapped_rebuilds_the_lanes_and_the_person_can_type() {
+    let now = Instant::now();
+    let event = |session: Option<&str>, event| ToClient::Event {
+        session: session.map(str::to_string),
+        event,
+        seq: None,
+    };
+    let (id, name) = ("bg".to_string(), "moved to the background".to_string());
+    let mut replay = vec![
+        ToClient::Gap,
+        event(None, Event::LaneStarted { id, name }),
+        event(Some("bg"), Event::Header(vec!["llx 0.1".into()])),
+        event(Some("bg"), Event::Mode("plan".into())),
+    ];
+    replay.extend((16..20).map(|at| event(Some("bg"), Event::Note(format!("tick {at}")))));
+    let mut app = app();
+    for frame in replay {
+        app.frame(frame, now);
+    }
+    assert_eq!(app.lane_id(), "bg");
+    assert_eq!(app.lane().mode, "plan");
+    let shown = history(&mut app);
+    assert!(
+        shown.contains("llx 0.1") && shown.contains("tick 19"),
+        "{shown}"
+    );
+    typed(&mut app, "go on", now);
+    app.input(key(KeyCode::Enter), now);
+    let sent: Vec<(String, String)> = (sent(&mut app).into_iter())
+        .map(|input| (input.session, input.text))
+        .collect();
+    assert_eq!(sent, [("bg".to_string(), "go on".to_string())]);
+}
+
+#[test]
+fn lanes_ending_as_the_person_quits_leave_the_screen_as_it_is() {
+    let now = Instant::now();
+    let mut app = lanes(now);
+    app.leave();
+    app.frame(from("A", Event::LaneEnded), now);
+    assert_eq!(app.lane_id(), "A", "no other lane drawn on the way out");
+    assert!(!app.take_replay());
+}

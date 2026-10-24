@@ -143,6 +143,7 @@ impl App {
                 self.views.sessions.retain(|session| !theirs(session));
                 return None;
             }
+            Event::LaneEnded => return self.lane_ended(at),
             event => return self.lane_event(at, event),
         };
         self.push(at, block);

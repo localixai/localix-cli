@@ -46,6 +46,9 @@ pub enum Event {
         id: String,
         name: String,
     },
+    /// The session, a lane, ended: the interface lets it go, with its agents, and nothing more
+    /// is said in it.
+    LaneEnded,
     /// This directory's saved sessions, newest first.
     Saved(Vec<Saved>),
     /// Show the session: it was opened, or asked for and open already.

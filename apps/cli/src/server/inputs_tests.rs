@@ -46,7 +46,12 @@ fn waiting_in(inputs: &Arc<Inputs>, lane: &'static str) -> std::thread::JoinHand
     let theirs = Arc::clone(inputs);
     let thread = std::thread::Builder::new().name("prompt".into());
     let prompt = thread.spawn(move || theirs.next(lane)).unwrap();
-    while !inputs.lock().get(lane).is_some_and(|state| state.ready) {
+    while !inputs
+        .lock()
+        .lanes
+        .get(lane)
+        .is_some_and(|state| state.ready)
+    {
         std::thread::sleep(Duration::from_millis(5));
     }
     prompt
@@ -150,4 +155,56 @@ fn a_closed_lane_and_a_person_who_left_get_nothing_more() {
     let prompt = waiting_in(&inputs, "s2");
     inputs.leave();
     assert_eq!(prompt.join().unwrap(), None);
+}
+
+#[test]
+fn reading_nothing_new_tells_the_interface_nothing() {
+    let (inputs, told) = inputs();
+    inputs.working("s1", true);
+    inputs.input(sent("use the cache"));
+    let before = told.lock().unwrap().len();
+    for _ in 0..5 {
+        assert!(inputs.steered("s1", false).len() <= 1);
+    }
+    let after: Vec<Event> = (told.lock().unwrap().iter().skip(before))
+        .map(|(_, event)| event.clone())
+        .collect();
+    let queues = after
+        .iter()
+        .filter(|event| matches!(event, Event::Queue { .. }));
+    assert_eq!(queues.count(), 1, "one change, told once: {after:?}");
+}
+
+#[test]
+fn a_lane_that_ended_is_said_ended_and_closing_it_keeps_nothing() {
+    let (inputs, told) = inputs();
+    inputs.input(sent("first"));
+    inputs.forget("s1");
+    assert_eq!(
+        told.lock().unwrap().last(),
+        Some(&("s1".to_string(), Event::LaneEnded))
+    );
+    inputs.close("s1");
+    assert!(
+        inputs.lock().lanes.is_empty(),
+        "nothing kept for a lane gone"
+    );
+}
+
+#[test]
+fn a_prompt_that_comes_after_the_person_left_gets_nothing_until_one_comes_back() {
+    let (inputs, _told) = inputs();
+    inputs.leave();
+    assert_eq!(
+        inputs.next("late"),
+        None,
+        "a lane that first waits after the leave"
+    );
+    inputs.back();
+    let prompt = waiting_in(&inputs, "late");
+    inputs.input(Input {
+        session: "late".into(),
+        ..sent("here again")
+    });
+    assert_eq!(prompt.join().unwrap(), Some(Typed::from("here again")));
 }

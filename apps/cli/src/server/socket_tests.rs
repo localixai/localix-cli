@@ -44,6 +44,8 @@ pub(crate) fn daemon(path: &Path) -> Daemon {
         let info = Info {
             max_lanes: 3,
             shells: || 0,
+            commands: vec![],
+            modes: vec![],
         };
         serve(&connection.incoming, &peer, &desk, &info);
         let _ = ended.send(());
@@ -85,7 +87,9 @@ fn a_client_over_the_socket_speaks_to_serve_as_one_in_process_does() {
         client.call(handshake, WAIT),
         Ok(Done::Initialized {
             version: protocol::VERSION,
-            max_lanes: 3
+            max_lanes: 3,
+            commands: vec![],
+            modes: vec![],
         })
     );
     let peer = daemon.peers.recv_timeout(WAIT).unwrap();

@@ -135,7 +135,8 @@ fn stop_shown_only() {
 fn quit_with_work_running_asks() {
     let command = format!("echo $$ > pid; {}", until_file("never"));
     let model = Model::start(vec![Reply::call("bash", json!({"command": command}))]);
-    let mut term = Term::start(&model, &["-y"]);
+    // In process: the work ends with the interface, so there is no background to offer.
+    let mut term = Term::start(&model, &["-y", "--no-daemon"]);
     term.type_text("first task").press(key::ENTER);
     term.wait_for("Running echo", LONG);
     new_session(&mut term, "❯ first task");

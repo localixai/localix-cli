@@ -248,6 +248,7 @@ pub(crate) fn connected(
             commands: vec![],
             modes: vec![],
             background: false,
+            host: None,
         };
         let served = Arc::clone(&peer);
         scope.spawn(move || serve(&incoming, &served, &to_desk, &info));

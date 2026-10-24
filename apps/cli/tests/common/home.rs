@@ -96,7 +96,39 @@ impl Home {
 
 impl Drop for Home {
     fn drop(&mut self) {
+        #[cfg(unix)]
+        stop_daemon(&self.0);
         let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// The daemon a test started in `home`, if any is left: asked to stop as a person asks
+/// (`llx serve stop`, so an instrumented binary writes its coverage), then killed by the pid its
+/// lock file still names. A daemon that ended cleanly emptied that file.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "`llx serve stop` waits a bounded time for the daemon, and ends"
+)]
+#[cfg(unix)]
+pub(crate) fn stop_daemon(home: &Path) {
+    let lock = home.join("config").join("llx").join("daemon.lock");
+    let pid = || {
+        let text = std::fs::read_to_string(&lock).ok()?;
+        text.trim().parse::<i32>().ok()
+    };
+    if pid().is_none() {
+        return;
+    }
+    let mut command = Command::new(env!("CARGO_BIN_EXE_llx"));
+    isolate(&mut command, home);
+    let _ = (command.args(["serve", "stop"]))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    if let Some(pid) = pid() {
+        // SAFETY: kill sends a signal and touches nothing of this process.
+        unsafe { libc::kill(pid, libc::SIGKILL) };
     }
 }
 

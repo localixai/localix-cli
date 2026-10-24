@@ -2,7 +2,7 @@
 //! desk; the desk's own end stops every lane; and quitting while lanes work stops them all and
 //! waits a bounded time before the process ends anyway.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -12,6 +12,13 @@ use protocol::Event;
 
 /// How long "Exit and stop tasks" waits for the lanes it stopped.
 pub(super) const QUIT_WAIT: Duration = Duration::from_secs(2);
+
+/// Lanes open in every desk of the process, for what a daemon says of itself.
+static OPEN: AtomicUsize = AtomicUsize::new(0);
+
+pub(crate) fn open_anywhere() -> usize {
+    OPEN.load(Ordering::SeqCst)
+}
 
 /// The lanes open, by session id, oldest first.
 #[derive(Default)]
@@ -33,6 +40,7 @@ impl Lanes {
 
     pub(super) fn join(&self, id: &str) {
         lock(&self.live).push(id.to_string());
+        OPEN.fetch_add(1, Ordering::SeqCst);
     }
 
     /// Wait up to `timeout` for a lane to end.
@@ -87,6 +95,7 @@ impl Drop for Leaving<'_> {
             self.lanes.panicked.store(true, Ordering::SeqCst);
         }
         lock(&self.lanes.live).retain(|live| *live != self.id);
+        OPEN.fetch_sub(1, Ordering::SeqCst);
         self.lanes.ended.notify_all();
     }
 }

@@ -21,6 +21,15 @@ struct Served {
     reason = "the in-process transport's channels, as the binary makes them"
 )]
 fn served() -> Served {
+    served_by(None)
+}
+
+/// [`served`], as the daemon `host` when there is one.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the in-process transport's channels, as the binary makes them"
+)]
+fn served_by(host: Option<Arc<Host>>) -> Served {
     let (to_server, incoming) = channel();
     let (out, from_server) = channel();
     let (desk, requests) = channel();
@@ -33,6 +42,7 @@ fn served() -> Served {
             commands: vec![("help".into(), "the commands".into())],
             modes: vec![("plan".into(), "plan first".into())],
             background: true,
+            host,
         };
         serve(&incoming, &theirs, &desk, &info);
     });
@@ -68,6 +78,7 @@ fn an_interface_that_attaches_is_told_what_the_server_allows() {
         Command::Initialize {
             version: protocol::VERSION,
             place: None,
+            build: String::new(),
         },
     );
     assert_eq!(
@@ -179,12 +190,13 @@ fn the_place_an_interface_attaches_from_goes_to_the_desk() {
     let place = protocol::Place {
         cwd: "/work/a".into(),
         env: vec![("VIRTUAL_ENV".into(), "/work/a/.venv".into())],
-        theme: None,
+        ..protocol::Place::default()
     };
     let version = protocol::VERSION;
     let initialize = Command::Initialize {
         version,
         place: Some(place.clone()),
+        build: String::new(),
     };
     served.call(1, initialize);
     assert!(matches!(served.done(1), Done::Initialized { .. }));
@@ -208,6 +220,7 @@ fn another(served: &Served) -> (Sender<ToServer>, Receiver<ToClient>) {
             commands: vec![],
             modes: vec![],
             background: true,
+            host: None,
         };
         connection(&incoming, &peer, out, &desk, &info);
     });
@@ -356,4 +369,51 @@ fn moved_to_the_background_the_connections_end_leaves_the_prompts_waiting() {
     });
     let entry = peer.inputs.next("s1").map(|entry| entry.text);
     assert_eq!(entry.as_deref(), Some("from the next interface"));
+}
+
+#[test]
+fn a_daemon_says_what_it_is_and_ends_when_asked() {
+    let host = Host::new("0.4.0+a".into());
+    let served = served_by(Some(Arc::clone(&host)));
+    let _attached = host.attach();
+    served.call(1, Command::Status);
+    let Done::Status {
+        build,
+        pid,
+        attached,
+        ..
+    } = served.done(1)
+    else {
+        panic!("no status");
+    };
+    assert_eq!(
+        (build.as_str(), pid, attached),
+        ("0.4.0+a", std::process::id(), 1)
+    );
+    served.call(2, Command::Shutdown);
+    assert_eq!(served.done(2), Done::Ok);
+    host.wait();
+}
+
+#[test]
+fn a_daemon_refuses_a_client_of_another_build() {
+    let served = served_by(Some(Host::new("0.4.0+a".into())));
+    let hello = |build: &str| Command::Initialize {
+        version: protocol::VERSION,
+        place: None,
+        build: build.into(),
+    };
+    served.call(1, hello("0.4.0+b"));
+    assert!(matches!(served.done(1), Done::Failed { why } if why.contains("0.4.0+a")));
+    served.call(2, hello("0.4.0+a"));
+    assert!(matches!(served.done(2), Done::Initialized { .. }));
+}
+
+#[test]
+fn in_process_there_is_no_daemon_to_ask_or_stop() {
+    let served = served();
+    for (id, command) in [(1, Command::Status), (2, Command::Shutdown)] {
+        served.call(id, command);
+        assert!(matches!(served.done(id), Done::Failed { .. }));
+    }
 }

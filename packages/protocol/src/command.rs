@@ -14,6 +14,9 @@ pub enum Command {
         version: u32,
         #[serde(default)]
         place: Option<Place>,
+        /// The client's build: a daemon of another build refuses it (docs/daemon.md).
+        #[serde(default)]
+        build: String,
     },
     /// What the person sent a session: its next task, words for the task running, or a command.
     Input(Input),
@@ -44,6 +47,10 @@ pub enum Command {
     /// "Move to background and exit": the lanes go on with no interface, their prompts and
     /// questions waiting for the next; the connection's end then stops nothing.
     Background,
+    /// What the daemon is: its build, its process, who is attached and what is open.
+    Status,
+    /// The daemon ends: every lane is stopped first.
+    Shutdown,
 }
 
 /// What the person sent: the text, and the pictures attached to it.
@@ -64,6 +71,11 @@ pub struct Place {
     pub env: Vec<(String, String)>,
     #[serde(default)]
     pub theme: Option<Theme>,
+    /// The command line it started with, the session's options; its relative paths are of `dir`.
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub dir: String,
 }
 
 /// A terminal's colours, each red, green and blue.
@@ -122,6 +134,14 @@ pub enum Done {
     /// Attached: the replay went up to event `seq`, the cursor to come back with.
     Attached {
         seq: u64,
+    },
+    /// The daemon: its build and process, the interfaces attached, the lanes open and working.
+    Status {
+        build: String,
+        pid: u32,
+        attached: usize,
+        lanes: usize,
+        working: usize,
     },
     /// The command could not be done, and why.
     Failed {

@@ -17,13 +17,6 @@ mod commands;
 mod compose;
 mod context;
 #[cfg(unix)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "D3 part 1: the daemon's plumbing, hosted by `llx serve` next"
-    )
-)]
 mod daemon;
 mod desk;
 mod error;
@@ -74,7 +67,7 @@ fn run() -> i32 {
             };
         }
     };
-    match commands::dispatch(cli) {
+    match commands::dispatch(cli, commands::run::At::Terminal) {
         Ok(code) => code,
         Err(failure) => {
             if let Some(message) = failure.message() {

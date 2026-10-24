@@ -89,13 +89,18 @@ pub(crate) struct Seat {
 impl Setup {
     /// What the lanes share, with the page on `browser`, and the first lane's seat.
     pub(crate) fn split(self, browser: Option<Browser>) -> (Shared, Seat) {
+        let lanes = crate::arrivals::listening(browser.as_ref());
+        self.split_into(browser, lanes)
+    }
+
+    /// [`Setup::split`], with `lanes` told what the person does in the window: a daemon's, which
+    /// every client's lanes join.
+    pub(crate) fn split_into(
+        self,
+        browser: Option<Browser>,
+        lanes: Arc<crate::arrivals::Lanes>,
+    ) -> (Shared, Seat) {
         let shown = self.shown;
-        let lanes = Arc::new(crate::arrivals::Lanes::default());
-        // What the person does in the window reaches the lanes' runs.
-        if let Some(browser) = &browser {
-            let told = Arc::clone(&lanes);
-            browser.listen(move |tab, what| told.post(tab, what));
-        }
         let shared = Shared {
             page: browser.clone().map(|browser| Page::new(browser, !shown)),
             browser,

@@ -41,11 +41,11 @@ pub(crate) mod views;
 pub(crate) mod wrap;
 
 use std::io::{self, Write};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Sender, channel};
 use std::thread::JoinHandle;
 
 use client::Client;
-use protocol::{Command, Done, Event, Place, ToClient, ToServer};
+use protocol::{Command, Done, Event, Place, ToClient};
 
 use self::app::App;
 use self::event::Input;
@@ -58,13 +58,21 @@ pub(crate) struct Running {
     thread: Option<JoinHandle<()>>,
 }
 
-/// What the interface is given: the server's ends of the frames, the directory for `@` (where the
-/// sessions it opens work), the terminal's colours, and how to end the process at once.
+/// Where the server's frames that are not answers go, until the server is gone.
+pub(crate) type Deliver = Box<dyn Fn(ToClient) + Send>;
+
+/// The client to the server, made with where its frames go: over channels in process, or over
+/// the daemon's socket.
+pub(crate) type Connect<'a> = Box<dyn FnOnce(Deliver) -> io::Result<Client> + 'a>;
+
+/// What the interface is given: its connection to the server, the directory for `@` (where the
+/// sessions it opens work), the terminal's colours, this binary's build (a daemon of another
+/// refuses it), and how to end the process at once.
 pub(crate) struct Start<'a> {
-    pub to_server: Sender<ToServer>,
-    pub from_server: Receiver<ToClient>,
+    pub connect: Connect<'a>,
     pub root: &'a std::path::Path,
     pub theme: Option<protocol::Theme>,
+    pub build: String,
     pub quit_now: fn() -> !,
 }
 
@@ -106,13 +114,14 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
     let keys = inbox.clone();
     let reader = std::thread::Builder::new().name("llx-keys".into());
     reader.spawn(move || terminal::read_keys(&keys))?;
-    let frames = inbox.clone();
-    let client = Client::in_process(start.to_server, start.from_server, move |frame| {
-        let _ = frames.send(Input::Frame(frame));
-    })?;
+    let gone = Gone(inbox.clone());
+    let client = (start.connect)(Box::new(move |frame| {
+        let _ = gone.0.send(Input::Frame(frame));
+    }))?;
     let hello = Command::Initialize {
         version: protocol::VERSION,
         place: Some(here(start.root, start.theme)),
+        build: start.build,
     };
     let Ok(Done::Initialized {
         max_lanes,
@@ -147,15 +156,44 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
     })
 }
 
+/// Where the server's frames went: when the server is gone (a daemon stopped), the interface is
+/// told so and ends.
+struct Gone(Sender<Input>);
+
+impl Drop for Gone {
+    fn drop(&mut self) {
+        for event in [Event::Error("llx: the server is gone".into()), Event::Quit] {
+            let _ = self.0.send(Input::Frame(ToClient::Event {
+                session: None,
+                event,
+                seq: None,
+            }));
+        }
+    }
+}
+
 /// Where this interface is: the sessions it opens work there, and their commands run with its
-/// environment (a variable that is not text is left out).
+/// environment (a variable that is not text is left out), and the command line it was started
+/// with, whose options the sessions take.
 fn here(root: &std::path::Path, theme: Option<protocol::Theme>) -> Place {
     let env = std::env::vars_os()
         .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)));
+    let dir = std::env::current_dir().unwrap_or_default();
     Place {
         cwd: root.display().to_string(),
         env: env.collect(),
         theme,
+        args: std::env::args().skip(1).collect(),
+        dir: dir.display().to_string(),
+    }
+}
+
+impl Running {
+    /// Until the interface ends by itself: the server said the session is over, or is gone.
+    pub(crate) fn wait(mut self) {
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
     }
 }
 

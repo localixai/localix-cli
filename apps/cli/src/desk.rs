@@ -16,6 +16,7 @@ use std::time::Duration;
 use contracts::history::History;
 use protocol::Target;
 
+pub(crate) use self::ending::open_anywhere;
 use self::ending::{AllLanes, Lanes, Leaving};
 use crate::commands::repl;
 use crate::compose::{Rig, Seat, Shared};

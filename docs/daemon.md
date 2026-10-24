@@ -1,4 +1,4 @@
-# llx as a daemon and a thin client (design, not yet built)
+# llx as a daemon and a thin client (design, being built)
 
 One `llx serve` per user owns everything that works: sessions (lanes), agents, jobs, models and
 sign-ins, terminal sessions and the one window with its tabs. `llx` at a terminal is a client: it
@@ -120,8 +120,30 @@ process environment): commands run in the environment of the client that opened 
    before its reader waits) and `daemon.rs` (`socket_path`, `lock` on `<config>/daemon.lock`
    where `<config>` is the credential store's directory, `probe`). A connection's ends are those
    `serve` and `Peer::new` take in process; a test drives `serve` over a real socket.
-   Still to come in this step: `llx serve` hosting a desk per connection, spawn, the handshake's
-   checks, the window host in the daemon, pty tests with a daemon per test home.
+   Built: `llx serve` (`commands/serve.rs`) takes the lock (retried 2 s, for a daemon that is
+   ending; else exit 3), binds, prints `llx serve: ready (pid N)`, sends its stdout where its
+   errors go (`daemon.log`), and runs the window's event loop on the main thread with the
+   accept loop on threads. Each connection gets a server (`run::serving`, with the daemon's
+   `Host`) and, once its `initialize` gives a place, a desk built by the same `run::run` as in
+   process (`At::Served`): the client's command line (`Place.args`, parsed again; its `-C` is
+   the place's directory, its pictures resolved at `Place.dir`) and environment (SSH decides
+   whether windows show). One `arrivals::Lanes` for every desk hears the window. A client that
+   goes without quitting stops its desk's lanes (`desk::ending::Detached::Stop`, the hook for
+   moving them to the background). `status` (`Done::Status`: build, pid, attached, lanes open,
+   tasks working) and `shutdown` (every task stopped, 2 s for them to end, the terminal sessions
+   killed, the socket removed, the lock file emptied). The client (`run/remote.rs`,
+   `daemon/start.rs`): `status` with a 2 s wait; this build's → attach; another build's, idle →
+   `shutdown`, wait for the connection to end, start a new one; busy → in process, said. None →
+   `llx serve` in its own session (`setsid`), the ready line awaited 10 s (a lost race to another
+   client's daemon is fine). The build is the version plus the binary's size and time
+   (`LLX_BUILD` stands in for it in tests); `initialize` carries it and a daemon refuses another.
+   `tui::Start` takes a `Connect` (channels or the socket); a server that is gone ends the
+   interface. Pty tests run through a daemon per test home; the harness stops it (`llx serve
+   stop`, then a kill by the pid in the lock file).
+   Still the daemon's, not the client's: the `LLX_*` model variables and the providers' keys
+   (the environment of the terminal that started it). Not built: `--no-daemon` aside, Windows
+   runs in process.
+
 4. **Attach and detach.** The event ring and cursors, pending requests replayed, the quit
    question (stop, move to the background, stay), `status`/`stop`, version restart.
    Built, the server's side: a `Peer` serves any number of clients (`server/hub.rs`). Every

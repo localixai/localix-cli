@@ -123,6 +123,16 @@ impl Lanes {
     }
 }
 
+/// The lanes, told what the person does in `browser`'s window.
+pub(crate) fn listening(browser: Option<&tools::browser::Browser>) -> Arc<Lanes> {
+    let lanes = Arc::new(Lanes::default());
+    if let Some(browser) = browser {
+        let told = Arc::clone(&lanes);
+        browser.listen(move |tab, what| told.post(tab, what));
+    }
+    lanes
+}
+
 #[cfg(test)]
 #[path = "arrivals_tests.rs"]
 mod tests;

@@ -46,3 +46,36 @@ fn the_probe_answers_only_for_a_daemon_that_answers() {
     let _daemon = daemon(&path);
     assert!(probe(&path, PROBE));
 }
+
+#[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the desk's requests, as the binary makes its channel"
+)]
+fn a_daemon_says_its_build_and_who_is_attached() {
+    let path = place("status");
+    assert_eq!(status(&path, PROBE), None, "nothing there");
+    let host = crate::server::host::Host::new(build());
+    let served = std::sync::Arc::clone(&host);
+    crate::server::socket::accept(crate::server::socket::bind(&path).unwrap(), move |c| {
+        let (desk, _requests) = std::sync::mpsc::channel();
+        let peer = crate::server::Peer::new(c.out);
+        let info = crate::server::serve::Info {
+            max_lanes: 1,
+            shells: Vec::new,
+            commands: vec![],
+            modes: vec![],
+            background: true,
+            host: Some(std::sync::Arc::clone(&served)),
+        };
+        crate::server::serve::serve(&c.incoming, &peer, &desk, &info);
+    })
+    .unwrap();
+    let _attached = host.attach();
+    let found = status(&path, Duration::from_secs(5)).unwrap();
+    assert_eq!(
+        (found.build, found.pid, found.attached),
+        (build(), std::process::id(), 1)
+    );
+    assert!(build().starts_with(env!("CARGO_PKG_VERSION")));
+}

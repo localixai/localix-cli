@@ -47,6 +47,7 @@ pub(crate) fn daemon(path: &Path) -> Daemon {
             commands: vec![],
             modes: vec![],
             background: false,
+            host: None,
         };
         serve(&connection.incoming, &peer, &desk, &info);
         let _ = ended.send(());
@@ -84,6 +85,7 @@ fn a_client_over_the_socket_speaks_to_serve_as_one_in_process_does() {
     let handshake = Command::Initialize {
         version: protocol::VERSION,
         place: None,
+        build: String::new(),
     };
     assert_eq!(
         client.call(handshake, WAIT),

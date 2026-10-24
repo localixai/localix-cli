@@ -20,7 +20,7 @@ fn a_session_works_in_the_clients_directory_with_the_clients_environment() {
             ("PATH".into(), std::env::var("PATH").unwrap_or_default()),
             ("LLX_ONLY_THE_CLIENT_HAS".into(), "the client's".into()),
         ],
-        theme: None,
+        ..Place::default()
     };
     assert!(std::env::var_os("LLX_ONLY_THE_CLIENT_HAS").is_none());
     let mut setup = crate::testing::setup(&scratch, Mode::Bypass, false);

@@ -132,6 +132,16 @@ fn every_question_to_the_person_comes_back_the_same_through_json() {
             done: Done::Attached { seq: 40 },
         },
         ToClient::Done {
+            id: 3,
+            done: Done::Status {
+                build: "0.4.0+1".into(),
+                pid: 42,
+                attached: 2,
+                lanes: 3,
+                working: 1,
+            },
+        },
+        ToClient::Done {
             id: 1,
             done: Done::Initialized {
                 version: crate::VERSION,
@@ -210,8 +220,15 @@ fn every_frame_to_the_server_comes_back_the_same_through_json() {
                         bg: [4, 5, 6],
                         cursor: [7, 8, 9],
                     }),
+                    args: vec!["-y".into(), "fix it".into()],
+                    dir: "/work".into(),
                 }),
+                build: "0.4.0+1".into(),
             },
+        },
+        ToServer::Call {
+            id: 11,
+            command: Command::Shutdown,
         },
     ];
     for frame in &frames {
@@ -249,7 +266,8 @@ fn a_client_that_gives_no_place_still_initializes() {
             id: 1,
             command: Command::Initialize {
                 version: 1,
-                place: None
+                place: None,
+                build: String::new(),
             }
         }
     );

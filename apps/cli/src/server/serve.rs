@@ -8,6 +8,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use protocol::{Command, Done, ToClient, ToServer};
 
+use super::host::Host;
 use super::hub::ClientId;
 use super::ui::{FIRST, Peer};
 use crate::desk::Request;
@@ -22,6 +23,8 @@ pub(crate) struct Info {
     pub modes: Vec<(String, String)>,
     /// Whether work may go on once the interface leaves (`Command::Background`).
     pub background: bool,
+    /// The daemon this server is, when it is one.
+    pub host: Option<Arc<Host>>,
 }
 
 /// Who a connection is to the peer: a client attached, or one that has not said `Attach` yet,
@@ -134,7 +137,12 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
         },
     };
     match command {
-        Command::Initialize { place, .. } => {
+        Command::Initialize { place, build, .. } => {
+            // A daemon of another build may not speak the same frames: the client starts its own.
+            if let Some(host) = info.host.as_ref().filter(|host| host.build != build) {
+                let why = format!("the daemon is build {}, this llx {build}", host.build);
+                return Done::Failed { why };
+            }
             // The sessions this client opens work where it is.
             if let Some(place) = place {
                 let _ = desk.send(Request::Attach(place));
@@ -183,6 +191,20 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
         Command::Background => to_desk(Request::Background),
         // Served by `serving`, which knows the connection.
         Command::Attach { .. } => Done::Ok,
+        Command::Status => info
+            .host
+            .as_ref()
+            .map_or_else(not_a_daemon, |host| host.status()),
+        Command::Shutdown => info.host.as_ref().map_or_else(not_a_daemon, |host| {
+            host.end();
+            Done::Ok
+        }),
+    }
+}
+
+fn not_a_daemon() -> Done {
+    Done::Failed {
+        why: "not a daemon: this llx runs its sessions itself".into(),
     }
 }
 

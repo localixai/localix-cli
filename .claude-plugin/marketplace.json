@@ -1,0 +1,11 @@
+{
+  "name": "llx",
+  "owner": { "name": "rsaryev" },
+  "plugins": [
+    {
+      "name": "llx",
+      "source": "./plugins/claude-code",
+      "description": "llx's window for Claude: native browser pages and terminal sessions as tabs of one window you watch, with a fast decision model for a tab's goal"
+    }
+  ]
+}

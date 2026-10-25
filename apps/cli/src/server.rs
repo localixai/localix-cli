@@ -12,6 +12,8 @@ pub(crate) mod place;
 pub(crate) mod serve;
 #[cfg(unix)]
 pub(crate) mod socket;
+#[cfg(unix)]
+pub(crate) mod toolbox;
 pub(crate) mod ui;
 pub(crate) mod wire;
 pub(crate) mod work;

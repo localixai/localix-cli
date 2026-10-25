@@ -18,6 +18,30 @@ pub(crate) fn outcome(outcome: &Result<ToolOutput, ToolError>) -> protocol::Outc
     }
 }
 
+/// What a tool's call came to, as a tool client reads it (W9): a failure is the command's.
+pub(crate) fn called(called: Result<ToolOutput, ToolError>) -> protocol::Done {
+    match called {
+        Ok(output) => protocol::Done::Tool {
+            report: output.report,
+            state: output.state,
+            image: output.image.map(|image| protocol::Picture {
+                media_type: image.media_type,
+                data: image.data,
+            }),
+        },
+        Err(ToolError::Failed(why) | ToolError::Fatal(why)) => protocol::Done::Failed { why },
+    }
+}
+
+/// A tool as a tool client's model reads it.
+pub(crate) fn tool(spec: contracts::tool::ToolSpec) -> protocol::ToolInfo {
+    protocol::ToolInfo {
+        name: spec.name,
+        description: spec.description,
+        parameters: spec.parameters,
+    }
+}
+
 /// A task of a session, as the transcript shows it again.
 pub(crate) fn turn(turn: &contracts::history::Turn) -> protocol::Turn {
     protocol::Turn {

@@ -15,7 +15,7 @@ use contracts::tool::Tool;
 use tools::browser::Page;
 use tools::fs::{EditTool, ReadTool};
 use tools::shell::BashTool;
-use tools::window::{Kind, WindowTool, Windowed};
+use tools::window::Windowed;
 use tools::workspace::Workspace;
 
 use crate::instructions::Instructed;
@@ -135,33 +135,22 @@ impl<'a> Tools<'a> {
             root: self.root.clone(),
             seen: self.seen,
         };
-        let browser = self.browser.map(|page| crate::kinds::Browser {
-            page,
-            gate: self.edit.gate,
-            locks: self.lock,
-        });
-        #[cfg(unix)]
-        let terminal = crate::kinds::Terminal {
+        let parts = crate::kinds::Parts {
             bash: &self.bash,
             sessions: self.sessions,
             stop: self.stop,
-        };
-        let mut kinds: Vec<&dyn Kind> = vec![];
-        #[cfg(unix)]
-        kinds.push(&terminal);
-        if let Some(browser) = &browser {
-            kinds.push(browser);
-        }
-        let window = WindowTool {
-            kinds,
-            window: self.windowed,
-            hands: Some(self.hands),
+            page: self.browser,
+            locks: self.lock,
+            windowed: self.windowed,
+            hands: self.hands,
             gate: self.edit.gate,
         };
-        let mut tools: Vec<&dyn Tool> = vec![&read, &edit, &self.bash];
-        if !window.kinds.is_empty() {
-            tools.push(&window);
-        }
-        work(&tools)
+        crate::kinds::window(&parts, |window| {
+            let mut tools: Vec<&dyn Tool> = vec![&read, &edit, &self.bash];
+            if let Some(window) = window {
+                tools.push(window);
+            }
+            work(&tools)
+        })
     }
 }

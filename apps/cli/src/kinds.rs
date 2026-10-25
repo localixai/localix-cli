@@ -4,9 +4,11 @@
 
 #[cfg(unix)]
 mod terminal;
+mod tool;
 
 #[cfg(unix)]
 pub(crate) use terminal::Terminal;
+pub(crate) use tool::{Parts, window};
 
 use std::sync::Mutex;
 

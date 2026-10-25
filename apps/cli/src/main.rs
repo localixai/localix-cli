@@ -28,6 +28,8 @@ mod interrupt;
 mod jobs;
 mod kinds;
 mod live;
+#[cfg(unix)]
+mod mcp;
 mod meta;
 mod mode;
 mod output;

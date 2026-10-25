@@ -5,6 +5,8 @@
 
 mod doctor;
 mod exec;
+#[cfg(unix)]
+mod mcp;
 mod pipes;
 mod repo;
 mod sessions;

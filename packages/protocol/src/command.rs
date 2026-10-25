@@ -51,6 +51,15 @@ pub enum Command {
     Status,
     /// The daemon ends: every lane is stopped first.
     Shutdown,
+    /// The tools a tool client may call (W9), each as a model reads it.
+    Tools,
+    /// Tool `name` called with `arguments`; `call` is the client's own id for it, which `Halt`
+    /// stops (W9).
+    Tool {
+        call: String,
+        name: String,
+        arguments: serde_json::Value,
+    },
 }
 
 /// What the person sent: the text, and the pictures attached to it.
@@ -149,8 +158,36 @@ pub enum Done {
         #[serde(default)]
         jobs: usize,
     },
+    /// The tools a tool client may call.
+    Tools {
+        tools: Vec<ToolInfo>,
+    },
+    /// What a tool's call did: what happened, the state it left (a tab's text), and a picture of
+    /// it. A call that failed is `Failed`, with why.
+    Tool {
+        report: String,
+        #[serde(default)]
+        state: Option<String>,
+        #[serde(default)]
+        image: Option<Picture>,
+    },
     /// The command could not be done, and why.
     Failed {
         why: String,
     },
+}
+
+/// A tool as a model reads it: its name, what it does, and its arguments as a JSON Schema.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolInfo {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
+}
+
+/// An encoded picture: its media type (`image/jpeg`) and its bytes in base64.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Picture {
+    pub media_type: String,
+    pub data: String,
 }

@@ -120,3 +120,24 @@ fn a_reply_reaches_the_server_under_its_question() {
         }
     );
 }
+
+#[test]
+fn a_command_begun_is_sent_at_once_and_its_answer_waited_for_later() {
+    let (client, at_server, from_server, _seen) = connected();
+    let begun = client.begin(Command::Tools).unwrap();
+    // Sent before anyone waits: what the client sends next comes after it.
+    client.send(Command::Halt { id: "c1".into() }).unwrap();
+    let first = at_server.recv_timeout(WAIT).unwrap();
+    let ToServer::Call { id, command } = first else {
+        panic!("not a call: {first:?}");
+    };
+    assert_eq!(command, Command::Tools);
+    let tools = Done::Tools { tools: vec![] };
+    from_server
+        .send(ToClient::Done {
+            id,
+            done: tools.clone(),
+        })
+        .unwrap();
+    assert_eq!(begun.wait(WAIT), Ok(tools));
+}

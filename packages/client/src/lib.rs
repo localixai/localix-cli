@@ -101,6 +101,12 @@ impl Client {
 
     /// `command`, and what was done with it, within `wait`.
     pub fn call(&self, command: Command, wait: Duration) -> Result<Done, CallError> {
+        self.begin(command)?.wait(wait)
+    }
+
+    /// `command` sent now, what is done with it waited for later: what is sent after it comes
+    /// after it, whoever waits.
+    pub fn begin(&self, command: Command) -> Result<Begun, CallError> {
         let (reply, done) = sync_channel(1);
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         {
@@ -114,18 +120,11 @@ impl Client {
             lock(&self.waiting).waiting.remove(&id);
             return Err(CallError::Gone);
         }
-        let done = match done.recv_timeout(wait) {
-            Ok(done) => done,
-            Err(RecvTimeoutError::Timeout) => {
-                lock(&self.waiting).waiting.remove(&id);
-                return Err(CallError::Timeout);
-            }
-            Err(RecvTimeoutError::Disconnected) => return Err(CallError::Gone),
-        };
-        match done {
-            Done::Failed { why } => Err(CallError::Failed(why)),
-            done => Ok(done),
-        }
+        Ok(Begun {
+            id,
+            done,
+            waiting: Arc::clone(&self.waiting),
+        })
     }
 
     /// `command`, not waiting for what is done with it.
@@ -144,6 +143,31 @@ impl Client {
             return Err(CallError::Gone);
         }
         (self.to_server.send(frame)).map_err(|_gone| CallError::Gone)
+    }
+}
+
+/// A command sent, whose answer is still to come.
+pub struct Begun {
+    id: u64,
+    done: Receiver<Done>,
+    waiting: Arc<Waiting>,
+}
+
+impl Begun {
+    /// What was done with the command, within `wait`.
+    pub fn wait(self, wait: Duration) -> Result<Done, CallError> {
+        let done = match self.done.recv_timeout(wait) {
+            Ok(done) => done,
+            Err(RecvTimeoutError::Timeout) => {
+                lock(&self.waiting).waiting.remove(&self.id);
+                return Err(CallError::Timeout);
+            }
+            Err(RecvTimeoutError::Disconnected) => return Err(CallError::Gone),
+        };
+        match done {
+            Done::Failed { why } => Err(CallError::Failed(why)),
+            done => Ok(done),
+        }
     }
 }
 

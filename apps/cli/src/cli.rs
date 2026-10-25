@@ -138,6 +138,15 @@ pub(crate) enum Command {
     /// lives on until `llx serve stop`.
     #[cfg(unix)]
     Serve(ServeArgs),
+    /// Serve llx's `window` to another agent over MCP on stdio (Claude Code, Codex, Cursor).
+    ///
+    /// Browser pages and terminal sessions as tabs of one window the person watches, grouped by
+    /// project; a `goal` on any tab is carried out by the decision model (an OpenRouter key).
+    /// The agent's own model thinks: no chat model is used. It runs in the daemon, started if
+    /// none runs; its tabs end when the agent closes its stdin. Add it with
+    /// `claude mcp add llx -- llx mcp`.
+    #[cfg(unix)]
+    Mcp,
 }
 
 #[derive(Args, Debug)]

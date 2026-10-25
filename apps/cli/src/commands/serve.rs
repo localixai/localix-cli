@@ -25,6 +25,7 @@ use crate::server::Ui;
 use crate::server::host::{Host, Kept};
 use crate::server::serve;
 use crate::server::socket::{self, Connection};
+use crate::server::toolbox;
 
 /// How long the daemon waits for its lanes to end once stopped; and for another daemon's lock
 /// that is being let go (one that was just asked to end).
@@ -133,6 +134,16 @@ fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, la
     let Ok(first) = incoming.recv() else {
         return;
     };
+    // A tool client (`llx mcp`) gets a toolbox, not a desk (W9).
+    if toolbox::wanted(&first) {
+        let hosted = toolbox::Hosted {
+            host: Some(Arc::clone(host)),
+            browser,
+            lanes: Arc::clone(lanes),
+            terminals: Arc::default(),
+        };
+        return toolbox::serve(first, &incoming, &out, &hosted);
+    }
     if let Some(kept) = rejoinable(&first, host) {
         return rejoin(first, &incoming, out, kept, host);
     }

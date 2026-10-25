@@ -1,14 +1,21 @@
+<p align="center">
+  <img src="site/public/logo.svg" width="72" height="72" alt="llx">
+</p>
+
 <h1 align="center">llx</h1>
 
 <p align="center">
-  An ultrafast, lightweight coding agent for the terminal.<br>
-  One binary under 4 MB, starts in about 5 ms, seven tools.
+  <strong>An ultrafast, lightweight coding agent for the terminal</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/rsaryev/llx/actions/workflows/ci.yml"><img src="https://github.com/rsaryev/llx/actions/workflows/ci.yml/badge.svg" alt="ci"></a>
-  <a href="https://github.com/rsaryev/llx/releases"><img src="https://img.shields.io/github/v/release/rsaryev/llx?include_prereleases&sort=semver" alt="release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
+  One binary under 4 MB that starts in about 5 ms. Seven tools, no plugins.
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="docs/usage.md">Documentation</a> ·
+  <a href="docs/mcp.md">Use from another agent</a> ·
   <a href="https://llx.sh">llx.sh</a>
 </p>
 

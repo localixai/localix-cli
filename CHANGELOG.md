@@ -2,8 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0
+
 The browser CLI of 0.1.0 is now `llx`: an ultrafast, lightweight coding agent for the terminal. It has seven tools: `read`, `edit`, `bash`, `window`, browser pages and terminal sessions as tabs of one window, whose goals a decision model carries out, `ask`, a question to the person in a session, `agents`, other agents it starts, and `jobs`, monitors and schedules. It stays one synchronous binary under 4 MB, with no async runtime and no plugins, MCP servers or skills to load.
 
+- **npm under `@localixai`.** The packages are `@localixai/llx` and one per platform; `npx -y @localixai/llx mcp` adds the window to Claude Code or Codex in one command, with nothing installed first.
+- **Linux: the strip keeps its height.** In the window's GTK box the strip of tabs took half the window and the page the other half; now the page fills everything under the strip. Pictures (a screenshot, a comment's picture) are still macOS's alone: on Linux a comment comes without one.
 - **Visual feedback in the window.** **Comment** in the strip turns the active page into a picker: click an element or drag over a region, write a note, Enter. Comments are held, counted on **Send N**, and sent as one batch, one message per tab, to whoever opened the page: a session gets them as an arrival that starts a task (or joins the one running); `llx mcp` hands them back with the agent's next `window` call (ARCHITECTURE.md W9). Each carries the element's selector, path, role, text, box and key styles, its source file when the page's dev build names it, and a picture of it. The page side lives in a closed shadow root and blocks only the person's own clicks, so the agent's actions go on while the person comments. The Claude Code plugin polls for them and submits them as a prompt.
 - **A plainer window.** The native title is hidden under the traffic lights (macOS) and the strip starts right after them; an empty part of the strip drags the window and a double click on it zooms.
 - **A quieter transcript.** An edit's diff colours only its signs and code, with dim line numbers, instead of bright bands across the terminal; paths in the project read from it (`Edited stats.py`), and a command's leading `cd` into the project is left out. Only what is drawn is shortened: the session keeps the call whole.

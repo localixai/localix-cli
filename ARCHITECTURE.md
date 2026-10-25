@@ -184,7 +184,9 @@ every new file already goes where its target crate will be.
   the agent's tools, not a session: its handshake's command line says `mcp`, and the server gives
   it a toolbox (`window`) at its place, with no chat model. Its connection is its session: the
   tabs it opens are its own and end with it. `tools`/`tool` calls run at once, each on a thread
-  of its own, answered when done (W1); `halt` with a call's id stops it.
+  of its own, answered when done (W1); `halt` with a call's id stops it. What the person sends
+  from its tabs (their comments) is its own too: held for it, and handed back with its next
+  `window` call after that call's report, marked, as untrusted page data with the person's notes.
 
 ## Concurrency and errors
 

@@ -44,6 +44,8 @@ pub(super) struct Deck {
     pub shown: Shown,
     /// The history menu is open: it takes the window, the pages stand aside.
     menu: bool,
+    /// The strip has its row of projects: the window holds the tabs of more than one.
+    rows: AtomicBool,
 }
 
 impl Deck {
@@ -121,6 +123,7 @@ impl Deck {
             terms: vec![],
             shown: Shown::Web,
             menu: false,
+            rows: AtomicBool::new(false),
         })
     }
 

@@ -314,9 +314,9 @@ pub(crate) fn first(browser: &Browser) {
     let seen = browser.peek(&panel, read).unwrap();
     assert_eq!(seen[1], "visible", "{seen}");
     assert!(seen[0].as_u64() > Some(5), "no animation frames: {seen}");
-    // Two projects' tabs: each project's name before its own, set as text; one project's, none.
+    // Two projects' tabs: a row of the projects, set as text; one project's, no row.
     let labels = |want: Value| {
-        let read = "[...document.querySelectorAll('.g')].map(g => g.textContent)";
+        let read = "[...document.querySelectorAll('.p')].map(p => p.textContent)";
         let deadline = Instant::now() + Duration::from_secs(10);
         while browser.peek_strip(read) != Ok(want.clone()) {
             assert!(Instant::now() < deadline, "{:?}", browser.peek_strip(read));
@@ -332,6 +332,13 @@ pub(crate) fn first(browser: &Browser) {
         None,
     );
     labels(json!(["alpha", "beta <i>"]));
+    // Under the projects, the shown one's tabs alone.
+    let own = "document.querySelectorAll('.t').length";
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while browser.peek_strip(own) != Ok(json!(1)) {
+        assert!(Instant::now() < deadline, "{:?}", browser.peek_strip(own));
+        std::thread::sleep(Duration::from_millis(20));
+    }
     let listed = browser.listing().unwrap_or_default();
     let groups: Vec<&str> = listed.iter().map(|tab| tab.group.as_str()).collect();
     assert_eq!(groups, ["alpha", "beta <i>"]);
@@ -363,8 +370,8 @@ fn history_menu(browser: &Browser) {
     };
     let menu = "[document.getElementById('menu').style.display, [...document.querySelectorAll('#menu .e')].map(e => e.textContent)]";
     said(
-        "[bk.textContent, fw.textContent, hs.textContent]",
-        json!(["‹", "›", "History"]),
+        "[bk.title, fw.title, hs.title]",
+        json!(["Back", "Forward", "History"]),
     );
     browser.click("history");
     said(menu, json!(["block", ["No pages yet"]]));

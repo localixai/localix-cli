@@ -2,7 +2,8 @@
 //! sessions' screens side by side, the one shown marked. The person switches with a click and
 //! closes one with its ×; the page says which as one short message, read as data. Titles are
 //! what pages and commands say, so they reach the page as JSON and are set as text. With the tabs
-//! of several projects in it (one window, several sessions), each project's are drawn together.
+//! of several projects in it (one window, several sessions), a row of the projects goes above
+//! them, and the tabs under it are the shown project's.
 
 use serde_json::json;
 
@@ -10,6 +11,8 @@ use super::history::Visit;
 
 /// The strip's height, in points.
 pub(super) const HEIGHT: f64 = 34.0;
+/// The row of projects above it, drawn when the tabs of more than one project are in the window.
+pub(super) const ROW: f64 = 28.0;
 
 /// A tab: one of the browser's (its id) or a terminal session's screen (its panel's id).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,10 +97,9 @@ pub(super) fn by_group<T>(mut items: Vec<T>, group: impl Fn(&T) -> &str) -> Vec<
 }
 
 /// The call that draws the strip: the tabs in order, and the one shown. With tabs of more than
-/// one project, each project's are drawn together, its name before the first.
+/// one project, each project's are together and each says its project.
 pub(super) fn script(items: &[Item], shown: Key) -> String {
     let several = items.iter().any(|item| item.group != items[0].group);
-    let mut last = None;
     let tabs: Vec<_> = by_group(items.iter().collect(), |item| item.group.as_str())
         .into_iter()
         .map(|item| {
@@ -108,7 +110,7 @@ pub(super) fn script(items: &[Item], shown: Key) -> String {
             let title = item.title.trim();
             let title = if title.is_empty() { empty } else { title };
             let mut tab = json!({"key": item.key.name(), "kind": kind, "title": title});
-            if several && last.replace(&item.group) != Some(&item.group) {
+            if several {
                 tab["group"] = json!(item.group);
             }
             tab

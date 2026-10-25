@@ -181,8 +181,8 @@ process environment): commands run in the environment of the client that opened 
    has a group (`Browser::group`, by key; a page's own new tab takes its opener's), named by the
    app per lane (`windows::group`, the session's directory's last component): a lane's `Tabs`
    claims the tabs its `window` calls open (`Windowed::opened`), its terminals' panels are
-   grouped as they open. The strip draws each group's tabs together, the group's name before
-   them, only when there are several; `window list` names a tab's group only then. The tool
+   grouped as they open. The strip draws a row of the groups above the tabs, the tabs under it the
+   shown group's, only when there are several; `window list` names a tab's group only then. The tool
    knows no project. Left for D3/D4: a daemon's lanes from several directories feed it.
 
 Estimated 2,500 to 3,500 lines; the budget has 5,000 left.

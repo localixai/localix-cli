@@ -92,7 +92,7 @@ fn one_project_draws_as_it_always_has() {
 }
 
 #[test]
-fn several_projects_draw_their_tabs_together_each_named_once() {
+fn several_projects_draw_their_tabs_together_each_saying_its_project() {
     let items = [
         item(Key::Web(1), "Docs", "llx"),
         item(Key::Term(2), "make", "<b>shop</b>"),
@@ -115,12 +115,12 @@ fn several_projects_draw_their_tabs_together_each_named_once() {
         labels,
         [
             &serde_json::json!("llx"),
-            &serde_json::Value::Null,
+            &serde_json::json!("llx"),
             &serde_json::json!("<b>shop</b>")
         ]
     );
     // A project's name is set as text too.
-    assert!(PAGE.contains("label.textContent = tab.group"));
+    assert!(PAGE.contains("pill.textContent = name"));
 }
 
 #[test]

@@ -6,16 +6,27 @@ use tao::dpi::LogicalSize;
 
 use super::super::frame::fill;
 use super::super::host::Shared;
-use super::super::strip::{self, HEIGHT, Item, Key};
+use std::sync::atomic::Ordering;
+
+use super::super::strip::{self, HEIGHT, Item, Key, ROW};
 use super::super::tabs::place;
 use super::{Deck, Shown};
 
 impl Deck {
+    /// How tall the strip is: its tabs, and above them the projects when there are several.
+    fn top(&self) -> f64 {
+        match (self.strip.is_some(), self.rows.load(Ordering::SeqCst)) {
+            (false, _) => 0.0,
+            (true, false) => HEIGHT,
+            (true, true) => HEIGHT + ROW,
+        }
+    }
+
     /// The page's part of the window: under the strip.
     pub(super) fn content(&self) -> (LogicalSize<f64>, f64) {
         let native = &self.frame.native;
         let size = native.inner_size().to_logical::<f64>(native.scale_factor());
-        let top = if self.strip.is_some() { HEIGHT } else { 0.0 };
+        let top = self.top();
         (
             LogicalSize::new(size.width, (size.height - top).max(0.0)),
             top,
@@ -24,7 +35,7 @@ impl Deck {
 
     /// Give the pages `width` by `height` (the browser's viewport), the strip above them.
     pub(in super::super) fn resize(&self, width: f64, height: f64) {
-        let top = if self.strip.is_some() { HEIGHT } else { 0.0 };
+        let top = self.top();
         self.frame
             .native
             .set_inner_size(LogicalSize::new(width, height + top));
@@ -50,11 +61,14 @@ impl Deck {
 
     /// Lay the window out again and tell the strip what it holds now.
     pub(in super::super) fn refresh(&self, shared: &Shared) {
+        let listed = self.listing(shared);
+        let several =
+            (listed.first()).is_some_and(|first| listed.iter().any(|tab| tab.group != first.group));
+        self.rows.store(several, Ordering::SeqCst);
         self.layout();
         let Some(strip) = &self.strip else {
             return;
         };
-        let listed = self.listing(shared);
         let shown = listed
             .iter()
             .find(|tab| tab.shown)

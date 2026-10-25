@@ -26,7 +26,7 @@ server.
 
 ## The layers
 
-```
+```text
                          apps/cli        the binary: arguments, the process, which transport
                         ╱        ╲
            apps/tui (target)    apps/server (target)    composition root: sessions, lanes,
@@ -103,6 +103,7 @@ every new file already goes where its target crate will be.
 
 - **C8**: callers decide, functions act: branches go up to the caller, loops down into
   functions that take the batch.
+
 ## Port rules (contracts)
 
 - **P1**: a port is a narrow trait, owned by the side that calls it, `Send + Sync`.
@@ -246,6 +247,7 @@ every new file already goes where its target crate will be.
   `#[non_exhaustive]` enums.
 - **S11**: an `unsafe` block says why it is sound (`// SAFETY:`), one unsafe operation each
   (_checked_).
+
 ## Adding things
 
 - **A provider:** an entry in the catalog (`providers/models`, from models.dev), a wire in a

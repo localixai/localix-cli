@@ -51,7 +51,7 @@ every new file already goes where its target crate will be.
 | Adapters | `providers/{models,openai,openrouter}` | `contracts`, `kit` |
 | Client | `client` (in process; the socket in D3) | `protocol` |
 | Server | `apps/server` (target) | every package but `client` |
-| Interface | `apps/tui` (target) | `client`, `protocol` |
+| Interface | `apps/tui` (target), `mcp` (the tool clients') | `client`, `protocol` |
 | Binary | `apps/cli` | `server`, `tui`, `client` |
 
 ## Dependency rules
@@ -69,10 +69,10 @@ every new file already goes where its target crate will be.
   context.
 - **L6** _checked_: `protocol` depends on no workspace crate. Its types are wire
   DTOs; domain types never derive its serde shapes, and it never re-exports one.
-- **L7** _checked_ on the sources (and with the crate, once it is one): the interface depends only
-  on `client` and `protocol`: never on the agent, tools, providers, the session store or the
-  server, nor on the app's other modules. What it needs to show, the
-  protocol carries (Codex's `verify_tui_core_boundary`).
+- **L7** _checked_ on the sources (and with the crate, once it is one): an interface (the
+  terminal's `tui`, the tool clients' `mcp`) depends only on `client` and `protocol`: never on
+  the agent, tools, providers, the session store or the server, nor on the app's other modules.
+  What it needs to show, the protocol carries (Codex's `verify_tui_core_boundary`).
 - **L8** _checked_ for the client: the server is the only crate that serves the protocol and
   the only one that knows every package; the client knows only the protocol, and is the only
   one that knows the socket.
@@ -153,6 +153,9 @@ every new file already goes where its target crate will be.
   text; it never filters tools.
 - **K6**: one place maps failures to the exit-code contract (`exit.rs`); the `--json` events and
   exit codes change only with a schema bump and a CHANGELOG entry.
+- **K7**: a tool client's calls are approved by the client that makes them (its own permission
+  prompt, before the call reaches llx): the toolbox's gate is bypass mode's, and refuses once
+  the call is stopped. The person is never asked through llx for them.
 
 ## Protocol rules (the seam between interface and server)
 
@@ -176,6 +179,11 @@ every new file already goes where its target crate will be.
 - **W7**: a request carries what the server needs to act on it (the session's id); no hidden
   state per connection but who is attached.
 - **W8**: one request's panic or failure never ends the server: it becomes that request's error.
+- **W9**: a tool client (`llx mcp`, which serves MCP to another agent) is an interface that calls
+  the agent's tools, not a session: its handshake's command line says `mcp`, and the server gives
+  it a toolbox (`window`) at its place, with no chat model. Its connection is its session: the
+  tabs it opens are its own and end with it. `tools`/`tool` calls run at once, each on a thread
+  of its own, answered when done (W1); `halt` with a call's id stops it.
 
 ## Concurrency and errors
 
@@ -243,7 +251,8 @@ every new file already goes where its target crate will be.
 - **A provider:** an entry in the catalog (`providers/models`, from models.dev), a wire in a
   provider package if none fits, one arm in `providers.rs`.
 - **A model:** nothing in llx: it arrives with the catalog's refresh.
-- **A tool capability:** an `action` of an existing tool, or the shell. A new tool is a decision
+- **A tool capability:** an `action` of an existing tool, or the shell. A tool client gets the
+  same `Tool` the agent has, from the toolbox (W9), never a copy of it. A new tool is a decision
   recorded here. `window` (the owner's decision): everything the agent opens to look at and work
   in is a tab of one window, each kind a `tools::window::Kind` the app gives; a `goal` belongs to
   every tab.
@@ -263,6 +272,8 @@ every new file already goes where its target crate will be.
 - **D4** (done): attach and detach: the ring, replayed questions, the quit question, back to
   the sessions moved to the background.
 - **D5** (done): the window grouped by project.
+- **D6**: tool clients (W9, K7): `llx mcp` serves `window` to other agents over MCP, through
+  the daemon.
 
 ## Budgets
 

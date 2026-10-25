@@ -6,6 +6,9 @@ import type { Register } from 'claude-code'
 const SERVERS = ['plugin:llx:llx', 'llx']
 // How the window tool marks what the person sent, after a call's own report.
 const MARK = '### What the person sent from the window'
+// What the window says the person did there (a tab closed, a page moved) is for the agent's next
+// call; only a batch of comments is worth a prompt of its own.
+const COMMENTS = 'The person sent '
 const EVERY_MS = 2000
 
 // One poll at a time: a slow daemon never stacks calls.
@@ -29,6 +32,7 @@ export const register: Register = on => {
           const at = text.indexOf(MARK)
           if (at < 0) continue
           const sent = text.slice(at)
+          if (!sent.includes(COMMENTS)) continue
           $.ui.toast('comments from the llx window')
           void $.prompt.submit({
             text: `The person sent comments from the llx window (${server}). Act on them.\n\n${sent}`,

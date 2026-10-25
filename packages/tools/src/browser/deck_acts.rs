@@ -23,7 +23,15 @@ impl Deck {
     pub(crate) fn act(&mut self, click: Click, shared: &Shared) -> Result<After, String> {
         let key = match click {
             Click::Show(key) | Click::Close(key) => key,
+            Click::History => {
+                self.menu = !self.menu;
+                return Ok(After::Kept);
+            }
+            Click::Back | Click::Forward => return Ok(self.walk(click)),
+            // The host opens its page: the tab it needs is built on the event loop.
+            Click::Visit(_) => return Ok(After::Kept),
         };
+        self.menu = false;
         if !self.listing(shared).iter().any(|tab| tab.id == key.name()) {
             let ids: Vec<String> = self.listing(shared).into_iter().map(|tab| tab.id).collect();
             return Err(format!(
@@ -33,6 +41,8 @@ impl Deck {
             ));
         }
         Ok(match click {
+            // Answered above.
+            Click::Back | Click::Forward | Click::History | Click::Visit(_) => After::Kept,
             Click::Show(Key::Web(id)) => {
                 if let Some(web) = self.web.as_mut() {
                     web.switch(id, shared)?;
@@ -62,6 +72,26 @@ impl Deck {
                 }
             }
         })
+    }
+
+    /// Back or forward in the page shown, when a page is.
+    fn walk(&mut self, click: Click) -> After {
+        self.menu = false;
+        if let (Some(web), Shown::Web) = (&self.web, self.shown) {
+            let script = if click == Click::Back {
+                "history.back()"
+            } else {
+                "history.forward()"
+            };
+            let _ = web.active().evaluate_script(script);
+        }
+        After::Kept
+    }
+
+    /// The history menu is done with: its page is about to open in the browser.
+    pub(crate) fn leave_menu(&mut self) {
+        self.menu = false;
+        self.show(Shown::Web);
     }
 
     /// Panel `id`'s page, or the strip's (`STRIP`).

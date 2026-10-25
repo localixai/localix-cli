@@ -15,6 +15,7 @@ use tao::window::WindowId;
 use super::super::deck::{After, Deck};
 use super::super::frame;
 use super::super::guard::token;
+use super::super::history::History;
 use super::super::panel::Opening;
 use super::super::platform;
 use super::super::strip::{Click, Key, click};
@@ -59,6 +60,7 @@ where
         tabs: Mutex::new(vec![]),
         listener: Mutex::new(None),
         groups: Mutex::new(HashMap::new()),
+        history: History::default(),
     });
     let browser = Browser {
         proxy: proxy.clone(),
@@ -258,6 +260,9 @@ impl On<'_> {
 
     /// The person's click: closing the browser's last tab is closing its window.
     fn clicked(&mut self, said: &str) {
+        if let Some(Click::Visit(at)) = click(said) {
+            return self.visit(at);
+        }
         if let Some(said) = click(said)
             && act(self.deck, said, self.shared, Some(self.on_close)).is_ok()
             && let Click::Close(key) = said
@@ -267,6 +272,16 @@ impl On<'_> {
                 Key::Term(_) => CLOSED_TERMINAL,
             };
             self.shared.heard(&key.name(), what);
+        }
+    }
+
+    /// A page of the history menu opens in a tab of its own.
+    fn visit(&mut self, at: usize) {
+        let url = self.shared.history.list().get(at).map(|v| v.url.clone());
+        if let (Some(url), Some(open)) = (url, self.deck.as_mut()) {
+            open.leave_menu();
+            let _ = self.proxy.send_event(Cmd::NewTab { url, reply: None });
+            open.refresh(self.shared);
         }
     }
 

@@ -16,6 +16,7 @@ use tao::event_loop::EventLoopProxy;
 use wry::PageLoadEvent;
 
 use super::capture::{Clip, Shot};
+use super::history::History;
 use super::panel;
 use super::strip::Click;
 use super::viewport::Viewport;
@@ -159,6 +160,8 @@ pub(super) struct Shared {
     listener: Mutex<Option<Listener>>,
     /// The group (a project) of each tab, by key, as its opener named it.
     pub groups: Mutex<HashMap<String, String>>,
+    /// The web pages the tabs have shown, for the strip's history menu.
+    pub history: History,
 }
 
 /// Told what the person did to a tab (its key; `window` for the whole window), in words.
@@ -238,11 +241,15 @@ impl Shared {
         if let Some(entry) = crate::lock(&self.tabs).iter_mut().find(|t| t.id == tab) {
             entry.url = url.to_string();
         }
+        if matches!(event, PageLoadEvent::Finished) {
+            self.history.visited(url);
+        }
         self.loaded.notify_all();
     }
 
     pub(super) fn titled(&self, tab: u32, title: String) {
         if let Some(entry) = crate::lock(&self.tabs).iter_mut().find(|t| t.id == tab) {
+            self.history.titled(&entry.url, &title);
             entry.title = title;
         }
     }

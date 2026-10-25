@@ -337,6 +337,7 @@ pub(crate) fn first(browser: &Browser) {
     assert_eq!(groups, ["alpha", "beta <i>"]);
     drop(other);
     labels(json!([]));
+    history_menu(browser);
     // The last tab gone, the window is too.
     drop(panel);
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -344,4 +345,33 @@ pub(crate) fn first(browser: &Browser) {
         assert!(Instant::now() < deadline, "the window stayed");
         std::thread::sleep(Duration::from_millis(50));
     }
+}
+
+/// The strip's buttons and its history menu: a click opens it over the window, another (the
+/// button's, or outside the list) closes it, and a click on a tab closes it too.
+fn history_menu(browser: &Browser) {
+    let said = |script: &str, want: Value| {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while browser.peek_strip(script) != Ok(want.clone()) {
+            assert!(
+                Instant::now() < deadline,
+                "{script}: {:?}",
+                browser.peek_strip(script)
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    };
+    let menu = "[document.getElementById('menu').style.display, [...document.querySelectorAll('#menu .e')].map(e => e.textContent)]";
+    said(
+        "[bk.textContent, fw.textContent, hs.textContent]",
+        json!(["‹", "›", "History"]),
+    );
+    browser.click("history");
+    said(menu, json!(["block", ["No pages yet"]]));
+    browser.click("history");
+    said(menu, json!(["none", []]));
+    browser.click("history");
+    said(menu, json!(["block", ["No pages yet"]]));
+    browser.click("back");
+    said(menu, json!(["none", []]));
 }

@@ -11,15 +11,17 @@ use tao::dpi::LogicalSize;
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 use wry::{NewWindowResponse, WebView, WebViewBuilder};
 
-use super::frame::{self, Frame, Look, fill};
+use super::frame::{self, Frame, Look};
 use super::host::{Cmd, Shared, Window};
 use super::panel::{self, Open, Opening};
-use super::strip::{self, HEIGHT, Item, Key};
+use super::strip::{self, HEIGHT};
 
 #[path = "deck_acts.rs"]
 mod acts;
+#[path = "deck_layout.rs"]
+mod layout;
 use super::tab_view::build;
-use super::tabs::{Tabs, place};
+use super::tabs::Tabs;
 use super::viewport::Viewport;
 pub(super) use acts::After;
 
@@ -40,6 +42,8 @@ pub(super) struct Deck {
     pub web: Option<Tabs>,
     terms: Vec<Open>,
     pub shown: Shown,
+    /// The history menu is open: it takes the window, the pages stand aside.
+    menu: bool,
 }
 
 impl Deck {
@@ -116,6 +120,7 @@ impl Deck {
             web: None,
             terms: vec![],
             shown: Shown::Web,
+            menu: false,
         })
     }
 
@@ -209,66 +214,6 @@ impl Deck {
                 None => Shown::Web,
             };
         }
-    }
-
-    /// The page's part of the window: under the strip.
-    fn content(&self) -> (LogicalSize<f64>, f64) {
-        let native = &self.frame.native;
-        let size = native.inner_size().to_logical::<f64>(native.scale_factor());
-        let top = if self.strip.is_some() { HEIGHT } else { 0.0 };
-        (
-            LogicalSize::new(size.width, (size.height - top).max(0.0)),
-            top,
-        )
-    }
-
-    /// Give the pages `width` by `height` (the browser's viewport), the strip above them.
-    pub(super) fn resize(&self, width: f64, height: f64) {
-        let top = if self.strip.is_some() { HEIGHT } else { 0.0 };
-        self.frame
-            .native
-            .set_inner_size(LogicalSize::new(width, height + top));
-    }
-
-    /// The strip along the top, what is shown under it, and the rest beside, out of sight.
-    pub(super) fn layout(&self) {
-        let (size, top) = self.content();
-        if let Some(strip) = &self.strip {
-            let _ = strip.set_bounds(fill(LogicalSize::new(size.width, top), 0.0, 0.0));
-        }
-        if let Some(web) = &self.web {
-            web.layout(size, top, self.shown == Shown::Web);
-        }
-        for open in &self.terms {
-            let here = self.shown == Shown::Term(open.id);
-            let x = if here { 0.0 } else { -(size.width + 100.0) };
-            place(&open.webview, x, top, size, here);
-        }
-    }
-
-    /// Lay the window out again and tell the strip what it holds now.
-    pub(super) fn refresh(&self, shared: &Shared) {
-        self.layout();
-        let Some(strip) = &self.strip else {
-            return;
-        };
-        let listed = self.listing(shared);
-        let shown = listed
-            .iter()
-            .find(|tab| tab.shown)
-            .map(|tab| tab.id.clone());
-        let items: Vec<Item> = listed
-            .into_iter()
-            .filter_map(|tab| {
-                Some(Item {
-                    key: Key::parse(&tab.id)?,
-                    title: tab.title,
-                    group: tab.group,
-                })
-            })
-            .collect();
-        let shown = shown.and_then(|id| Key::parse(&id)).unwrap_or(Key::Web(0));
-        let _ = strip.evaluate_script(&strip::script(&items, shown));
     }
 }
 

@@ -122,3 +122,35 @@ fn several_projects_draw_their_tabs_together_each_named_once() {
     // A project's name is set as text too.
     assert!(PAGE.contains("label.textContent = tab.group"));
 }
+
+#[test]
+fn the_toolbar_and_the_history_button_say_what_they_are() {
+    assert_eq!(click("back"), Some(Click::Back));
+    assert_eq!(click("forward"), Some(Click::Forward));
+    assert_eq!(click("history"), Some(Click::History));
+    assert_eq!(click("visit 2"), Some(Click::Visit(2)));
+    for junk in [
+        "back w1",
+        "visit",
+        "visit x",
+        "visit -1",
+        "visit 1 2",
+        "History",
+    ] {
+        assert_eq!(click(junk), None, "{junk:?}");
+    }
+}
+
+#[test]
+fn the_history_menu_reaches_the_page_as_data() {
+    use super::super::history::Visit;
+    let visit = Visit {
+        url: "https://a.example/\"</script>".into(),
+        title: "A".into(),
+    };
+    let open = menu(Some(std::slice::from_ref(&visit)));
+    assert!(open.starts_with("M([{"), "{open}");
+    assert!(open.contains(r#""title":"A""#), "{open}");
+    assert!(open.contains(r#"\"</script>"#), "{open}");
+    assert_eq!(menu(None), "M(null)");
+}

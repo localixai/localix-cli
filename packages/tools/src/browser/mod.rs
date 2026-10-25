@@ -8,6 +8,7 @@ mod capture;
 mod deck;
 mod frame;
 mod guard;
+mod history;
 mod host;
 mod page;
 mod panel;

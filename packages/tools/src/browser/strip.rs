@@ -6,6 +6,8 @@
 
 use serde_json::json;
 
+use super::history::Visit;
+
 /// The strip's height, in points.
 pub(super) const HEIGHT: f64 = 34.0;
 
@@ -43,15 +45,30 @@ impl Key {
 pub(super) enum Click {
     Show(Key),
     Close(Key),
+    Back,
+    Forward,
+    /// The history menu opens or closes.
+    History,
+    /// The page at this place of the history menu.
+    Visit(usize),
 }
 
-/// A message from the strip's page: `show w3`, `close t1`. Anything else is nothing.
+/// A message from the strip's page: `show w3`, `close t1`, `back`, `forward`, `history`,
+/// `visit 2`. Anything else is nothing.
 pub(super) fn click(body: &str) -> Option<Click> {
-    let (verb, key) = body.split_once(' ')?;
-    let key = Key::parse(key)?;
-    match verb {
-        "show" => Some(Click::Show(key)),
-        "close" => Some(Click::Close(key)),
+    let (verb, rest) = match body.split_once(' ') {
+        Some((verb, rest)) => (verb, Some(rest)),
+        None => (body, None),
+    };
+    match (verb, rest) {
+        ("back", None) => Some(Click::Back),
+        ("forward", None) => Some(Click::Forward),
+        ("history", None) => Some(Click::History),
+        ("visit", Some(at)) if at.bytes().all(|b| b.is_ascii_digit()) => {
+            at.parse().ok().map(Click::Visit)
+        }
+        ("show", Some(key)) => Key::parse(key).map(Click::Show),
+        ("close", Some(key)) => Key::parse(key).map(Click::Close),
         _ => None,
     }
 }
@@ -98,6 +115,18 @@ pub(super) fn script(items: &[Item], shown: Key) -> String {
         })
         .collect();
     format!("S({})", json!({"tabs": tabs, "shown": shown.name()}))
+}
+
+/// The call that opens the history menu on `visits` (newest first), or closes it.
+pub(super) fn menu(visits: Option<&[Visit]>) -> String {
+    let shown = visits.map(|visits| {
+        let rows: Vec<_> = visits
+            .iter()
+            .map(|visit| json!({"url": visit.url, "title": visit.title}))
+            .collect();
+        rows
+    });
+    format!("M({})", json!(shown))
 }
 
 /// The strip's page: dressed in the frame's stylesheet, clear over the window's glass.

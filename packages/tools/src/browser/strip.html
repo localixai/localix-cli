@@ -7,7 +7,19 @@
 <style>
 :root{--ground:#f7f7f7;color:#1d1d1f;font:12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
 @media (prefers-color-scheme: dark){:root{--ground:#070707;color:#e6e6e6}}
-body{display:flex;align-items:center;gap:4px;padding:0 8px;box-sizing:border-box;cursor:default;user-select:none;-webkit-user-select:none}
+body{margin:0;cursor:default;user-select:none;-webkit-user-select:none}
+#bar{display:flex;align-items:center;gap:4px;height:34px;padding:0 8px;box-sizing:border-box}
+#tabs{display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow:hidden}
+.b{flex:none;height:24px;min-width:24px;padding:0 6px;box-sizing:border-box;border-radius:7px;display:grid;place-items:center;font-size:15px;opacity:.7}
+.b:hover,.b.on{opacity:1;background:color-mix(in srgb,currentColor 10%,transparent)}
+.b.h{font-size:12px;padding:0 9px}
+#back{position:fixed;inset:34px 0 0 0;display:none}
+#menu{position:fixed;top:36px;right:8px;width:min(380px,calc(100vw - 16px));max-height:calc(100vh - 48px);overflow-y:auto;box-sizing:border-box;padding:5px;border-radius:10px;background:var(--ground);box-shadow:0 0 0 1px color-mix(in srgb,currentColor 14%,transparent),0 10px 30px rgba(0,0,0,.28);display:none}
+.v{padding:7px 9px;border-radius:7px}
+.v:hover{background:color-mix(in srgb,currentColor 9%,transparent)}
+.v .n{display:block;font-size:12.5px}
+.v .u{display:block;margin-top:3px;font-size:11px;opacity:.5;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.e{padding:12px 9px;opacity:.5}
 .t{display:flex;align-items:center;gap:6px;min-width:0;max-width:220px;height:24px;padding:0 6px 0 10px;border-radius:7px;opacity:.62}
 .t:hover{opacity:.9;background:color-mix(in srgb,currentColor 7%,transparent)}
 .t.on{opacity:1;background:color-mix(in srgb,currentColor 13%,transparent)}
@@ -21,12 +33,14 @@ body{display:flex;align-items:center;gap:4px;padding:0 8px;box-sizing:border-box
 </style>
 </head>
 <body>
+<div id="bar"><span class="b" id="bk" title="Back">‹</span><span class="b" id="fw" title="Forward">›</span><div id="tabs"></div><span class="b h" id="hs" title="History">History</span></div>
+<div id="back"></div><div id="menu"></div>
 <script>
 "use strict";
 // Draw the tabs, a project's name before its first; every name is set as text. A click says
 // which tab, and what to do with it.
 function S(data) {
-  document.body.replaceChildren(...data.tabs.flatMap((tab) => {
+  document.getElementById("tabs").replaceChildren(...data.tabs.flatMap((tab) => {
     const item = document.createElement("div");
     item.className = tab.key === data.shown ? "t on" : "t";
     item.title = tab.title;
@@ -51,6 +65,39 @@ function S(data) {
     label.textContent = tab.group;
     return [label, item];
   }));
+}
+// The history menu: the pages as a list, newest first; null closes it. Titles and addresses
+// are set as text.
+function M(visits) {
+  const menu = document.getElementById("menu");
+  const open = visits !== null;
+  menu.style.display = document.getElementById("back").style.display = open ? "block" : "none";
+  document.getElementById("hs").className = open ? "b h on" : "b h";
+  if (!open) return menu.replaceChildren();
+  if (visits.length === 0) {
+    const none = document.createElement("div");
+    none.className = "e";
+    none.textContent = "No pages yet";
+    menu.replaceChildren(none);
+    return;
+  }
+  menu.replaceChildren(...visits.map((visit, at) => {
+    const row = document.createElement("div");
+    row.className = "v";
+    row.title = visit.url;
+    const name = document.createElement("span");
+    name.className = "n";
+    name.textContent = visit.title || visit.url;
+    const url = document.createElement("span");
+    url.className = "u";
+    url.textContent = visit.url;
+    row.append(name, url);
+    row.addEventListener("click", () => window.ipc.postMessage("visit " + at));
+    return row;
+  }));
+}
+for (const [id, what] of [["bk", "back"], ["fw", "forward"], ["hs", "history"], ["back", "history"]]) {
+  document.getElementById(id).addEventListener("click", () => window.ipc.postMessage(what));
 }
 </script>
 </body>

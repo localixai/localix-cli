@@ -45,8 +45,3 @@
   scrollbar-width: none;
 }
 
-@media (min-width: 48rem) {
-  .agents dl {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}

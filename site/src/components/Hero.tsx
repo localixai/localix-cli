@@ -15,7 +15,9 @@ export function Hero() {
           4&nbsp;MB that starts in about 5&nbsp;ms, for your terminal.
         </p>
         <InstallCommand command={INSTALL} />
-        <p className="under">macOS · Linux</p>
+        <p className="under">
+          macOS · Linux · or <code>npm install -g @rsaryev/llx</code>
+        </p>
       </div>
       <Demo />
     </section>

@@ -89,6 +89,11 @@ claude mcp add llx -- llx mcp        # Claude Code
 codex mcp add llx -- llx mcp         # Codex
 ```
 
+That is all: the first call starts llx's daemon by itself, and the window opens when a tab is. Two things to know:
+
+- `llx` must be on the `PATH` of the agent that starts it (the installer puts it in `~/.local/bin`).
+- A `goal` on a tab is carried out by llx's decision model, which needs an OpenRouter key: run `/login` in `llx` once, or pass it along, as in `claude mcp add llx -e OPENROUTER_API_KEY=sk-or-... -- llx mcp`. Without one, everything else works.
+
 Any other client takes a server whose command is `llx` and whose argument is `mcp`. More in [docs/mcp.md](docs/mcp.md).
 
 ## Documentation

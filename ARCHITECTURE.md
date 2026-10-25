@@ -150,13 +150,19 @@ every new file already goes where its target crate will be.
   one terminal of the daemon (or in sessions moved to the background) never holds another's.
 - **K4**: something that reaches a run from outside its calls is a kind in `arrivals.rs` (its
   policy and tag) posted to the lane's queue; the agent's inbox knows no source.
-- **K5**: a mode changes only what the gate and the person answer and the context's `Mode:`
-  text; it never filters tools.
+- **K5**: a mode is a named set of rules (`allow`, `deny`), and nothing else: the built-in ones
+  (`default`, no rule; `plan`, `edit` denied; `bypass`, everything allowed) and the person's,
+  from `<config>/llx/settings.json`, where one may replace a built-in. `--allow` and `--deny` add
+  to the mode's. A deny refuses in every mode; an allow runs without asking; what no rule settles
+  is asked of the person, or refused when no one is there. Rules come from the command line and
+  the person's settings only, never from the repository (a pull request would allow itself). A
+  mode changes only what the gate answers and the context's rules text; it never filters tools,
+  and no code branches on a mode's name.
 - **K6**: one place maps failures to the exit-code contract (`exit.rs`); the `--json` events and
   exit codes change only with a schema bump and a CHANGELOG entry.
 - **K7**: a tool client's calls are approved by the client that makes them (its own permission
-  prompt, before the call reaches llx): the toolbox's gate is bypass mode's, and refuses once
-  the call is stopped. The person is never asked through llx for them.
+  prompt, before the call reaches llx): the toolbox's gate is the `bypass` mode's rules, and
+  refuses once the call is stopped. The person is never asked through llx for them.
 
 ## Protocol rules (the seam between interface and server)
 

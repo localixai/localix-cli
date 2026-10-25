@@ -5,17 +5,17 @@
 <h1 align="center">llx</h1>
 
 <p align="center">
-  <strong>An ultrafast, lightweight coding agent for the terminal</strong>
+  <strong>The ultrafast browser and coding agent</strong>
 </p>
 
 <p align="center">
-  One binary under 4 MB that starts in about 5 ms. Seven tools, no plugins.
+  A native browser, terminals and a coding agent in one binary under 4 MB. <code>llx mcp</code> gives the same window to Claude Code, Codex or any agent.
 </p>
 
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="docs/usage.md">Documentation</a> ·
-  <a href="docs/mcp.md">Use from another agent</a> ·
+  <a href="#use-it-from-another-agent">Use from another agent</a> ·
   <a href="https://llx.sh">llx.sh</a>
 </p>
 
@@ -25,7 +25,42 @@
   </a>
 </p>
 
-<sub>A real session, recorded with asciinema (<code>site/scripts/RECORDING.md</code>). Times, tokens and cost vary.</sub>
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <strong>A fast native browser</strong><br>
+      Real pages as tabs, driven by a short goal: search, book, fill a form, check a page.<br>
+      <a href="docs/tools.md">Tools →</a>
+    </td>
+    <td width="33%" valign="top">
+      <strong>Terminals in the same window</strong><br>
+      Tests, servers and REPLs as tabs beside the pages, typed into and read as you would.<br>
+      <a href="docs/tools.md">Tools →</a>
+    </td>
+    <td width="33%" valign="top">
+      <strong>Visual feedback</strong><br>
+      Click what is wrong, write a note, send: the agent gets the selector, source file and a picture.<br>
+      <a href="docs/mcp.md">Comments →</a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <strong>For your other agents</strong><br>
+      <code>llx mcp</code> serves the window to Claude Code, Codex, Cursor and any MCP client.<br>
+      <a href="docs/mcp.md">MCP →</a>
+    </td>
+    <td valign="top">
+      <strong>Any model</strong><br>
+      A ChatGPT sign-in, OpenRouter, or about 200 providers with a key.<br>
+      <a href="MODELS.md">Models →</a>
+    </td>
+    <td valign="top">
+      <strong>Safe by default</strong><br>
+      Reading never asks; every command, change and page action does, by mode.<br>
+      <a href="docs/modes.md">Modes →</a>
+    </td>
+  </tr>
+</table>
 
 ## Install
 
@@ -33,134 +68,30 @@
 npm install -g @rsaryev/llx
 ```
 
-Or with the script (macOS and Linux x86_64), which checks the release against `SHA256SUMS` and installs `llx` into `~/.local/bin` (`LLX_VERSION=0.2.0` picks a version, `LLX_INSTALL_DIR` the place):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh
-```
-
-From a clone: `cargo install --locked --path apps/cli` (Rust 1.88 or newer). Windows is not supported for now.
-
-The browser is the system's own WebView: WKWebView on macOS; on Linux, WebKitGTK (`libwebkit2gtk-4.1-0`) and a display.
-
-## Quick start
+Or `curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh` (macOS and Linux x86_64, checked against `SHA256SUMS`), or `cargo install --locked --path apps/cli` from a clone. The browser is the system's WebView: WKWebView on macOS, WebKitGTK (`libwebkit2gtk-4.1-0`) on Linux. Windows is not supported for now.
 
 ```bash
 cd your-project
-llx              # a session: type /login first, then a task
-llx doctor       # checks the sign-ins, both models, the WebView and the shell
+llx                                    # a session: /login first, then a task
+git diff | llx -p "review this change" # one task from stdin, then exit
+llx doctor                             # sign-ins, models, the WebView, the shell
 ```
-
-`/login` signs you in to a provider and picks a model:
-
-- **OpenAI** with a ChatGPT sign-in: your browser opens and comes back to llx by itself; requests are billed to your ChatGPT plan.
-- **OpenRouter** with a key: paste it, or sign in in the browser. `OPENROUTER_API_KEY` works too.
-- **Any provider of the [model catalog](MODELS.md)** (Anthropic, Google, xAI, DeepSeek, Mistral, Groq… about 200) with a key: paste it, or set the variable models.dev names for it (`ANTHROPIC_API_KEY`…).
-
-```bash
-llx "fix the failing test in src/parse.rs"          # a session that starts with this task
-llx -c                                              # go on with the newest session here
-llx --mode plan "how should we split src/parse.rs?" # investigate and plan; change no file
-git diff | llx -p "review this change"              # one task from stdin, then exit
-llx exec --json -y "update the changelog"           # JSON events, one per line
-```
-
-## What it has
-
-| Tool | What it does |
-| --- | --- |
-| `read`, `edit` | Files: numbered lines, exact and atomic replacement |
-| `bash` | Commands that run to their end, killed with everything they started |
-| `window` | Everything it opens, as tabs of one window: real web pages and terminal sessions, acted in with a short `goal` or the kind's own fields |
-| `ask` | A question to you, when a decision is yours |
-| `agents` | Other agents in parallel, each a session you can switch to |
-| `jobs` | Monitors (a background command whose lines come back) and schedules |
-
-No plugins, no MCP servers consumed, no extra tools: a model with a shell and a browser needs little more. Details in [docs/tools.md](docs/tools.md).
-
-## Visual feedback
-
-Point at what is wrong in a page the agent opened. Press **Comment** in the window's strip, click an element or drag over a region, write a note, Enter. Comments are held until you press **Send N**, then go back as one batch to the agent that opened the page. Each carries what an agent needs to find the element in the code: its selector and path, role and text, box, key styles, the source file when the page's dev build names it (React's `_debugSource`, `data-source-loc`), and a picture of it.
-
-In `llx` the batch starts a task (or joins the one running). Through `llx mcp` it comes back with the agent's next `window` call.
-
-## Safe by default
-
-Reading never asks. Every command, file change and page action asks first, in one place, and a mode decides what happens: `default` asks, `plan` investigates and refuses file changes, `bypass` (`-y`) allows everything, `autonomous` allows everything and never asks you a question. `edit` stays inside the workspace; tool output is data, never instructions. There is no sandbox, though: `bash` is a real shell with your permissions. See [Modes, approvals and trust](docs/modes.md).
 
 ## Use it from another agent
 
-`llx mcp` is an MCP server on stdio. It gives any agent llx's `window`: real browser pages and terminal sessions as tabs of one window you watch, and the comments you send from them. One command adds it to your agent; `npx` fetches the llx binary for your platform, so nothing needs installing first:
-
-**Claude Code**
+One command, nothing to install first (`npx` fetches llx for your platform):
 
 ```bash
-claude mcp add llx -- npx -y @rsaryev/llx mcp
+claude mcp add llx -- npx -y @rsaryev/llx mcp   # Claude Code
+codex mcp add llx -- npx -y @rsaryev/llx mcp    # Codex
 ```
 
-Or the plugin, which also brings the comments you send from the window into Claude as a prompt: `/plugin marketplace add rsaryev/llx`, then `/plugin install llx@llx`.
-
-**Codex**
-
-```bash
-codex mcp add llx -- npx -y @rsaryev/llx mcp
-```
-
-Codex asks before each MCP call. For `codex exec`, where nobody is there to answer, allow the window: `-c 'mcp_servers.llx.tools.window.approval_mode="approve"'`.
-
-**Cursor, and any other client** that takes a JSON config (Cursor: `~/.cursor/mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "llx": { "command": "npx", "args": ["-y", "@rsaryev/llx", "mcp"] }
-  }
-}
-```
-
-With llx installed (`npm install -g @rsaryev/llx`), the command can be just `llx mcp`, which starts a little faster.
-
-The first call starts llx's daemon by itself, and the window opens when a tab is. A `goal` on a tab is carried out by llx's decision model, which needs an OpenRouter key: run `/login` in `llx` once, or set `OPENROUTER_API_KEY` in the server's environment. Without one, everything else works. More in [docs/mcp.md](docs/mcp.md).
+Any other client takes the command `npx` with `-y @rsaryev/llx mcp` (Cursor: `~/.cursor/mcp.json`). The Claude Code plugin also brings the comments you send from the window in as a prompt: `/plugin marketplace add rsaryev/llx`, then `/plugin install llx@llx`. A `goal` on a tab needs an OpenRouter key (`/login` in llx once, or `OPENROUTER_API_KEY`); everything else works without one. See [docs/mcp.md](docs/mcp.md).
 
 ## Documentation
 
-| | |
-| --- | --- |
-| [Using llx](docs/usage.md) | The command line, a session's keys and slash commands, models, sessions, project instructions |
-| [Tools](docs/tools.md) | What each of the seven tools does and its limits |
-| [Modes, approvals and trust](docs/modes.md) | What it asks, how to stop it, what it protects |
-| [MCP](docs/mcp.md) | `llx mcp` for other agents |
-| [Reference](docs/reference.md) | Exit codes and `--json` events |
-| [Daemon](docs/daemon.md) | How sessions are kept and attached |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | The layers and the rules every change follows |
-| [MODELS.md](MODELS.md) | Where the model facts come from |
-| [CHANGELOG.md](CHANGELOG.md) | What changed |
-
-## Architecture
-
-Packages and one app, every dependency pointing inward: `contracts` (ports), `agent` and `decision-loop` (the core), `tools`, `session`, `providers/*` (adapters), `protocol` and `client` (the seam between the interface and the daemon), and `apps/cli` (the binary that composes them). The agent names no tool or provider, a tool asks the gate before an effect, and only the app answers it. `apps/cli/tests/suite/repo/` checks the rules. See [ARCHITECTURE.md](ARCHITECTURE.md) and [AGENTS.md](AGENTS.md).
-
-## Metrics
-
-<!-- metrics:start -->
-Latest run, 2026-10-22 22:17 on Darwin 25.6.0 arm64: the agent on anthropic/claude-haiku-5.5, the browser's hands on ~typesafe/jev-latest, from [benchmarks/HISTORY.md](benchmarks/HISTORY.md):
-
-| Metric | Value |
-| --- | --- |
-| Eval runs passed | 24/24 (browser 16/16, code 8/8) |
-| Task time, median / p90 | 8.5 s / 21.2 s |
-| Cost per task | $0.0020 |
-| Start (`--version`) | 3.8 ms |
-| Memory at start (`--help`) | 9.6 MB |
-| Release binary | 1.59 MB |
-<!-- metrics:end -->
-
-The binary has grown since that run (the daemon and `llx mcp`): 3.8 MB on macOS arm64, and it still starts in about 5 ms. `python3 evals/run.py --record` replaces the table and appends to [benchmarks/HISTORY.md](benchmarks/HISTORY.md); the tasks are in [evals/README.md](evals/README.md).
+[Using llx](docs/usage.md) · [Tools](docs/tools.md) · [Modes and trust](docs/modes.md) · [MCP](docs/mcp.md) · [Reference](docs/reference.md) · [Daemon](docs/daemon.md) · [Architecture](ARCHITECTURE.md) · [Models](MODELS.md) · [Changelog](CHANGELOG.md)
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Report security issues as described in [SECURITY.md](SECURITY.md).
-
-## License
-
-[MIT](LICENSE)
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [ARCHITECTURE.md](ARCHITECTURE.md). Report vulnerabilities as [SECURITY.md](SECURITY.md) describes. llx is released under the [MIT License](LICENSE).

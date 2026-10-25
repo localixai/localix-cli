@@ -56,6 +56,7 @@ impl App {
     /// is the one shown. What is not a session's own goes to the interface as a whole.
     pub(super) fn on(&mut self, at: usize, event: Event, now: Instant) -> Option<Action> {
         let width = self.width;
+        let event = super::here::event(event, self.files.root());
         let agent = self.views.sessions[at].parent.is_some();
         let view = &mut self.views.sessions[at];
         let block = match event {

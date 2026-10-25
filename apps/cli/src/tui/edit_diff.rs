@@ -66,37 +66,26 @@ pub(super) fn render(diff: &str, width: usize) -> Vec<Line<'static>> {
                 continue;
             }
         };
-        let gutter = format!("    {before:>3} {after:>3} {mark} ");
-        let room = width.saturating_sub(columns(&gutter)).max(1);
+        // Only the sign and the code carry the colour: the numbers stay dim, nothing is banded.
+        let numbers = format!("    {before:>3} {after:>3} ");
+        let sign = format!("{mark} ");
+        let indent = columns(&numbers) + columns(&sign);
+        let room = width.saturating_sub(indent).max(1);
         for (at, text) in hard(&printable(text), room).into_iter().enumerate() {
-            let prefix = if at == 0 {
-                gutter.clone()
+            let row = if at == 0 {
+                Line::from(vec![
+                    Span::styled(numbers.clone(), style::dim()),
+                    Span::styled(sign.clone(), colour),
+                    Span::styled(text, colour),
+                ])
             } else {
-                " ".repeat(columns(&gutter))
+                Line::from(vec![
+                    Span::raw(" ".repeat(indent)),
+                    Span::styled(text, colour),
+                ])
             };
-            let row = Line::from(vec![
-                Span::styled(prefix, colour),
-                Span::styled(text, colour),
-            ]);
             // Extremely narrow terminals still retain the signs and line numbers.
-            for mut row in super::super::wrap::fit(&row, width) {
-                if mark != ' ' {
-                    use ratatui::style::{Color, Style};
-                    let background = if mark == '+' {
-                        Color::Green
-                    } else {
-                        Color::Red
-                    };
-                    row.style = Style::new().bg(background).fg(Color::Black);
-                    for span in &mut row.spans {
-                        span.style = row.style;
-                    }
-                    // Explicit padding also carries the band into scrollback's ANSI output.
-                    let padding = width.saturating_sub(super::super::wrap::line_width(&row));
-                    row.spans.push(Span::raw(" ".repeat(padding)));
-                }
-                out.push(row);
-            }
+            out.extend(super::super::wrap::fit(&row, width));
         }
     }
     out

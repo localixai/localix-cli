@@ -19,6 +19,11 @@ impl Files {
         Self { root, list: None }
     }
 
+    /// The project the files are in.
+    pub(crate) fn root(&self) -> Option<&Path> {
+        self.root.as_deref()
+    }
+
     /// Reads the list the first time it is wanted.
     pub(crate) fn load(&mut self) {
         if self.list.is_none() {

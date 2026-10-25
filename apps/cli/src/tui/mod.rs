@@ -15,6 +15,7 @@ mod clipboard;
 pub(crate) mod composer;
 mod drawing;
 pub(crate) mod event;
+mod here;
 pub(crate) mod keys;
 mod list;
 pub(crate) mod live;

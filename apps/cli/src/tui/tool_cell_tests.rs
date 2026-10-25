@@ -108,6 +108,8 @@ fn files_say_what_changed() {
 
 #[test]
 fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
+    use ratatui::style::Color;
+
     let outcome = done(
         "Edited a.rs: replaced 1 occurrence (+1 -1 lines).\n\nDiff:\n@@ -181,3 +181,3 @@\n target: 'bun',\n-throw: true,\n+throw: false,\n end",
     );
@@ -126,15 +128,13 @@ fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
     assert!(screen.contains("182     - throw: true,"), "{screen}");
     assert!(screen.contains("    182 + throw: false,"), "{screen}");
     assert!(rendered.iter().any(|row| {
-        row.spans.iter().any(|span| {
-            span.content.contains("throw: true")
-                && span.style.bg == Some(ratatui::style::Color::Red)
-        })
+        row.spans
+            .iter()
+            .any(|span| span.content.contains("throw: true") && span.style.fg == Some(Color::Red))
     }));
     assert!(rendered.iter().any(|row| {
         row.spans.iter().any(|span| {
-            span.content.contains("throw: false")
-                && span.style.bg == Some(ratatui::style::Color::Green)
+            span.content.contains("throw: false") && span.style.fg == Some(Color::Green)
         })
     }));
     let long = format!(
@@ -164,13 +164,8 @@ fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
 }
 
 #[test]
-fn diff_backgrounds_fill_changed_rows_including_wraps_but_not_context() {
-    use ratatui::{
-        buffer::Buffer,
-        layout::Rect,
-        style::Color,
-        widgets::{Paragraph, Widget},
-    };
+fn a_diff_colours_its_signs_and_code_only_never_a_band_and_dims_its_numbers() {
+    use ratatui::style::{Color, Modifier};
 
     let report =
         done("Edited x.\n\nDiff:\n@@ -1,2 +1,2 @@\n context\n-old\n+abcdefghijklmnopqrstuvwxyz");
@@ -180,21 +175,25 @@ fn diff_backgrounds_fill_changed_rows_including_wraps_but_not_context() {
         State::Done(&report),
         24,
     );
-    let area = Rect::new(0, 0, 24, u16::try_from(rendered.len()).unwrap());
-    let mut buffer = Buffer::empty(area);
-    Paragraph::new(rendered.clone()).render(area, &mut buffer);
-    let changed = rendered
-        .iter()
-        .position(|row| style::plain(row).contains("- old"))
-        .unwrap();
-    let row = |y: usize| u16::try_from(y).unwrap();
-    for x in 0..24 {
-        assert_eq!(buffer[(x, row(changed))].bg, Color::Red);
-        for y in changed + 1..rendered.len() {
-            assert_eq!(buffer[(x, row(y))].bg, Color::Green);
-        }
-        assert_eq!(buffer[(x, row(changed) - 1)].bg, Color::Reset);
-    }
+    let spans: Vec<_> = rendered.iter().flat_map(|row| row.spans.iter()).collect();
+    assert!(
+        spans
+            .iter()
+            .all(|span| span.style.bg.is_none() && row_bg(&rendered))
+    );
+    let span = |text: &str| {
+        spans
+            .iter()
+            .find(|span| span.content.contains(text))
+            .unwrap()
+    };
+    assert_eq!(span("old").style.fg, Some(Color::Red));
+    assert_eq!(span("abcdef").style.fg, Some(Color::Green));
+    assert!(span("  1 ").style.add_modifier.contains(Modifier::DIM));
+}
+
+fn row_bg(rows: &[Line]) -> bool {
+    rows.iter().all(|row| row.style.bg.is_none())
 }
 
 #[test]

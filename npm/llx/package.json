@@ -1,0 +1,25 @@
+{
+  "name": "@rsaryev/llx",
+  "version": "0.1.0",
+  "description": "An ultrafast, lightweight coding agent for the terminal, and a window for other agents over MCP",
+  "license": "MIT",
+  "author": "rsaryev",
+  "homepage": "https://llx.sh",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rsaryev/llx.git"
+  },
+  "keywords": ["agent", "coding-agent", "cli", "mcp", "browser", "terminal"],
+  "bin": {
+    "llx": "bin/llx.js"
+  },
+  "files": ["bin", "README.md"],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@rsaryev/llx-darwin-arm64": "0.1.0",
+    "@rsaryev/llx-darwin-x64": "0.1.0",
+    "@rsaryev/llx-linux-x64": "0.1.0"
+  }
+}

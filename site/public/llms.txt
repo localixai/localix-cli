@@ -21,7 +21,7 @@
 ## From another agent
 
 - `llx mcp` serves llx's `window` (browser pages and terminal sessions as tabs, with a `goal` carried out by llx's decision model) to any agent that speaks MCP over stdio.
-- Claude Code: `claude mcp add llx -- llx mcp`. Codex: `codex mcp add llx -- llx mcp`.
+- Claude Code: `claude mcp add llx -- npx -y @rsaryev/llx mcp`. Codex: `codex mcp add llx -- npx -y @rsaryev/llx mcp`.
 
 ## Links
 

@@ -34,10 +34,16 @@ parse_range treated an empty upper bound as 0; it now means "to the end". All 14
 ## Install
 
 ```bash
+npm install -g @rsaryev/llx
+```
+
+Or with the script (macOS and Linux x86_64), which checks the release against `SHA256SUMS` and installs `llx` into `~/.local/bin` (`LLX_VERSION=0.2.0` picks a version, `LLX_INSTALL_DIR` the place):
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh
 ```
 
-The script downloads the latest release for macOS or Linux x86_64, checks it against `SHA256SUMS` and installs `llx` into `~/.local/bin` (`LLX_VERSION=0.2.0` picks a version, `LLX_INSTALL_DIR` the place). From a clone: `cargo install --locked --path apps/cli` (Rust 1.88 or newer). Windows is not supported for now.
+From a clone: `cargo install --locked --path apps/cli` (Rust 1.88 or newer). Windows is not supported for now.
 
 The browser is the system's own WebView: WKWebView on macOS; on Linux, WebKitGTK (`libwebkit2gtk-4.1-0`) and a display.
 
@@ -82,19 +88,16 @@ Reading never asks. Every command, file change and page action asks first, in on
 
 ## Use it from another agent
 
-`llx mcp` gives Claude Code, Codex, Cursor or any MCP client llx's `window`: real browser pages and terminal sessions in a window you watch. Install `llx` first (above), then add it as an MCP server:
+`llx mcp` gives Claude Code, Codex, Cursor or any MCP client llx's `window`: real browser pages and terminal sessions in a window you watch. One command, with nothing installed before it (`npx` fetches llx):
 
 ```bash
-claude mcp add llx -- llx mcp        # Claude Code
-codex mcp add llx -- llx mcp         # Codex
+claude mcp add llx -- npx -y @rsaryev/llx mcp        # Claude Code
+codex mcp add llx -- npx -y @rsaryev/llx mcp         # Codex
 ```
 
-That is all: the first call starts llx's daemon by itself, and the window opens when a tab is. Two things to know:
+Or add the plugin in Claude Code: `/plugin marketplace add rsaryev/llx`, then `/plugin install llx@llx`. With `llx` already installed, the server's command is just `llx mcp`.
 
-- `llx` must be on the `PATH` of the agent that starts it (the installer puts it in `~/.local/bin`).
-- A `goal` on a tab is carried out by llx's decision model, which needs an OpenRouter key: run `/login` in `llx` once, or pass it along, as in `claude mcp add llx -e OPENROUTER_API_KEY=sk-or-... -- llx mcp`. Without one, everything else works.
-
-Any other client takes a server whose command is `llx` and whose argument is `mcp`. More in [docs/mcp.md](docs/mcp.md).
+The first call starts llx's daemon by itself, and the window opens when a tab is. A `goal` on a tab is carried out by llx's decision model, which needs an OpenRouter key: run `/login` in `llx` once, or pass it along with `-e OPENROUTER_API_KEY=sk-or-...` before the `--`. Without one, everything else works. More in [docs/mcp.md](docs/mcp.md).
 
 ## Documentation
 

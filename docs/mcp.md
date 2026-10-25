@@ -6,19 +6,23 @@ The other agent's model does the thinking, so no chat model is used. A `goal` on
 
 ## Connect
 
+One command; `npx` fetches the llx binary for your platform (the npm package `@rsaryev/llx`), so nothing needs installing first:
+
 ```bash
-claude mcp add llx -- llx mcp                    # Claude Code
-codex mcp add llx -- llx mcp                     # Codex
+claude mcp add llx -- npx -y @rsaryev/llx mcp        # Claude Code
+codex mcp add llx -- npx -y @rsaryev/llx mcp         # Codex
 ```
 
-Claude Code can also add it as a plugin. The plugin is only a wrapper: it registers the same `llx mcp` server, so it is the same thing as the `claude mcp add` line above, just done by `/plugin`. `llx` itself must be installed and on your `PATH` either way.
+Claude Code can also add it as a plugin, which registers the same server (the plugin is only that wrapper, so it is the same thing as the line above):
 
 ```text
 /plugin marketplace add rsaryev/llx
 /plugin install llx@llx
 ```
 
-Any other MCP client takes a server whose command is `llx` with the argument `mcp`.
+Any other MCP client takes a server whose command is `npx` with the arguments `-y @rsaryev/llx mcp`. If `llx` is installed (`npm install -g @rsaryev/llx`, or the install script), the command is just `llx` with the argument `mcp`, which starts a little faster.
+
+The `goal` of a tab needs an OpenRouter key: save one with `/login` in `llx`, or pass `-e OPENROUTER_API_KEY=sk-or-...` before the `--` in `claude mcp add`. Without one, everything but `goal` works.
 
 ## How it runs
 

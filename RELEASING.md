@@ -32,16 +32,20 @@ A version with a suffix (`v1.0.0-rc.1`) is published as a prerelease, which `ins
      `universal-apple-darwin` joined with `lipo`;
    - Linux (`ubuntu-22.04`, for an older glibc): `x86_64-unknown-linux-gnu`, linked against
      WebKitGTK 4.1;
-   - Windows (`windows-latest`): `x86_64-pc-windows-msvc`.
 
-   Each archive (`llx-<target>.tar.gz`, `.zip` on Windows) holds the binary, `README.md` and
+   Each archive (`llx-<target>.tar.gz`) holds the binary, `README.md` and
    `LICENSE`. The binary is run with `--version` before upload.
 3. **publish**: joins every platform's `SHA256SUMS`, checks them against the archives, and runs
-   `gh release create vX.Y.Z` with the archives, `SHA256SUMS`, `install.sh` and `install.ps1`,
-   and the CHANGELOG section as the notes.
+   `gh release create vX.Y.Z` with the archives, `SHA256SUMS` and `install.sh`, and the CHANGELOG
+   section as the notes.
+4. **npm**, when the `NPM_TOKEN` secret is set (an npm automation token that may publish
+   `@rsaryev/*`): `scripts/npm-pack.sh --publish` makes one package per platform with the binary
+   from the archives, then the wrapper `@rsaryev/llx`, with provenance. A version with a suffix goes
+   out under the `next` tag. `scripts/npm-pack.sh` alone builds them into `dist/npm/` without
+   publishing, to try with `npm install dist/npm/*.tgz`.
 
-`scripts/install.sh` and `scripts/install.ps1` read `releases/latest` (or `LLX_VERSION`) and
-verify the archive against `SHA256SUMS`, so a release is installable as soon as it is published.
+`scripts/install.sh` reads `releases/latest` (or `LLX_VERSION`) and
+verifies the archive against `SHA256SUMS`, so a release is installable as soon as it is published.
 
 ## Locally
 

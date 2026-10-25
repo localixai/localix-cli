@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "llx": {
-      "command": "llx",
-      "args": ["mcp"]
+      "command": "npx",
+      "args": ["-y", "@rsaryev/llx", "mcp"]
     }
   }
 }

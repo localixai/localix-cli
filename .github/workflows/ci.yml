@@ -40,12 +40,10 @@ jobs:
       - run: shellcheck scripts/*.sh
 
   test:
-    name: test (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    name: test
+    # Linux only: a macOS runner costs ten times as much. The macOS code compiles and is tested
+    # in the release workflow's own matrix.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
@@ -58,16 +56,8 @@ jobs:
           toolchain: stable
           components: clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      # The lint job sees only Linux code; the macOS modules compile only here.
-      - name: Clippy (platform code)
-        if: runner.os != 'Linux'
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Test
-        if: runner.os != 'Linux'
-        run: cargo test --workspace --locked
       # packages/tools/tests/browser.rs opens a real WebView window, which needs a display.
       - name: Test (virtual display)
-        if: runner.os == 'Linux'
         run: xvfb-run -a cargo test --workspace --locked
 
   coverage:

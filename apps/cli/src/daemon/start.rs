@@ -38,8 +38,9 @@ pub(crate) fn reach(config: &Path) -> Result<PathBuf, String> {
             return Err(format!("the daemon (pid {}) did not stop", found.pid));
         }
     }
-    spawn(config, &path)?;
-    Ok(path)
+    spawn(config)?;
+    // The daemon that serves may have been started where `$TMPDIR` was another: its lock says.
+    Ok(socket_path(config))
 }
 
 /// Ask the daemon at `path` to end, and wait until it has: its connection ends with it. Whether
@@ -72,7 +73,7 @@ struct Closed(#[expect(dead_code, reason = "held only to be dropped")] SyncSende
     clippy::zombie_processes,
     reason = "the daemon outlives this process, which never waits for it; init reaps it"
 )]
-fn spawn(config: &Path, path: &Path) -> Result<(), String> {
+fn spawn(config: &Path) -> Result<(), String> {
     let why = |error: std::io::Error| format!("the daemon could not start: {error}");
     std::fs::create_dir_all(config).map_err(why)?;
     let log = std::fs::File::options()
@@ -113,7 +114,7 @@ fn spawn(config: &Path, path: &Path) -> Result<(), String> {
     match line.recv_timeout(READY) {
         Ok(first) if first.starts_with(READY_LINE) => Ok(()),
         // Another client's daemon took the lock first: that one serves.
-        Ok(_) if probe(path, ASK) => Ok(()),
+        Ok(_) if probe(&socket_path(config), ASK) => Ok(()),
         Ok(_) => {
             let _ = child.wait();
             Err("the daemon did not start: see daemon.log in llx's config directory".into())

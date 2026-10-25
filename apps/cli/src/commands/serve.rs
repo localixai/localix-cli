@@ -35,7 +35,7 @@ pub(crate) fn serve(action: Option<&ServeAction>) -> Result<i32, Failure> {
     let config = daemon::config().map_err(Failure::Environment)?;
     let path = daemon::socket_path(&config);
     match action {
-        None => host(&config, path),
+        None => host(&config, daemon::own_socket(&config)),
         Some(ServeAction::Status) => match daemon::status(&path, ENDING) {
             Some(found) => {
                 let daemon::Status {

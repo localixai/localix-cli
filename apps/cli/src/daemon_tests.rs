@@ -140,3 +140,27 @@ fn a_daemon_slow_to_answer_its_stop_under_load_is_still_stopped() {
     slow_daemon(&path, Duration::from_secs(3));
     assert!(stop(&path), "a stop answered in 3 s is a stop");
 }
+
+#[test]
+fn a_client_finds_the_daemon_by_its_lock_whatever_its_own_runtime_directory() {
+    let scratch = Scratch::new();
+    let config = scratch.path().join("config");
+    // Nobody holds it: where this process would put it.
+    assert_eq!(socket_path(&config), own_socket(&config));
+    let held = lock(&config).unwrap().unwrap();
+    assert_eq!(socket_path(&config), own_socket(&config));
+    // A daemon started where `$TMPDIR` was another says so in its lock: a client of a host
+    // that sets another `$TMPDIR` goes to it, not to a second daemon the lock refuses.
+    std::fs::write(
+        config.join("daemon.lock"),
+        "4242\n/elsewhere/llx-501/a.sock",
+    )
+    .unwrap();
+    assert_eq!(
+        socket_path(&config),
+        PathBuf::from("/elsewhere/llx-501/a.sock")
+    );
+    drop(held);
+    // Let go: the lock names nothing.
+    assert_eq!(socket_path(&config), own_socket(&config));
+}

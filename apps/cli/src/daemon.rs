@@ -92,10 +92,21 @@ fn runtime_dir() -> PathBuf {
     std::env::var_os("TMPDIR").map_or_else(|| PathBuf::from("/tmp"), PathBuf::from)
 }
 
+/// Where the daemon for `config` listens, as a client finds it: the socket its lock names while
+/// it holds the lock (it was started where `$TMPDIR` may be another than this process's, as by
+/// an app that sets its own), else where this process would put one.
+pub(crate) fn socket_path(config: &Path) -> PathBuf {
+    let named = std::fs::read_to_string(config.join("daemon.lock")).ok();
+    let named = named.and_then(|text| text.lines().nth(1).map(PathBuf::from));
+    named
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| own_socket(config))
+}
+
 /// `$TMPDIR/llx-<uid>/<hash of the config directory>.sock`: short, as `sun_path` must be, and
 /// the same for a config directory in every process and every build (FNV-1a, not std's hasher,
-/// which may change).
-pub(crate) fn socket_path(config: &Path) -> PathBuf {
+/// which may change). Where a daemon started by this process listens.
+pub(crate) fn own_socket(config: &Path) -> PathBuf {
     let hash = config
         .as_os_str()
         .as_bytes()
@@ -111,7 +122,7 @@ pub(crate) fn socket_path(config: &Path) -> PathBuf {
 }
 
 /// The daemon's lock on its config directory, held while it lives; let go when it drops. The
-/// file names the daemon's process while it holds it.
+/// file names the daemon's process and its socket while it holds it.
 pub(crate) struct Lock {
     held: File,
 }
@@ -135,7 +146,12 @@ pub(crate) fn lock(config: &Path) -> std::io::Result<Option<Lock>> {
     if locked == 0 {
         let mut held = file;
         held.set_len(0)?;
-        write!(held, "{}", std::process::id())?;
+        write!(
+            held,
+            "{}\n{}",
+            std::process::id(),
+            own_socket(config).display()
+        )?;
         return Ok(Some(Lock { held }));
     }
     let error = std::io::Error::last_os_error();

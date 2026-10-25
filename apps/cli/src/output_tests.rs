@@ -174,3 +174,32 @@ fn a_task_keeps_what_it_did_each_call_and_turn_with_its_time() {
     assert_eq!(steps[1].detail, "900 in · 40 out");
     assert!(output.take_steps().is_empty(), "taken once");
 }
+
+#[test]
+fn on_a_github_runner_the_trace_cannot_issue_workflow_commands() {
+    // A file or a model's answer can hold `::add-mask::` or `##[add-matcher]`: the runner reads
+    // such a line on either stream as a command (openai/codex-action#187).
+    let err = Captured::default();
+    let mut output = Output::with(
+        false,
+        true,
+        Box::new(Captured::default()),
+        Box::new(err.clone()),
+    );
+    let text = "::add-mask::abc\n  ::set-env name=X::1\n##[add-matcher]m.json\nok :: fine\n";
+    output.runner = Runner::GitHub;
+    output.note(text);
+    for line in err.text().lines() {
+        let line = line.trim_start();
+        assert!(
+            !line.starts_with("::") && !line.starts_with("##["),
+            "{line:?}"
+        );
+    }
+    assert!(err.text().contains("ok :: fine"));
+    assert_eq!(
+        err.text().replace('\u{200b}', ""),
+        text,
+        "what the person reads stays"
+    );
+}

@@ -99,6 +99,52 @@ pub(crate) struct Output {
     answer_terminal: bool,
     /// What the session spent in all (`spent.rs`).
     total: Mutex<contracts::history::Spent>,
+    /// Where stderr is read: a CI runner may take a line of it as a command.
+    runner: Runner,
+}
+
+/// What reads the trace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Runner {
+    Plain,
+    /// GitHub Actions takes a line that begins `::` or `##[` as a workflow command, on either
+    /// stream: a file or an answer quoted in the trace must not be one (openai/codex-action#187).
+    GitHub,
+}
+
+impl Runner {
+    fn here() -> Self {
+        match std::env::var("GITHUB_ACTIONS").as_deref() {
+            Ok("true") => Self::GitHub,
+            _ => Self::Plain,
+        }
+    }
+
+    /// `text` as this runner may read it: on GitHub, a zero-width space breaks each command's
+    /// opening, which leaves what a person reads the same.
+    fn inert(self, text: &str) -> String {
+        match self {
+            Self::Plain => text.to_string(),
+            Self::GitHub => text
+                .split_inclusive('\n')
+                .map(|line| {
+                    let body = line.trim_start();
+                    let (indent, _) = line.split_at(line.len() - body.len());
+                    match body
+                        .strip_prefix("::")
+                        .map(|rest| ("::", rest))
+                        .or_else(|| body.strip_prefix("##[").map(|rest| ("##[", rest)))
+                    {
+                        Some((open, rest)) => {
+                            let (first, second) = open.split_at(1);
+                            format!("{indent}{first}\u{200b}{second}{rest}")
+                        }
+                        None => line.to_string(),
+                    }
+                })
+                .collect(),
+        }
+    }
 }
 
 impl Output {
@@ -109,6 +155,7 @@ impl Output {
         output.colour = style::colour_stderr();
         output.width = stderr_width().unwrap_or(TRACE_WIDTH);
         output.answer_terminal = std::io::IsTerminal::is_terminal(&std::io::stdout());
+        output.runner = Runner::here();
         output
     }
 
@@ -135,6 +182,7 @@ impl Output {
             steps: Mutex::new(vec![]),
             answer_terminal: false,
             total: Mutex::default(),
+            runner: Runner::Plain,
         }
     }
 
@@ -247,6 +295,7 @@ impl Output {
         if let Some(ui) = &self.ui {
             return ui.send(Event::Note(text.to_string()));
         }
+        let text = self.runner.inert(text);
         let mut err = lock(&self.err);
         let _ = err.write_all(text.as_bytes()).and_then(|()| err.flush());
     }

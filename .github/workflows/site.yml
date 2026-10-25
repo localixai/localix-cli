@@ -1,8 +1,8 @@
 name: site
 
-# Builds site/ and deploys it to Cloudflare as the `llx` Worker with static assets
-# (site/wrangler.jsonc) on every change to the site on main. Needs two repository secrets:
-# CLOUDFLARE_API_TOKEN (Account > Workers Scripts > Edit) and CLOUDFLARE_ACCOUNT_ID.
+# Builds site/ and publishes it to Cloudflare Pages (project llx) on every change to the site on
+# main. Needs two repository secrets: CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit) and
+# CLOUDFLARE_ACCOUNT_ID.
 
 on:
   push:
@@ -35,10 +35,10 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run build
-      - name: Deploy the Worker (site/wrangler.jsonc)
+      - name: Publish dist/ to Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: site
-          command: deploy
+          command: pages deploy dist --project-name=llx --branch=main

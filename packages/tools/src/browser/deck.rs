@@ -43,6 +43,11 @@ pub(super) struct Deck {
 }
 
 impl Deck {
+    /// Whether the window is on the person's screen (it has its strip), not headless.
+    pub(super) fn is_shown(&self) -> bool {
+        self.strip.is_some()
+    }
+
     /// The window for the browser, on its first tab.
     pub(super) fn for_web(
         target: &EventLoopWindowTarget<Cmd>,

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The window has a Dock icon while it is shown (macOS).** A click on it brings the window back from another desktop; the app is still an accessory (no icon) with no window, in `exec` and in autonomous mode, and the window still never takes the keyboard.
+
 The browser CLI of 0.1.0 is now `llx`: an ultrafast, lightweight coding agent for the terminal. It has seven tools: `read`, `edit`, `bash`, the browser, whose clicks and typing a decision model does, `ask`, a question to the person in a session, `agents`, other agents it starts, and `jobs`, monitors and schedules. It stays one synchronous binary of about 2 MB, with no async runtime and no plugins, MCP servers or skills to load.
 
 - **llx's window for other agents: `llx mcp`.** Claude Code, Codex, Cursor or any agent that speaks MCP over stdio gets llx's `window` tool, the same one the llx agent has: native browser pages and terminal sessions as tabs of one window the person watches, grouped by project, a `goal` on any tab carried out by the decision model (an OpenRouter key; everything else works without one). The other agent's model thinks, so no chat model is used. `llx mcp` is the daemon's tool client: the daemon is started if none runs, the tabs work where the agent started it, with its environment, and the agent approves each call itself (ARCHITECTURE.md W9, K7). Calls run at once; a cancelled one is stopped; when the agent closes the server its terminals end and its browser tabs close. A Claude Code plugin wraps it (`/plugin install llx --marketplace rsaryev/llx`), or `claude mcp add llx -- llx mcp`. The protocol gains `tools` and `tool` (additive).

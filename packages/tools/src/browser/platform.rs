@@ -1,6 +1,23 @@
-//! What differs by platform: where a headless window goes, keeping it rendering, the user agent.
+//! What differs by platform: where a headless window goes, keeping it rendering, the Dock, the user agent.
 
+use tao::event_loop::EventLoopWindowTarget;
 use tao::window::WindowBuilder;
+
+/// Whether the app is in the Dock while its window is shown, so a click on its icon brings the
+/// window back from another desktop. A headless window has no icon: the app stays an accessory.
+/// Showing the icon never activates the app (the window still never takes the keyboard).
+#[cfg(target_os = "macos")]
+pub(super) fn dock<T>(target: &EventLoopWindowTarget<T>, shown: bool) {
+    use tao::platform::macos::{ActivationPolicy, EventLoopWindowTargetExtMacOS};
+    let policy = match shown {
+        true => ActivationPolicy::Regular,
+        false => ActivationPolicy::Accessory,
+    };
+    target.set_activation_policy_at_runtime(policy);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(super) fn dock<T>(_target: &EventLoopWindowTarget<T>, _shown: bool) {}
 
 /// Where a headless window goes. macOS keeps it on screen and makes it invisible afterwards
 /// ([`keep_rendering`]): WebKit marks an off-screen window hidden and stops its animation frames

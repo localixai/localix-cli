@@ -16,6 +16,7 @@ use super::super::deck::{After, Deck};
 use super::super::frame;
 use super::super::guard::token;
 use super::super::panel::Opening;
+use super::super::platform;
 use super::super::strip::{Click, Key, click};
 use super::web::on_browser;
 use super::{Browser, Cmd, Shared, WINDOW_CLOSED, Window};
@@ -41,8 +42,8 @@ where
     {
         use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
         event_loop.set_activate_ignoring_other_apps(false);
-        // An accessory app: no Dock icon and no menu bar, whether its window is shown or not,
-        // so a window that appears mid-task never pulls the person out of their terminal.
+        // An accessory app until a window is shown (`platform::dock`): no Dock icon and no menu
+        // bar, so a window that appears mid-task never pulls the person out of their terminal.
         event_loop.set_activation_policy(ActivationPolicy::Accessory);
     }
     let proxy = event_loop.create_proxy();
@@ -75,6 +76,7 @@ where
     }
 
     let mut deck: Option<Deck> = None;
+    let mut docked = false;
     event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
@@ -99,6 +101,11 @@ where
                 window_id, event, ..
             } => on_window(&mut deck, window_id, &event, &shared, on_close),
             _ => {}
+        }
+        let shown = deck.as_ref().is_some_and(Deck::is_shown);
+        if shown != docked {
+            docked = shown;
+            platform::dock(target, shown);
         }
     })
 }

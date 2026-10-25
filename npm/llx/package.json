@@ -1,5 +1,5 @@
 {
-  "name": "@rsaryev/llx",
+  "name": "@localixai/llx",
   "version": "0.1.0",
   "description": "An ultrafast, lightweight coding agent for the terminal, and a window for other agents over MCP",
   "license": "MIT",
@@ -18,8 +18,8 @@
     "node": ">=18"
   },
   "optionalDependencies": {
-    "@rsaryev/llx-darwin-arm64": "0.1.0",
-    "@rsaryev/llx-darwin-x64": "0.1.0",
-    "@rsaryev/llx-linux-x64": "0.1.0"
+    "@localixai/llx-darwin-arm64": "0.1.0",
+    "@localixai/llx-darwin-x64": "0.1.0",
+    "@localixai/llx-linux-x64": "0.1.0"
   }
 }

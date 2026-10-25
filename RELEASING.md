@@ -39,8 +39,8 @@ A version with a suffix (`v1.0.0-rc.1`) is published as a prerelease, which `ins
    `gh release create vX.Y.Z` with the archives, `SHA256SUMS` and `install.sh`, and the CHANGELOG
    section as the notes.
 4. **npm**, when the `NPM_TOKEN` secret is set (an npm automation token that may publish
-   `@rsaryev/*`): `scripts/npm-pack.sh --publish` makes one package per platform with the binary
-   from the archives, then the wrapper `@rsaryev/llx`, with provenance. A version with a suffix goes
+   `@localixai/*`): `scripts/npm-pack.sh --publish` makes one package per platform with the binary
+   from the archives, then the wrapper `@localixai/llx`, with provenance. A version with a suffix goes
    out under the `next` tag. `scripts/npm-pack.sh` alone builds them into `dist/npm/` without
    publishing, to try with `npm install dist/npm/*.tgz`.
 

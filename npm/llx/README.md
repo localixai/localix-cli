@@ -4,15 +4,15 @@ An ultrafast, lightweight coding agent for the terminal, in one native binary. T
 installs it for your platform (macOS arm64 and x64, Linux x64).
 
 ```bash
-npm install -g @rsaryev/llx     # then: llx
-npx -y @rsaryev/llx mcp         # no install: serve llx's window to another agent over MCP
+npm install -g @localixai/llx     # then: llx
+npx -y @localixai/llx mcp         # no install: serve llx's window to another agent over MCP
 ```
 
 For Claude Code or Codex:
 
 ```bash
-claude mcp add llx -- npx -y @rsaryev/llx mcp
-codex mcp add llx -- npx -y @rsaryev/llx mcp
+claude mcp add llx -- npx -y @localixai/llx mcp
+codex mcp add llx -- npx -y @localixai/llx mcp
 ```
 
 Docs: <https://github.com/rsaryev/llx>

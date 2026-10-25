@@ -65,7 +65,7 @@
 ## Install
 
 ```bash
-npm install -g @rsaryev/llx
+npm install -g @localixai/llx
 ```
 
 Or `curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh` (macOS and Linux x86_64, checked against `SHA256SUMS`), or `cargo install --locked --path apps/cli` from a clone. The browser is the system's WebView: WKWebView on macOS, WebKitGTK (`libwebkit2gtk-4.1-0`) on Linux. Windows is not supported for now.
@@ -82,11 +82,11 @@ llx doctor                             # sign-ins, models, the WebView, the shel
 One command, nothing to install first (`npx` fetches llx for your platform):
 
 ```bash
-claude mcp add llx -- npx -y @rsaryev/llx mcp   # Claude Code
-codex mcp add llx -- npx -y @rsaryev/llx mcp    # Codex
+claude mcp add llx -- npx -y @localixai/llx mcp   # Claude Code
+codex mcp add llx -- npx -y @localixai/llx mcp    # Codex
 ```
 
-Any other client takes the command `npx` with `-y @rsaryev/llx mcp` (Cursor: `~/.cursor/mcp.json`). The Claude Code plugin also brings the comments you send from the window in as a prompt: `/plugin marketplace add rsaryev/llx`, then `/plugin install llx@llx`. A `goal` on a tab needs an OpenRouter key (`/login` in llx once, or `OPENROUTER_API_KEY`); everything else works without one. See [docs/mcp.md](docs/mcp.md).
+Any other client takes the command `npx` with `-y @localixai/llx mcp` (Cursor: `~/.cursor/mcp.json`). The Claude Code plugin also brings the comments you send from the window in as a prompt: `/plugin marketplace add rsaryev/llx`, then `/plugin install llx@llx`. A `goal` on a tab needs an OpenRouter key (`/login` in llx once, or `OPENROUTER_API_KEY`); everything else works without one. See [docs/mcp.md](docs/mcp.md).
 
 ## Documentation
 

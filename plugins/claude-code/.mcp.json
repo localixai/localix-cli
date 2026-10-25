@@ -2,7 +2,7 @@
   "mcpServers": {
     "llx": {
       "command": "npx",
-      "args": ["-y", "@rsaryev/llx", "mcp"]
+      "args": ["-y", "@localixai/llx", "mcp"]
     }
   }
 }

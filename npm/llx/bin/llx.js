@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Starts the llx binary of this platform, which npm installed as an optional dependency
-// (@rsaryev/llx-<os>-<cpu>, one per release target). The wrapper only finds it and hands over:
+// (@localixai/llx-<os>-<cpu>, one per release target). The wrapper only finds it and hands over:
 // arguments, stdio and the exit code pass through, and so do the signals that stop a run.
 "use strict";
 
@@ -20,10 +20,10 @@ function binary() {
     fail(`no build for ${key}. Supported: macOS (arm64, x64) and Linux x64.`);
   }
   try {
-    return require.resolve(`@rsaryev/llx-${key}/bin/llx`);
+    return require.resolve(`@localixai/llx-${key}/bin/llx`);
   } catch {
     fail(
-      `the package @rsaryev/llx-${key} is missing. Reinstall without --omit=optional ` +
+      `the package @localixai/llx-${key} is missing. Reinstall without --omit=optional ` +
         "or --no-optional, or install the binary: https://github.com/rsaryev/llx#install",
     );
   }

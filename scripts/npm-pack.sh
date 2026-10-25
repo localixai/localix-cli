@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds the npm packages of a release into dist/npm/ from the archives scripts/dist.sh made:
-# one package per platform (@rsaryev/llx-<os>-<cpu>, holding the binary, with `os` and `cpu` so
-# npm installs only the one that fits) and the wrapper @rsaryev/llx that depends on them all.
+# one package per platform (@localixai/llx-<os>-<cpu>, holding the binary, with `os` and `cpu` so
+# npm installs only the one that fits) and the wrapper @localixai/llx that depends on them all.
 # Each is stamped with the workspace version. With --publish they are also published (the
 # platform packages first, so the wrapper never points at a package that does not exist yet);
 # a version with a suffix (1.0.0-rc.1) goes out under the `next` tag, so `latest` skips it.
@@ -55,7 +55,7 @@ for entry in $platforms; do
   cp LICENSE "$pkg/"
   cat >"$pkg/package.json" <<JSON
 {
-  "name": "@rsaryev/llx-$key",
+  "name": "@localixai/llx-$key",
   "description": "The llx binary for $key",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/rsaryev/llx.git" },
@@ -63,7 +63,7 @@ for entry in $platforms; do
 }
 JSON
   stamp "$pkg/package.json" "$version" "$key"
-  echo "packed @rsaryev/llx-$key"
+  echo "packed @localixai/llx-$key"
 done
 
 main="$out/llx"

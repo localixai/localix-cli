@@ -171,7 +171,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/* \
             --verify-tag --title "llx $VERSION" --notes-file notes.md $prerelease
 
-  # The npm packages (@rsaryev/llx and one per platform: scripts/npm-pack.sh) from the same
+  # The npm packages (@localixai/llx and one per platform: scripts/npm-pack.sh) from the same
   # archives, published after the release exists. Without the NPM_TOKEN secret the job ends here.
   npm:
     name: npm

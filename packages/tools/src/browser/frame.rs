@@ -59,6 +59,10 @@ pub(super) fn glass_allowed() -> bool {
 }
 
 /// A page's bounds: `size`, `x` points from the window's left edge and `top` from its top.
+#[cfg_attr(
+    target_os = "linux",
+    allow(dead_code, reason = "a page in a GTK box takes its place from the box")
+)]
 pub(super) fn fill(size: LogicalSize<f64>, x: f64, top: f64) -> wry::Rect {
     use wry::dpi::{LogicalPosition as At, LogicalSize as Size};
     wry::Rect {

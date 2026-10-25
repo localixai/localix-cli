@@ -65,8 +65,9 @@ fn no_session_is_swept_for_init_or_nothing() {
 
 #[test]
 fn the_sweep_kills_the_members_and_spares_the_leader() {
-    // The shell waits on its stdin, so it outlives the sleep the sweep kills.
-    let (mut shell, sleep) = spawn("sleep 300 & echo $!; read line");
+    // The shell reaps the sleep it started once the sweep kills it (a killed child nobody waits
+    // for stays a zombie of the session), then waits on its stdin: it outlives the sweep.
+    let (mut shell, sleep) = spawn("sleep 300 & echo $!; wait; read line");
     let leader = shell.id().cast_signed();
     assert!(end(leader, Duration::from_secs(2)));
     assert!(gone(sleep), "the sleep still runs");

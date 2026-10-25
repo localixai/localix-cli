@@ -120,5 +120,7 @@ pub(super) fn build(builder: WebViewBuilder, window: &tao::window::Window) -> wr
 pub(super) fn build(builder: WebViewBuilder, window: &tao::window::Window) -> wry::Result<WebView> {
     use tao::platform::unix::WindowExtUnix;
     use wry::WebViewBuilderExtUnix;
-    builder.build_gtk(window.default_vbox().expect("tao window has a vbox"))
+    let vbox = (window.default_vbox())
+        .ok_or_else(|| std::io::Error::other("the window has no box to put a page in"))?;
+    builder.build_gtk(vbox)
 }

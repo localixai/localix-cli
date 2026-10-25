@@ -35,8 +35,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace          # on a Linux server: xvfb-run -a cargo test --workspace
 ```
 
-CI also checks the minimum Rust version, the line coverage (`scripts/coverage.sh`), and fails when
-the Linux release binary passes 5 MiB (`cargo build --release && ls -la target/release/llx`).
+CI runs one job on Linux (format, lint, tests). Run these yourself before a release: the minimum
+Rust version (`cargo +1.88 check --workspace --all-targets --locked`), the line coverage
+(`scripts/coverage.sh`), and the binary's size, which stays under 5 MiB
+(`cargo build --release && ls -la target/release/llx`).
 The code stays under 50,000 lines of working code and 300 per file (ARCHITECTURE.md S1, S2).
 
 For changes to the loop, the page probe or the instructions, run the live evals too

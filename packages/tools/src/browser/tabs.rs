@@ -11,7 +11,6 @@ use tao::dpi::LogicalSize;
 use tao::event_loop::EventLoopProxy;
 use wry::WebView;
 
-use super::frame::fill;
 use super::host::{Cmd, Shared, Window};
 use super::platform::keep_tab_rendering;
 use super::strip::Key;
@@ -199,7 +198,7 @@ fn list(ids: &[u32]) -> String {
 /// shown are hidden instead (WebKitGTK keeps running a hidden view's timers).
 #[cfg(not(target_os = "linux"))]
 pub(super) fn place(webview: &WebView, x: f64, top: f64, size: LogicalSize<f64>, _shown: bool) {
-    let _ = webview.set_bounds(fill(size, x, top));
+    let _ = webview.set_bounds(super::frame::fill(size, x, top));
 }
 
 #[cfg(target_os = "linux")]

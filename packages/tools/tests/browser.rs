@@ -582,10 +582,20 @@ fn feedback(browser: &browser::Browser, driver: &WebviewDriver) {
     assert!(what.starts_with("The person sent 1 comment(s)"), "{what}");
     assert!(what.contains(": make it red"), "{what}");
     assert!(what.contains("Selector: #veiled"), "{what}");
-    // Its picture, taken from the screen, in a file the agent can read.
-    let picture = what.split("Picture of it: ").nth(1).unwrap_or_default();
-    let jpeg = std::fs::read(picture.lines().next().unwrap_or_default()).unwrap();
-    assert!(jpeg.starts_with(&[0xff, 0xd8]), "a JPEG");
+    // Its picture, taken from the screen, in a file the agent can read: on macOS, the one
+    // system the window captures on; elsewhere the comment comes without one.
+    let picture = what.split("Picture of it: ").nth(1);
+    if cfg!(target_os = "macos") {
+        let file = picture
+            .unwrap_or_default()
+            .lines()
+            .next()
+            .unwrap_or_default();
+        let jpeg = std::fs::read(file).unwrap();
+        assert!(jpeg.starts_with(&[0xff, 0xd8]), "a JPEG");
+    } else {
+        assert!(picture.is_none(), "{what}");
+    }
     browser.click("comment");
     assert_eq!(cursor(driver), "", "and off again");
     browser.listen(|_, _| {});

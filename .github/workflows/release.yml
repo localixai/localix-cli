@@ -70,7 +70,7 @@ jobs:
       # packages/tools/tests/browser.rs opens a real WebView window, which needs a display.
       - name: Test (virtual display)
         if: runner.os == 'Linux'
-        run: xvfb-run -a cargo test --workspace --locked
+        run: xvfb-run -a -s "-screen 0 1920x1080x24" cargo test --workspace --locked
 
   build:
     name: build (${{ matrix.name }})

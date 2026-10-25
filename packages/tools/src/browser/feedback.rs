@@ -103,7 +103,8 @@ pub(super) fn said(fb: &Value) -> Option<String> {
     )];
     if let Some(picked) = fb.get("element") {
         element(picked, &mut lines);
-    } else if let Some(region) = fb.get("region") {
+    } else {
+        let region = fb.get("region")?;
         lines.push(format!("Region: {}", boxed(region)));
         for member in fb
             .get("members")
@@ -119,8 +120,6 @@ pub(super) fn said(fb: &Value) -> Option<String> {
                     .into(),
             );
         }
-    } else {
-        return None;
     }
     Some(lines.join("\n"))
 }

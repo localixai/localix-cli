@@ -1,6 +1,11 @@
 {
   "name": "llx",
-  "owner": { "name": "rsaryev" },
+  "owner": {
+    "name": "rsaryev"
+  },
+  "metadata": {
+    "description": "llx's browser and terminal window for Claude Code, over MCP."
+  },
   "plugins": [
     {
       "name": "llx",

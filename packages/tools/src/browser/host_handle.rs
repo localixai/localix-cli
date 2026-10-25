@@ -37,6 +37,15 @@ impl Browser {
         ))
     }
 
+    /// A driver for the window as it is open now, for a client that did not open it (the daemon
+    /// has one window, and every client of it works in tabs of its own); `None` while it is not.
+    pub fn attach(&self) -> Option<WebviewDriver> {
+        self.shared
+            .open
+            .load(Ordering::SeqCst)
+            .then(|| WebviewDriver::new(self.proxy.clone(), Arc::clone(&self.shared)))
+    }
+
     /// A tab `id` (unique among the panels: a terminal session's id) titled `title` in the window, showing `html` (a page of the caller's, which paints
     /// run frames in), shown once it opens; it closes when the panel is dropped. It opens the
     /// window when the browser has not.

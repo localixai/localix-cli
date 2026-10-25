@@ -55,6 +55,15 @@ impl Page {
             }
             closed(open);
         }
+        // The window is open for someone else (another client of the daemon): this page works in
+        // a tab of its own and leaves theirs as it is.
+        if let Some(attached) = self.browser.attach() {
+            attached
+                .new_tab(url)
+                .map_err(|error| ViewError::Unavailable(error.to_string()))?;
+            *driver = Some(attached);
+            return Ok(());
+        }
         *current = hidden;
         let opened = self.browser.open(Window {
             url: url.to_string(),

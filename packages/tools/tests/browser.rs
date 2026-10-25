@@ -493,6 +493,27 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     ));
 }
 
+/// A second page on the one open window (another client of the daemon): it opens a tab of its own
+/// beside the first page's, and the first page's tab is left as it was.
+fn second_page(browser: &browser::Browser, driver: &WebviewDriver, origin: &str) {
+    let (before, _) = driver.tabs();
+    let page = browser::Page::new(browser.clone(), true);
+    page.open(&format!("{origin}/form.html"), "second", None)
+        .expect("a second page opens beside the first");
+    let (after, _) = driver.tabs();
+    assert_eq!(after.len(), before.len() + 1, "{after:?}");
+    for tab in after
+        .iter()
+        .filter(|t| !before.iter().any(|b| b.id == t.id))
+    {
+        driver
+            .close_tab(tab.id)
+            .expect("the second page's tab closes");
+    }
+    let (left, _) = driver.tabs();
+    assert_eq!(left.len(), before.len(), "{left:?}");
+}
+
 /// Tabs: one opened, switched to and back, one per link with target=_blank and per window.open,
 /// a tab out of sight still drawing, and closing them.
 fn tabs(driver: &WebviewDriver, origin: &str) {
@@ -696,7 +717,14 @@ fn main() {
                     return 3;
                 }
             };
-            let driven = !driving || run("driver", &|| scenario(&driver, &origin));
+            let driven = !driving
+                || run("driver", &|| {
+                    driver
+                        .wait_loaded(Duration::from_secs(10))
+                        .expect("it loads");
+                    second_page(&browser, &driver, &origin);
+                    scenario(&driver, &origin);
+                });
             // The driver's scenario ends with its window closed: the panel's opens it again.
             let paneled = !paneling
                 || run("panel", &|| {

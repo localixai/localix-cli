@@ -117,7 +117,7 @@ pub(crate) fn clipboard(dir: &Path) -> Result<PathBuf, String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn clipboard(_: &Path) -> Result<PathBuf, String> {
+pub(crate) fn clipboard(_: &Path) -> Result<PathBuf, String> {
     Err("pasting a picture is not supported here yet: drag the file in instead".into())
 }
 

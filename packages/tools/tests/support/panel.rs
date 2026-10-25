@@ -203,14 +203,17 @@ pub(crate) fn glass(browser: &Browser, driver: &WebviewDriver, window: &Window, 
         state.contains("visible") && !state.contains("hidden"),
         "{state}"
     );
-    // Coated as a panel is, so its titlebar and toolbar are not the bare material's grey.
-    let expected = if cfg!(target_os = "macos") {
-        (1, 1, false, true)
-    } else {
-        (0, -1, true, false)
-    };
+    // Coated as a panel is, so its titlebar and toolbar are not the bare material's grey: in
+    // glass on macOS, opaque where the person (or a CI runner) reduces transparency.
+    let glass = (1, 1, false, true);
+    let opaque = (0, -1, true, false);
     let dressed = browser.dressed().map(|d| (d.0, d.1, d.2, d.4));
-    assert_eq!(dressed, Some(expected), "the browser's frame");
+    let looks = if cfg!(target_os = "macos") {
+        vec![Some(glass), Some(opaque)]
+    } else {
+        vec![Some(opaque)]
+    };
+    assert!(looks.contains(&dressed), "the browser's frame: {dressed:?}");
     let size = driver.observe().unwrap().viewport;
     // A shown window fits the person's screen (960 to 1440 wide), the strip of tabs above it.
     assert!(

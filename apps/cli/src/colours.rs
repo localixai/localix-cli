@@ -125,10 +125,16 @@ impl Terminal for Tty {
         // select, not poll: macOS's poll does not wait on a terminal device, and says it is
         // ready at once, so the read would block until the person typed.
         let fd = self.0.as_raw_fd();
+        // Below a million: it fits every suseconds_t (an i32 on macOS, where the conversion can
+        // fail in the type's eyes, an i64 on Linux, where it cannot).
+        #[allow(
+            clippy::unnecessary_fallible_conversions,
+            reason = "suseconds_t is i32 on macOS and i64 on Linux"
+        )]
+        let micros = libc::suseconds_t::try_from(wait.subsec_micros()).unwrap_or(0);
         let mut timeout = libc::timeval {
             tv_sec: libc::time_t::try_from(wait.as_secs()).unwrap_or(libc::time_t::MAX),
-            // Below a million: it fits every suseconds_t.
-            tv_usec: libc::suseconds_t::try_from(wait.subsec_micros()).unwrap_or(0),
+            tv_usec: micros,
         };
         // SAFETY: an fd_set is plain bits: all zero is the empty set.
         let mut set: libc::fd_set = unsafe { std::mem::zeroed() };

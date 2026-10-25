@@ -1,15 +1,17 @@
 # Contributing
 
-Thanks for helping. llx is meant to stay small and fast: a few tools (read, edit, bash, the
-browser), synchronous code, no async runtime, and a release binary of about 1.6 MB. A change that
-adds a dependency has to earn its size.
+Thanks for helping. llx is meant to stay small and fast: seven tools (`read`, `edit`, `bash`,
+`window`, `ask`, `agents`, `jobs`), synchronous code, no async runtime, and a release binary under
+4 MB. A change that adds a dependency has to earn its size.
 
 ## Before you start
 
-Read [AGENTS.md](AGENTS.md): it holds the layer rules (L1-L5: dependencies point inward, and the
-agent and the hands name no tool or provider), the behaviour rules, and the code rules. They
-apply to people as much as to coding agents, and `apps/cli/tests/architecture.rs` checks the
-layering.
+Read [ARCHITECTURE.md](ARCHITECTURE.md) and [AGENTS.md](AGENTS.md). ARCHITECTURE.md is binding:
+it fixes the layers, what may know what, and every rule by id (L, C, P, A, K, W, R, S).
+AGENTS.md says what each file is, with the behaviour and code rules. They apply to people as
+much as to coding agents, and the tests in `apps/cli/tests/suite/repo/` check the layering and
+the size budgets. A change that does not fit a rule is redesigned, or the rule is changed first,
+in its own commit.
 
 For a larger change, open an issue first to agree on the shape.
 
@@ -25,7 +27,7 @@ sudo apt-get install libwebkit2gtk-4.1-dev xvfb   # Debian, Ubuntu
 
 ## Checks
 
-Run these before you push; CI runs the same on macOS, Linux and Windows:
+Run these before you push; CI runs the same on macOS and Linux (Windows is not supported for now):
 
 ```bash
 cargo fmt --all --check
@@ -33,11 +35,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace          # on a Linux server: xvfb-run -a cargo test --workspace
 ```
 
-CI also checks the minimum Rust version, and fails when the Linux release binary passes 2.5 MiB
-(`cargo build --release && ls -la target/release/llx`).
+CI also checks the minimum Rust version, the line coverage (`scripts/coverage.sh`), and fails when
+the Linux release binary passes 5 MiB (`cargo build --release && ls -la target/release/llx`).
+The code stays under 50,000 lines of working code and 300 per file (ARCHITECTURE.md S1, S2).
 
 For changes to the loop, the page probe or the instructions, run the live evals too
-(`python3 evals/run.py --repeat 3`; paid, about $0.03) and put the result in the pull request.
+(`python3 evals/run.py --repeat 3`; paid, a few cents) and put the result in the pull request.
 
 ## Code
 

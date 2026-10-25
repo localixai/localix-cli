@@ -1,9 +1,9 @@
 [package]
 name = "llx"
-description = "llx: an ultrafast, lightweight coding agent for the terminal: read, edit, bash, a browser and ask"
+description = "llx: an ultrafast, lightweight coding agent for the terminal, with a native browser and terminal window other agents can use over MCP"
 homepage = "https://llx.sh"
 repository = "https://github.com/rsaryev/llx"
-keywords = ["agent", "coding-agent", "cli", "llm", "browser"]
+keywords = ["agent", "coding-agent", "cli", "llm", "mcp"]
 categories = ["command-line-utilities", "development-tools"]
 version.workspace = true
 edition.workspace = true

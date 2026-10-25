@@ -12,7 +12,7 @@
 - `jobs`: monitors (a background command whose lines come back as they are printed) and schedules (a prompt that comes back at a time);
 - `window`: everything the agent opens to look at and work in, as tabs of one window: real web pages and terminal sessions, and more kinds later. It opens several at once and reads each one's snapshot as text, acts in a tab (with a short `goal` that a cheap decision model carries out on any kind of tab, or the kind's own fields), takes a screenshot, and shows you the tab you ask for.
 
-It is one binary of about 1.6 MB, with synchronous code and no async runtime. It takes no plugins, MCP servers or extra tools: a model with a shell and a browser needs little more. The other way round, it serves its `window` to other agents over MCP (`llx mcp`, below).
+It is one binary under 4 MB that starts in about 5 ms, with synchronous code and no async runtime. It takes no plugins, MCP servers or extra tools: a model with a shell and a browser needs little more. The other way round, it serves its `window` to other agents over MCP (`llx mcp`, below).
 
 ```text
 $ llx exec -y "the tests in tests/parse.rs fail: fix the parser, not the tests"
@@ -180,7 +180,14 @@ claude mcp add llx -- llx mcp                    # Claude Code
 codex mcp add llx -- llx mcp                     # Codex
 ```
 
-In Claude Code the plugin does the same: `/plugin install llx --marketplace rsaryev/llx`. Elsewhere, a server whose command is `llx` with the argument `mcp`.
+In Claude Code the plugin does the same (`llx` itself must be on your `PATH`):
+
+```text
+/plugin marketplace add rsaryev/llx
+/plugin install llx@llx
+```
+
+Elsewhere, any MCP client takes a server whose command is `llx` with the argument `mcp`.
 
 It runs in the daemon (started if none runs), so its tabs share the one window with your llx sessions, under the project the agent started it in; its terminals run there, with the agent's environment. The other agent approves each call (its own permission prompt): llx asks nothing more for them. A cancelled call is stopped; when the agent closes the server, its terminals end and the browser tabs it left open close.
 
@@ -255,6 +262,8 @@ Latest run, 2026-10-22 22:17 on Darwin 25.6.0 arm64: the agent on anthropic/clau
 | Memory at start (`--help`) | 9.6 MB |
 | Release binary | 1.59 MB |
 <!-- metrics:end -->
+
+The binary has grown since that run (the daemon and `llx mcp`): 3.8 MB on macOS arm64, and it still starts in about 5 ms. The next `--record` replaces the table.
 
 `python3 evals/run.py --record` runs the live evals, then appends a dated file to `benchmarks/runs/` and regenerates [benchmarks/HISTORY.md](benchmarks/HISTORY.md) and this block. The coding tasks write and run a script, fix a failing test, rename a function across files, answer questions about code, answer an installer's prompts in a terminal session and plan a feature in `--mode plan`, each on a small fixture. The browser tasks cover a login, forms, a TodoMVC app, delayed content, search, a quiz behind a consent banner and a Google Flights search. See [evals/README.md](evals/README.md).
 

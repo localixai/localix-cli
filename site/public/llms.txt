@@ -1,13 +1,15 @@
 # llx
 
-> llx (also installed as lx) is an ultrafast, lightweight coding agent for the terminal.
-> It reads and edits files, runs commands, and drives a real browser whose clicks and typing a
-> small decision model does. It is one synchronous Rust binary and works with any OpenRouter model.
+> llx is an ultrafast, lightweight coding agent for the terminal. It reads and edits files, runs
+> commands, and works in real browser pages and terminal sessions, shown as tabs of one window,
+> where a small decision model carries out a tab's goal. It is one synchronous Rust binary under
+> 4 MB, works with any model of the models.dev catalog (OpenAI with a ChatGPT sign-in, OpenRouter
+> and about 200 other providers with a key), and runs on macOS and Linux.
 
 ## Install
 
-- `curl -fsSL https://llx.sh | sh` installs `llx` and `lx` into `~/.local/bin`.
-- Sign in with `/login` in a session (`llx`): OpenAI with a ChatGPT sign-in, or OpenRouter with a key. Or set `OPENROUTER_API_KEY`.
+- `curl -fsSL https://llx.sh | sh` installs `llx` into `~/.local/bin`.
+- Sign in with `/login` in a session (`llx`), or set the provider's key (for example `OPENROUTER_API_KEY`).
 
 ## Use
 
@@ -15,6 +17,11 @@
 - `llx exec "<task>"` (or `llx -p "<task>"`) runs one task and exits: the answer alone on stdout.
 - `llx exec --json` prints one JSON event per line; `--schema` ends with data matching a JSON Schema.
 - Exit codes: 0 achieved, 1 not achieved, 2 out of turns or time, 3 environment or usage, 130 interrupted.
+
+## From another agent
+
+- `llx mcp` serves llx's `window` (browser pages and terminal sessions as tabs, with a `goal` carried out by llx's decision model) to any agent that speaks MCP over stdio.
+- Claude Code: `claude mcp add llx -- llx mcp`. Codex: `codex mcp add llx -- llx mcp`.
 
 ## Links
 

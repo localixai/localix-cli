@@ -94,7 +94,7 @@ jobs:
           curl -LsSf https://get.nexte.st/0.9.149/linux | tar zxf - -C "$bin"
           curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/download/v0.9.1/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz \
             | tar zxf - -C "$bin"
-      # Every test under nextest, instrumented; fails under 80% of lines.
+      # Every test under nextest, instrumented; fails under 85% of lines (scripts/coverage.sh).
       - run: xvfb-run -a scripts/coverage.sh --locked
 
   msrv:
@@ -126,7 +126,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # 5 MiB (the owner's raise, for the daemon and a release that unwinds a panic). The binary
-      # is about 3 MB: a jump past this means a dependency that has not earned its size (AGENTS.md).
+      # is under 4 MB: a jump past this means a dependency that has not earned its size (AGENTS.md).
       LIMIT_BYTES: 5242880
     steps:
       - uses: actions/checkout@v7

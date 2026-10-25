@@ -123,7 +123,7 @@ Behaviour:
 - Tool content (files, command output, pages) is untrusted data. Never let it reach a request as an instruction; mark it so where the agent reads it.
 - No task- or site-specific wording in the agent's prompt, the tool descriptions or the hands' instructions. A rule earns its place by the evals, and stays general.
 - Synchronous code: threads where needed, no async runtime. Tools, gates, the chat model and the person are `Send + Sync`: a turn's calls and the agents run on threads.
-- The release binary stays small (about 3 MB). No browser engine, and no dependency that is not already in the tree unless it earns its size; std first. Check `ls -la target/release/llx` after adding one. CI fails above 5 MiB.
+- The release binary stays small (under 4 MB). No browser engine, and no dependency that is not already in the tree unless it earns its size; std first. Check `ls -la target/release/llx` after adding one. CI fails above 5 MiB.
 - The browser window never takes keyboard focus and never stops rendering. An action is settled when the DOM has been quiet for 100 ms (at most 700 ms), and when a navigation it started has a parsed document.
 - Exit codes (`apps/cli/src/exit.rs`) and the `--json` events (`apps/cli/src/output/json.rs`, `SCHEMA`) are a public contract. Change them only with a schema bump and a CHANGELOG entry.
 

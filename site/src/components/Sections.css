@@ -1,0 +1,141 @@
+/* The sections after the hero share one measure: a display headline, a soft lede, a grid. */
+.callers,
+.pipeline,
+.small {
+  display: grid;
+  gap: 1.25rem;
+  padding-block: clamp(2rem, 6vw, 4rem);
+}
+.callers h2,
+.pipeline h2,
+.small h2 {
+  margin: 0;
+  font: 700 clamp(1.75rem, 3.4vw, 2.75rem) / 1.05 var(--display);
+  letter-spacing: -0.04em;
+}
+.section-lede {
+  max-width: 42rem;
+  margin: 0;
+  color: var(--soft);
+}
+.section-lede code,
+.callers code {
+  color: var(--white);
+  font: 0.9em var(--mono);
+}
+.section-more {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.callers-grid {
+  display: grid;
+  gap: 1rem;
+}
+@media (min-width: 48rem) {
+  .callers-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.callers article {
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.callers h3 {
+  margin: 0;
+  font: 600 1rem/1.3 var(--text);
+}
+.callers article code {
+  width: fit-content;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.callers p {
+  margin: 0;
+  color: var(--soft);
+  font-size: 0.9375rem;
+}
+
+.term {
+  margin: 0;
+  padding: 1.1rem 1.25rem;
+  overflow-x: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: #0b0b0d;
+  color: var(--soft);
+  font: 400 0.8125rem/1.7 var(--mono);
+}
+.term-out {
+  color: var(--muted);
+}
+.term-gap {
+  line-height: 0.8;
+}
+.code-line {
+  display: block;
+  white-space: pre;
+}
+.tk-prompt,
+.tk-comment {
+  color: var(--muted);
+}
+.tk-cmd {
+  color: var(--white);
+  font-weight: 600;
+}
+.tk-flag {
+  color: #7aa2ff;
+}
+.tk-str {
+  color: #9ece6a;
+}
+.tk-op {
+  color: #e0af68;
+}
+.pipeline-codes,
+.small-facts {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+.pipeline-codes {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+.pipeline-codes div {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+}
+.pipeline-codes dt {
+  color: var(--white);
+  font: 600 0.875rem var(--mono);
+}
+.pipeline-codes dd,
+.small-facts dd {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.small-facts {
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+.small-facts dt {
+  color: var(--white);
+  font: 600 clamp(1.25rem, 2.4vw, 1.75rem) / 1.2 var(--mono);
+  letter-spacing: -0.02em;
+}
+
+.recipes {
+  display: grid;
+  gap: 0.6rem;
+}
+.recipes .install-tabs {
+  flex-wrap: wrap;
+}

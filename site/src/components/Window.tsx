@@ -3,15 +3,15 @@ import './Window.css';
 
 const USE: [string, string][] = [
   ['Open', 'The agent opens pages and terminals as tabs, each project’s together.'],
-  ['Watch', 'Every tab stays live: each click, each key, each command as it runs.'],
-  ['Comment', 'Press the comment icon, click what is wrong, write a note. Repeat.'],
-  ['Send', 'Send hands the batch to the agent that opened the page, and it fixes them.'],
+  ['Say the goal', '“Book the cheapest flight on Friday”: a small, fast model does the clicking.'],
+  ['Watch', 'Every tab stays live. The window never takes your keyboard.'],
+  ['Point', 'Click what is wrong, write a note, Send. The agent that opened the page fixes it.'],
 ];
 
 const GETS = [
-  'the element’s CSS selector and path',
+  'the element’s selector and path',
   'its source file and component, from your dev build',
-  'its box, role, text and computed styles',
+  'its box, role, text and key styles',
   'a picture of it, and your note',
 ];
 
@@ -19,19 +19,17 @@ const GETS = [
 export function Window() {
   return (
     <section className="window wrap" aria-labelledby="window-title">
-      <h2 id="window-title">Everything in one window.</h2>
+      <h2 id="window-title">Real pages. Real shells. One window you can watch.</h2>
       <p className="window-lede">
-        Browser pages and terminals are tabs of one native window, grouped by project. Give the agent a goal and
-        it is done in seconds: find and book a flight, fill a form, check a page. In the next tab it runs your
-        tests, servers and REPLs, typing and reading as you would, without a second app. llx works there, and so
-        do Claude Code and Codex through <code>llx mcp</code>. You watch every tab, and point at what to change.
+        Browser pages run in the system’s own WebView and terminals in a real PTY, as tabs of one native window
+        grouped by project. llx works there, and so do Claude Code and Codex through <code>llx mcp</code>.
       </p>
 
       <Mock />
 
       <div className="window-lists">
         <div>
-          <h3>How you use it</h3>
+          <h3>How it works</h3>
           <ol>
             {USE.map(([name, text]) => (
               <li key={name}>
@@ -41,7 +39,7 @@ export function Window() {
           </ol>
         </div>
         <div>
-          <h3>What the agent gets</h3>
+          <h3>What the agent gets from your comment</h3>
           <ul>
             {GETS.map((text) => (
               <li key={text}>{text}</li>

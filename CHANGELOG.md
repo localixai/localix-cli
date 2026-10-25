@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **llx is an ultrafast, lightweight agent runtime.** The help, the README, the landing and the packages now say what it has become: a native window of browser pages and terminals that any agent can work in (`llx mcp`), a decision step for scripts and CI (`llx exec`), and a minimal agent for the terminal (`llx`). Nothing in how it runs changes.
+- **`llx decide`.** One question about stdin to the decision model; the option it picked alone on stdout (`yes` or `no`, or `--choices patch,minor=a new feature,major`). `--choices` repeated keeps each `key=…` whole, commas and all. `--expect` exits 1 on another option, `--json` adds the probabilities, the model and the cost. It needs an OpenRouter key and answers in about a second.
+- **`docs/recipes.md`.** llx composed with `gh`, `glab` and `git`, each recipe run for real: a pull or merge request reviewed and the comment posted, gates, triage, a failed run explained, an incident in CI classified and routed, releases, a page checked after a deploy, and the GitHub Actions and GitLab CI jobs. Nothing of GitHub or GitLab is in llx.
+- **`docs/ci.md`.** `llx exec` in a pipeline: the key, the mode a runner needs (`--mode plan` for read-only steps, `-y` for ones that change the tree), `--schema` answers, the exit codes, and a GitHub Actions example.
+
 ## 0.2.0
 
 The browser CLI of 0.1.0 is now `llx`: an ultrafast, lightweight coding agent for the terminal. It has seven tools: `read`, `edit`, `bash`, `window`, browser pages and terminal sessions as tabs of one window, whose goals a decision model carries out, `ask`, a question to the person in a session, `agents`, other agents it starts, and `jobs`, monitors and schedules. It stays one synchronous binary under 4 MB, with no async runtime and no plugins, MCP servers or skills to load.

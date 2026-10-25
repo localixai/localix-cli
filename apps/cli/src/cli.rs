@@ -12,9 +12,11 @@ const USAGE: &str = "llx [OPTIONS] [PROMPT]\n       \
     llx exec [OPTIONS] [PROMPT | -]\n       \
     llx <COMMAND>";
 
-const ABOUT: &str = "llx: an ultrafast, lightweight coding agent for the terminal";
+const ABOUT: &str = "llx: an ultrafast, lightweight agent runtime: a native window of browser pages and terminals for any agent, a decision step for scripts and CI, a minimal agent for the terminal";
 
-const LONG_ABOUT: &str = "llx: an ultrafast, lightweight coding agent for the terminal.
+const LONG_ABOUT: &str = "llx: an ultrafast, lightweight agent runtime. A native window of browser pages and terminals \
+any agent can work in (llx mcp serves it to Claude Code, Codex or Cursor), a decision step for \
+scripts and CI (llx exec), and a minimal agent for the terminal (llx).
 
 It works in a directory (the current one, or -C DIR) with seven tools: read, edit, bash (on \
 unix it can keep a program that asks, such as a REPL, open in a terminal session until the task \
@@ -119,6 +121,12 @@ pub(crate) enum Command {
     /// block (`</dev/null` skips it); `-` reads the prompt itself from stdin.
     #[command(visible_alias = "e", args_conflicts_with_subcommands = true)]
     Exec(Box<ExecArgs>),
+    /// Ask the decision model one question about stdin; the option it picked alone goes to stdout.
+    ///
+    /// A small, fast model picks one of the choices (yes or no unless --choices says otherwise),
+    /// in about a second, for a fraction of a cent: a gate in a script or CI. It needs an
+    /// OpenRouter key. Example: `git diff | llx decide "Does this break the public API?"`.
+    Decide(Box<DecideArgs>),
     /// Go on with a saved session, at the terminal.
     ///
     /// Its conversation is not kept, only each task and how it ended: the agent starts a new
@@ -196,6 +204,25 @@ pub(crate) enum ExecCommand {
     /// Go on with a saved session with one task, then exit.
     #[command(group(ArgGroup::new("which").args(["id", "last"]).required(true).multiple(true)))]
     Resume(ResumeArgs),
+}
+
+#[derive(Args, Debug)]
+pub(crate) struct DecideArgs {
+    /// The question, about what comes on stdin.
+    pub question: String,
+    /// The options, comma-separated; `key=what it means` tells the model more. Repeated, each
+    /// `key=…` is one option whole, commas and all.
+    #[arg(long, value_name = "A,B,…", default_value = "yes,no")]
+    pub choices: Vec<String>,
+    /// Exit 1 when the model picks any other option.
+    #[arg(long, value_name = "CHOICE")]
+    pub expect: Option<String>,
+    /// Print the choice with each option's probability, the model and the cost, as JSON.
+    #[arg(long)]
+    pub json: bool,
+    /// The decision model.
+    #[arg(short = 'm', long, value_name = "MODEL", env = "LLX_DECISION_MODEL", default_value = crate::providers::DECISION_DEFAULT)]
+    pub model: String,
 }
 
 #[derive(Args, Debug)]
@@ -300,7 +327,6 @@ pub(crate) struct RunOptions {
         conflicts_with = "yes"
     )]
     pub mode: Option<Mode>,
-
     /// Print events as JSON lines on stdout: run.started, tool.call, tool.result, step, turn,
     /// run.completed. With `exec` or -p.
     #[arg(long, help_heading = "Output")]

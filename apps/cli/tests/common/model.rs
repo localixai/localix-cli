@@ -18,6 +18,8 @@ pub(crate) enum Reply {
     Refused(u16),
     /// The reply given once the file exists: a lane's request waits while another works.
     After(std::path::PathBuf, Box<Reply>),
+    /// A decision model's answer to `/systemone`: the key it picked, with each key's probability.
+    Decided(String, Vec<(String, f64)>),
 }
 
 impl Reply {
@@ -151,6 +153,9 @@ fn answer(stream: TcpStream, shared: &Mutex<Shared>) {
                 status,
                 json!({"error": {"code": status, "message": "No auth credentials found"}}),
             ),
+            Some(Reply::Decided(choice, probabilities)) => {
+                (200, decided(&request, &choice, &probabilities))
+            }
             reply => (200, completion(reply, n, &request)),
         }
     };
@@ -184,7 +189,9 @@ fn completion(reply: Option<Reply>, n: usize, request: &Value) -> Value {
     let model = request["model"].as_str().unwrap_or("test/model");
     let message = match reply.unwrap_or(Reply::Text("Done.\nRESULT: achieved".into())) {
         Reply::Text(text) => json!({"role": "assistant", "content": text}),
-        Reply::Refused(_) | Reply::After(..) => unreachable!("answered before"),
+        Reply::Refused(_) | Reply::After(..) | Reply::Decided(..) => {
+            unreachable!("answered before")
+        }
         Reply::Calls(calls) => {
             let calls: Vec<Value> = calls
                 .into_iter()
@@ -199,6 +206,23 @@ fn completion(reply: Option<Reply>, n: usize, request: &Value) -> Value {
     };
     json!({"id": format!("c{n}"), "model": model, "choices": [{"index": 0, "message": message}],
         "usage": {"prompt_tokens": 1000, "completion_tokens": 20, "cost": 0.0001}})
+}
+
+/// `/systemone`'s answer: every question asked gets `choice`, with `probabilities`.
+fn decided(request: &Value, choice: &str, probabilities: &[(String, f64)]) -> Value {
+    let odds: serde_json::Map<String, Value> = (probabilities.iter())
+        .map(|(key, p)| (key.clone(), json!(p)))
+        .collect();
+    let answers: serde_json::Map<String, Value> = (request["questions"].as_object().unwrap())
+        .keys()
+        .map(|key| {
+            let answer = json!({"type": "choice", "choice": choice, "probabilities": odds,
+                "confidence": 0.9});
+            (key.clone(), answer)
+        })
+        .collect();
+    json!({"model": request["model"], "answers": answers,
+        "usage": {"cost": 0.00002, "input_tokens": 300, "output_tokens": 1}})
 }
 
 /// What the model was asked in its `at`th request, as one text: its messages' contents.

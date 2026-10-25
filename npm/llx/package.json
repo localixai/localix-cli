@@ -1,7 +1,7 @@
 {
   "name": "@localixai/llx",
   "version": "0.2.0",
-  "description": "An ultrafast, lightweight coding agent for the terminal, and a window for other agents over MCP",
+  "description": "Ultrafast, lightweight agent runtime: a native window of browser pages and terminals for any agent (MCP), a decision step for scripts and CI, and a minimal agent for the terminal",
   "license": "MIT",
   "author": "rsaryev",
   "homepage": "https://llx.sh",
@@ -9,7 +9,7 @@
     "type": "git",
     "url": "git+https://github.com/rsaryev/llx.git"
   },
-  "keywords": ["agent", "coding-agent", "cli", "mcp", "browser", "terminal"],
+  "keywords": ["agent", "agent-runtime", "mcp", "browser", "terminal", "ci", "coding-agent", "cli"],
   "bin": {
     "llx": "bin/llx.js"
   },

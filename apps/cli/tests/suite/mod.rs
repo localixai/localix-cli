@@ -3,6 +3,7 @@
 //! the rest stop before one is called. Each test gets its own home, config and sessions
 //! directories, so nothing of the person's is read. `repo` checks the repository itself.
 
+mod decide;
 mod doctor;
 mod exec;
 #[cfg(unix)]

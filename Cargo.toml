@@ -1,4 +1,4 @@
-# llx: an ultrafast, lightweight coding agent for the terminal: read, edit, bash,
+# llx: an ultrafast, lightweight agent runtime: read, edit, bash,
 # and a native browser whose clicks and typing a decision model does.
 #
 # Packages and apps, dependencies pointing inward only (AGENTS.md, rules L1-L5):

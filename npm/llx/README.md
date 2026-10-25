@@ -1,6 +1,6 @@
 # llx
 
-An ultrafast, lightweight coding agent for the terminal, in one native binary. This package
+Ultrafast, lightweight agent runtime: a native window of browser pages and terminals for any agent, a decision step for scripts and CI, and a minimal agent for the terminal, in one native binary. This package
 installs it for your platform (macOS arm64 and x64, Linux x64).
 
 ```bash

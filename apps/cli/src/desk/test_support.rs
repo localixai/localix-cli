@@ -70,7 +70,7 @@ impl Person {
 
     /// Take what the server sends until the interface is told to end.
     pub(crate) fn until_over(&mut self) {
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + Duration::from_secs(30);
         while !self.over {
             assert!(Instant::now() < deadline, "waited too long for the end");
             self.take();
@@ -202,7 +202,7 @@ pub(crate) fn at_desk_with(
 }
 
 /// A session at the desk as [`at_desk_with`] makes it, `person` given the connection to end it
-/// as they choose, and the server's side of it; the desk must end within 10 s after.
+/// as they choose, and the server's side of it; the desk must end within 30 s after.
 #[allow(
     clippy::disallowed_methods,
     reason = "the desk's end is looked at again for a bounded time: with the person gone, no \

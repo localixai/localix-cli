@@ -19,6 +19,9 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # A fresh runner gains nothing from debug info or incremental state: both only slow the build.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_INCREMENTAL: 0
 
 jobs:
   # One job, so the dependencies compile once: format, lint, then the tests on a virtual display

@@ -1,15 +1,14 @@
-//! The mode a run works in: one setting for what runs without asking, what is refused, and whether
-//! the person answers questions. A mode changes only what the gate and the person answer and what
-//! the context's `Mode:` line says, from the same value, so the two cannot drift apart; it never
-//! filters the tools (the list stays the same, and so does the prompt cache). A change in a
-//! session reaches the model as a `<mode_change>` note.
+//! The mode a run works in: a name, a line on what it does, and its rules (ARCHITECTURE.md K5).
+//! The gate judges each effect by the mode's rules and the command line's, then asks the person
+//! what no rule settles, or refuses it with no one to ask. The context says the same rules, from
+//! the same values, so the two cannot drift apart; a mode never filters the tools (the list stays
+//! the same, and so does the prompt cache). A change in a session reaches the model as a
+//! `<mode_change>` note.
 
-use std::collections::HashSet;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use clap::ValueEnum;
 use contracts::gate::{Effect, Gate, Verdict};
 
 use crate::gate::{Asker, Prompter, TerminalGate, declined};
@@ -17,203 +16,128 @@ use crate::output::lock;
 use crate::rules::{Rules, Ruling};
 use protocol::Approval;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub(crate) enum Mode {
-    /// Each command, file change and browser action is asked at the terminal.
-    Default,
-    /// Investigate and plan: file changes are refused, each command and browser action is asked.
-    Plan,
-    /// Everything runs without asking (-y); questions still reach you.
-    Bypass,
-    /// Everything runs without asking, and no question is asked (in exec, the same as bypass).
-    Autonomous,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Mode(Arc<Named>);
+
+#[derive(Debug, PartialEq, Eq)]
+struct Named {
+    name: String,
+    hint: String,
+    rules: Rules,
 }
 
 impl Mode {
-    pub(crate) const ALL: [Self; 4] = [Self::Default, Self::Plan, Self::Bypass, Self::Autonomous];
-
-    /// `-y` is bypass; otherwise the flag, else default.
-    pub(crate) fn choose(flag: Option<Self>, yes: bool) -> Self {
-        match yes {
-            true => Self::Bypass,
-            false => flag.unwrap_or(Self::Default),
-        }
+    pub(crate) fn new(name: &str, hint: &str, rules: Rules) -> Self {
+        Self(Arc::new(Named {
+            name: name.to_string(),
+            hint: hint.to_string(),
+            rules,
+        }))
     }
 
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Self::Default => "default",
-            Self::Plan => "plan",
-            Self::Bypass => "bypass",
-            Self::Autonomous => "autonomous",
-        }
+    pub(crate) fn name(&self) -> &str {
+        &self.0.name
     }
 
-    /// The mode called `name`, as `--mode` spells it.
-    pub(crate) fn named(name: &str) -> Option<Self> {
-        Self::from_str(name.trim(), true).ok()
+    /// One line on what the mode does.
+    pub(crate) fn hint(&self) -> &str {
+        &self.0.hint
     }
 
-    /// One line on what the mode does: its `--help` text.
-    pub(crate) fn hint(self) -> String {
-        self.to_possible_value()
-            .and_then(|value| value.get_help().map(ToString::to_string))
-            .unwrap_or_default()
+    pub(crate) fn rules(&self) -> &Rules {
+        &self.0.rules
     }
 }
 
 /// The mode now, read by the gate and the person on whichever thread asks (an agent's, a call's
 /// running beside others) and set between tasks.
 #[derive(Debug)]
-pub(crate) struct ModeCell(AtomicU8);
+pub(crate) struct ModeCell(Mutex<Mode>);
 
 impl ModeCell {
     pub(crate) fn new(mode: Mode) -> Self {
-        Self(AtomicU8::new(Self::index(mode)))
+        Self(Mutex::new(mode))
     }
 
     pub(crate) fn get(&self) -> Mode {
-        Mode::ALL[self.0.load(Ordering::SeqCst) as usize]
+        lock(&self.0).clone()
     }
 
     pub(crate) fn set(&self, mode: Mode) {
-        self.0.store(Self::index(mode), Ordering::SeqCst);
-    }
-
-    fn index(mode: Mode) -> u8 {
-        let at = Mode::ALL.iter().position(|&m| m == mode);
-        at.and_then(|at| u8::try_from(at).ok()).unwrap_or(0)
+        *lock(&self.0) = mode;
     }
 }
 
 /// `/mode`: each mode with what it does, the current one marked.
-pub(crate) fn list(current: Mode) -> String {
-    let line = |mode: Mode| {
-        let mark = if mode == current { "*" } else { " " };
+pub(crate) fn list(current: &Mode, modes: &[Mode]) -> String {
+    let line = |mode: &Mode| {
+        let mark = if mode.name() == current.name() {
+            "*"
+        } else {
+            " "
+        };
         format!("{mark} {:<11} {}\n", mode.name(), mode.hint())
     };
-    Mode::ALL.map(line).concat()
+    modes.iter().map(line).collect()
 }
 
 /// What the person is told when the mode changes.
-pub(crate) fn switched(mode: Mode) -> String {
+pub(crate) fn switched(mode: &Mode) -> String {
     format!("Mode: {}. {}\n", mode.name(), mode.hint())
 }
 
-/// Why plan mode refuses a file change.
-pub(crate) const PLAN_REFUSAL: &str = "plan mode is read-only: files are not changed in it. Investigate \
-with reads and commands that change nothing, then answer with the plan; the person switches the \
-mode to have it carried out.";
-
-/// Why an effect is refused with no one to approve it.
-pub(crate) const NO_TERMINAL: &str = "no one is at a terminal to approve it; the person must rerun \
-llx with --yes (-y) or --mode bypass to allow commands, file changes and browser actions";
-
-/// Why plan mode refuses a command or a browser action with no one to approve it. It never points
-/// to bypass: that would turn a read-only request into one that changes files unasked.
-pub(crate) const PLAN_NO_TERMINAL: &str = "no one is at a terminal to approve it, and plan mode runs \
-nothing unapproved: plan from reading files, and say in the plan which commands to run, or that \
-the person can run llx at a terminal to approve each one";
+/// Why an effect no rule allows is refused with no one to approve it.
+const NO_ONE: &str = "no rule allows it, and no one is at a terminal to approve it: the person \
+can rerun llx with --allow and a rule that names it, a --mode that allows it, or --yes (-y)";
 
 /// Why an effect is refused when the terminal gave no answer.
 const NO_ANSWER: &str = "no answer came from the terminal";
 
-/// Why a question gets no answer in autonomous mode.
-pub(crate) const AUTONOMOUS: &str = "nobody answers questions in autonomous mode: decide on your best \
-assumption, state it in your answer, and keep going";
-
-/// The tool plan mode refuses outright: the one that changes files.
-const EDIT: &str = "edit";
-
-/// The mode as the agent's context states it. `terminal`: someone can approve at the terminal.
-/// `asks`: the `ask` tool is offered (a session).
-pub(crate) fn describe(mode: Mode, terminal: bool, asks: bool) -> String {
-    let asks = asks && terminal;
-    let mut text = String::new();
-    match mode {
-        Mode::Default if terminal => {
-            text.push_str(
-                "default: the person approves each command, file change and browser action at \
-                 the terminal; a refusal says why.",
-            );
-            if asks {
-                text.push_str(
-                    " Ask the person with `ask` only when a decision is theirs and the tools \
-                     cannot settle it; otherwise make a reasonable assumption and state it.",
-                );
-            }
+/// The mode as the agent's context states it, with `more` (the command line's rules) beside its
+/// own. `terminal`: someone can approve at the terminal. `asks`: the `ask` tool is offered.
+pub(crate) fn describe(mode: &Mode, more: &Rules, terminal: bool, asks: bool) -> String {
+    let mut text = format!("{}: {}", mode.name(), mode.hint());
+    if let Some(rules) = mode.rules().with(more).describe() {
+        text.push(' ');
+        text.push_str(&rules);
+    }
+    text.push_str(match terminal {
+        true => " Anything else is asked of the person, who may refuse it; a refusal says why.",
+        false => {
+            " Anything else that changes something (a command, a file, a page) is refused: no one \
+             is at a terminal to approve it. Reading files works."
         }
-        Mode::Default => text.push_str(
-            "default: commands, file changes and browser actions are refused: no one is at a \
-             terminal to approve them, and the person must rerun with --yes (-y) or --mode bypass \
-             to allow them; reading files works.",
-        ),
-        Mode::Plan => {
-            text.push_str(
-                "plan: investigate and plan; do not do the work. `edit` is refused in this mode",
-            );
-            match terminal {
-                true => text.push_str(
-                    ". Use commands and the browser only to look (read, search, list, run checks \
-                     that change no tracked file); the person approves each one and refuses any \
-                     that would change something.",
-                ),
-                false => text.push_str(
-                    ", and commands and browser actions are refused too (no one at a terminal to \
-                     approve them): plan from reading files.",
-                ),
-            }
-            if asks {
-                text.push_str(
-                    " Ask about preferences and tradeoffs with `ask`, after you have looked.",
-                );
-            }
-            text.push_str(
-                " When the plan is complete enough that whoever carries it out makes no decision, \
-                 answer with it: a title, a short summary, the changes file by file, the tests to \
-                 add or run, and the assumptions you made. Do not ask whether to proceed: the \
-                 person switches the mode to have it carried out.",
-            );
-        }
-        Mode::Bypass => {
-            text.push_str("bypass: commands, file changes and browser actions run without asking.");
-            if asks {
-                text.push_str(
-                    " The person can still answer questions with `ask`; use it only when a \
-                     decision is theirs.",
-                );
-            }
-        }
-        Mode::Autonomous => text.push_str(
-            "autonomous: commands, file changes and browser actions run without asking, and \
-             nobody answers questions: decide on your best assumption, state it in your answer, \
-             and keep going.",
-        ),
+    });
+    if asks && terminal {
+        text.push_str(
+            " Ask the person with `ask` only when a decision is theirs and the tools cannot \
+             settle it; otherwise make a reasonable assumption and state it.",
+        );
     }
     text
 }
 
 /// The note that tells the model the mode changed mid-session.
-pub(crate) fn notice(mode: Mode, terminal: bool, asks: bool) -> String {
+pub(crate) fn notice(mode: &Mode, more: &Rules, terminal: bool, asks: bool) -> String {
     format!(
         "<mode_change>\nThe mode is now {}\nWhat the context or an earlier note said about the \
          mode no longer holds.\n</mode_change>",
-        describe(mode, terminal, asks)
+        describe(mode, more, terminal, asks)
     )
 }
 
-/// The gate as the current mode answers it: bypass and autonomous allow, plan refuses file changes
-/// and asks for the rest, default asks. Plan keeps its own "always" answers, so an `a` given while
-/// working does not let a command through unasked while planning, nor the reverse.
+/// The gate as the current mode answers it: its rules and the command line's first, then the
+/// person. Each mode keeps its own "always" answers, so one given in a mode that asks little does
+/// not carry into one meant to ask more.
 pub(crate) struct ModeGate<'a> {
     mode: &'a ModeCell,
     /// `None`: nobody to ask.
     asker: Option<Box<dyn Asker + 'a>>,
-    /// The tools the person said not to ask about again: while working, and while planning.
-    always: [Mutex<HashSet<String>>; 2],
+    /// The tools the person said not to ask about again, by mode.
+    always: Mutex<HashMap<String, HashSet<String>>>,
     /// Told how long the person took to answer, so it does not count toward the time limit.
     waited: &'a (dyn Fn(Duration) + Sync),
-    /// `--allow` and `--deny`, asked before the mode.
+    /// `--allow` and `--deny`, beside the mode's own.
     rules: Rules,
 }
 
@@ -237,13 +161,13 @@ impl<'a> ModeGate<'a> {
         Self {
             mode,
             asker,
-            always: Default::default(),
+            always: Mutex::default(),
             waited,
             rules: Rules::default(),
         }
     }
 
-    /// The same, with `rules` judging each effect first.
+    /// The same, with the command line's `rules` beside the mode's.
     pub(crate) fn ruled(self, rules: Rules) -> Self {
         Self { rules, ..self }
     }
@@ -251,22 +175,25 @@ impl<'a> ModeGate<'a> {
 
 impl Gate for ModeGate<'_> {
     fn check(&self, effect: Effect) -> Verdict {
-        let read_only = self.mode.get() == Mode::Plan && effect.tool == EDIT;
-        match self.rules.judge(effect.tool, effect.subject) {
-            Ruling::Denied(why) => return Verdict::Deny(why),
-            Ruling::Allowed if !read_only => return Verdict::Allow,
-            Ruling::Allowed | Ruling::Unsettled => {}
+        let mode = self.mode.get();
+        match mode
+            .rules()
+            .with(&self.rules)
+            .judge(effect.tool, effect.subject)
+        {
+            Ruling::Denied(why) => return Verdict::Deny(format!("{why} (mode {})", mode.name())),
+            Ruling::Allowed => return Verdict::Allow,
+            Ruling::Unsettled => {}
         }
-        let (always, none) = match self.mode.get() {
-            Mode::Bypass | Mode::Autonomous => return Verdict::Allow,
-            Mode::Plan if effect.tool == EDIT => return Verdict::Deny(PLAN_REFUSAL.into()),
-            Mode::Plan => (&self.always[1], PLAN_NO_TERMINAL),
-            Mode::Default => (&self.always[0], NO_TERMINAL),
-        };
         let Some(asker) = &self.asker else {
-            return Verdict::Deny(none.into());
+            return Verdict::Deny(NO_ONE.into());
         };
-        if lock(always).contains(effect.tool) {
+        let known = |always: &HashMap<String, HashSet<String>>| {
+            always
+                .get(mode.name())
+                .is_some_and(|tools| tools.contains(effect.tool))
+        };
+        if known(&lock(&self.always)) {
             return Verdict::Allow;
         }
         // The asker holds its person for the question (`gate::one_question`).
@@ -276,7 +203,9 @@ impl Gate for ModeGate<'_> {
         match approval {
             Some(Approval::Yes) => Verdict::Allow,
             Some(Approval::Always) => {
-                lock(always).insert(effect.tool.to_string());
+                let mut always = lock(&self.always);
+                let tools = always.entry(mode.name().to_string()).or_default();
+                tools.insert(effect.tool.to_string());
                 Verdict::Allow
             }
             Some(Approval::No(why)) => Verdict::Deny(declined(why)),

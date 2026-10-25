@@ -32,6 +32,7 @@ mod live;
 mod mcp;
 mod meta;
 mod mode;
+mod modes;
 mod output;
 mod picker;
 mod providers;

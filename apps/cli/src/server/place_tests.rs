@@ -4,7 +4,6 @@ use serde_json::json;
 use super::*;
 use crate::compose::{Models, assemble};
 use crate::interrupt::Interrupt;
-use crate::mode::Mode;
 use crate::testing::{NoDecider, Scratch, ScriptedChat, quiet, says};
 
 /// A session opened from a client elsewhere: its commands run there, with what the client has
@@ -23,7 +22,7 @@ fn a_session_works_in_the_clients_directory_with_the_clients_environment() {
         ..Place::default()
     };
     assert!(std::env::var_os("LLX_ONLY_THE_CLIENT_HAS").is_none());
-    let mut setup = crate::testing::setup(&scratch, Mode::Bypass, false);
+    let mut setup = crate::testing::setup(&scratch, crate::modes::built("bypass"), false);
     setup.workspace = workspace(&place).unwrap();
     let command = r#"ls; echo "[$LLX_ONLY_THE_CLIENT_HAS]""#;
     let chat = ScriptedChat::new(vec![

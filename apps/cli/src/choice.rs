@@ -64,8 +64,26 @@ impl Choice {
     }
 }
 
-fn path() -> Option<PathBuf> {
+/// `<config>/llx/settings.json`: the saved choice and the person's modes.
+pub(crate) fn settings_path() -> Option<PathBuf> {
     provider_kit::store::path(APP, FILE)
+}
+
+fn path() -> Option<PathBuf> {
+    settings_path()
+}
+
+/// The settings file's text with `choice` put in, the rest (the person's modes) kept; text that
+/// is not a JSON object is replaced.
+fn merged(existing: Option<&str>, choice: &Choice) -> String {
+    let mut settings = existing
+        .and_then(|text| serde_json::from_str::<Value>(text).ok())
+        .filter(Value::is_object)
+        .unwrap_or_else(|| json!({}));
+    if let (Some(settings), Value::Object(chosen)) = (settings.as_object_mut(), choice.to_json()) {
+        settings.extend(chosen);
+    }
+    format!("{settings:#}\n")
 }
 
 /// The choice `/login` saved.
@@ -76,7 +94,8 @@ pub(crate) fn saved() -> Option<Choice> {
 
 pub(crate) fn save(choice: &Choice) -> std::io::Result<PathBuf> {
     let path = path().ok_or_else(|| std::io::Error::other("no home directory"))?;
-    provider_kit::store::save(&path, &format!("{:#}\n", choice.to_json()))?;
+    let existing = std::fs::read_to_string(&path).ok();
+    provider_kit::store::save(&path, &merged(existing.as_deref(), choice))?;
     Ok(path)
 }
 

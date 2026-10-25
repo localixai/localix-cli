@@ -12,6 +12,8 @@ use tools::workspace::Workspace;
 use crate::choice::Choice;
 use crate::cli::RunOptions;
 use crate::mode::Mode;
+use crate::modes::Modes;
+use crate::rules::Rules;
 use crate::server::Ui;
 
 /// Everything a session is built from, decided before the browser's event loop takes the main
@@ -28,6 +30,10 @@ pub(crate) struct Setup {
     pub schema: Option<Value>,
     /// The mode the run starts in, as the context states it.
     pub mode: Mode,
+    /// Every mode a session can switch to.
+    pub modes: Modes,
+    /// The command line's `--allow` and `--deny`, beside each mode's own.
+    pub rules: Rules,
     /// Whether there is a terminal to ask the person on.
     pub terminal: bool,
     /// Whether `ask` is offered: in a session, not in `exec`, where one task runs unattended.
@@ -65,6 +71,8 @@ pub(crate) struct Shared {
     pub fresh: String,
     /// The mode, models and terminal a new lane starts with.
     pub started: Mode,
+    pub modes: Modes,
+    pub rules: Rules,
     pub choice: Choice,
     pub terminal: bool,
     pub asks: bool,
@@ -115,7 +123,9 @@ impl Setup {
             workspace: self.workspace,
             history: self.history,
             fresh: self.fresh,
-            started: self.mode,
+            started: self.mode.clone(),
+            modes: self.modes,
+            rules: self.rules,
             choice: self.choice.clone(),
             terminal: self.terminal,
             asks: self.asks,
@@ -147,7 +157,7 @@ impl Shared {
             session,
             ui,
             choice: self.choice.clone(),
-            mode: self.started,
+            mode: self.started.clone(),
             schema: None,
         }
     }

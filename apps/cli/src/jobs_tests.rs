@@ -4,7 +4,6 @@ use contracts::chat::{Completion, ToolCall};
 use serde_json::json;
 
 use super::*;
-use crate::mode::Mode;
 use crate::testing::{Captured, Scratch, answers, composed, results, says, users};
 use protocol::Event;
 
@@ -30,7 +29,7 @@ fn in_exec_a_task_waits_for_its_monitor_and_reads_each_batch() {
         says("Still watching."),
         says("It said hello and world."),
     ];
-    composed(Mode::Bypass, false, replies, |rig| {
+    composed(crate::modes::built("bypass"), false, replies, |rig| {
         rig.task("watch it");
         let came: Vec<String> = users(rig)
             .into_iter()
@@ -51,7 +50,7 @@ fn schedules_need_a_session_and_are_listed_and_stopped_there() {
     let schedule = json!({"action": "schedule", "prompt": "check the deploy", "in": "45m",
         "name": "deploy"});
     composed(
-        Mode::Bypass,
+        crate::modes::built("bypass"),
         false,
         vec![call(schedule.clone()), says("No.")],
         |rig| {
@@ -67,7 +66,7 @@ fn schedules_need_a_session_and_are_listed_and_stopped_there() {
         call(json!({"action": "list"})),
         says("Done."),
     ];
-    composed(Mode::Bypass, true, replies, |rig| {
+    composed(crate::modes::built("bypass"), true, replies, |rig| {
         rig.task("remind me");
         let results = results(rig);
         assert!(
@@ -92,7 +91,7 @@ fn a_monitor_asks_like_a_command() {
     let replies = vec![call(json!({"action": "monitor", "command": "ls"}))];
     let mut replies = replies;
     replies.extend(answers(1));
-    composed(Mode::Default, false, replies, |rig| {
+    composed(crate::modes::built("default"), false, replies, |rig| {
         rig.task("watch");
         let (failed, why) = &results(rig)[0];
         assert!(*failed && why.contains("no one is at a terminal"), "{why}");
@@ -159,7 +158,7 @@ fn a_line_that_closes_the_tag_stays_inside_its_monitor_message() {
         says("Still watching."),
         says("Done."),
     ];
-    composed(Mode::Bypass, false, replies, |rig| {
+    composed(crate::modes::built("bypass"), false, replies, |rig| {
         rig.task("watch it");
         let came: Vec<String> = users(rig)
             .into_iter()

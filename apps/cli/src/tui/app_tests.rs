@@ -227,7 +227,7 @@ fn slash_offers_the_commands_and_enter_takes_the_marked_one() {
     insta::assert_snapshot!(render(&mut app, now), @"
     ❯ /mode plan
       mode  ›  current: default · ↑↓ choose · tab complete · en…
-      plan         Investigate and plan: file changes are refus…
+      plan         Read-only: file changes are refused
       default mode · shift+tab to cycle
     ");
     app.input(key(KeyCode::Enter), now);
@@ -258,14 +258,14 @@ fn command_drill_down_shows_modes_and_preserves_argument_entry() {
     ❯ /mode
       mode  ›  current: default · ↑↓ choose · tab complete · en…
       default      Each command, file change and browser action…
-      plan         Investigate and plan: file changes are refus…
-      bypass       Everything runs without asking (-y); questio…
-      autonomous   Everything runs without asking, and no quest…
+      plan         Read-only: file changes are refused
+      bypass       Everything runs without asking (-y)
+      review       The person's own mode.
       default mode · shift+tab to cycle
     ");
-    typed(&mut app, "aut", now);
+    typed(&mut app, "rev", now);
     app.input(key(KeyCode::Tab), now);
-    assert_eq!(sent(&mut app, "").as_deref(), Some("/mode autonomous"));
+    assert_eq!(sent(&mut app, "").as_deref(), Some("/mode review"));
     assert_eq!(
         sent(&mut app, "/permissions by").as_deref(),
         Some("/permissions bypass"),

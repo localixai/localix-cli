@@ -4,7 +4,6 @@ use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall};
 use serde_json::json;
 
 use super::*;
-use crate::mode::Mode;
 use crate::picker::{Lines, Picker};
 use crate::testing::{answers, composed, composed_with};
 
@@ -50,7 +49,7 @@ fn rewinding_puts_back_the_files_and_the_conversation_before_the_task() {
         json!({"path": "a.txt", "old_string": "1", "new_string": "2"}),
     ));
     replies.extend(answers(1));
-    composed(Mode::Bypass, true, replies, |rig| {
+    composed(crate::modes::built("bypass"), true, replies, |rig| {
         rig.task("make a");
         let after_first = rig.conversation.as_ref().unwrap().messages().len();
         rig.task("change a");
@@ -75,7 +74,7 @@ fn rewinding_puts_back_the_files_and_the_conversation_before_the_task() {
 
 #[test]
 fn background_tasks_are_listed_as_the_transcript_shows_them_and_not_put_back_in_the_prompt() {
-    composed(Mode::Bypass, true, answers(2), |rig| {
+    composed(crate::modes::built("bypass"), true, answers(2), |rig| {
         rig.task("(scheduled `hello`) say hello");
         rig.task(&crate::arrivals::monitor("ticks", "tick 1").render());
         let (ui, frames) = crate::testing::fake_ui();
@@ -118,7 +117,7 @@ impl Chat for Delegates {
 
 #[test]
 fn rewinding_the_conversation_lets_its_agents_go() {
-    composed_with(Mode::Bypass, true, &Delegates, |rig| {
+    composed_with(crate::modes::built("bypass"), true, &Delegates, |rig| {
         rig.task("write it with an agent");
         steps(rig, &mut picks(&[Some(0), Some(0)]));
         rig.task("write it with an agent");
@@ -143,7 +142,7 @@ fn rewinding_the_conversation_lets_its_agents_go() {
 
 #[test]
 fn init_is_listed_as_the_command_typed_not_its_instruction() {
-    composed(Mode::Bypass, true, answers(1), |rig| {
+    composed(crate::modes::built("bypass"), true, answers(1), |rig| {
         rig.task(crate::commands::extras::INIT);
         let mut person = picks(&[None]);
         steps(rig, &mut person);
@@ -158,7 +157,7 @@ fn rewinding_while_another_session_works_here_warns() {
         json!({"path": "a.txt", "old_string": "", "new_string": "1\n"}),
     )];
     replies.extend(answers(1));
-    composed(Mode::Bypass, true, replies, |rig| {
+    composed(crate::modes::built("bypass"), true, replies, |rig| {
         rig.task("make a");
         let said = steps(rig, &mut picks(&[None]));
         assert!(!said.contains("Another session"), "{said}");

@@ -54,6 +54,8 @@ pub(crate) struct Kit<'a> {
     pub mode: &'a ModeCell,
     /// The mode the context states.
     pub started: Mode,
+    /// The command line's rules, beside each mode's.
+    pub rules: crate::rules::Rules,
     pub terminal: bool,
 }
 

@@ -8,14 +8,11 @@
 use crate::commands::{login, model};
 use crate::compose::Rig;
 use crate::exit;
-use crate::mode::{self, Mode};
+use crate::mode;
 use crate::server::Ui;
 use protocol::Event;
 
 pub(crate) use super::entry::{Entry, HELP, commands, entry};
-
-/// The task that carries out a plan.
-const IMPLEMENT: &str = "Implement the plan.";
 
 /// The session in `ui`, after `first` when it is given.
 pub(crate) fn run(rig: &mut Rig, ui: &Ui, first: Option<&str>) -> i32 {
@@ -34,7 +31,7 @@ pub(crate) fn run(rig: &mut Rig, ui: &Ui, first: Option<&str>) -> i32 {
         ui.send(Event::Note(signed_out));
     }
     if let Some(task) = first
-        && !attempt(rig, ui, task)
+        && !attempt(rig, task)
     {
         return exit::OK;
     }
@@ -50,7 +47,7 @@ pub(crate) fn run(rig: &mut Rig, ui: &Ui, first: Option<&str>) -> i32 {
             Some(Entry::Rewind) => crate::commands::rewind::run(rig, ui),
             Some(entry) => {
                 if let Some(task) = command(rig, entry)
-                    && !attempt(rig, ui, &task)
+                    && !attempt(rig, &task)
                 {
                     return exit::OK;
                 }
@@ -65,11 +62,6 @@ fn command(rig: &mut Rig, entry: Entry) -> Option<String> {
     let note = |text: &str| rig.output.note(text);
     match entry {
         Entry::Task(task) => return Some(task),
-        Entry::Plan(task) => {
-            rig.switch(Mode::Plan);
-            note(&mode::switched(Mode::Plan));
-            return task;
-        }
         Entry::Help => note(HELP),
         Entry::Diff => note(&super::extras::diff(rig.workspace.root())),
         Entry::Copy => {
@@ -79,28 +71,23 @@ fn command(rig: &mut Rig, entry: Entry) -> Option<String> {
         }
         Entry::Usage => note(&super::extras::usage(rig)),
         Entry::Status => note(&status(rig)),
-        Entry::Modes => note(&mode::list(rig.mode.get())),
-        Entry::Switch(mode) => {
-            rig.switch(mode);
-            note(&mode::switched(mode));
-        }
+        Entry::Modes => note(&mode::list(&rig.mode.get(), rig.modes.all())),
+        Entry::Switch(name) => match rig.modes.named(&name) {
+            Some(mode) => {
+                note(&mode::switched(&mode));
+                rig.switch(mode);
+            }
+            None => note(&format!("unknown mode {name}: {}\n", rig.modes.names())),
+        },
         Entry::Reasoning(up) => {
             let said = model::step_reasoning(rig, up);
             note(&said);
         }
         Entry::CycleMode => {
-            let current = Mode::ALL
-                .iter()
-                .position(|&mode| mode == rig.mode.get())
-                .unwrap_or(0);
-            let mode = Mode::ALL[(current + 1) % Mode::ALL.len()];
+            let mode = rig.modes.after(&rig.mode.get());
+            note(&mode::switched(&mode));
             rig.switch(mode);
-            note(&mode::switched(mode));
         }
-        Entry::UnknownMode(name) => note(&format!(
-            "unknown mode {name}: {}\n",
-            Mode::ALL.map(Mode::name).join(", ")
-        )),
 
         Entry::Unknown(command) => {
             note(&format!("unknown command /{command}: /help lists them\n"));
@@ -112,26 +99,9 @@ fn command(rig: &mut Rig, entry: Entry) -> Option<String> {
     None
 }
 
-/// Run `task`; when it was a plan that ended well, ask whether to carry it out. False once the
-/// output's reader is gone.
-fn attempt(rig: &mut Rig, ui: &Ui, task: &str) -> bool {
-    let code = rig.task(task);
-    if rig.output.closed() {
-        return false;
-    }
-    if code != exit::OK || rig.mode.get() != Mode::Plan {
-        return true;
-    }
-    let yes = format!("Yes, in {} mode", rig.before_plan.name());
-    let options = [yes, "No, stay in plan mode".into()].map(|o| (o, String::new()));
-    if ui.pick("Implement this plan?", options.into(), None) != Some(0) {
-        return true;
-    }
-    let mode = rig.before_plan;
-    rig.switch(mode);
-    rig.output.note(&mode::switched(mode));
-    // The plan is in the conversation already: this only says to carry it out.
-    rig.task(IMPLEMENT);
+/// Run `task`. False once the output's reader is gone.
+fn attempt(rig: &mut Rig, task: &str) -> bool {
+    rig.task(task);
     !rig.output.closed()
 }
 

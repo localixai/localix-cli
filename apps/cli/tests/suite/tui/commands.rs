@@ -33,8 +33,8 @@ fn slash_down_enter_opens_model_which_applies_the_one_chosen() {
 fn slash_mode_offers_the_modes_the_server_says() {
     let model = Model::start(vec![]);
     let mut term = Term::start(&model, &[]);
-    term.type_text("/mode au");
-    let screen = term.wait_for("autonomous", LONG);
+    term.type_text("/mode by");
+    let screen = term.wait_for("bypass", LONG);
     assert!(
         screen.contains("Everything runs without asking"),
         "{screen}"

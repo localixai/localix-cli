@@ -9,10 +9,11 @@ llx exec "is the changelog up to date with this branch?"   # the answer alone on
 ## What a pipeline needs
 
 - **A key.** The agent's model comes from `--provider` and `-m`, or `LLX_PROVIDER` and `LLX_MODEL`. Its key is the provider's variable from the model catalog (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`…). Keep it in the CI's secrets. A `goal` on a window tab needs an OpenRouter key whichever model the agent uses.
-- **A mode.** A runner has no terminal, so nobody can approve anything:
-  - `--mode default` (no flag) refuses every command, file change and page action.
-  - `--mode plan` is read-only: files are read, and commands, file changes and page actions are refused. Use it for reviews and decisions.
-  - `-y` (`--mode bypass`) allows everything. Use it for jobs that change the tree, on a branch, and only from triggers you trust.
+- **Rules.** A runner has no terminal, so nobody can approve anything: what no rule allows is refused ([docs/modes.md](modes.md)).
+  - With no flag, files are read and every command, file change and page action is refused.
+  - `--allow 'bash(cargo test *)'` lets the agent run the tests and nothing else; `--mode plan` also refuses every file change outright.
+  - Name a set of rules once, as a mode in `settings.json` (`--mode review`), and mount that file into the runner's container read-only.
+  - `-y` (`--mode bypass`) allows everything; `--deny 'bash(git push *)'` still refuses what it names. Use it for jobs that change the tree, on a branch, and only from triggers you trust.
 - **Limits.** `--max-turns N` (default 50) and `--timeout SECONDS` (default 1800). A task that runs out of either exits 2.
 - **A browser, if the task opens pages.** On Linux, the WebKitGTK runtime (`libwebkit2gtk-4.1-0`) and a display: run under `xvfb-run -a -s "-screen 0 1920x1080x24"`. Screenshots and comment pictures are macOS only.
 
@@ -105,5 +106,4 @@ A job that fixes something runs with `-y` on a branch and opens a pull request w
 ## Not yet
 
 - No cost cap: `--max-turns` and `--timeout` bound a task, and `--json` reports its cost, but nothing stops it at an amount.
-- No allowlist between `plan` and `-y` (for example "commands, but only `git diff`").
 - No `llx-action`: the steps above install llx with npm.

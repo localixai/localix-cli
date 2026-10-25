@@ -15,7 +15,7 @@ use crate::commands::repl;
 use crate::desk;
 use crate::error::Failure;
 use crate::interrupt;
-use crate::mode::Mode;
+use crate::modes::Modes;
 use crate::server::host::Host;
 use crate::server::{Peer, Ui, serve};
 use crate::tui;
@@ -123,9 +123,13 @@ pub(crate) fn info(host: Option<Arc<Host>>, terminals: Arc<AtomicU32>) -> serve:
         max_lanes: desk::MAX_LANES,
         shells: Arc::new(move || tools::shell::running_with(&terminals)),
         commands: repl::commands(),
-        modes: Mode::ALL
-            .map(|mode| (mode.name().into(), mode.hint()))
-            .to_vec(),
+        // A server's settings that cannot be read refused its run already; here the list is all.
+        modes: (Modes::load()
+            .unwrap_or_else(|_| Modes::built_in())
+            .all()
+            .iter())
+        .map(|mode| (mode.name().to_string(), mode.hint().to_string()))
+        .collect(),
         // Only a daemon keeps the work once the interface leaves; in process it ends with it.
         background: host.is_some(),
         host,

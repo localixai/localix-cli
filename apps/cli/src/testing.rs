@@ -232,6 +232,8 @@ pub(crate) fn setup(scratch: &Scratch, mode: Mode, asks: bool) -> Setup {
         fresh: String::new(),
         schema: None,
         mode,
+        modes: crate::modes::Modes::built_in(),
+        rules: crate::rules::Rules::default(),
         terminal: false,
         asks,
         history,

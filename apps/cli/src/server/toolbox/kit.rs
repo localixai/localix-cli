@@ -21,8 +21,10 @@ use crate::interrupt::Interrupt;
 use crate::kinds::{self, BrowserLocks};
 use crate::live::LiveDecider;
 use crate::mode::{Mode, ModeCell, ModeGate};
+use crate::modes::{BYPASS, Modes};
 use crate::output::lock;
 use crate::providers::{self, Provider};
+use crate::rules::Rules;
 use crate::server::{place, wire};
 use crate::windows::{self, Tabs};
 
@@ -139,7 +141,9 @@ impl Kit {
         work: impl FnOnce(&WindowTool) -> Result<T, ToolError>,
     ) -> Result<T, ToolError> {
         let stopped = || interrupt.stopped();
-        let mode = ModeCell::new(Mode::Bypass);
+        // Built in, so always there; a mode with no rules would only refuse.
+        let bypass = Modes::built_in().named(BYPASS);
+        let mode = ModeCell::new(bypass.unwrap_or_else(|| Mode::new(BYPASS, "", Rules::default())));
         let waited = |_: Duration| {};
         let approver = ModeGate::asking(&mode, None, &waited);
         let gate = Stoppable {

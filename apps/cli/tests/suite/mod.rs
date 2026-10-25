@@ -8,6 +8,7 @@ mod doctor;
 pub(crate) mod exec;
 #[cfg(unix)]
 mod mcp;
+mod modes;
 mod pipes;
 mod repo;
 mod rules;

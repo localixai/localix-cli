@@ -145,7 +145,7 @@ fn mode_breadcrumb_and_suggestions_fit_a_narrow_terminal() {
     typed(&mut app, "/mode ", now);
     let (lines, _) = render(&app, now);
     assert!(shown(&app, now).contains("mode  ›"));
-    assert!(shown(&app, now).contains("autonomous"));
+    assert!(shown(&app, now).contains("review"));
     assert!(
         lines
             .iter()

@@ -1,11 +1,10 @@
 //! The window a session shows by itself: one, with the browser's tabs and a tab per terminal
-//! session `bash` keeps. It shows where somebody watches: in a session, not in `exec` (nobody watches)
-//! or autonomous mode (nobody is asked), and not over SSH, where they would open on a screen
+//! session `bash` keeps. It shows where somebody watches: in a session, not in `exec` (nobody watches),
+//! and not over SSH, where they would open on a screen
 //! the person is not at. `--show-browser` shows them anyway. The browser and the shell know
 //! nothing of each other: the terminals' tabs are the browser host's panels, joined here.
 
 use crate::cli::RunOptions;
-use crate::mode::Mode;
 #[cfg(unix)]
 use tools::browser::Browser;
 #[cfg(unix)]
@@ -100,8 +99,8 @@ impl tools::window::Windowed for Tabs {
 }
 
 /// Whether windows show by themselves.
-pub(crate) fn shown(options: &RunOptions, asks: bool, started: Mode, remote: bool) -> bool {
-    options.show_browser || (asks && started != Mode::Autonomous && !remote)
+pub(crate) fn shown(options: &RunOptions, asks: bool, remote: bool) -> bool {
+    options.show_browser || (asks && !remote)
 }
 
 /// Whether llx runs over SSH, as `set` tells of the environment's variables.

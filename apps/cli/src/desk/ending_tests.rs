@@ -8,7 +8,6 @@ use serde_json::json;
 use crate::compose::{Models, Seat, Shared, lane_with};
 use crate::desk::test_support::{Person, at_desk, at_desk_with, call, connected, ended, state};
 use crate::desk::{Work, run};
-use crate::mode::Mode;
 use crate::server::serve::{Info, serve};
 use crate::server::{Peer, Ui};
 use crate::testing::{NoDecider, Scratch, gated, says, setup};
@@ -53,7 +52,7 @@ fn a_panicking_lane_ends_the_other_lanes() {
     let begun = Instant::now();
     let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let scratch = Scratch::new();
-        let (shared, seat) = setup(&scratch, Mode::Bypass, true).split(None);
+        let (shared, seat) = setup(&scratch, crate::modes::built("bypass"), true).split(None);
         #[allow(
             clippy::disallowed_methods,
             reason = "the in-process transport and the desk's requests, as the binary makes them"

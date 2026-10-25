@@ -1,13 +1,11 @@
 //! What is typed at a session's prompt: the slash commands and the help.
 
-use crate::mode::Mode;
 use protocol::SHIFT_TAB;
 
 pub(crate) const HELP: &str = "Type a task and press Enter; each one goes on from the last.
   /model            choose the model and its reasoning level (of the providers signed in to)
   /login            sign in to a provider, then choose its model and reasoning level
   /mode [name]      the modes, or switch to one (also /permissions)
-  /plan [task]      plan mode: investigate and answer with a plan; with a task, run it
   /rewind           back to before a task: its files, the conversation, or both (also /undo)
   /diff             the changes since the last commit, new files too
   /init             write an AGENTS.md for this project
@@ -23,7 +21,7 @@ Keys
   Tab               complete a command
   Ctrl-R            the last earlier entry with the words typed before it; again for older
   Ctrl-G            write the entry in $EDITOR
-  Shift+Tab         cycle default, plan, bypass, autonomous (after the task if working)
+  Shift+Tab         the next mode (after the task if working)
   Shift+Up, Down    more or less reasoning, as far as the model takes it
   Left, Right       on an empty prompt: switch to an agent's session and back
   Esc               stop the task (a message typed meanwhile waits for it), or back to main
@@ -46,12 +44,8 @@ pub(crate) enum Entry {
     Exit,
     /// `/mode`: the modes, the current one marked.
     Modes,
-    /// `/mode <name>`.
-    Switch(Mode),
-    /// `/mode` with a name that is not one.
-    UnknownMode(String),
-    /// `/plan`, with a task to run in plan mode.
-    Plan(Option<String>),
+    /// `/mode <name>`, a mode's name or not.
+    Switch(String),
     /// Shift+Tab.
     CycleMode,
     /// Shift+Up or Shift+Down: the next level the model takes, up or down.
@@ -83,7 +77,6 @@ pub(crate) fn commands() -> Vec<(String, String)> {
         ("init", "write an AGENTS.md for this project"),
         ("copy", "copy the last answer"),
         ("usage", "what the session spent"),
-        ("plan", "plan mode: investigate and answer with a plan"),
         ("new", "open a new session; this one goes on"),
         ("status", "the model, the workspace, the mode, the session"),
         ("exit", "quit"),
@@ -114,12 +107,7 @@ pub(crate) fn entry(text: &str) -> Option<Entry> {
         .map_or((command, ""), |(name, rest)| (name, rest.trim()));
     Some(match (name, rest) {
         ("mode" | "permissions", "") => Entry::Modes,
-        ("mode" | "permissions", name) => match Mode::named(name) {
-            Some(mode) => Entry::Switch(mode),
-            None => Entry::UnknownMode(name.to_string()),
-        },
-        ("plan", "") => Entry::Plan(None),
-        ("plan", task) => Entry::Plan(Some(task.to_string())),
+        ("mode" | "permissions", name) => Entry::Switch(name.to_string()),
         (name, "") if protocol::EXIT.contains(&name) => Entry::Exit,
         ("login", "") => Entry::Login,
         ("model" | "models", "") => Entry::Model,

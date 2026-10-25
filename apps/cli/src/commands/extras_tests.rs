@@ -69,7 +69,7 @@ fn copy_takes_the_last_answer_that_says_something() {
 
 #[test]
 fn usage_counts_tokens_with_thousands_separators_as_the_trace_does() {
-    crate::testing::composed(crate::mode::Mode::Default, false, vec![], |rig| {
+    crate::testing::composed(crate::modes::built("default"), false, vec![], |rig| {
         rig.spent.calls = 4;
         rig.spent.input_tokens = 1_234_567;
         rig.spent.cached_tokens = 2_000;
@@ -88,7 +88,7 @@ fn usage_counts_tokens_with_thousands_separators_as_the_trace_does() {
 
 #[test]
 fn usage_says_what_the_whole_session_spent_its_earlier_tasks_too() {
-    crate::testing::composed(crate::mode::Mode::Default, false, vec![], |rig| {
+    crate::testing::composed(crate::modes::built("default"), false, vec![], |rig| {
         rig.output.spend(contracts::history::Spent {
             input_tokens: 24_100,
             cached_tokens: 21_000,
@@ -108,7 +108,7 @@ fn usage_says_what_the_whole_session_spent_its_earlier_tasks_too() {
 fn copy_sends_the_last_answer_to_the_client_whose_clipboard_it_is() {
     use protocol::Event;
     let replies = vec![crate::testing::says("forty-two")];
-    crate::testing::composed(crate::mode::Mode::Default, true, replies, |rig| {
+    crate::testing::composed(crate::modes::built("default"), true, replies, |rig| {
         let (ui, frames) = crate::testing::fake_ui();
         rig.ui = Some(ui);
         assert_eq!(copy(rig), Some("No answer to copy yet.\n"));

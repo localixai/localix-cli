@@ -42,14 +42,12 @@ fn answering_places() -> (Ui, std::thread::JoinHandle<Vec<String>>) {
 #[test]
 fn each_question_is_asked_in_turn_and_the_time_taken_is_told() {
     let (ui, person) = answering_places();
-    let mode = ModeCell::new(Mode::Default);
     let told = AtomicUsize::new(0);
     let waited = |_: Duration| {
         told.fetch_add(1, Ordering::SeqCst);
     };
     let asking = UiPerson {
         ui,
-        mode: &mode,
         stopped: &|| false,
         waited: &waited,
         asking: &Default::default(),
@@ -66,23 +64,15 @@ fn each_question_is_asked_in_turn_and_the_time_taken_is_told() {
 }
 
 #[test]
-fn in_autonomous_mode_or_once_stopped_nobody_is_asked() {
-    for (mode, stopped, expected) in [
-        (Mode::Autonomous, false, Reply::Nobody(AUTONOMOUS.into())),
-        (Mode::Default, true, Reply::Stopped),
-    ] {
-        let (ui, person) = answering_places();
-        let mode = ModeCell::new(mode);
-        let is_stopped = move || stopped;
-        let asking = UiPerson {
-            ui,
-            mode: &mode,
-            stopped: &is_stopped,
-            waited: &|_| {},
-            asking: &Default::default(),
-        };
-        assert_eq!(asking.ask(&[question("db")]), expected);
-        drop(asking);
-        assert!(person.join().unwrap().is_empty());
-    }
+fn once_stopped_nobody_is_asked() {
+    let (ui, person) = answering_places();
+    let asking = UiPerson {
+        ui,
+        stopped: &|| true,
+        waited: &|_| {},
+        asking: &Default::default(),
+    };
+    assert_eq!(asking.ask(&[question("db")]), Reply::Stopped);
+    drop(asking);
+    assert!(person.join().unwrap().is_empty());
 }

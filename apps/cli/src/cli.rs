@@ -6,8 +6,6 @@ use std::path::PathBuf;
 use clap::builder::RangedU64ValueParser;
 use clap::{ArgGroup, Args, Parser, Subcommand};
 
-use crate::mode::Mode;
-
 const USAGE: &str = "llx [OPTIONS] [PROMPT]\n       \
     llx exec [OPTIONS] [PROMPT | -]\n       \
     llx <COMMAND>";
@@ -37,14 +35,14 @@ default for later sessions and for exec. The browser \
 tool's decision model runs on OpenRouter, so it needs an OpenRouter key whichever provider the \
 agent thinks with.
 
-The mode (--mode) decides what runs without asking. In default, commands, file changes and \
-browser actions are asked for at the terminal (1 yes, 2 always for this tool, 3 no; outside a \
-session y, a or n), and refused without one. plan investigates and answers with a plan: file changes are refused, and each \
-command (and each input to a terminal session) is asked. bypass (-y) allows everything. \
-autonomous also allows everything, and the agent asks you nothing (in exec, where ask is not \
-offered, it is the same as bypass). In a session, /mode switches it, /plan enters plan mode, \
-Shift+Tab cycles default, plan, bypass and autonomous (after the task if working); the mode \
-is always shown under the prompt, and /status shows it too. Markdown tables wrap their cells \
+Rules decide what runs without asking: a deny refuses, an allow runs it, and anything else is \
+asked at the terminal (1 yes, 2 always for this tool, 3 no; outside a session y, a or n), or \
+refused with no one to ask. A mode (--mode) is a named set of rules: default (none), plan \
+(file changes refused), bypass (-y, everything allowed), or your own from `modes` in \
+~/.config/llx/settings.json. --allow and --deny add rules for one run: bash(cargo test *), \
+edit(docs/**), browser. In a session, /mode switches it and Shift+Tab goes round the modes \
+(after the task if working); the mode is always shown under the prompt, and /status shows it \
+too. Markdown tables wrap their cells \
 to the terminal width; completed edits show numbered diffs with red/green background bands. Tab completes a slash command \
 (with a space for commands taking an argument); Enter executes the typed command. Pasted text \
 is shown as [Paste] until sent; pasted file paths become file or image marks.
@@ -316,17 +314,17 @@ pub(crate) struct RunOptions {
     #[arg(short = 'y', long, help_heading = "Approvals",
         aliases = ["yolo", "dangerously-skip-permissions"])]
     pub yes: bool,
-    /// What runs without asking, what is refused, and whether the agent may ask you questions.
-    /// Default: default. Also accepted as --permission-mode.
+    /// A named set of rules on what runs without asking: default (everything is asked), plan
+    /// (file changes refused), bypass (everything runs, as -y), or your own from `modes` in
+    /// ~/.config/llx/settings.json. Also accepted as --permission-mode.
     #[arg(
         long,
-        value_enum,
         value_name = "MODE",
         help_heading = "Approvals",
         alias = "permission-mode",
         conflicts_with = "yes"
     )]
-    pub mode: Option<Mode>,
+    pub mode: Option<String>,
     /// Run what RULE names without asking, where the mode would ask or, with no one to ask,
     /// refuse: `bash(cargo test *)` (every part of the command must match), `edit(docs/**)`,
     /// `browser`. Repeat it. Plan mode stays read-only. The syntax is Claude Code's: docs/ci.md.
@@ -367,7 +365,7 @@ pub(crate) struct RunOptions {
     pub timeout: u64,
 
     /// Always show the browser window, and a window for each terminal session `bash` keeps. By
-    /// default they show in a session, and stay hidden in exec, in autonomous mode and over SSH;
+    /// default they show in a session, and stay hidden in exec and over SSH;
     /// the agent can show, hide or close the browser per call, and a terminal window where they
     /// show. They are ordinary windows, never on top of others, and never take the keyboard.
     #[arg(long, help_heading = "Browser")]

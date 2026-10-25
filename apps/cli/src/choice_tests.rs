@@ -88,3 +88,14 @@ fn a_level_the_model_does_not_take_is_a_usage_error() {
     );
     assert!(matches!(unknown, Err(Failure::Usage(m)) if m.ends_with("takes off")));
 }
+
+#[test]
+fn saving_a_choice_keeps_the_rest_of_the_settings() {
+    let choice = Choice::new(Provider::openai(), "gpt-6-sol");
+    let before = r#"{"modes":{"review":{"allow":["bash"]}},"model":"old"}"#;
+    let kept: Value = serde_json::from_str(&merged(Some(before), &choice)).unwrap();
+    assert_eq!(kept["modes"]["review"]["allow"][0], "bash");
+    assert_eq!(kept["model"], "gpt-6-sol");
+    let fresh: Value = serde_json::from_str(&merged(Some("not json"), &choice)).unwrap();
+    assert_eq!(fresh["provider"], "openai");
+}

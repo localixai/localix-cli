@@ -65,7 +65,7 @@ llx is the part of an agent that touches the world. It opens real browser pages 
     </td>
     <td valign="top">
       <strong>Reading never asks</strong><br>
-      Every command, file change and page action asks first, by mode: default, plan, bypass, autonomous.<br>
+      Every command, file change and page action asks first, unless a rule allows it: <code>--allow 'bash(cargo test *)'</code>, or a mode of your own.<br>
       <a href="docs/modes.md">Modes →</a>
     </td>
   </tr>

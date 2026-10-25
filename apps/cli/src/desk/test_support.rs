@@ -14,7 +14,6 @@ use serde_json::Value;
 
 use super::{Seat, Shared, Work, run};
 use crate::compose::{Models, lane_with};
-use crate::mode::Mode;
 use crate::server::serve::{Info, serve};
 use crate::server::{Peer, Ui};
 use crate::testing::{Gated, NoDecider, Scratch, setup};
@@ -215,7 +214,7 @@ pub(crate) fn connected(
     person: impl FnOnce(Person, &Arc<Peer>),
 ) -> Scratch {
     let scratch = Scratch::new();
-    let (shared, seat) = setup(&scratch, Mode::Bypass, true).split(None);
+    let (shared, seat) = setup(&scratch, crate::modes::built("bypass"), true).split(None);
     #[allow(
         clippy::disallowed_methods,
         reason = "the in-process transport and the desk's requests, as the binary makes them"

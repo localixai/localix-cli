@@ -11,7 +11,7 @@ use crate::cli::Cli;
 use crate::compose::{Models, assemble};
 use crate::exit;
 use crate::interrupt::Interrupt;
-use crate::mode::NO_TERMINAL;
+use crate::mode::Mode;
 use crate::output::Output;
 use crate::testing::{Captured, NoDecider, Scratch, ScriptedChat};
 
@@ -150,6 +150,8 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
         fresh: String::new(),
         schema,
         mode,
+        modes: Modes::built_in(),
+        rules: Rules::default(),
         // No terminal: nothing here may wait on a person.
         terminal: false,
         asks: false,
@@ -210,7 +212,7 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
 
 #[test]
 fn a_composed_task_reports_in_order_writes_its_answer_and_is_saved() {
-    let done = compose_one(Mode::Bypass, false, None);
+    let done = compose_one(crate::modes::built("bypass"), false, None);
     let types: Vec<&str> = done
         .events
         .iter()
@@ -239,17 +241,22 @@ fn a_composed_task_reports_in_order_writes_its_answer_and_is_saved() {
 
 #[test]
 fn with_no_one_to_approve_nothing_runs_and_the_model_is_told_why() {
-    let done = compose_one(Mode::Default, false, None);
+    let done = compose_one(crate::modes::built("default"), false, None);
     let result = &done.events[3];
     assert_eq!(result["type"], "tool.result");
     assert_eq!(result["failed"], true);
-    assert!(result["output"].as_str().unwrap().contains(NO_TERMINAL));
+    assert!(
+        result["output"]
+            .as_str()
+            .unwrap()
+            .contains("no one is at a terminal")
+    );
     assert!(!done.made);
 }
 
 #[test]
 fn a_failed_answer_file_is_in_the_exit_code_the_report_gives() {
-    let done = compose_one(Mode::Bypass, true, None);
+    let done = compose_one(crate::modes::built("bypass"), true, None);
     let completed = done.events.last().unwrap();
     assert_eq!(done.code, exit::ENVIRONMENT);
     assert_eq!(completed["exit_code"], exit::ENVIRONMENT);
@@ -258,7 +265,11 @@ fn a_failed_answer_file_is_in_the_exit_code_the_report_gives() {
 
 #[test]
 fn with_a_schema_and_no_data_the_answer_file_holds_no_prose() {
-    let done = compose_one(Mode::Bypass, false, Some(json!({"type": "object"})));
+    let done = compose_one(
+        crate::modes::built("bypass"),
+        false,
+        Some(json!({"type": "object"})),
+    );
     assert_eq!(
         done.last, "",
         "prose where data is expected would break the reader"

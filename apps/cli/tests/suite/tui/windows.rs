@@ -21,11 +21,9 @@ fn only_a_watched_session_asks_for_the_terminal_s_colours() {
     assert_eq!(asked(&watched), cfg!(target_os = "macos"), "a session");
     drop(watched);
     let ssh = [("SSH_CONNECTION", "10.0.0.2 52000 10.0.0.1 22")];
-    for (args, env) in [(&["--mode", "autonomous"][..], &[][..]), (&[], &ssh)] {
-        let term = Term::spawn(&model, args, env);
-        term.wait_for("❯", LONG);
-        assert!(!asked(&term), "{args:?} {env:?}");
-    }
+    let term = Term::spawn(&model, &[], &ssh);
+    term.wait_for("❯", LONG);
+    assert!(!asked(&term), "over ssh");
 }
 
 #[test]

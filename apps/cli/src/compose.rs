@@ -40,7 +40,6 @@ use crate::jobs::{self, Jobs};
 use crate::live::Live;
 use crate::mode::{ModeCell, ModeGate};
 use crate::output::{Output, lock};
-use crate::rules::Rules;
 use crate::server::asking::{UiGate, UiPerson};
 use crate::windows;
 
@@ -80,7 +79,7 @@ pub(crate) fn assemble(
         on_step: &on_step,
         max_actions: shared.options.max_steps,
     };
-    let mode = ModeCell::new(seat.mode);
+    let mode = ModeCell::new(seat.mode.clone());
     let waited = |took| brake.extend(took);
     let approver = match &seat.ui {
         Some(ui) => {
@@ -94,9 +93,7 @@ pub(crate) fn assemble(
         }
         None => ModeGate::new(&mode, shared.terminal.then_some(Tty), &waited),
     };
-    // Read once already, before the run started: `run` refused rules it could not read.
-    let rules = Rules::new(&shared.options.allow, &shared.options.deny).unwrap_or_default();
-    let approver = approver.ruled(rules);
+    let approver = approver.ruled(shared.rules.clone());
     let gate = Stoppable {
         inner: &approver,
         stopped: &stopped,
@@ -104,7 +101,6 @@ pub(crate) fn assemble(
     let person: Box<dyn Person> = match &seat.ui {
         Some(ui) => Box::new(UiPerson {
             ui: ui.clone(),
-            mode: &mode,
             stopped: &stopped,
             waited: &waited,
             asking: &shared.asking,
@@ -197,7 +193,8 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
         output,
         history,
         mode: base.mode,
-        started: seat.mode,
+        started: seat.mode.clone(),
+        rules: shared.rules.clone(),
         terminal: *terminal,
     };
     // The main session's tools are an agent's, on the session's own gate and stop. A

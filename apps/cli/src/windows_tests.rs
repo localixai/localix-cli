@@ -11,16 +11,13 @@ fn options(args: &[&str]) -> RunOptions {
 }
 
 #[test]
-fn windows_show_in_a_session_and_not_in_exec_autonomous_or_over_ssh() {
+fn windows_show_in_a_session_and_not_in_exec_or_over_ssh() {
     let plain = options(&[]);
-    for mode in [Mode::Default, Mode::Plan, Mode::Bypass] {
-        assert!(shown(&plain, true, mode, false), "{mode:?}");
-    }
-    assert!(!shown(&plain, false, Mode::Default, false), "exec");
-    assert!(!shown(&plain, true, Mode::Autonomous, false), "autonomous");
-    assert!(!shown(&plain, true, Mode::Default, true), "over ssh");
+    assert!(shown(&plain, true, false), "a session");
+    assert!(!shown(&plain, false, false), "exec");
+    assert!(!shown(&plain, true, true), "over ssh");
     let forced = options(&["--show-browser"]);
-    assert!(shown(&forced, false, Mode::Autonomous, true), "forced");
+    assert!(shown(&forced, false, true), "forced");
 }
 
 #[test]
@@ -42,11 +39,11 @@ fn recording() -> (Watch, Arc<Mutex<Vec<String>>>) {
     (watch, titles)
 }
 
-/// The titles of the windows a kept `cat` opens, in a session started as `mode` (`asks` false is
-/// `exec`), with `show` as its call gives it.
-fn opened(asks: bool, mode: Mode, remote: bool, show: Option<bool>) -> Vec<String> {
+/// The titles of the windows a kept `cat` opens, in a session (`asks` false is `exec`), with
+/// `show` as its call gives it.
+fn opened(asks: bool, remote: bool, show: Option<bool>) -> Vec<String> {
     let (watch, titles) = recording();
-    let sessions = terminals(Some(watch), shown(&options(&[]), asks, mode, remote));
+    let sessions = terminals(Some(watch), shown(&options(&[]), asks, remote));
     let dir = Scratch::new();
     let wait = tools::shell::Wait {
         needle: None,
@@ -61,27 +58,13 @@ fn opened(asks: bool, mode: Mode, remote: bool, show: Option<bool>) -> Vec<Strin
 
 #[test]
 fn a_kept_session_opens_a_window_in_a_session_only() {
-    assert_eq!(
-        opened(true, Mode::Default, false, None),
-        ["session 1 · cat"]
-    );
-    assert_eq!(
-        opened(true, Mode::Default, false, Some(false)),
-        [] as [&str; 0]
-    );
-    for (asks, mode, remote) in [
-        (false, Mode::Default, false),
-        (true, Mode::Autonomous, false),
-        (true, Mode::Default, true),
-    ] {
-        let case = format!("asks {asks}, {mode:?}, ssh {remote}");
-        assert_eq!(opened(asks, mode, remote, None), [] as [&str; 0], "{case}");
+    assert_eq!(opened(true, false, None), ["session 1 · cat"]);
+    assert_eq!(opened(true, false, Some(false)), [] as [&str; 0]);
+    for (asks, remote) in [(false, false), (true, true)] {
+        let case = format!("asks {asks}, ssh {remote}");
+        assert_eq!(opened(asks, remote, None), [] as [&str; 0], "{case}");
         // Not even when a call asks for one: nobody is there to see it.
-        assert_eq!(
-            opened(asks, mode, remote, Some(true)),
-            [] as [&str; 0],
-            "{case}"
-        );
+        assert_eq!(opened(asks, remote, Some(true)), [] as [&str; 0], "{case}");
     }
 }
 

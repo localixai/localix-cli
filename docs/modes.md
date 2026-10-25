@@ -9,19 +9,57 @@ What llx asks before it acts, how to stop it, and what it does and does not prot
 
 ## Modes
 
-`read` never asks. `edit`, `bash` and `window` ask before they act, through one gate (`window` when a call opens an address, hands over a goal, presses keys, types into a terminal or runs a script; reading a tab does not ask). The mode decides what the gate answers, and whether `ask` gets an answer:
+`read` never asks. `edit`, `bash` and `window` ask before they act, through one gate (`window` when a call opens an address, hands over a goal, presses keys, types into a terminal or runs a script; reading a tab does not ask). What the gate answers comes from rules:
 
-| Mode | What happens |
+1. A **deny** rule that matches refuses, and the refusal names the rule.
+2. An **allow** rule that matches runs it without asking.
+3. Anything else is asked of the person at the terminal; with no one there (`exec`, CI), it is refused, and the agent is told how the person can allow it.
+
+A **mode** is a named set of those rules, and nothing more. Three are built in:
+
+| Mode | Rules |
 | --- | --- |
-| `default` | Each command, file change and browser action is asked at the terminal. With no terminal, they are refused, and the agent is told the person must rerun with `--yes` or `--mode bypass`. Reading still works. |
-| `plan` | The agent investigates and answers with a plan: a title, a summary, the changes file by file, the tests, its assumptions. File changes are refused without asking. Each command, each start of a terminal session and each text typed into one, and each browser action is asked, so it can look but you decide what runs; plan keeps its own `a` answers, apart from the default mode's, and `a` for `bash` covers its terminal sessions as it covers its commands. With no terminal, commands and browser actions are refused too, and the plan comes from reading files. |
-| `bypass` (`-y`) | Everything is allowed without asking. `ask` still reaches you. |
-| `autonomous` | Everything is allowed without asking, and nobody answers questions: `ask` fails at once and the agent goes on with its best assumption. In `exec`, where `ask` is not offered, it is the same as `bypass`. |
+| `default` | none: everything is asked, or refused with no one to ask |
+| `plan` | deny `edit`: read-only, file changes refused without asking |
+| `bypass` (`-y`) | allow everything |
 
-- The mode is `--mode` (or `-y`), else `default`, for a session and for `exec` alike.
-- In a session, `/mode <name>` switches it for the next question, `/plan` enters plan mode, and Shift+Tab cycles default → plan → bypass → autonomous → default without Enter (queued until the current task ends). The current mode and `shift+tab to cycle` are always shown under the prompt.
-- The agent is told of a change before its next task, in a `<mode_change>` note.
-- When a task in plan mode ends well, llx asks `Implement this plan?`: yes goes back to the mode plan mode was entered from and runs `Implement the plan.`; no stays in plan mode, where your next message can revise the plan.
+Your own go in `modes` in `~/.config/llx/settings.json` (under `XDG_CONFIG_HOME` when set); one with the name of a built-in mode replaces it:
+
+```json
+{
+  "modes": {
+    "review": { "allow": ["bash(cargo test *)", "bash(git log *)"], "description": "Review, tests allowed." },
+    "fix":    { "allow": ["bash(cargo *)", "edit(src/**)", "edit(tests/**)"], "deny": ["bash(git push *)"] },
+    "smoke":  { "allow": ["browser"] }
+  }
+}
+```
+
+- `--mode NAME` chooses one, `-y` is `bypass`, else `default`; for a session and for `exec` alike. A name that is not a mode, or a mode whose rules cannot be read, stops the run before a model is called (exit 3).
+- `--allow RULE` and `--deny RULE`, repeated, add to the mode's rules for that run: `llx exec --mode review --deny 'bash(cargo publish *)' …`.
+- In a session, `/mode` lists the modes, `/mode <name>` switches for the next question, and Shift+Tab goes round them all without Enter (queued until the current task ends). The agent hears of a change before its next task, in a `<mode_change>` note; its context lists the rules in force.
+- Rules come from the command line and your settings only, never from the repository: a pull request in CI could otherwise allow itself anything. In a container, mount your settings file read-only (`-v ./llx.json:/root/.config/llx/settings.json:ro`) and pass the key as a variable; `/login` writes to that file, so do not sign in through a read-only one.
+
+### Rules
+
+Rules are written as Claude Code writes them:
+
+| Rule | Matches |
+| --- | --- |
+| `bash` or `bash(*)` | every command |
+| `bash(cargo test)` | that command exactly |
+| `bash(cargo test *)` | `cargo test`, `cargo test -q`, …, not `cargo testing` |
+| `bash(* --version)` | any program's `--version` |
+| `edit` | every file change |
+| `edit(docs/**)` | a file under `docs/`, from the workspace root |
+| `edit(*.md)` | a Markdown file at any depth |
+| `browser`, `terminal`, `jobs` | every page action, every goal on a terminal tab, every monitor or schedule |
+
+- `*` stands for any text, spaces included; the words before it limit the rule, so put it after the subcommand (`git log *`, not `git * main`).
+- A command is **allowed** only when every part of it matches an allow rule: it is split at `&&`, `||`, `;`, `|`, `&` and line breaks, outside quotes. One with `$(…)`, backticks, `<(…)`, a here-document, a redirect to a file (`> /dev/null` and `2>&1` are fine), `eval`, `sh -c`, `tee` to a file or `find -exec`/`-delete` is never allowed by a pattern: it is asked, or refused with no one to ask. `timeout`, `time`, `nice`, `nohup`, `stdbuf` and a bare `xargs` are looked through; a leading `VAR=value` stops an allow.
+- A command is **denied** when any part matches a deny rule, inside `$(…)` and past any `VAR=value` too.
+- A rule matches the command as written: `bash(rm *)` in deny does not stop `/bin/rm` or `sh -c 'rm …'`. It is a guard on what the model usually writes, not a sandbox; for that, run llx in a container.
+- Typing into a terminal session has no command to match: only a bare `bash` allows or denies it.
 
 ## Approvals
 
@@ -51,6 +89,6 @@ In a session, an approval replaces the prompt with what would happen (`Run this 
 - **The workspace limits `edit`, not `bash`.** `edit` changes only files inside the workspace, after following symlinks. `bash` is a real shell with your permissions, and there is no sandbox: the gate is what stands between the model and your machine. A `workdir` outside the workspace is named as such in the question.
 - **llx's own files are off limits** to `read` and `edit`, symlinks included: its config directory (the saved key, the ChatGPT tokens, the `/login` choice) and the sessions directory.
 - **The browser's decision model only chooses** among the operations and controls a page offers, and types only the strings the agent gave it. Its output never becomes a selector, coordinates or code. Only http(s) pages load; downloads and other schemes are refused. A password field is typed into, but its value is never read back.
-- **Keys and tokens:** `/login` saves an OpenRouter key in `~/.config/llx/credentials` and a ChatGPT sign-in's tokens (access, refresh, ID, and the account id) in `~/.config/llx/openai.json` (under `XDG_CONFIG_HOME` when set), mode 0600, also when an older file was wider; the choice of provider, model and level goes in `settings.json` beside them. Keys and tokens are never printed or logged; a pasted key is read with the echo off and shown only as its masked ends. The ChatGPT access token is refreshed five minutes before it lapses (and once when a request is refused), and the refreshed tokens are saved. `llx logout` removes both files. `OPENROUTER_API_KEY` wins over a saved key when set. Commands start without it, or the key variables of the provider in use (or of one chosen later with `/login`), in their environment, but a command can still read the key from llx's environment or from the saved file: what keeps it from a command is approving each one (not `--yes`, `bypass` or `autonomous`).
+- **Keys and tokens:** `/login` saves an OpenRouter key in `~/.config/llx/credentials` and a ChatGPT sign-in's tokens (access, refresh, ID, and the account id) in `~/.config/llx/openai.json` (under `XDG_CONFIG_HOME` when set), mode 0600, also when an older file was wider; the choice of provider, model and level goes in `settings.json` beside them. Keys and tokens are never printed or logged; a pasted key is read with the echo off and shown only as its masked ends. The ChatGPT access token is refreshed five minutes before it lapses (and once when a request is refused), and the refreshed tokens are saved. `llx logout` removes both files. `OPENROUTER_API_KEY` wins over a saved key when set. Commands start without it, or the key variables of the provider in use (or of one chosen later with `/login`), in their environment, but a command can still read the key from llx's environment or from the saved file: what keeps it from a command is approving each one (not `--yes`, `bypass`, or a rule that allows it).
 
 A terminal session never outlives its task, so a long-lived server still runs as `cmd > log 2>&1 &`. `wait_for` can match the echo of the text typed; the report says so when the text was in the input.

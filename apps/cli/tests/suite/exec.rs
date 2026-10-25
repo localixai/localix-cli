@@ -79,13 +79,13 @@ fn json_lines_parse_and_end_with_the_exit_code_of_the_process() {
 }
 
 #[test]
-fn with_no_terminal_a_command_runs_only_with_yes_or_in_autonomous_mode() {
+fn with_no_terminal_a_command_runs_only_with_yes_or_in_bypass_mode() {
     let home = Home::new();
     let made = home.path().join("made.txt");
     for (flags, runs) in [
         (&[][..], false),
         (&["-y"][..], true),
-        (&["--mode", "autonomous"][..], true),
+        (&["--mode", "bypass"][..], true),
     ] {
         let _ = std::fs::remove_file(&made);
         let model = Model::start(vec![

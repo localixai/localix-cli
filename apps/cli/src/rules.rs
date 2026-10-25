@@ -27,7 +27,7 @@ pub(crate) enum Ruling {
     Unsettled,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Rule {
     text: String,
     tool: &'static str,
@@ -35,7 +35,7 @@ struct Rule {
     pattern: Option<String>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Rules {
     allow: Vec<Rule>,
     deny: Vec<Rule>,
@@ -53,6 +53,15 @@ impl Rules {
             allow: read(allow)?,
             deny: read(deny)?,
         })
+    }
+
+    /// These rules and `more`'s, as one set: a mode's and the command line's.
+    pub(crate) fn with(&self, more: &Self) -> Self {
+        let join = |a: &[Rule], b: &[Rule]| [a, b].concat();
+        Self {
+            allow: join(&self.allow, &more.allow),
+            deny: join(&self.deny, &more.deny),
+        }
     }
 
     /// What the rules say of `tool` acting on `subject` (its command, or its path; empty when
@@ -87,20 +96,19 @@ impl Rules {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
-        let mut text = String::from("Rules for this run:");
+        let mut said = vec![];
         if !self.allow.is_empty() {
-            text.push_str(&format!(
-                " these run without asking, whatever the mode says of commands: {}. A command runs under them only when every part of \
-                 it (split at `&&`, `||`, `;`, `|`) matches one, with no `$(…)`, backticks or \
-                 redirect to a file;",
+            said.push(format!(
+                "Allowed without asking: {}. A command is allowed only when every part of it \
+                 (split at `&&`, `||`, `;`, `|`) matches one, with no `$(…)`, backticks or \
+                 redirect to a file.",
                 list(&self.allow)
             ));
         }
         if !self.deny.is_empty() {
-            text.push_str(&format!(" these are always refused: {};", list(&self.deny)));
+            said.push(format!("Always refused: {}.", list(&self.deny)));
         }
-        text.pop();
-        text.push('.');
+        let text = said.join(" ");
         Some(text)
     }
 }

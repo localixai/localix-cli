@@ -12,7 +12,6 @@ use protocol::Approval;
 
 use super::Ui;
 use crate::gate::Asker;
-use crate::mode::{AUTONOMOUS, Mode, ModeCell};
 use crate::picker::{Adjustment, Item, Lines, Picker};
 
 /// Approvals asked in the interface; a stopped task closes the question with a no.
@@ -32,7 +31,6 @@ impl Asker for UiGate<'_> {
 
 pub(crate) struct UiPerson<'a> {
     pub ui: Ui,
-    pub mode: &'a ModeCell,
     pub stopped: &'a (dyn Fn() -> bool + Sync),
     /// Told how long the person took, so it does not count toward the time limit.
     pub waited: &'a (dyn Fn(Duration) + Sync),
@@ -46,9 +44,6 @@ impl Person for UiPerson<'_> {
     fn ask(&self, questions: &[Question]) -> Reply {
         if (self.stopped)() {
             return Reply::Stopped;
-        }
-        if self.mode.get() == Mode::Autonomous {
-            return Reply::Nobody(AUTONOMOUS.into());
         }
         let asked = Instant::now();
         let _asking = crate::gate::one_question(self.asking);

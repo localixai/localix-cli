@@ -6,14 +6,13 @@ use contracts::history::History;
 
 use super::*;
 use crate::choice::Choice;
-use crate::mode::{Mode, PLAN_REFUSAL};
 use crate::testing::{answers, composed, users};
 
 #[test]
 fn a_mode_change_is_told_once_before_the_next_task() {
-    composed(Mode::Default, true, answers(3), |rig| {
+    composed(crate::modes::built("default"), true, answers(3), |rig| {
         rig.task("one");
-        rig.switch(Mode::Plan);
+        rig.switch(crate::modes::built("plan"));
         rig.task("two");
         rig.task("three");
         let users = users(rig);
@@ -21,27 +20,6 @@ fn a_mode_change_is_told_once_before_the_next_task() {
         assert_eq!(users[0], "Goal: one");
         assert!(users[1].starts_with("<mode_change>\nThe mode is now plan: "));
         assert_eq!(users[2..], ["Goal: two", "Goal: three"]);
-        0
-    });
-}
-
-#[test]
-fn entering_plan_remembers_the_mode_it_came_from() {
-    composed(Mode::Bypass, true, vec![], |rig| {
-        assert_eq!(rig.before_plan, Mode::Bypass);
-        rig.switch(Mode::Autonomous);
-        rig.switch(Mode::Plan);
-        rig.switch(Mode::Plan);
-        assert_eq!(rig.before_plan, Mode::Autonomous);
-        assert_eq!(rig.mode.get(), Mode::Plan);
-        0
-    });
-    composed(Mode::Plan, true, vec![], |rig| {
-        assert_eq!(
-            rig.before_plan,
-            Mode::Default,
-            "llx --mode plan carries out in default"
-        );
         0
     });
 }
@@ -55,14 +33,14 @@ fn ask_is_offered_in_a_session_only() {
             .map(|tool| tool.spec().name)
             .collect()
     };
-    composed(Mode::Default, true, vec![], |rig| {
+    composed(crate::modes::built("default"), true, vec![], |rig| {
         assert_eq!(
             names(rig),
             ["read", "edit", "bash", "window", "ask", "agents", "jobs"]
         );
         0
     });
-    composed(Mode::Autonomous, false, vec![], |rig| {
+    composed(crate::modes::built("bypass"), false, vec![], |rig| {
         assert_eq!(
             names(rig),
             ["read", "edit", "bash", "window", "agents", "jobs"]
@@ -83,7 +61,7 @@ fn plan_mode_changes_no_file() {
         ..Completion::default()
     }];
     replies.extend(answers(1));
-    composed(Mode::Plan, true, replies, |rig| {
+    composed(crate::modes::built("plan"), true, replies, |rig| {
         rig.task("write the plan to plan.md");
         let refused = rig
             .conversation
@@ -93,7 +71,7 @@ fn plan_mode_changes_no_file() {
             .iter()
             .any(|message| {
                 matches!(message, Message::ToolResult { content, failed: true, .. }
-                if content.contains(PLAN_REFUSAL))
+                if content.contains("refused by the rule `edit`"))
             });
         assert!(refused);
         assert!(!rig.workspace.root().join("plan.md").exists());
@@ -133,7 +111,7 @@ fn a_terminal_session_outlives_its_task_in_a_session() {
         ..Completion::default()
     });
     replies.extend(answers(1));
-    composed(Mode::Bypass, true, replies, |rig| {
+    composed(crate::modes::built("bypass"), true, replies, |rig| {
         rig.task("start a sleep in a terminal");
         assert!(
             rig.sessions.running().contains("sleep 30"),
@@ -152,32 +130,37 @@ fn a_terminal_session_outlives_its_task_in_a_session() {
 #[cfg(unix)]
 #[test]
 fn a_terminal_session_ends_with_an_exec_task() {
-    composed(Mode::Bypass, false, a_terminal_started(), |rig| {
-        rig.task("start a sleep in a terminal");
-        let started = rig
-            .conversation
-            .as_ref()
-            .unwrap()
-            .messages()
-            .iter()
-            .any(|message| {
-                matches!(message, Message::ToolResult { content, failed: false, .. }
+    composed(
+        crate::modes::built("bypass"),
+        false,
+        a_terminal_started(),
+        |rig| {
+            rig.task("start a sleep in a terminal");
+            let started = rig
+                .conversation
+                .as_ref()
+                .unwrap()
+                .messages()
+                .iter()
+                .any(|message| {
+                    matches!(message, Message::ToolResult { content, failed: false, .. }
                 if content.starts_with("t1 (terminal): session 1 running (`sleep 30`)"))
-            });
-        assert!(
-            started,
-            "{:?}",
-            rig.conversation.as_ref().unwrap().messages()
-        );
-        assert_eq!(rig.sessions.running(), "none");
-        0
-    });
+                });
+            assert!(
+                started,
+                "{:?}",
+                rig.conversation.as_ref().unwrap().messages()
+            );
+            assert_eq!(rig.sessions.running(), "none");
+            0
+        },
+    );
 }
 
 #[cfg(unix)]
 #[test]
 fn status_shows_the_mode_and_the_terminals() {
-    composed(Mode::Plan, true, vec![], |rig| {
+    composed(crate::modes::built("plan"), true, vec![], |rig| {
         let wait = tools::shell::Wait {
             needle: None,
             yield_ms: Some(100),
@@ -200,7 +183,9 @@ fn status_shows_the_mode_and_the_terminals() {
 fn a_session_that_panics_ends_its_background_work_and_does_not_hang() {
     let begun = std::time::Instant::now();
     let unwound = std::panic::catch_unwind(|| {
-        composed(Mode::Bypass, true, vec![], |_| panic!("a bug in a task"));
+        composed(crate::modes::built("bypass"), true, vec![], |_| {
+            panic!("a bug in a task")
+        });
     });
     assert!(unwound.is_err());
     assert!(begun.elapsed() < std::time::Duration::from_secs(5));
@@ -224,7 +209,9 @@ fn commands_never_see_the_key_of_the_provider_in_use() {
         context: String::new(),
         fresh: String::new(),
         schema: None,
-        mode: Mode::Bypass,
+        mode: crate::modes::built("bypass"),
+        modes: crate::modes::Modes::built_in(),
+        rules: crate::rules::Rules::default(),
         terminal: false,
         asks: false,
         history,
@@ -274,7 +261,7 @@ fn the_main_tools_learn_a_subtrees_instructions_once_and_keep_edits() {
         ..Completion::default()
     });
     replies.extend(answers(1));
-    composed(Mode::Bypass, true, replies, |rig| {
+    composed(crate::modes::built("bypass"), true, replies, |rig| {
         let sub = rig.workspace.root().join("sub");
         std::fs::create_dir_all(&sub).unwrap();
         std::fs::write(sub.join("AGENTS.md"), "Use tabs here.").unwrap();
@@ -312,7 +299,7 @@ fn a_provider_chosen_later_has_its_key_kept_from_commands_too() {
     replies.extend(answers(1));
     replies.push(probe());
     replies.extend(answers(1));
-    composed(Mode::Bypass, false, replies, |rig| {
+    composed(crate::modes::built("bypass"), false, replies, |rig| {
         rig.task("before");
         let cerebras = crate::providers::Provider::named("cerebras").unwrap();
         rig.hide_for(&cerebras);
@@ -331,7 +318,7 @@ fn a_provider_chosen_later_has_its_key_kept_from_commands_too() {
 fn two_lanes_over_one_shared_share_the_workspace_and_browser_but_keep_their_own() {
     use crate::testing::{NoDecider, Scratch, ScriptedChat, quiet, setup};
     let scratch = Scratch::new();
-    let (shared, seat) = setup(&scratch, Mode::Bypass, true).split(None);
+    let (shared, seat) = setup(&scratch, crate::modes::built("bypass"), true).split(None);
     let other = shared.seat(shared.history.start(), None);
     let chat = ScriptedChat::new(vec![]);
     let models = || Models {

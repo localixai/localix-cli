@@ -169,7 +169,7 @@ fn print_and_continue_are_flags() {
 fn the_mode_is_a_flag_with_its_other_spellings_and_conflicts_with_yes() {
     assert_eq!(
         parse(&["--mode", "plan", "x"]).unwrap().run.mode,
-        Some(Mode::Plan)
+        Some("plan".to_string())
     );
     let Some(Command::Exec(exec)) = parse(&["exec", "--permission-mode", "bypass", "x"])
         .unwrap()
@@ -177,11 +177,10 @@ fn the_mode_is_a_flag_with_its_other_spellings_and_conflicts_with_yes() {
     else {
         panic!("not exec")
     };
-    assert_eq!(exec.run.mode, Some(Mode::Bypass));
+    assert_eq!(exec.run.mode.as_deref(), Some("bypass"));
     assert_eq!(parse(&["x"]).unwrap().run.mode, None);
     let conflict = parse(&["-y", "--mode", "plan", "x"]).unwrap_err();
     assert_eq!(conflict.kind(), ErrorKind::ArgumentConflict);
-    assert!(parse(&["--mode", "nope", "x"]).is_err());
 }
 
 #[test]

@@ -2,12 +2,12 @@ use contracts::gate::Open;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use super::*;
-use crate::mode::{Mode, ModeCell};
+use crate::mode::ModeCell;
 use crate::testing::Typed;
 
 /// Asking at a terminal that reads `script`, as the default mode does.
 fn terminal(script: &Typed) -> crate::mode::ModeGate<'_> {
-    let mode = Box::leak(Box::new(ModeCell::new(Mode::Default)));
+    let mode = Box::leak(Box::new(ModeCell::new(crate::modes::built("default"))));
     crate::mode::ModeGate::new(mode, Some(script), &|_| {})
 }
 

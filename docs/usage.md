@@ -19,7 +19,7 @@ llx "fix the failing test in src/parse.rs"                 # a session that star
 llx -c                                                     # go on with the newest session here
 llx exec "fix the failing test in src/parse.rs"            # one task, then exit (also: llx e, llx -p)
 llx exec -y "run the tests and fix what fails"             # allow commands and edits without asking
-llx --mode plan "how should we split src/parse.rs?"        # investigate and plan; change no file
+llx --mode plan "how should we split src/parse.rs?"        # read-only: change no file
 git diff | llx -p "review this change"                     # piped stdin is added to the prompt
 llx exec - < task.md                                       # the prompt from stdin
 llx exec -y "fix the lint" </dev/null                      # from a script whose stdin stays open
@@ -39,7 +39,8 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 | Option | Meaning |
 | --- | --- |
 | `-C, --cd DIR` | The workspace: paths resolve in it and files change only inside it. Default: the current directory. |
-| `--mode MODE` | `default`, `plan`, `bypass` or `autonomous` (see [Modes and approvals](modes.md)). Also `--permission-mode`. Default: `default`. |
+| `--mode MODE` | A named set of rules: `default`, `plan`, `bypass`, or your own from `settings.json` (see [Modes and approvals](modes.md)). Also `--permission-mode`. Default: `default`. |
+| `--allow RULE`, `--deny RULE` | Add a rule to the mode's for this run: `bash(cargo test *)`, `edit(docs/**)`, `browser`. Repeat them. A deny refuses in every mode, `-y` included. |
 | `-y, --yes` | `--mode bypass`: allow commands, file changes and browser actions without asking. Also `--yolo` and `--dangerously-skip-permissions`. Giving it with `--mode` is a usage error. |
 | `-p, --print` | Run the prompt as one task and exit, as `exec` does. |
 | `-c, --continue` | Go on with the newest session of this directory, as `resume --last` does. |
@@ -55,7 +56,7 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 | `--max-steps N` | Actions for one browser task of the decision model (40; 1 to 10000). |
 | `--timeout SECONDS` | Seconds one task may take (1800; at most 86400). It stops at the first model turn past them, or while the task waits on its monitors or agents. Time spent waiting on you (an approval, a question) does not count. |
 | `--no-daemon` | Run the session in this process instead of the daemon (`llx serve`). Env `LLX_NO_DAEMON=1`. `exec` always runs in process. |
-| `--show-browser` | Show the browser window, and a window for each terminal session `bash` keeps. By default they show in a session, and stay hidden in `exec`, in autonomous mode and over SSH (`SSH_CONNECTION` or `SSH_TTY` set; the browser then works without a window). The browser window opens only when the browser is first used. A shown window is an ordinary one: it comes to the front when it opens, without taking the keyboard, and goes behind other windows like any other. |
+| `--show-browser` | Show the browser window, and a window for each terminal session `bash` keeps. By default they show in a session, and stay hidden in `exec` and over SSH (`SSH_CONNECTION` or `SSH_TTY` set; the browser then works without a window). The browser window opens only when the browser is first used. A shown window is an ordinary one: it comes to the front when it opens, without taking the keyboard, and goes behind other windows like any other. |
 
 ### Commands
 
@@ -89,7 +90,7 @@ interface cannot start) it is a usage error pointing to `llx exec`, which prints
 - While a task works, Enter sends what you type to it, read at its next step (`↳`); Tab keeps it for after the task (`⏎`).
 - Ctrl-R finds the last earlier entry with the words already typed (type them first; again for older ones). Ctrl-G writes the entry in `$EDITOR`.
 - Clipboard text shows as `[Paste]` (numbered for several) and is expanded when sent.
-- Shift+Tab cycles default → plan → bypass → autonomous → default without Enter; while a task runs, the switch waits until it ends.
+- Shift+Tab goes round the modes (default → plan → bypass → your own → default) without Enter; while a task runs, the switch waits until it ends.
 
 ### Attaching files
 
@@ -100,14 +101,13 @@ interface cannot start) it is a usage error pointing to `llx exec`, which prints
 
 ### Slash commands
 
-Typing `/` lists them. Tab completes the selected command (with a trailing space for `/mode`, `/permissions` and `/plan`); Enter runs exactly what is typed.
+Typing `/` lists them. Tab completes the selected command (with a trailing space for `/mode` and `/permissions`); Enter runs exactly what is typed.
 
 | Command | What it does |
 | --- | --- |
 | `/login` | Signs in, and chooses the provider, the model and its reasoning level (see [below](#signing-in-and-choosing-a-model)). |
 | `/model` | Chooses the model and its reasoning level. |
 | `/mode [name]` (also `/permissions`) | Lists the [modes](modes.md) or switches to one. |
-| `/plan [task]` | Enters plan mode, and runs the task in it. |
 | `/new` (also `/clear`) | Opens a new session and shows it, even while a task works; the old one goes on in the background. |
 | `/status` | The models, the workspace, the mode, the session and any terminal session still running. |
 | `/rewind` (also `/undo`, or Esc Esc on an empty prompt) | Goes back to before one of the conversation's tasks: the files `edit` changed (the agents' too; not what commands changed), the conversation (the task's words back in the prompt; the session's agents are let go), or both. |

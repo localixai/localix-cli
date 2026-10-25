@@ -34,7 +34,8 @@ use crate::error::Failure;
 use crate::gate::Tty;
 use crate::input::{self, Prompt};
 use crate::interrupt;
-use crate::mode::{self, Mode};
+use crate::mode;
+use crate::modes::Modes;
 use crate::server::{Ui, place};
 use crate::tui;
 use crate::windows;
@@ -168,14 +169,15 @@ pub(crate) fn run(
         return Err(Failure::SignedOut(choice.provider.how_to_sign_in()));
     }
     let work = work(prompt, kind)?;
-    let mode = Mode::choose(options.mode, options.yes);
+    let modes = Modes::load()?;
+    let mode = modes.choose(options.mode.as_deref(), options.yes)?;
     // The daemon's client has the terminal the person is asked at.
     let (terminal, asks) = (served.is_some() || Tty::available(), kind == Kind::Session);
     let set = |name: &str| match &served {
         Some(served) => served.place.env.iter().any(|(set, _)| set == name),
         None => std::env::var_os(name).is_some(),
     };
-    let shown = windows::shown(&options, asks, mode, windows::remote(set));
+    let shown = windows::shown(&options, asks, windows::remote(set));
     let browser =
         (served.as_ref()).map_or_else(tools::browser::has_display, |s| s.browser.is_some());
     // A session's interface attaches first: its sessions work where it is.
@@ -204,11 +206,7 @@ pub(crate) fn run(
     }
     let environment = Environment {
         root: workspace.root(),
-        mode: &[Some(mode::describe(mode, terminal, asks)), rules.describe()]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join(" "),
+        mode: &mode::describe(&mode, &rules, terminal, asks),
         browser,
         now: session::now(),
     };
@@ -227,6 +225,8 @@ pub(crate) fn run(
         fresh,
         schema,
         mode,
+        modes,
+        rules,
         terminal,
         asks,
         history,

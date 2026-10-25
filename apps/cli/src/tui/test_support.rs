@@ -124,15 +124,9 @@ pub(crate) fn modes() -> Vec<(String, String)> {
             "default",
             "Each command, file change and browser action asks first",
         ),
-        ("plan", "Investigate and plan: file changes are refused"),
-        (
-            "bypass",
-            "Everything runs without asking (-y); questions are asked",
-        ),
-        (
-            "autonomous",
-            "Everything runs without asking, and no question is asked",
-        ),
+        ("plan", "Read-only: file changes are refused"),
+        ("bypass", "Everything runs without asking (-y)"),
+        ("review", "The person's own mode."),
     ]
     .map(|(n, w)| (n.to_string(), w.to_string()))
     .to_vec()

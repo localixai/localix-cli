@@ -22,8 +22,10 @@ use crate::interrupt::Interrupt;
 use crate::jobs::{self, Jobs, JobsTool};
 use crate::live::Live;
 use crate::mode::{self, Mode, ModeCell};
+use crate::modes::Modes;
 use crate::output::{Output, lock};
 use crate::providers::Provider;
+use crate::rules::Rules;
 use crate::server::Ui;
 use protocol::Event;
 
@@ -65,8 +67,9 @@ pub(crate) struct Rig<'a> {
     pub asks: bool,
     /// The mode the model last heard of.
     pub told: Mode,
-    /// The mode plan mode was entered from, which carrying out the plan goes back to.
-    pub before_plan: Mode,
+    /// Every mode the session can switch to, and the command line's rules beside each.
+    pub modes: &'a Modes,
+    pub rules: &'a Rules,
     /// The interface the session is shown in, at a terminal.
     pub ui: Option<Ui>,
     /// The pictures the person attached to the next task.
@@ -154,11 +157,8 @@ pub(super) fn drive(
                 terminal: shared.terminal,
                 asks: shared.asks,
                 told: started,
-                // `llx --mode plan`: carrying out the plan goes on in the default mode.
-                before_plan: match started {
-                    Mode::Plan => Mode::Default,
-                    other => other,
-                },
+                modes: &shared.modes,
+                rules: &shared.rules,
                 ui,
                 attached: vec![],
                 choice,
@@ -198,15 +198,11 @@ impl Rig<'_> {
         }
     }
 
-    /// Work in `mode` from the next question on; entering plan remembers the mode it came from.
+    /// Work in `mode` from the next question on.
     pub(crate) fn switch(&mut self, mode: Mode) {
-        let now = self.mode.get();
-        if mode == Mode::Plan && now != Mode::Plan {
-            self.before_plan = now;
-        }
         self.mode.set(mode);
         if let Some(ui) = &self.ui {
-            ui.send(Event::Mode(mode.name().to_string()));
+            ui.send(Event::Mode(self.mode.get().name().to_string()));
         }
     }
 
@@ -219,8 +215,8 @@ impl Rig<'_> {
         if mode == self.told {
             return conversation;
         }
-        self.told = mode;
-        let note = mode::notice(mode, self.terminal, self.asks);
+        self.told = mode.clone();
+        let note = mode::notice(&mode, self.rules, self.terminal, self.asks);
         Some(self.agent.tell(conversation, &note))
     }
 }

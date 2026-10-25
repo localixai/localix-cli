@@ -55,7 +55,7 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
                     child.session.name.clone(),
                     child.conversation.take(),
                     std::mem::take(&mut child.seen),
-                    child.told,
+                    child.told.clone(),
                     Arc::clone(&child.stop),
                     Arc::clone(&child.letters),
                 )
@@ -109,7 +109,7 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
             said.push(brief(&name));
         }
         if now != told {
-            said.push(mode::notice(now, kit.terminal, false));
+            said.push(mode::notice(&now, &kit.rules, kit.terminal, false));
         }
         let conversation = match said.is_empty() {
             true => conversation,

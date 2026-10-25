@@ -60,7 +60,7 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
                 seen: crate::instructions::chain(self.kit.workspace.root())
                     .into_iter()
                     .collect(),
-                told: self.kit.started,
+                told: self.kit.started.clone(),
                 status: String::new(),
                 open: true,
                 working: false,

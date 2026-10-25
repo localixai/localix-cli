@@ -545,11 +545,10 @@ fn tabs(driver: &WebviewDriver, origin: &str) {
     driver.switch_tab(2).unwrap();
     std::thread::sleep(Duration::from_millis(600));
     driver.switch_tab(1).unwrap();
-    assert!(
-        drawn(driver) > before + 10,
-        "{before} then {}",
-        drawn(driver)
-    );
+    // A tab kept drawing draws at the display's pace (a virtual display's is slow: a few frames
+    // in 600 ms); one that was throttled draws none.
+    let after = drawn(driver);
+    assert!(after > before + 2, "{before} then {after}");
 
     // A driver pinned to a tab acts there, whatever is shown: two tabs' scripts run at once.
     let (one, two) = (driver.on(1), driver.on(2));

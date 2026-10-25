@@ -11,7 +11,7 @@ claude mcp add llx -- llx mcp                    # Claude Code
 codex mcp add llx -- llx mcp                     # Codex
 ```
 
-In Claude Code the plugin does the same (`llx` itself must be on your `PATH`):
+Claude Code can also add it as a plugin. The plugin is only a wrapper: it registers the same `llx mcp` server, so it is the same thing as the `claude mcp add` line above, just done by `/plugin`. `llx` itself must be installed and on your `PATH` either way.
 
 ```text
 /plugin marketplace add rsaryev/llx

@@ -82,14 +82,14 @@ Reading never asks. Every command, file change and page action asks first, in on
 
 ## Use it from another agent
 
-`llx mcp` serves llx's `window` over MCP, so Claude Code, Codex or Cursor can drive real browser pages and terminal sessions in a window you watch:
+`llx mcp` gives Claude Code, Codex, Cursor or any MCP client llx's `window`: real browser pages and terminal sessions in a window you watch. Install `llx` first (above), then add it as an MCP server:
 
 ```bash
 claude mcp add llx -- llx mcp        # Claude Code
 codex mcp add llx -- llx mcp         # Codex
 ```
 
-In Claude Code the plugin does the same: `/plugin marketplace add rsaryev/llx`, then `/plugin install llx@llx`. More in [docs/mcp.md](docs/mcp.md).
+Any other client takes a server whose command is `llx` and whose argument is `mcp`. More in [docs/mcp.md](docs/mcp.md).
 
 ## Documentation
 

@@ -3681,6 +3681,7 @@ dependencies = [
  "block2",
  "contracts",
  "getrandom 0.3.4",
+ "gtk",
  "libc",
  "objc2",
  "objc2-web-kit",

@@ -4,12 +4,11 @@
 
 use tao::dpi::LogicalSize;
 
-use super::super::frame::fill;
 use super::super::host::Shared;
 use std::sync::atomic::Ordering;
 
 use super::super::strip::{self, HEIGHT, Item, Key, ROW};
-use super::super::tabs::place;
+use super::super::tabs::{pin, place};
 use super::{Deck, Shown};
 
 impl Deck {
@@ -47,7 +46,7 @@ impl Deck {
         if let Some(strip) = &self.strip {
             // The open menu has the whole window: the pages stand aside, still rendering.
             let height = if self.menu { top + size.height } else { top };
-            let _ = strip.set_bounds(fill(LogicalSize::new(size.width, height), 0.0, 0.0));
+            pin(strip, LogicalSize::new(size.width, height));
         }
         if let Some(web) = &self.web {
             web.layout(size, top, self.shown == Shown::Web && !self.menu);

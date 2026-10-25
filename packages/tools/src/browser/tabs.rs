@@ -206,6 +206,25 @@ pub(super) fn place(webview: &WebView, _x: f64, _top: f64, _size: LogicalSize<f6
     let _ = webview.set_visible(shown);
 }
 
+/// The strip along the top, `size` tall. In a GTK box every page takes an equal share unless
+/// told otherwise: the strip is held to its height there, and the pages under it fill the rest.
+#[cfg(not(target_os = "linux"))]
+pub(super) fn pin(strip: &WebView, size: LogicalSize<f64>) {
+    let _ = strip.set_bounds(super::frame::fill(size, 0.0, 0.0));
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn pin(strip: &WebView, size: LogicalSize<f64>) {
+    use gtk::prelude::{BoxExt, Cast, WidgetExt};
+    use wry::WebViewExtUnix;
+    let view = strip.webview();
+    let tall = size.cast::<i32>().height;
+    view.set_size_request(-1, tall);
+    if let Some(parent) = view.parent().and_then(|p| p.downcast::<gtk::Box>().ok()) {
+        parent.set_child_packing(&view, false, false, 0, gtk::PackType::Start);
+    }
+}
+
 /// The id of the tab in slot `at`: ids count from 1, and there are at most `MAX_TABS`.
 fn id_of(at: usize) -> u32 {
     u32::try_from(at + 1).unwrap_or(u32::MAX)

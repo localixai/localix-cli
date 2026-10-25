@@ -728,6 +728,15 @@ fn tabs(driver: &WebviewDriver, origin: &str) {
 fn screenshots(driver: &WebviewDriver, origin: &str) {
     driver.navigate(&format!("{origin}/canvas.html")).unwrap();
     let viewport = driver.observe().unwrap().viewport;
+    if !cfg!(target_os = "macos") {
+        // Pictures are macOS's only for now: elsewhere the call says so, and nothing breaks.
+        let refused = driver.screenshot(None);
+        assert!(
+            matches!(refused, Err(BrowserError::Refused(_))),
+            "{refused:?}"
+        );
+        return;
+    }
     let page = driver.screenshot(None).unwrap();
     assert_eq!(&page.jpeg[..3], [0xFF, 0xD8, 0xFF], "a JPEG");
     let ratio = |w: u32, h: u32| f64::from(w) / f64::from(h);

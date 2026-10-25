@@ -38,6 +38,10 @@ block2.workspace = true
 objc2.workspace = true
 objc2-web-kit.workspace = true
 
+# Already in the tree through tao and wry: a page's place in the window's GTK box.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk.workspace = true
+
 [dev-dependencies]
 # The terminal page's own script is allowed by its hash: a test checks the one written down.
 sha2.workspace = true

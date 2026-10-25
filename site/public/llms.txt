@@ -23,7 +23,7 @@
 ## From another agent
 
 - `llx mcp` serves llx's `window` (browser pages and terminal sessions as tabs, with a `goal` carried out by llx's decision model) to any agent that speaks MCP over stdio.
-- Claude Code: `claude mcp add llx -- npx -y @localixai/llx mcp`. Codex: `codex mcp add llx -- npx -y @localixai/llx mcp`.
+- Any MCP client: a server whose command is `llx` with the argument `mcp` (or `npx -y @localixai/llx mcp`).
 
 ## Links
 

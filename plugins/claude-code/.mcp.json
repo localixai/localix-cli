@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "llx": {
-      "command": "npx",
-      "args": ["-y", "@localixai/llx", "mcp"]
-    }
-  }
-}

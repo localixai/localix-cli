@@ -8,11 +8,7 @@ npm install -g @localixai/llx     # then: llx
 npx -y @localixai/llx mcp         # no install: serve llx's window to another agent over MCP
 ```
 
-For Claude Code or Codex:
-
-```bash
-claude mcp add llx -- npx -y @localixai/llx mcp
-codex mcp add llx -- npx -y @localixai/llx mcp
-```
+`llx mcp` serves the window to any MCP client: a server whose command is `llx` (or `npx` with
+`-y @localixai/llx mcp`) and the argument `mcp`.
 
 Docs: <https://github.com/rsaryev/llx>

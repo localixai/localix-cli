@@ -3,7 +3,7 @@ import "./InstallCommand.css";
 import { useEffect, useRef, useState } from "react";
 
 /** The install commands as one block with one Copy, in the ghost-button measure of the hero; a
- *  tab for each way in (llx itself, then each agent's MCP setup). */
+ *  tab row only when there are several ways in. */
 export function InstallCommand({
   tabs,
 }: {
@@ -28,6 +28,7 @@ export function InstallCommand({
 
   return (
     <div className="install-box">
+      {tabs.length > 1 && (
       <div className="install-tabs" role="tablist">
         {tabs.map(([name], at) => (
           <button
@@ -45,6 +46,7 @@ export function InstallCommand({
           </button>
         ))}
       </div>
+      )}
       <div className="install">
         <code>
           {commands.map((command) => (

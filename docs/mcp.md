@@ -1,35 +1,33 @@
 # llx as an MCP server
 
-`llx mcp` serves llx's `window` to another agent (Claude Code, Codex, Cursor, anything that speaks MCP over stdio): native browser pages and terminal sessions as tabs of one window you watch, grouped by project, with the same actions, kinds and snapshots the llx agent has.
+`llx mcp` serves llx's `window` to another agent (any client that speaks MCP over stdio): native browser pages and terminal sessions as tabs of one window you watch, grouped by project, with the same actions, kinds and snapshots the llx agent has.
 
 The other agent's model does the thinking, so no chat model is used. A `goal` on a tab is carried out by llx's decision model, which needs an OpenRouter key (`OPENROUTER_API_KEY`, or one saved with `/login`). Without one, everything but `goal` works.
 
 ## Connect
 
-One command; `npx` fetches the llx binary for your platform (the npm package `@localixai/llx`), so nothing needs installing first:
+Any MCP client takes a server whose command is `llx` with the argument `mcp` (install it with `npm install -g @localixai/llx`):
 
-```bash
-claude mcp add llx -- npx -y @localixai/llx mcp        # Claude Code
-codex mcp add llx -- npx -y @localixai/llx mcp         # Codex
+```json
+{
+  "mcpServers": {
+    "llx": { "command": "llx", "args": ["mcp"] }
+  }
+}
 ```
 
-Claude Code can also add it as a plugin, which registers the same server (the plugin is only that wrapper, so it is the same thing as the line above):
+With nothing installed, the command is `npx` with the arguments `-y @localixai/llx mcp`: `npx` fetches the llx binary for your platform.
 
-```text
-/plugin marketplace add rsaryev/llx
-/plugin install llx@llx
-```
+The `goal` of a tab needs an OpenRouter key: save one with `/login` in `llx`, or set `OPENROUTER_API_KEY` in the server's environment. Without one, everything but `goal` works.
 
-Any other MCP client takes a server whose command is `npx` with the arguments `-y @localixai/llx mcp`. If `llx` is installed (`npm install -g @localixai/llx`, or the install script), the command is just `llx` with the argument `mcp`, which starts a little faster.
-
-The `goal` of a tab needs an OpenRouter key: save one with `/login` in `llx`, or pass `-e OPENROUTER_API_KEY=sk-or-...` before the `--` in `claude mcp add`. Without one, everything but `goal` works.
+Wrappers for particular agents live outside this repository; `llx mcp` is the interface they use.
 
 ## How it runs
 
 - It runs in the daemon (started if none runs), so its tabs share the one window with your llx sessions, under the project the agent started it in; its terminals run there, with the agent's environment.
 - The other agent approves each call (its own permission prompt): llx asks nothing more for them.
 - A cancelled call is stopped. When the agent closes the server, its terminals end and the browser tabs it left open close.
-- Comments the person sends from its tabs come back with the agent's next `window` call, after that call's report, under `### What the person sent from the window`. The Claude Code plugin asks for them every two seconds with a quiet `list` and hands them to Claude as a prompt, so they arrive without the agent calling.
+- Comments the person sends from its tabs come back with the agent's next `window` call, after that call's report, under `### What the person sent from the window`. A wrapper can ask for them with a quiet `list` to have them arrive without the agent calling.
 - Unix only.
 
 The rules behind it are W9 and K7 in [ARCHITECTURE.md](../ARCHITECTURE.md).

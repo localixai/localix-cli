@@ -87,14 +87,7 @@ llx doctor                             # sign-ins, models, the WebView, the shel
 
 ## In other agents
 
-One command, nothing to install first:
-
-```bash
-claude mcp add llx -- npx -y @localixai/llx mcp   # Claude Code
-codex mcp add llx -- npx -y @localixai/llx mcp    # Codex
-```
-
-Any other client takes the command `npx` with `-y @localixai/llx mcp` (Cursor: `~/.cursor/mcp.json`). Their model thinks; llx opens the pages and terminals and acts in them, in a window you can watch, and hands back the comments you send from it. The Claude Code plugin also brings your comments in as a prompt: `/plugin marketplace add rsaryev/llx`, then `/plugin install llx@llx`. A `goal` needs an OpenRouter key (`/login` once, or `OPENROUTER_API_KEY`). See [docs/mcp.md](docs/mcp.md).
+`llx mcp` serves the window to any MCP client over stdio. Configure a server whose command is `llx` with the argument `mcp` (or, with nothing installed, `npx` with `-y @localixai/llx mcp`). A `goal` on a tab needs an OpenRouter key (`/login` in llx once, or `OPENROUTER_API_KEY`); everything else works without one. See [docs/mcp.md](docs/mcp.md).
 
 ## In CI and scripts
 

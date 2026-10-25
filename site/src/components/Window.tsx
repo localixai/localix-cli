@@ -22,7 +22,7 @@ export function Window() {
       <h2 id="window-title">Real pages. Real shells. One window you can watch.</h2>
       <p className="window-lede">
         Browser pages run in the system’s own WebView and terminals in a real PTY, as tabs of one native window
-        grouped by project. llx works there, and so do Claude Code and Codex through <code>llx mcp</code>.
+        grouped by project. llx works there, and so does any MCP client through <code>llx mcp</code>.
       </p>
 
       <Mock />

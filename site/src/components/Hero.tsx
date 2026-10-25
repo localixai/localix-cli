@@ -8,15 +8,17 @@ export function Hero() {
     <section className="hero wrap">
       <div className="hero-copy">
         <h1>
-          Ultrafast, <span className="chip">lightweight</span> coding agent.
+          The <span className="chip">ultrafast</span> browser and coding agent.
         </h1>
         <p className="lede">
-          <b>llx</b> writes the code, tests it in a real browser and fixes what it finds. One binary under
-          4&nbsp;MB that starts in about 5&nbsp;ms, for your terminal.
+          <b>llx</b> is a native browser, terminals and a coding agent in one binary under 4&nbsp;MB. It
+          writes the code, tests it in the browser and fixes what it finds; <code>llx mcp</code> gives the same
+          window to Claude Code, Codex or any agent.
         </p>
-        <InstallCommand commands={INSTALL} />
+        <InstallCommand tabs={INSTALL} />
         <p className="under">
-          macOS · Linux · one binary under 4&nbsp;MB · <a href={`${GITHUB}/blob/main/docs/usage.md`}>Read the docs</a>
+          macOS · Linux · under 4&nbsp;MB · <a href={`${GITHUB}#use-it-from-another-agent`}>MCP setup</a> ·{' '}
+          <a href={`${GITHUB}/blob/main/docs/usage.md`}>Read the docs</a>
         </p>
       </div>
       <div id="demo" className="hero-demo">

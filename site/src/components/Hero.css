@@ -25,6 +25,10 @@ h1 {
   font-size: clamp(1rem, 1.4vw, 1.125rem);
   line-height: 1.55;
 }
+.lede code {
+  color: var(--white);
+  font: 0.9em var(--mono);
+}
 .lede b {
   color: var(--white);
   font-weight: 600;
@@ -72,3 +76,4 @@ h1,
 @keyframes rise {
   from { opacity: 0; transform: translateY(14px); }
 }
+

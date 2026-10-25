@@ -4,7 +4,6 @@
   align-items: stretch;
   width: fit-content;
   max-width: 100%;
-  margin-top: clamp(1.75rem, 2.6vw, 3rem);
   border: 1px solid var(--line-strong);
   border-radius: 9px;
   background: var(--card);
@@ -56,3 +55,29 @@
   color: var(--white);
 }
 
+/* The ways in, as tabs over the block. */
+.install-box {
+  margin-top: clamp(1.75rem, 2.6vw, 3rem);
+}
+.install-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+.install-tabs button {
+  padding: 0.35rem 0.7rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font: 500 0.8125rem/1 var(--text);
+  cursor: pointer;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+.install-tabs button:hover {
+  color: var(--white);
+}
+.install-tabs button.on {
+  background: var(--card);
+  color: var(--white);
+}

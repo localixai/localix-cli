@@ -90,16 +90,37 @@ Reading never asks. Every command, file change and page action asks first, in on
 
 ## Use it from another agent
 
-`llx mcp` gives Claude Code, Codex, Cursor or any MCP client llx's `window`: real browser pages and terminal sessions in a window you watch. One command, with nothing installed before it (`npx` fetches llx):
+`llx mcp` is an MCP server on stdio. It gives any agent llx's `window`: real browser pages and terminal sessions as tabs of one window you watch, and the comments you send from them. One command adds it to your agent; `npx` fetches the llx binary for your platform, so nothing needs installing first:
+
+**Claude Code**
 
 ```bash
-claude mcp add llx -- npx -y @rsaryev/llx mcp        # Claude Code
-codex mcp add llx -- npx -y @rsaryev/llx mcp         # Codex
+claude mcp add llx -- npx -y @rsaryev/llx mcp
 ```
 
-Or add the plugin in Claude Code: `/plugin marketplace add rsaryev/llx`, then `/plugin install llx@llx`. The plugin also brings the comments you send from the window straight into Claude as a prompt. With `llx` already installed, the server's command is just `llx mcp`.
+Or the plugin, which also brings the comments you send from the window into Claude as a prompt: `/plugin marketplace add rsaryev/llx`, then `/plugin install llx@llx`.
 
-The first call starts llx's daemon by itself, and the window opens when a tab is. A `goal` on a tab is carried out by llx's decision model, which needs an OpenRouter key: run `/login` in `llx` once, or pass it along with `-e OPENROUTER_API_KEY=sk-or-...` before the `--`. Without one, everything else works. More in [docs/mcp.md](docs/mcp.md).
+**Codex**
+
+```bash
+codex mcp add llx -- npx -y @rsaryev/llx mcp
+```
+
+Codex asks before each MCP call. For `codex exec`, where nobody is there to answer, allow the window: `-c 'mcp_servers.llx.tools.window.approval_mode="approve"'`.
+
+**Cursor, and any other client** that takes a JSON config (Cursor: `~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "llx": { "command": "npx", "args": ["-y", "@rsaryev/llx", "mcp"] }
+  }
+}
+```
+
+With llx installed (`npm install -g @rsaryev/llx`), the command can be just `llx mcp`, which starts a little faster.
+
+The first call starts llx's daemon by itself, and the window opens when a tab is. A `goal` on a tab is carried out by llx's decision model, which needs an OpenRouter key: run `/login` in `llx` once, or set `OPENROUTER_API_KEY` in the server's environment. Without one, everything else works. More in [docs/mcp.md](docs/mcp.md).
 
 ## Documentation
 

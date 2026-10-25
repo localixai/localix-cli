@@ -1,38 +1,69 @@
-import { Check, Copy } from './icons'
-import './InstallCommand.css'
-import { useEffect, useRef, useState } from 'react'
+import { Check, Copy } from "./icons";
+import "./InstallCommand.css";
+import { useEffect, useRef, useState } from "react";
 
-/** The install commands as one block with one Copy, in the ghost-button measure of the hero. */
-export function InstallCommand({ commands }: { commands: readonly string[] }) {
-  const [copied, setCopied] = useState(false)
-  const timer = useRef<number | undefined>(undefined)
-  useEffect(() => () => window.clearTimeout(timer.current), [])
+/** The install commands as one block with one Copy, in the ghost-button measure of the hero; a
+ *  tab for each way in (llx itself, then each agent's MCP setup). */
+export function InstallCommand({
+  tabs,
+}: {
+  tabs: readonly (readonly [string, string])[];
+}) {
+  const [shown, setShown] = useState(0);
+  const commands = [tabs[shown]?.[1] ?? ""];
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(commands.join('\n'))
-      setCopied(true)
+      await navigator.clipboard.writeText(commands.join("\n"));
+      setCopied(true);
     } catch {
-      return
+      return;
     }
-    window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => setCopied(false), 1600)
-  }
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setCopied(false), 1600);
+  };
 
   return (
-    <div className="install">
-      <code>
-        {commands.map((command) => (
-          <span key={command} className="install-line">
-            <span aria-hidden="true">$ </span>
-            {command}
-          </span>
+    <div className="install-box">
+      <div className="install-tabs" role="tablist">
+        {tabs.map(([name], at) => (
+          <button
+            key={name}
+            type="button"
+            role="tab"
+            aria-selected={at === shown}
+            className={at === shown ? "on" : undefined}
+            onClick={() => {
+              setShown(at);
+              setCopied(false);
+            }}
+          >
+            {name}
+          </button>
         ))}
-      </code>
-      <button type="button" className="install-copy" onClick={copy} aria-label="Copy the install commands">
-        {copied ? <Check /> : <Copy />}
-        <span>{copied ? 'Copied' : 'Copy'}</span>
-      </button>
+      </div>
+      <div className="install">
+        <code>
+          {commands.map((command) => (
+            <span key={command} className="install-line">
+              <span aria-hidden="true">$ </span>
+              {command}
+            </span>
+          ))}
+        </code>
+        <button
+          type="button"
+          className="install-copy"
+          onClick={copy}
+          aria-label="Copy the install commands"
+        >
+          {copied ? <Check /> : <Copy />}
+          <span>{copied ? "Copied" : "Copy"}</span>
+        </button>
+      </div>
     </div>
-  )
+  );
 }

@@ -129,6 +129,9 @@ fn the_toolbar_and_the_history_button_say_what_they_are() {
     assert_eq!(click("forward"), Some(Click::Forward));
     assert_eq!(click("history"), Some(Click::History));
     assert_eq!(click("visit 2"), Some(Click::Visit(2)));
+    assert_eq!(click("comment"), Some(Click::Comment));
+    assert_eq!(click("drag"), Some(Click::Drag));
+    assert_eq!(click("zoom"), Some(Click::Zoom));
     for junk in [
         "back w1",
         "visit",

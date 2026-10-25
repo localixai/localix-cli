@@ -20,6 +20,7 @@ pub(super) fn builder<'a>(
     with_ipc: bool,
 ) -> WebViewBuilder<'a> {
     let ipc = Arc::clone(shared);
+    let told = proxy.clone();
     let loads = Arc::clone(shared);
     let requests = Arc::clone(shared);
     let titles = Arc::clone(shared);
@@ -70,7 +71,11 @@ pub(super) fn builder<'a>(
         })
         .with_background_throttling(wry::BackgroundThrottlingPolicy::Disabled);
     if with_ipc {
-        builder = builder.with_ipc_handler(move |request| ipc.ipc(request.body()));
+        builder = builder.with_ipc_handler(move |request| {
+            if let Some(noted) = ipc.ipc(request.body()) {
+                let _ = told.send_event(Cmd::Noted(noted));
+            }
+        });
     }
     if let Some(agent) = user_agent() {
         builder = builder.with_user_agent(agent);

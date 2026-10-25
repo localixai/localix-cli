@@ -47,7 +47,7 @@ pub(super) fn spawn(
     let (master, slave) = open()?;
     let mut shell = process::shell(command);
     process::quiet_env(&mut shell, env);
-    // A real terminal, as Localix's: a full-screen program (an editor, Claude Code) draws as it
+    // A real terminal: a full-screen program (an editor, an agent) draws as it
     // would anywhere, in colour for the window. What the model reads is text: a transcript, or
     // the screen when the program draws over it.
     shell

@@ -16,6 +16,7 @@ use tao::event_loop::EventLoopProxy;
 use wry::PageLoadEvent;
 
 use super::capture::{Clip, Shot};
+use super::comments::Comments;
 use super::history::History;
 use super::panel;
 use super::strip::Click;
@@ -29,14 +30,15 @@ mod handle;
 mod web;
 pub use events::host;
 
-/// One script from six files: snapshot, same-origin frames, the outline, actions, keys, then
-/// evaluate and the IPC entry point.
+/// One script from seven files: snapshot, same-origin frames, the outline, actions, keys, the
+/// person's comments, then evaluate and the IPC entry point.
 pub(super) const PROBE: &str = concat!(
     include_str!("probe/snapshot.js"),
     include_str!("probe/frames.js"),
     include_str!("probe/outline.js"),
     include_str!("probe/act.js"),
     include_str!("probe/keys.js"),
+    include_str!("probe/feedback.js"),
     include_str!("probe/evaluate.js"),
 );
 
@@ -107,6 +109,8 @@ pub(super) enum Cmd {
     Titled(u32, String),
     /// What the person clicked on the strip.
     Clicked(String),
+    /// A comment the person made on a page: pictured, then held.
+    Noted(Noted),
     /// Tell the strip what the window holds (a tab's title changed, its page loaded).
     Strip,
     /// For checks: how the window is dressed, once tinted again.
@@ -162,10 +166,28 @@ pub(super) struct Shared {
     pub groups: Mutex<HashMap<String, String>>,
     /// The web pages the tabs have shown, for the strip's history menu.
     pub history: History,
+    /// The person's comments on the pages, until they send them.
+    pub comments: Comments,
 }
 
 /// Told what the person did to a tab (its key; `window` for the whole window), in words.
-type Listener = Box<dyn Fn(&str, &str) + Send + Sync>;
+type Listener = Box<dyn Fn(&str, Heard<'_>) + Send + Sync>;
+
+/// A comment the person made on browser tab `tab`, in words, and the part of the view it is about.
+pub(super) struct Noted {
+    pub tab: u32,
+    pub said: String,
+    pub clip: Option<Clip>,
+}
+
+/// What the person did in the window, in words.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Heard<'a> {
+    /// They closed a tab, or the window: news for whoever works in it.
+    Did(&'a str),
+    /// They sent their comments on a page: words for the agent, as a message of theirs.
+    Sent(&'a str),
+}
 
 /// The loads of tab `active`.
 pub(super) fn active_loads(loads: &HashMap<u32, Loads>, active: u32) -> Loads {
@@ -192,7 +214,7 @@ pub(super) struct Loads {
 
 impl Shared {
     /// Tell the listener what the person did to `key`.
-    fn heard(&self, key: &str, what: &str) {
+    pub(super) fn heard(&self, key: &str, what: Heard<'_>) {
         if let Some(listen) = crate::lock(&self.listener).as_ref() {
             listen(key, what);
         }
@@ -272,22 +294,28 @@ impl Shared {
         self.loaded.notify_all();
     }
 
-    /// A message from the page: `{t, id, ok}` or `{t, id, err}`. Anything else is ignored.
-    pub(super) fn ipc(&self, body: &str) {
-        let Ok(message) = serde_json::from_str::<Value>(body) else {
-            return;
-        };
+    /// A message from the page: `{t, id, ok}` or `{t, id, err}`, or `{t, fb}`, a comment of the
+    /// person's on the tab shown, given back to be pictured and held. Anything else is ignored.
+    pub(super) fn ipc(&self, body: &str) -> Option<Noted> {
+        let message = serde_json::from_str::<Value>(body).ok()?;
         if message.get("t").and_then(Value::as_str) != Some(self.token.as_str()) {
-            return;
+            return None;
         }
-        let Some(id) = message.get("id").and_then(Value::as_u64) else {
-            return;
-        };
+        if let Some(fb) = message.get("fb") {
+            let tab = self.active.load(Ordering::SeqCst);
+            return super::feedback::said(fb).map(|said| Noted {
+                tab,
+                said,
+                clip: super::feedback::framed(fb),
+            });
+        }
+        let id = message.get("id").and_then(Value::as_u64)?;
         let reply = match message.get("err").and_then(Value::as_str) {
             Some(error) => Err(error.to_string()),
             None => Ok(message.get("ok").cloned().unwrap_or(Value::Null)),
         };
         self.answer(id, reply);
+        None
     }
 }
 

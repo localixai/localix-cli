@@ -53,6 +53,13 @@ pub(super) fn on_browser(
         }
         Cmd::Resize(width, height) => open.resize(width, height),
         Cmd::Capture { clip, reply, tab } => return capture(tabs.at(tab), clip, reply),
+        Cmd::Noted(noted) => {
+            let (reply, shot) = std::sync::mpsc::sync_channel(1);
+            if noted.clip.is_some() {
+                capture(tabs.at(Some(noted.tab)), noted.clip, reply);
+            }
+            return crate::browser::comments::pictured(noted, shot, shared, proxy);
+        }
         // What the agent does in the browser is shown: the window goes back to it, unless it
         // works in a tab of its own beside the one shown.
         // An address the system cannot read never reaches WebKit: its load would panic here.

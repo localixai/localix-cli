@@ -1,5 +1,4 @@
-//! A session's title, made from its first task while that task runs, as Codex makes a thread's:
-//! the same model at its lowest level, asked once with no tools, its answer cleaned to one short
+//! A session's title, made from its first task while that task runs: the same model at its lowest level, asked once with no tools, its answer cleaned to one short
 //! line. The task never waits for it; a failure only leaves the session named by its task.
 
 use contracts::catalog::Selection;

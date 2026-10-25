@@ -9,6 +9,8 @@ use std::sync::{Arc, Mutex, Weak};
 
 use queue::{Entry, Idle, Policy, Queue};
 
+use tools::browser::Heard;
+
 use crate::server::Ui;
 
 /// Entries a lane's queue keeps at most: past it the oldest go, and the run is told.
@@ -49,6 +51,13 @@ const WINDOW: Policy = Policy {
     idle: Idle::Waits,
 };
 
+/// The person's comments on a page, sent from the window: their words, so a task of their own
+/// when none runs, as a message typed at the prompt would be.
+const COMMENTS: Policy = Policy {
+    joins: true,
+    idle: Idle::Opens,
+};
+
 /// The tag agents' answers are read in, and the one they are taken by.
 pub(crate) const AGENT_RESULT: &str = "agent_result";
 
@@ -79,9 +88,13 @@ pub(crate) fn schedule(name: &str, prompt: &str) -> Entry {
     Entry::new(SCHEDULE, "", &said).keyed(name)
 }
 
-/// What the person did to tab `tab` of the window (`closed`).
-pub(crate) fn window(tab: &str, what: &str) -> Entry {
-    Entry::new(WINDOW, "window", what)
+/// What the person did to tab `tab` of the window: closed it, or sent their comments on it.
+pub(crate) fn window(tab: &str, heard: Heard<'_>) -> Entry {
+    let (policy, what) = match heard {
+        Heard::Did(what) => (WINDOW, what),
+        Heard::Sent(what) => (COMMENTS, what),
+    };
+    Entry::new(policy, "window", what)
         .attr("tab", tab)
         .keyed(tab)
 }
@@ -106,7 +119,7 @@ impl Lanes {
     }
 
     /// What the person did to tab `key`, to its owner while it lives, else to every lane.
-    pub(crate) fn post(&self, key: &str, what: &str) {
+    pub(crate) fn post(&self, key: &str, what: Heard<'_>) {
         let owner = crate::output::lock(&self.owners)
             .get(key)
             .and_then(Weak::upgrade);

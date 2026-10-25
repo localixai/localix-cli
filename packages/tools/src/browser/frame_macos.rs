@@ -16,11 +16,15 @@ const SIZABLE: usize = 2 | 16;
 const BELOW: isize = -1;
 const ABOVE: isize = 1;
 
-/// A window that shows what is behind it, with its titlebar clear over the material.
+/// A window that shows what is behind it, with its titlebar clear over the material. The strip
+/// is the titlebar, as in a browser: the pages fill the window from its top, the strip beside the
+/// window's buttons, and the title is hidden (the strip names the tabs).
 pub(super) fn clear(builder: WindowBuilder) -> WindowBuilder {
     builder
         .with_transparent(true)
         .with_titlebar_transparent(true)
+        .with_fullsize_content_view(true)
+        .with_title_hidden(true)
 }
 
 /// Whether the person asked for less transparency (Accessibility, Display).

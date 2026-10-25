@@ -1,5 +1,5 @@
 //! The tool clients' interface (ARCHITECTURE.md W9): `llx mcp` serves MCP over stdio to another
-//! agent (Claude Code, Codex, Cursor, ...), as the daemon's client. It is an interface as the
+//! agent, as the daemon's client. It is an interface as the
 //! terminal's is (L7): it knows only the protocol and the client. The daemon gives it a toolbox
 //! at its place, the agent's own `window`; this side only turns MCP's messages into the
 //! protocol's commands and their answers back. Each `tools/call` waits on a thread of its own,

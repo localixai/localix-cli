@@ -514,6 +514,83 @@ fn second_page(browser: &browser::Browser, driver: &WebviewDriver, origin: &str)
     assert_eq!(left.len(), before.len(), "{left:?}");
 }
 
+/// Visual feedback: the person turns commenting on from the strip; then a press on a button picks
+/// it instead of pressing it (a script's click still presses it), the note typed in its card is
+/// held, and Send hands the batch to the listener with the element's selector.
+fn feedback(browser: &browser::Browser, driver: &WebviewDriver) {
+    let (sender, heard) = std::sync::mpsc::channel();
+    let sender = std::sync::Mutex::new(sender);
+    browser.listen(move |tab, heard| {
+        if let browser::Heard::Sent(what) = heard {
+            let _ = sender
+                .lock()
+                .unwrap()
+                .send((tab.to_string(), what.to_string()));
+        }
+    });
+    // The overlay's root is open, so a check can reach the card.
+    driver
+        .evaluate(
+            "const attach = Element.prototype.attachShadow;
+             Element.prototype.attachShadow = function () { return attach.call(this, { mode: 'open' }) };
+             true",
+        )
+        .unwrap();
+    let cursor = |driver: &WebviewDriver| {
+        driver
+            .evaluate("await sleep(300); document.documentElement.style.cursor")
+            .unwrap()
+    };
+    browser.click("comment");
+    assert_eq!(
+        cursor(driver),
+        "crosshair",
+        "the strip's button turns it on"
+    );
+    let picked = driver
+        .evaluate(
+            "const title = document.title;
+             const button = document.getElementById('veiled');
+             button.click();
+             const pressed = document.title;
+             document.title = 'before';
+             __dloop_call(0, 'comment', { on: true, all: true });
+             await sleep(50);
+             const r = button.getBoundingClientRect();
+             const at = { clientX: r.left + 5, clientY: r.top + 5, bubbles: true, composed: true, cancelable: true };
+             for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'])
+               button.dispatchEvent(new PointerEvent(type, at));
+             const card = document.querySelector('llx-feedback').shadowRoot;
+             card.querySelector('textarea').value = 'make it red';
+             card.querySelector('button.s').click();
+             const after = document.title;
+             document.title = title;
+             [pressed, after].join(' | ')",
+        )
+        .unwrap();
+    assert_eq!(
+        picked, "veiled clicked | before",
+        "a script presses, the person picks"
+    );
+    assert!(
+        heard.recv_timeout(Duration::from_millis(500)).is_err(),
+        "held until sent"
+    );
+    browser.click("send");
+    let (tab, what) = heard.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert!(tab.starts_with('w'), "{tab}");
+    assert!(what.starts_with("The person sent 1 comment(s)"), "{what}");
+    assert!(what.contains(": make it red"), "{what}");
+    assert!(what.contains("Selector: #veiled"), "{what}");
+    // Its picture, taken from the screen, in a file the agent can read.
+    let picture = what.split("Picture of it: ").nth(1).unwrap_or_default();
+    let jpeg = std::fs::read(picture.lines().next().unwrap_or_default()).unwrap();
+    assert!(jpeg.starts_with(&[0xff, 0xd8]), "a JPEG");
+    browser.click("comment");
+    assert_eq!(cursor(driver), "", "and off again");
+    browser.listen(|_, _| {});
+}
+
 /// Tabs: one opened, switched to and back, one per link with target=_blank and per window.open,
 /// a tab out of sight still drawing, and closing them.
 fn tabs(driver: &WebviewDriver, origin: &str) {
@@ -722,6 +799,7 @@ fn main() {
                         .wait_loaded(Duration::from_secs(10))
                         .expect("it loads");
                     second_page(&browser, &driver, &origin);
+                    feedback(&browser, &driver);
                     scenario(&driver, &origin);
                 });
             // The driver's scenario ends with its window closed: the panel's opens it again.

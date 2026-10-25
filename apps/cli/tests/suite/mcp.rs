@@ -1,4 +1,4 @@
-//! `llx mcp`: another agent (Claude Code, Codex, Cursor) calls llx's `window` over MCP on stdio.
+//! `llx mcp`: another agent calls llx's `window` over MCP on stdio.
 //! It is the daemon's tool client: the first `llx mcp` of a home starts `llx serve`, and the
 //! tabs it opens run where the agent started it and end when the agent closes its stdin.
 

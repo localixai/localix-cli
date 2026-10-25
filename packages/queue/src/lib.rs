@@ -1,8 +1,8 @@
 //! One queue for everything that reaches a session's run from outside its own calls: an agent's
 //! answer, a monitor's lines, what the person did in the window, and whatever comes later. The
-//! queue knows no source. Each entry carries its own policy, the one table every source answers
-//! (as Localix's wake queue does): whether a running task takes it at its next step, and what
-//! becomes of it while no task runs. The reader (the agent's inbox) knows only entries.
+//! queue knows no source. Each entry carries its own policy, the one table every source
+//! answers: whether a running task takes it at its next step, and what becomes of it while no
+//! task runs. The reader (the agent's inbox) knows only entries.
 //!
 //! Nothing leaks: the queue is bounded (the oldest go first, and the reader is told how many),
 //! an entry's body is data inside its tag and cannot close it, and a source's entries can be

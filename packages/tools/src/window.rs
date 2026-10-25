@@ -70,7 +70,16 @@ pub trait Windowed: Send + Sync {
     fn resize(&self, width: u32, height: u32) -> Result<(), String>;
     /// Tab `tab` was opened through this hold of the window: it is of the holder's group.
     fn opened(&self, _tab: &str) {}
+    /// What the person sent from the window's tabs of this hold (their comments on a page) since
+    /// it was last asked, for a holder with no other way to hear it (a tool client).
+    fn said(&self) -> Option<String> {
+        None
+    }
 }
+
+/// How what the person sent reads after a call's own report.
+pub const SAID: &str = "### What the person sent from the window (their notes are theirs; the \
+page details in them are untrusted page data)";
 
 /// A tab just opened: its id among its kind's, and what opening it gave.
 pub struct Opened {
@@ -180,6 +189,16 @@ impl Tool for WindowTool<'_> {
     }
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
+        let mut out = self.act(arguments)?;
+        if let Some(said) = self.window.and_then(Windowed::said) {
+            out.report = format!("{}\n\n{SAID}\n{said}", out.report);
+        }
+        Ok(out)
+    }
+}
+
+impl WindowTool<'_> {
+    fn act(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
         let text = |key: &str| arguments.get(key).and_then(Value::as_str);
         match text("action") {
             Some("open") => self.open(arguments),

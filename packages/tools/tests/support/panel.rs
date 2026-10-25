@@ -163,7 +163,7 @@ pub(crate) fn scenario(browser: &Browser, driver: &WebviewDriver) {
     browser.listen(move |key, what| {
         told.lock()
             .unwrap()
-            .push((key.to_string(), what.to_string()))
+            .push((key.to_string(), format!("{what:?}")))
     });
     browser.click(&format!("close {tab}"));
     until_shown("w1");

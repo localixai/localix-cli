@@ -3,7 +3,7 @@
 
 use wry::WebView;
 
-use super::super::host::{Listed, STRIP, Shared};
+use super::super::host::{Heard, Listed, STRIP, Shared};
 use super::super::strip::{self, Click, Key};
 use super::{Deck, Shown};
 
@@ -30,6 +30,27 @@ impl Deck {
             Click::Back | Click::Forward => return Ok(self.walk(click)),
             // The host opens its page: the tab it needs is built on the event loop.
             Click::Visit(_) => return Ok(After::Kept),
+            Click::Drag => {
+                let _ = self.frame.native.drag_window();
+                return Ok(After::Kept);
+            }
+            Click::Zoom => {
+                let native = &self.frame.native;
+                native.set_maximized(!native.is_maximized());
+                return Ok(After::Kept);
+            }
+            Click::Send => {
+                for (tab, said) in shared.comments.take() {
+                    shared.heard(&tab, Heard::Sent(&said));
+                }
+                self.sent = self.sent.wrapping_add(1);
+                return Ok(After::Kept);
+            }
+            Click::Comment => {
+                self.commenting = !self.commenting;
+                self.menu = false;
+                return Ok(After::Kept);
+            }
         };
         self.menu = false;
         if !self.listing(shared).iter().any(|tab| tab.id == key.name()) {
@@ -42,7 +63,14 @@ impl Deck {
         }
         Ok(match click {
             // Answered above.
-            Click::Back | Click::Forward | Click::History | Click::Visit(_) => After::Kept,
+            Click::Back
+            | Click::Forward
+            | Click::History
+            | Click::Visit(_)
+            | Click::Comment
+            | Click::Send
+            | Click::Drag
+            | Click::Zoom => After::Kept,
             Click::Show(Key::Web(id)) => {
                 if let Some(web) = self.web.as_mut() {
                     web.switch(id, shared)?;

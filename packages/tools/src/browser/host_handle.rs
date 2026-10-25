@@ -11,7 +11,7 @@ use super::super::panel::Panel;
 use super::super::strip::{Click, Key};
 use super::super::webview::WebviewDriver;
 use super::super::{BrowserError, BrowserResult};
-use super::{Browser, Cmd, Dressing, Listed, STRIP, Window};
+use super::{Browser, Cmd, Dressing, Heard, Listed, STRIP, Window};
 
 impl Browser {
     /// Open the window on `window.url` and wait for its document. One window per process: the
@@ -74,7 +74,7 @@ impl Browser {
 
     /// Hear what the person does in the window: a tab or the window closed, by key (`window` for
     /// the whole of it) and in words. It runs on the window's thread: it must not wait.
-    pub fn listen(&self, listener: impl Fn(&str, &str) + Send + Sync + 'static) {
+    pub fn listen(&self, listener: impl Fn(&str, Heard<'_>) + Send + Sync + 'static) {
         *crate::lock(&self.shared.listener) = Some(Box::new(listener));
     }
 

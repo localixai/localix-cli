@@ -143,9 +143,6 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
     } = shared;
     // The one window as its tabs, where it shows; the lane's are of its directory.
     let group = windows::group(&seat.session.workspace, workspace.root());
-    let tabs = (shared.browser.clone())
-        .filter(|_| shared.shown)
-        .map(|browser| windows::Tabs::of(browser, &group));
     // What commands never see: the variables of the key the models are called with, and of a
     // provider chosen later with `/login` (hiding is no barrier anyway).
     let hidden_names = Mutex::new(seat.choice.provider.hidden());
@@ -153,6 +150,9 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
     // The lane's queue: what reaches its run from outside its calls.
     let lane_queue = Arc::new(crate::arrivals::queue(output.ui().cloned()));
     shared.lanes.join(&lane_queue);
+    let tabs = (shared.browser.clone())
+        .filter(|_| shared.shown)
+        .map(|browser| windows::Tabs::of(browser, &group).owned(&shared.lanes, &lane_queue));
     // Terminal windows open only where windows show; a call can still show or hide one.
     #[cfg(unix)]
     let sessions = windows::terminals(

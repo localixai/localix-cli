@@ -46,6 +46,10 @@ pub(super) struct Deck {
     menu: bool,
     /// The strip has its row of projects: the window holds the tabs of more than one.
     rows: AtomicBool,
+    /// The person comments on the pages (probe/feedback.js): a click picks, it does not press.
+    commenting: bool,
+    /// How many batches of comments were sent: a page drops the marks of earlier ones.
+    sent: u32,
 }
 
 impl Deck {
@@ -124,6 +128,8 @@ impl Deck {
             shown: Shown::Web,
             menu: false,
             rows: AtomicBool::new(false),
+            commenting: false,
+            sent: 0,
         })
     }
 

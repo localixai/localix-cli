@@ -163,6 +163,8 @@ struct Shown {
     asked: Mutex<Vec<String>>,
     /// Tabs beside its own, of other projects.
     others: Vec<WindowTab>,
+    /// What the person sent, until a call takes it.
+    sent: Mutex<Option<String>>,
 }
 
 impl Windowed for Shown {
@@ -184,6 +186,9 @@ impl Windowed for Shown {
     }
     fn opened(&self, tab: &str) {
         self.asked.lock().unwrap().push(format!("opened {tab}"));
+    }
+    fn said(&self) -> Option<String> {
+        self.sent.lock().unwrap().take()
     }
     #[allow(
         clippy::unwrap_in_result,
@@ -395,6 +400,26 @@ fn list_reads_the_window_where_it_shows_else_every_kinds_tabs() {
         call(&hidden, json!({"action": "list"})).unwrap().report,
         "1 tab:\nt1  terminal  terminal 1"
     );
+}
+
+#[test]
+fn what_the_person_sent_comes_after_the_next_calls_report_once() {
+    let term = Fake::new("terminal", 't');
+    let window = Shown::default();
+    *window.sent.lock().unwrap() = Some("make it red".into());
+    let tool = WindowTool {
+        kinds: vec![&term],
+        window: Some(&window),
+        hands: None,
+        gate: &Open,
+    };
+    let first = call(&tool, json!({"action": "list"})).unwrap().report;
+    assert!(
+        first.ends_with(&format!("\n\n{SAID}\nmake it red")),
+        "{first}"
+    );
+    let second = call(&tool, json!({"action": "list"})).unwrap().report;
+    assert!(!second.contains("make it red"), "{second}");
 }
 
 #[test]

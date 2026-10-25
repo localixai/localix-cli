@@ -68,7 +68,7 @@ fn each_appearance_has_its_own_material_and_coat() {
     assert_eq!((dark_ground, light_ground), (DARK, LIGHT));
     // Mostly glass: at most 60% coat, lighter where the text is dark.
     assert!(dark_alpha < light_alpha && dark_alpha >= 0.4 && light_alpha <= 0.6);
-    // A neutral glass, as Localix's: a terminal's own grey-blue ground only says which
+    // A neutral glass: a terminal's own grey-blue ground only says which
     // appearance; the coat stays near-black (or near-white), so the material does not read grey.
     let neutral = |[red, green, blue]: Rgb| red == green && green == blue;
     let (over_grey_blue, alpha) = coat(Some([0x2a, 0x2b, 0x37]), false);

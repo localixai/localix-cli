@@ -143,7 +143,9 @@ pub(crate) enum Command {
     /// Browser pages and terminal sessions as tabs of one window the person watches, grouped by
     /// project; a `goal` on any tab is carried out by the decision model (an OpenRouter key).
     /// The agent's own model thinks: no chat model is used. It runs in the daemon, started if
-    /// none runs; its tabs end when the agent closes its stdin. Add it with
+    /// none runs; its tabs end when the agent closes its stdin. Comments the person sends from
+    /// its tabs (Comment, then Send, in the window's strip) come back with the agent's next
+    /// `window` call. Add it with
     /// `claude mcp add llx -- llx mcp`.
     #[cfg(unix)]
     Mcp,

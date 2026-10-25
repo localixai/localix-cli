@@ -52,9 +52,12 @@ impl Kit {
         let shown = hosted.browser.is_some() && !remote;
         let group = windows::group(&place.cwd, workspace.root());
         let page = (hosted.browser.clone()).map(|browser| Page::new(browser, !shown));
+        // What the person sends from its tabs waits here for the client's next call.
+        let heard = Arc::new(crate::arrivals::queue(None));
         let held = (hosted.browser.clone().filter(|_| shown)).map(|browser| Held {
-            tabs: Tabs::of(browser, &group),
+            tabs: Tabs::of(browser, &group).owned(&hosted.lanes, &heard),
             opened: Mutex::default(),
+            heard,
         });
         // Its terminals' tabs tell no lane what the person does to them: it has none.
         let watch = hosted.browser.clone().map(|browser| {
@@ -182,6 +185,8 @@ impl Kit {
 struct Held {
     tabs: Tabs,
     opened: Mutex<Vec<String>>,
+    /// What the person did to its tabs, and sent from them, until a call takes it.
+    heard: Arc<queue::Queue>,
 }
 
 impl Held {
@@ -213,5 +218,14 @@ impl Windowed for Held {
     fn opened(&self, tab: &str) {
         self.tabs.opened(tab);
         lock(&self.opened).push(tab.to_string());
+    }
+
+    fn said(&self) -> Option<String> {
+        // Taken as a running task takes it: everything waiting, as the inbox renders it.
+        self.heard.begin();
+        let taken = self.heard.take_joining();
+        self.heard.end();
+        let said: Vec<String> = taken.iter().map(queue::Entry::render).collect();
+        (!said.is_empty()).then(|| said.join("\n\n"))
     }
 }

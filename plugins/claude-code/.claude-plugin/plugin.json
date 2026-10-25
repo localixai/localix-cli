@@ -1,10 +1,18 @@
 {
   "name": "llx",
-  "version": "0.1.0",
-  "description": "llx's window for Claude: native browser pages and terminal sessions as tabs of one window you watch, with a fast decision model for a tab's goal",
-  "author": { "name": "rsaryev" },
+  "version": "0.2.0",
+  "description": "llx's window for Claude: native browser pages and terminal sessions as tabs of one window you watch, a fast decision model for a tab's goal, and the comments you send from it back as a prompt",
+  "author": {
+    "name": "rsaryev"
+  },
   "homepage": "https://github.com/rsaryev/llx",
   "repository": "https://github.com/rsaryev/llx",
   "license": "MIT",
-  "keywords": ["browser", "terminal", "window", "mcp"]
+  "keywords": [
+    "browser",
+    "terminal",
+    "window",
+    "mcp",
+    "visual-feedback"
+  ]
 }

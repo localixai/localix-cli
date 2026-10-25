@@ -5,7 +5,9 @@
 
 mod args;
 mod capture;
+mod comments;
 mod deck;
+mod feedback;
 mod frame;
 mod guard;
 mod history;
@@ -31,7 +33,7 @@ pub use capture::{Clip, Shot};
 pub use contracts::view::{
     Action, Element, SelectOption, ViewError as BrowserError, ViewResult as BrowserResult,
 };
-pub use host::{Browser, Dressing, Listed, Tab, Window, host};
+pub use host::{Browser, Dressing, Heard, Listed, Tab, Window, host};
 pub use page::Page;
 pub use panel::Panel;
 pub use tabs::MAX_TABS;

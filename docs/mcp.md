@@ -29,6 +29,7 @@ The `goal` of a tab needs an OpenRouter key: save one with `/login` in `llx`, or
 - It runs in the daemon (started if none runs), so its tabs share the one window with your llx sessions, under the project the agent started it in; its terminals run there, with the agent's environment.
 - The other agent approves each call (its own permission prompt): llx asks nothing more for them.
 - A cancelled call is stopped. When the agent closes the server, its terminals end and the browser tabs it left open close.
+- Comments the person sends from its tabs come back with the agent's next `window` call, after that call's report, under `### What the person sent from the window`. The Claude Code plugin asks for them every two seconds with a quiet `list` and hands them to Claude as a prompt, so they arrive without the agent calling.
 - Unix only.
 
 The rules behind it are W9 and K7 in [ARCHITECTURE.md](../ARCHITECTURE.md).

@@ -100,8 +100,8 @@ pub(super) fn material(dark: bool) -> isize {
     if dark { 13 } else { 21 }
 }
 
-/// The coat over the glass, and how much of it covers: neutral near-black or near-white, as
-/// Localix's window ground (oklch 0.13 and 0.975), never the page's own colour. A terminal's
+/// The coat over the glass, and how much of it covers: neutral near-black or near-white
+/// (oklch 0.13 and 0.975), never the page's own colour. A terminal's
 /// grey-blue ground over the material read as grey; the page's ground, else the system's, only
 /// says which appearance.
 #[cfg_attr(
@@ -110,7 +110,7 @@ pub(super) fn material(dark: bool) -> isize {
 )]
 pub(super) fn coat(ground: Option<Rgb>, system_dark: bool) -> (Rgb, f64) {
     match ground.map_or(system_dark, dark) {
-        // Thinner than Localix's 85% and 92%: the desktop shows through, text still reads.
+        // Thin: the desktop shows through, text still reads.
         true => (DARK, 0.5),
         false => (LIGHT, 0.6),
     }

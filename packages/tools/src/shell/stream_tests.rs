@@ -242,7 +242,7 @@ fn a_full_screen_program_is_read_as_its_screen() {
 
 #[test]
 fn a_program_that_redraws_in_place_is_read_as_its_screen() {
-    // As Claude Code draws: no alternate screen, but the cursor goes up and lines are erased.
+    // As an agent's interface draws: no alternate screen, but the cursor goes up and lines are erased.
     let mut stream = Stream::default();
     stream.take_in(b"> hi\r\n* thinking\r\n");
     stream.take_in(b"\x1b[1A\x1b[2K\x1b[Ganswer: 42\r\n");

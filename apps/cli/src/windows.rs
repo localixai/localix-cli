@@ -16,12 +16,36 @@ use tools::shell::{Painter, Sessions, Theme, Watch};
 pub(crate) struct Tabs {
     pub browser: Browser,
     pub group: String,
+    /// Who hears what the person does to the tabs opened here: the lane's queue, or a tool
+    /// client's.
+    owner: Option<(
+        std::sync::Arc<crate::arrivals::Lanes>,
+        std::sync::Weak<queue::Queue>,
+    )>,
 }
 
 impl Tabs {
     pub(crate) fn of(browser: Browser, group: &str) -> Self {
         let group = group.to_string();
-        Self { browser, group }
+        let owner = None;
+        Self {
+            browser,
+            group,
+            owner,
+        }
+    }
+
+    /// The tabs opened here are `queue`'s: what the person does to them reaches it alone.
+    pub(crate) fn owned(
+        mut self,
+        lanes: &std::sync::Arc<crate::arrivals::Lanes>,
+        queue: &std::sync::Arc<queue::Queue>,
+    ) -> Self {
+        self.owner = Some((
+            std::sync::Arc::clone(lanes),
+            std::sync::Arc::downgrade(queue),
+        ));
+        self
     }
 }
 
@@ -67,6 +91,11 @@ impl tools::window::Windowed for Tabs {
 
     fn opened(&self, tab: &str) {
         self.browser.group(tab, &self.group);
+        if let Some((lanes, queue)) = &self.owner
+            && let Some(queue) = queue.upgrade()
+        {
+            lanes.own(tab, &queue);
+        }
     }
 }
 

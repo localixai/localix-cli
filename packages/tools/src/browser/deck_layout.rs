@@ -66,6 +66,11 @@ impl Deck {
             (listed.first()).is_some_and(|first| listed.iter().any(|tab| tab.group != first.group));
         self.rows.store(several, Ordering::SeqCst);
         self.layout();
+        // Again on every refresh: a tab switched to, or a page loaded, comments as the strip says.
+        if let Some(web) = &self.web {
+            let script = strip::comment(self.commenting, self.sent);
+            let _ = web.active().evaluate_script(&script);
+        }
         let Some(strip) = &self.strip else {
             return;
         };
@@ -87,5 +92,7 @@ impl Deck {
         let _ = strip.evaluate_script(&strip::script(&items, shown));
         let visits = self.menu.then(|| shared.history.list());
         let _ = strip.evaluate_script(&strip::menu(visits.as_deref()));
+        let held = shared.comments.count();
+        let _ = strip.evaluate_script(&strip::commenting(self.commenting, held));
     }
 }

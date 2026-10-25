@@ -54,10 +54,17 @@ pub(super) enum Click {
     History,
     /// The page at this place of the history menu.
     Visit(usize),
+    /// Commenting on the pages turns on or off.
+    Comment,
+    /// The comments held go to whoever listens, and their marks leave the pages.
+    Send,
+    /// The strip's empty part is the titlebar: a press moves the window, a double click zooms it.
+    Drag,
+    Zoom,
 }
 
 /// A message from the strip's page: `show w3`, `close t1`, `back`, `forward`, `history`,
-/// `visit 2`. Anything else is nothing.
+/// `visit 2`, `comment`, `send`, `drag`, `zoom`. Anything else is nothing.
 pub(super) fn click(body: &str) -> Option<Click> {
     let (verb, rest) = match body.split_once(' ') {
         Some((verb, rest)) => (verb, Some(rest)),
@@ -67,6 +74,10 @@ pub(super) fn click(body: &str) -> Option<Click> {
         ("back", None) => Some(Click::Back),
         ("forward", None) => Some(Click::Forward),
         ("history", None) => Some(Click::History),
+        ("comment", None) => Some(Click::Comment),
+        ("send", None) => Some(Click::Send),
+        ("drag", None) => Some(Click::Drag),
+        ("zoom", None) => Some(Click::Zoom),
         ("visit", Some(at)) if at.bytes().all(|b| b.is_ascii_digit()) => {
             at.parse().ok().map(Click::Visit)
         }
@@ -129,6 +140,19 @@ pub(super) fn menu(visits: Option<&[Visit]>) -> String {
         rows
     });
     format!("M({})", json!(shown))
+}
+
+/// The call that marks the comment button on or off, and offers to send the comments held.
+pub(super) fn commenting(on: bool, held: usize) -> String {
+    format!("C({on}, {held})")
+}
+
+/// The call that turns commenting on or off in a page; a page whose marks are of an earlier
+/// batch than `sent` drops them.
+pub(super) fn comment(on: bool, sent: u32) -> String {
+    format!(
+        "window.__dloop_call && window.__dloop_call(0, 'comment', {{ on: {on}, sent: {sent} }})"
+    )
 }
 
 /// The strip's page: dressed in the frame's stylesheet, clear over the window's glass.

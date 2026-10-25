@@ -12,6 +12,7 @@ use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
 use tao::window::WindowId;
 
+use super::super::comments::Comments;
 use super::super::deck::{After, Deck};
 use super::super::frame;
 use super::super::guard::token;
@@ -20,7 +21,7 @@ use super::super::panel::Opening;
 use super::super::platform;
 use super::super::strip::{Click, Key, click};
 use super::web::on_browser;
-use super::{Browser, Cmd, Shared, WINDOW_CLOSED, Window};
+use super::{Browser, Cmd, Heard, Shared, WINDOW_CLOSED, Window};
 
 /// Take the main thread for the browser's event loop and run `work` on a worker thread with a
 /// handle that opens the window when it is needed. The event loop never returns, so the process
@@ -61,6 +62,7 @@ where
         listener: Mutex::new(None),
         groups: Mutex::new(HashMap::new()),
         history: History::default(),
+        comments: Comments::default(),
     });
     let browser = Browser {
         proxy: proxy.clone(),
@@ -130,7 +132,7 @@ fn on_window(
             open.let_go();
             let browser = open.web.is_some();
             *deck = None;
-            shared.heard("window", CLOSED_WINDOW);
+            shared.heard("window", Heard::Did(CLOSED_WINDOW));
             if browser {
                 shared.closed();
                 on_close();
@@ -271,7 +273,7 @@ impl On<'_> {
                 Key::Web(_) => CLOSED_PAGE,
                 Key::Term(_) => CLOSED_TERMINAL,
             };
-            self.shared.heard(&key.name(), what);
+            self.shared.heard(&key.name(), Heard::Did(what));
         }
     }
 

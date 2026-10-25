@@ -130,7 +130,7 @@ impl Tool for BashTool<'_> {
             Some(place) => format!("{}  (in {place})", summary(command)),
             None => summary(command),
         };
-        ask(self.gate, NAME, &effect)?;
+        ask(self.gate, NAME, command, &effect)?;
         let timeout = args
             .timeout_ms
             .unwrap_or(DEFAULT_TIMEOUT_MS)

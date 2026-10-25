@@ -5,11 +5,12 @@
 
 mod decide;
 mod doctor;
-mod exec;
+pub(crate) mod exec;
 #[cfg(unix)]
 mod mcp;
 mod pipes;
 mod repo;
+mod rules;
 mod sessions;
 mod sign_in;
 mod tui;

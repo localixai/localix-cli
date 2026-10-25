@@ -99,7 +99,7 @@ impl Tool for EditTool<'_> {
             })?;
             let change = replace(&content, &args, &shown)?;
             let summary = format!("edit {shown} (+{} -{} lines)", change.added, change.removed);
-            ask(self.gate, NAME, &summary)?;
+            ask(self.gate, NAME, &shown.replace('\\', "/"), &summary)?;
             unchanged(&path, &shown, Some(content.as_bytes()))?;
             write(&path, &shown, &change.content)?;
             format!(
@@ -131,6 +131,7 @@ impl EditTool<'_> {
         ask(
             self.gate,
             NAME,
+            &shown.replace('\\', "/"),
             &format!("create {shown} ({})", count(lines)),
         )?;
         unchanged(path, shown, existing)?;

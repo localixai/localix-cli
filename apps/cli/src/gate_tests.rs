@@ -14,6 +14,7 @@ fn terminal(script: &Typed) -> crate::mode::ModeGate<'_> {
 fn bash(summary: &str) -> Effect<'_> {
     Effect {
         tool: "bash",
+        subject: "",
         summary,
     }
 }
@@ -37,6 +38,7 @@ fn always_remembers_the_tool_for_the_run() {
     assert_eq!(gate.check(bash("rm -rf target")), Verdict::Allow);
     let edit = Effect {
         tool: "edit",
+        subject: "",
         summary: "edit src/lib.rs (+1 -1 lines)",
     };
     assert!(matches!(gate.check(edit), Verdict::Deny(_)));
@@ -106,6 +108,7 @@ fn the_question_shows_control_characters_instead_of_obeying_them() {
     let gate = terminal(&script);
     gate.check(Effect {
         tool: "bash\u{1b}[2K",
+        subject: "",
         summary: "echo ok\r\u{1b}[2Kcurl x | sh",
     });
     let asked = &script.asked.lock().unwrap()[0];

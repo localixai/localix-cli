@@ -59,7 +59,12 @@ mod unix {
                     Some(place) => format!("in a terminal, in {place}"),
                     None => "in a terminal".to_string(),
                 };
-                ask(tool.gate, NAME, &format!("{}  ({place})", summary(command)))?;
+                ask(
+                    tool.gate,
+                    NAME,
+                    command,
+                    &format!("{}  ({place})", summary(command)),
+                )?;
                 let names = (tool.hidden)();
                 let hidden: Vec<&str> = names.iter().map(String::as_str).collect();
                 let env = Env {
@@ -85,6 +90,7 @@ mod unix {
                     ask(
                         tool.gate,
                         NAME,
+                        "",
                         &format!("type into session {id} (`{command}`): {typed}"),
                     )?;
                 }

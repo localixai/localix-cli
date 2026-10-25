@@ -11,7 +11,7 @@ use crate::common::model::{Model, Reply, said};
 
 /// `exec args…` with `stdin` piped in, run to its end as CI runs it: with no terminal at all (a
 /// session of its own, so not even `/dev/tty` is there to ask on).
-fn exec(home: &Home, model: &Model, args: &[&str], stdin: &str) -> Output {
+pub(crate) fn exec(home: &Home, model: &Model, args: &[&str], stdin: &str) -> Output {
     let mut command = home.with_model(model, args);
     #[cfg(unix)]
     {

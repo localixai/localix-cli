@@ -182,6 +182,7 @@ impl Kind for Browser<'_> {
                     if let contracts::gate::Verdict::Deny(why) =
                         self.gate.check(contracts::gate::Effect {
                             tool: "browser",
+                            subject: "",
                             summary: &effect,
                         })
                     {

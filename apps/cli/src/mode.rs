@@ -14,6 +14,7 @@ use contracts::gate::{Effect, Gate, Verdict};
 
 use crate::gate::{Asker, Prompter, TerminalGate, declined};
 use crate::output::lock;
+use crate::rules::{Rules, Ruling};
 use protocol::Approval;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -212,6 +213,8 @@ pub(crate) struct ModeGate<'a> {
     always: [Mutex<HashSet<String>>; 2],
     /// Told how long the person took to answer, so it does not count toward the time limit.
     waited: &'a (dyn Fn(Duration) + Sync),
+    /// `--allow` and `--deny`, asked before the mode.
+    rules: Rules,
 }
 
 impl<'a> ModeGate<'a> {
@@ -236,12 +239,24 @@ impl<'a> ModeGate<'a> {
             asker,
             always: Default::default(),
             waited,
+            rules: Rules::default(),
         }
+    }
+
+    /// The same, with `rules` judging each effect first.
+    pub(crate) fn ruled(self, rules: Rules) -> Self {
+        Self { rules, ..self }
     }
 }
 
 impl Gate for ModeGate<'_> {
     fn check(&self, effect: Effect) -> Verdict {
+        let read_only = self.mode.get() == Mode::Plan && effect.tool == EDIT;
+        match self.rules.judge(effect.tool, effect.subject) {
+            Ruling::Denied(why) => return Verdict::Deny(why),
+            Ruling::Allowed if !read_only => return Verdict::Allow,
+            Ruling::Allowed | Ruling::Unsettled => {}
+        }
         let (always, none) = match self.mode.get() {
             Mode::Bypass | Mode::Autonomous => return Verdict::Allow,
             Mode::Plan if effect.tool == EDIT => return Verdict::Deny(PLAN_REFUSAL.into()),

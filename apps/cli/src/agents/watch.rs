@@ -73,6 +73,7 @@ impl Gate for Labeled<'_> {
         let summary = format!("[agent {}] {}", self.label, effect.summary);
         self.inner.check(Effect {
             tool: effect.tool,
+            subject: effect.subject,
             summary: &summary,
         })
     }

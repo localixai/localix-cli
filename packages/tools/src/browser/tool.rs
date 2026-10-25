@@ -41,7 +41,7 @@ impl Tool for BrowserTool<'_> {
             .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
         let url = given(&args.url).map(address).transpose()?;
         if let Some(effects) = effects(url.as_deref(), &args) {
-            ask(self.gate, NAME, &effects)?;
+            ask(self.gate, NAME, "", &effects)?;
         }
         let mut report = vec![];
         match args.new_tab && self.page.is_open() {

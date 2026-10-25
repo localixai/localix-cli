@@ -48,7 +48,7 @@ impl WindowTool<'_> {
             let quoted: Vec<String> = values.iter().map(|v| format!("\"{v}\"")).collect();
             summary.push_str(&format!(" (may type {})", quoted.join(", ")));
         }
-        crate::ask(self.gate, kind.name(), &summary)?;
+        crate::ask(self.gate, kind.name(), "", &summary)?;
         let done = {
             let view = kind.view(id)?;
             hands.carry_out(

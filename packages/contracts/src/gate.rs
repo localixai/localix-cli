@@ -7,6 +7,9 @@
 pub struct Effect<'a> {
     /// The tool asking, by its spec name.
     pub tool: &'a str,
+    /// The one thing a rule on the tool matches, exactly as the tool will use it: the text it
+    /// runs, or the place it changes, relative to where it works. Empty when the call has none.
+    pub subject: &'a str,
     /// What it will do, in full and on one line: the command, or the file and its +/- lines.
     /// Whoever answers judges this text alone, so nothing that matters is left out of it.
     pub summary: &'a str,

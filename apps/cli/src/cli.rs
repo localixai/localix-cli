@@ -132,7 +132,7 @@ pub(crate) enum Command {
     /// Its conversation is not kept, only each task and how it ended: the agent starts a new
     /// conversation that is told them, and records into the same session.
     #[command(group(ArgGroup::new("which").args(["id", "last"]).required(true).multiple(true)))]
-    Resume(ResumeArgs),
+    Resume(Box<ResumeArgs>),
     /// List saved sessions, newest first.
     Sessions,
     /// Forget every saved sign-in: the ChatGPT tokens and the OpenRouter key.
@@ -327,6 +327,15 @@ pub(crate) struct RunOptions {
         conflicts_with = "yes"
     )]
     pub mode: Option<Mode>,
+    /// Run what RULE names without asking, where the mode would ask or, with no one to ask,
+    /// refuse: `bash(cargo test *)` (every part of the command must match), `edit(docs/**)`,
+    /// `browser`. Repeat it. Plan mode stays read-only. The syntax is Claude Code's: docs/ci.md.
+    #[arg(long, value_name = "RULE", help_heading = "Approvals")]
+    pub allow: Vec<String>,
+    /// Refuse what RULE names in every mode, -y included: `bash(git push *)`. Repeat it.
+    #[arg(long, value_name = "RULE", help_heading = "Approvals")]
+    pub deny: Vec<String>,
+
     /// Print events as JSON lines on stdout: run.started, tool.call, tool.result, step, turn,
     /// run.completed. With `exec` or -p.
     #[arg(long, help_heading = "Output")]

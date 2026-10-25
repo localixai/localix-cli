@@ -40,6 +40,7 @@ use crate::jobs::{self, Jobs};
 use crate::live::Live;
 use crate::mode::{ModeCell, ModeGate};
 use crate::output::{Output, lock};
+use crate::rules::Rules;
 use crate::server::asking::{UiGate, UiPerson};
 use crate::windows;
 
@@ -93,6 +94,9 @@ pub(crate) fn assemble(
         }
         None => ModeGate::new(&mode, shared.terminal.then_some(Tty), &waited),
     };
+    // Read once already, before the run started: `run` refused rules it could not read.
+    let rules = Rules::new(&shared.options.allow, &shared.options.deny).unwrap_or_default();
+    let approver = approver.ruled(rules);
     let gate = Stoppable {
         inner: &approver,
         stopped: &stopped,

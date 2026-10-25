@@ -41,6 +41,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
     fn ask(&self, summary: &str) -> Result<(), ToolError> {
         match self.kit.gate.check(Effect {
             tool: spec::NAME,
+            subject: "",
             summary,
         }) {
             Verdict::Allow => Ok(()),

@@ -8,6 +8,7 @@ use protocol::Approval;
 fn effect(tool: &str) -> Effect<'_> {
     Effect {
         tool,
+        subject: "",
         summary: "the summary",
     }
 }

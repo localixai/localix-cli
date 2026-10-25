@@ -11,6 +11,7 @@ mod interface;
 mod remote;
 mod task;
 
+use crate::rules::Rules;
 use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Arc;
@@ -147,6 +148,7 @@ pub(crate) fn run(
 ) -> Result<i32, Failure> {
     let mut workspace = root(&options)?;
     let schema = options.schema.as_deref().map(input::schema).transpose()?;
+    let rules = Rules::new(&options.allow, &options.deny).map_err(Failure::Usage)?;
     // A picture asked for that cannot be attached stops the run before a model is paid for.
     for path in &options.images {
         attach::read(path).map_err(|why| Failure::Usage(format!("--image {why}")))?;
@@ -202,7 +204,11 @@ pub(crate) fn run(
     }
     let environment = Environment {
         root: workspace.root(),
-        mode: &mode::describe(mode, terminal, asks),
+        mode: &[Some(mode::describe(mode, terminal, asks)), rules.describe()]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" "),
         browser,
         now: session::now(),
     };

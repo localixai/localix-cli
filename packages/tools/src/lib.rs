@@ -26,10 +26,14 @@ pub mod workspace;
 #[cfg(test)]
 mod testing;
 
-/// Ask `gate` before an effect; a refusal is a failed call the model reads, so it can try another
-/// way.
-fn ask(gate: &dyn Gate, tool: &str, summary: &str) -> Result<(), ToolError> {
-    match gate.check(Effect { tool, summary }) {
+/// Ask `gate` before an effect on `subject` ([`Effect::subject`]); a refusal is a failed call the
+/// model reads, so it can try another way.
+fn ask(gate: &dyn Gate, tool: &str, subject: &str, summary: &str) -> Result<(), ToolError> {
+    match gate.check(Effect {
+        tool,
+        subject,
+        summary,
+    }) {
         Verdict::Allow => Ok(()),
         Verdict::Deny(reason) => Err(ToolError::Failed(format!("not allowed: {reason}"))),
     }

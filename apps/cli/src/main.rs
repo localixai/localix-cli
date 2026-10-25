@@ -35,6 +35,7 @@ mod mode;
 mod output;
 mod picker;
 mod providers;
+mod rules;
 mod server;
 #[cfg(test)]
 mod testing;

@@ -363,6 +363,7 @@ fn an_agents_effects_name_it() {
     };
     labeled.check(Effect {
         tool: "bash",
+        subject: "",
         summary: "cargo test",
     });
     assert_eq!(*asked.0.lock().unwrap(), ["[agent scout] cargo test"]);

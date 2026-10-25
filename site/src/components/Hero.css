@@ -6,7 +6,7 @@
 }
 h1 {
   margin: 0;
-  font: 700 clamp(2.75rem, 6.2vw, 5.25rem) / 0.98 var(--display);
+  font: 700 clamp(2.5rem, 1.4rem + 5.6vw, 4.75rem) / 0.98 var(--display);
   letter-spacing: -0.05em;
   text-wrap: balance;
 }
@@ -34,18 +34,39 @@ h1 {
   color: var(--muted);
   font: 400 0.8125rem/1.5 var(--mono);
 }
+.under a {
+  color: var(--soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 160ms ease;
+}
+.under a:hover {
+  color: var(--white);
+}
 
+
+/* Side by side on wide screens, as tokendoctor's: the film takes the larger share. */
+@media (min-width: 60rem) {
+  .hero {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+    column-gap: clamp(3rem, 5vw, 8rem);
+    align-items: center;
+  }
+  h1 {
+    font-size: clamp(2.75rem, 4.3vw, 8rem);
+  }
+}
 
 /* First paint: the copy rises in, line by line, then the demo. */
 h1,
 .lede,
-.hero .command,
+.hero .install,
 .hero .under,
 .hero-demo {
   animation: rise 700ms var(--ease-out) both;
 }
 .lede { animation-delay: 80ms; }
-.hero .command { animation-delay: 140ms; }
+.hero .install { animation-delay: 140ms; }
 .hero .under { animation-delay: 180ms; }
 .hero-demo { animation-delay: 220ms; }
 @keyframes rise {

@@ -1,2 +1,2 @@
 export const GITHUB = 'https://github.com/rsaryev/llx';
-export const INSTALL = 'curl -fsSL https://llx.sh | sh';
+export const INSTALL = ['npm install -g @rsaryev/llx'] as const;

@@ -1,50 +1,58 @@
-/* The command is the primary action: white, mono, with Copy as its own segment. */
-.command {
-  display: inline-flex;
-  align-items: stretch;
-  max-width: 100%;
-  margin-top: 2rem;
-  border-radius: 10px;
-  background: var(--white);
-  color: var(--black);
-  overflow: hidden;
-}
-.command code {
+/* The install block, as tokendoctor's: a hairline frame in the hero's one-action measure. */
+.install {
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: clamp(1.75rem, 2.6vw, 3rem);
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--card);
+}
+.install code {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.3rem;
   min-width: 0;
-  padding: 0.9rem 1.1rem;
+  padding: 0.7rem 1rem;
   overflow-x: auto;
-  white-space: nowrap;
-  font-size: 0.9375rem;
-  font-weight: 600;
   scrollbar-width: none;
+  color: var(--white);
+  font: 400 clamp(0.6875rem, 0.6rem + 0.2vw, 0.8125rem) / 1.4 var(--mono);
 }
-.sigil {
-  margin-right: 0.6ch;
-  color: #8a8a87;
+.install code::-webkit-scrollbar {
+  display: none;
 }
-.command button {
-  flex: none;
-  padding: 0 1.2rem;
+.install-line {
+  white-space: nowrap;
+}
+.install-line > span {
+  color: var(--muted);
+}
+.install-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-inline: 0.9rem;
   border: 0;
-  border-left: 1px solid #d6d6d3;
+  border-left: 1px solid var(--line-strong);
+  border-radius: 0 8px 8px 0;
   background: transparent;
-  color: var(--black);
-  font: 600 0.8125rem/1 var(--mono);
+  color: var(--soft);
+  font: 500 0.8125rem/1 var(--text);
   cursor: pointer;
-  transition: background-color 160ms ease;
+  transition: color 160ms ease, background-color 160ms ease;
 }
-.command button:hover {
-  background: #e6e6e3;
+.install-copy span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.install-copy:hover {
+  background: var(--card);
+  color: var(--white);
 }
 
-@media (max-width: 40rem) {
-  .command code {
-    padding: 0.8rem 0.9rem;
-    font-size: 0.8125rem;
-  }
-  .command button {
-    padding: 0 0.9rem;
-  }
-}

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import 'asciinema-player/dist/bundle/asciinema-player.css';
+import './Film.css';
 
 /**
  * A real llx session, recorded with asciinema (scripts/record-llx.exp) and replayed as text, so

@@ -1,47 +1,38 @@
-import { useEffect, useRef, useState } from 'react';
-import './InstallCommand.css';
+import { Check, Copy } from './icons'
+import './InstallCommand.css'
+import { useEffect, useRef, useState } from 'react'
 
-type Label = 'Copy' | 'Copied' | 'Selected';
-
-/** The install command, with Copy as its own segment. Where the clipboard is refused, the command
- *  is selected instead, so the visitor can copy it themselves. */
-export function InstallCommand({ command }: { command: string }) {
-  const text = useRef<HTMLSpanElement>(null);
-  const [label, setLabel] = useState<Label>('Copy');
-  const reset = useRef<number | undefined>(undefined);
-
-  useEffect(() => () => window.clearTimeout(reset.current), []);
+/** The install commands as one block with one Copy, in the ghost-button measure of the hero. */
+export function InstallCommand({ commands }: { commands: readonly string[] }) {
+  const [copied, setCopied] = useState(false)
+  const timer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(timer.current), [])
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(command);
-      setLabel('Copied');
+      await navigator.clipboard.writeText(commands.join('\n'))
+      setCopied(true)
     } catch {
-      const node = text.current;
-      const selection = window.getSelection();
-      if (node && selection) {
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
-      setLabel('Selected');
+      return
     }
-    window.clearTimeout(reset.current);
-    reset.current = window.setTimeout(() => setLabel('Copy'), 1600);
-  };
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setCopied(false), 1600)
+  }
 
   return (
-    <div className="command">
+    <div className="install">
       <code>
-        <span className="sigil" aria-hidden="true">
-          $
-        </span>{' '}
-        <span ref={text}>{command}</span>
+        {commands.map((command) => (
+          <span key={command} className="install-line">
+            <span aria-hidden="true">$ </span>
+            {command}
+          </span>
+        ))}
       </code>
-      <button type="button" onClick={copy} data-done={label === 'Copy' ? undefined : ''}>
-        <span className="copy-label">{label}</span>
+      <button type="button" className="install-copy" onClick={copy} aria-label="Copy the install commands">
+        {copied ? <Check /> : <Copy />}
+        <span>{copied ? 'Copied' : 'Copy'}</span>
       </button>
     </div>
-  );
+  )
 }

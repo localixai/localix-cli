@@ -222,6 +222,11 @@ pub(crate) fn glass(browser: &Browser, driver: &WebviewDriver, window: &Window, 
         size.w,
         size.h
     );
+    if !cfg!(target_os = "macos") {
+        // The glass and a page's picture of it are macOS's alone.
+        driver.close();
+        return;
+    }
     let white = driver.screenshot(None).unwrap();
     driver
         .navigate(&format!("{origin}/blank-transparent.html"))

@@ -5,6 +5,7 @@
 //! protocol's commands and their answers back. Each `tools/call` waits on a thread of its own,
 //! so calls run at once; a cancelled one is halted and never answered.
 
+mod link;
 mod rpc;
 
 use std::collections::HashMap;
@@ -18,6 +19,7 @@ use client::{Begun, CallError, Client};
 use protocol::{Command, Done, Place};
 use serde_json::Value;
 
+use self::link::Link;
 use self::rpc::Message;
 
 /// How long the daemon has to take the handshake and list the tools.
@@ -42,21 +44,17 @@ pub(crate) fn here() -> Place {
     }
 }
 
-/// Serve the agent at `input` and `output` through `client`, from `place`, until its input
-/// ends; then what its calls still do is halted. Why it could not start.
-pub(crate) fn run(
-    client: &Client,
+/// Serve the agent at `input` and `output` through the daemon `connect` reaches (again when it
+/// is lost), from `place`, until its input ends; then what its calls still do is halted. Why it
+/// could not start.
+pub(crate) fn run<F: Fn() -> io::Result<Client> + Sync>(
+    connect: F,
     place: Place,
     build: String,
     input: impl BufRead,
     output: impl Write + Send,
 ) -> io::Result<()> {
-    let hello = Command::Initialize {
-        version: protocol::VERSION,
-        place: Some(place),
-        build,
-    };
-    client.call(hello, ASK).map_err(io::Error::other)?;
+    let link = Link::open(connect, place, build)?;
     let (lines, written) = sync_channel::<String>(WRITES);
     let open = Calls::default();
     std::thread::scope(|scope| {
@@ -81,18 +79,18 @@ pub(crate) fn run(
                         let _ = lines.send(unnamed);
                         continue;
                     };
-                    let begun = client.begin(command);
-                    let open = &open;
-                    let calling = move || answered(open, &id, begun, &lines);
+                    let begun = link.begin(command);
+                    let (open, link) = (&open, &link);
+                    let calling = move || answered(open, link, &id, begun, &lines);
                     let thread = std::thread::Builder::new().name("llx-mcp-call".into());
                     thread.spawn_scoped(scope, calling)?;
                 }
                 Message::Request { id, method, params } => {
-                    let _ = lines.send(answer(client, &id, &method, &params));
+                    let _ = lines.send(answer(&link, &id, &method, &params));
                 }
                 Message::Notification { method, params } => {
                     if method == "notifications/cancelled" {
-                        open.cancel(client, params.get("requestId"));
+                        open.cancel(&link.client().1, params.get("requestId"));
                     }
                 }
                 Message::Response => {}
@@ -103,7 +101,7 @@ pub(crate) fn run(
             }
         }
         // The agent is gone: nobody reads what its calls would say.
-        open.halt_all(client);
+        open.halt_all(&link.client().1);
         Ok(())
     })
 }
@@ -153,22 +151,37 @@ impl Calls {
 }
 
 /// A `tools/call`, waited for and answered, unless it was cancelled.
-fn answered(open: &Calls, id: &Value, begun: Result<Begun, CallError>, lines: &SyncSender<String>) {
+fn answered<F: Fn() -> io::Result<Client>>(
+    open: &Calls,
+    link: &Link<F>,
+    id: &Value,
+    begun: Result<Begun, CallError>,
+    lines: &SyncSender<String>,
+) {
+    let seen = link.client().0;
     let done = begun.and_then(|begun| begun.wait(CALL));
+    if done == Err(CallError::Gone) {
+        link.lost(seen);
+    }
     if open.end(id) {
         let _ = lines.send(rpc::result(id, rpc::called(done)));
     }
 }
 
 /// What a request other than a call comes to.
-fn answer(client: &Client, id: &Value, method: &str, params: &Value) -> String {
+fn answer<F: Fn() -> io::Result<Client>>(
+    link: &Link<F>,
+    id: &Value,
+    method: &str,
+    params: &Value,
+) -> String {
     match method {
         "initialize" => {
             let version = env!("CARGO_PKG_VERSION");
             rpc::result(id, rpc::initialized(params, version))
         }
         "ping" => rpc::result(id, Value::Object(Default::default())),
-        "tools/list" => match client.call(Command::Tools, ASK) {
+        "tools/list" => match link.call(Command::Tools, ASK) {
             Ok(Done::Tools { tools }) => rpc::result(id, rpc::tools(tools)),
             Ok(_) => rpc::error(id, rpc::INVALID_REQUEST, "the server lists no tools"),
             Err(why) => rpc::error(id, rpc::INVALID_REQUEST, &why.to_string()),

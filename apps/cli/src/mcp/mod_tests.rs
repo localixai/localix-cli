@@ -82,6 +82,14 @@ impl Agent {
         reason = "what the agent reads, as a process's stdout would carry it"
     )]
     fn start(client: Client) -> Self {
+        Self::reaching(move || Ok(client.clone()))
+    }
+
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "what the agent reads, as a process's stdout would carry it"
+    )]
+    fn reaching(connect: impl Fn() -> io::Result<Client> + Send + Sync + 'static) -> Self {
         let (input, stdin) = io::pipe().unwrap();
         let (stdout, output) = io::pipe().unwrap();
         let place = Place {
@@ -90,7 +98,7 @@ impl Agent {
         };
         let running = std::thread::spawn(move || {
             run(
-                &client,
+                connect,
                 place,
                 String::new(),
                 io::BufReader::new(input),
@@ -255,5 +263,37 @@ fn a_line_that_is_not_a_message_is_a_parse_error() {
     agent.send("{oops");
     let answer = agent.answer(Value::Null);
     assert_eq!(answer["error"]["code"], -32700);
+    agent.close();
+}
+
+/// A daemon that takes the handshake and then goes away, as one stopped under the agent does.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the in-process transport's channels, as the binary makes them"
+)]
+fn dying() -> Client {
+    let (to_server, incoming) = channel::<ToServer>();
+    let (out, from_server) = channel::<ToClient>();
+    std::thread::spawn(move || {
+        if let Ok(ToServer::Call { id, .. }) = incoming.recv() {
+            let _ = out.send(ToClient::Done { id, done: Done::Ok });
+        }
+    });
+    Client::in_process(to_server, from_server, |_| {}).unwrap()
+}
+
+#[test]
+fn a_call_after_the_daemon_went_away_reaches_a_new_one() {
+    let reached = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = Arc::clone(&reached);
+    let mut agent = Agent::reaching(move || match count.fetch_add(1, Ordering::SeqCst) {
+        0 => Ok(dying()),
+        _ => Ok(server().0),
+    });
+    agent.ask(json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "window", "arguments": {"action": "list"}}}));
+    let called = agent.answer(json!(1));
+    assert_eq!(called["result"]["content"][0]["text"], "did \"list\"");
+    assert_eq!(reached.load(Ordering::SeqCst), 2);
     agent.close();
 }

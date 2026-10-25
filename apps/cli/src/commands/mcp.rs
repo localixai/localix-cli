@@ -8,12 +8,15 @@ use crate::{daemon, exit};
 
 pub(crate) fn mcp() -> Result<i32, Failure> {
     let config = daemon::config().map_err(Failure::Environment)?;
-    let path = daemon::reach(&config).map_err(Failure::Environment)?;
-    // What the daemon says beside its answers (none to a tool client) is nothing to it.
-    let client = client::Client::connect(&path, |_| {})
-        .map_err(|error| Failure::Environment(format!("the daemon did not attach ({error})")))?;
+    // Reached again when it is lost: the daemon is found, else started, each time. What it says
+    // beside its answers (none to a tool client) is nothing to it.
+    let connect = || {
+        let path = daemon::reach(&config).map_err(std::io::Error::other)?;
+        client::Client::connect(&path, |_| {})
+            .map_err(|error| std::io::Error::other(format!("the daemon did not attach ({error})")))
+    };
     let (input, output) = (std::io::stdin().lock(), std::io::stdout());
-    crate::mcp::run(&client, crate::mcp::here(), daemon::build(), input, output)
+    crate::mcp::run(connect, crate::mcp::here(), daemon::build(), input, output)
         .map_err(|error| Failure::Environment(format!("llx mcp: {error}")))?;
     Ok(exit::OK)
 }

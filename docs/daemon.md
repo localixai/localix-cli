@@ -79,7 +79,7 @@ process environment): commands run in the environment of the client that opened 
   event loop on the main thread and the sessions on threads.
 - Quitting while work runs asks, as Claude Code does:
 
-  ```
+  ```text
   Background work is running
   The following will stop when you exit:
     shell · Build Electron with siso remote cache
@@ -230,4 +230,3 @@ What is the process's in a terminal's own llx is each desk's in the daemon:
   terminal`), whether resumed on the command line or from the list; in its own desk it is shown.
 - **Waking.** The desk waits on one channel: its requests (forwarded from the connection's) and
   its lanes' ends (`Leaving`), never a timer.
-

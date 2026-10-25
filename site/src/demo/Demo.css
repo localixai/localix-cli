@@ -117,13 +117,19 @@
   50% { opacity: 0.35; }
 }
 
-/* The page card lands over the terminal's lower corner, as eza stacks its two listings. */
+/* The page card lands beside the terminal, never over its lines; under it on a phone. */
+.rig {
+  display: grid;
+  gap: 1rem;
+  align-items: end;
+}
+@media (min-width: 48rem) {
+  .rig {
+    grid-template-columns: minmax(0, 1fr) 19rem;
+  }
+}
 .browser {
-  position: absolute;
-  right: -1.25rem;
-  bottom: -2.5rem;
-  z-index: 2;
-  width: min(19rem, 72%);
+  position: relative;
   border-radius: 14px;
   background: #161616;
   box-shadow: 0 30px 70px -20px rgb(0 0 0 / 0.9);
@@ -240,10 +246,5 @@
     --step: 2ch;
     height: 20rem;
     font-size: 0.6875rem;
-  }
-  .browser {
-    right: 0.5rem;
-    bottom: 3rem;
-    width: min(15rem, 80%);
   }
 }

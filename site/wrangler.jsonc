@@ -1,0 +1,11 @@
+// The landing as a Worker with static assets: the prerendered site in dist/, nothing else.
+// Deployed by .github/workflows/site.yml (`wrangler deploy`), or by hand after `npm run build`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "llx",
+  "compatibility_date": "2026-10-19",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}

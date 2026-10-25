@@ -19,17 +19,13 @@
   <a href="https://llx.sh">llx.sh</a>
 </p>
 
-```text
-$ llx exec -y "the tests in tests/parse.rs fail: fix the parser, not the tests"
-   1.1s ▸ bash cargo test --test parse
-   3.4s ▸ read src/parse.rs
-   5.0s ▸ edit src/parse.rs
-   6.2s ▸ bash cargo test --test parse
-achieved in 9.0s · 5 turns · $0.0058
-parse_range treated an empty upper bound as 0; it now means "to the end". All 14 tests pass.
-```
+<p align="center">
+  <a href="https://llx.sh">
+    <img src="docs/assets/demo.gif" alt="llx at a terminal: /login picks OpenRouter and a model, Shift+Tab switches to bypass mode, then it fixes the failing median tests in stats.py and shows the diff, in 8 seconds for $0.002" width="880">
+  </a>
+</p>
 
-<sub>An example: times, tokens and cost vary. The trace goes to stderr and the answer alone to stdout.</sub>
+<sub>A real session, recorded with asciinema (<code>site/scripts/RECORDING.md</code>). Times, tokens and cost vary.</sub>
 
 ## Install
 
@@ -82,6 +78,12 @@ llx exec --json -y "update the changelog"           # JSON events, one per line
 
 No plugins, no MCP servers consumed, no extra tools: a model with a shell and a browser needs little more. Details in [docs/tools.md](docs/tools.md).
 
+## Visual feedback
+
+Point at what is wrong in a page the agent opened. Press **Comment** in the window's strip, click an element or drag over a region, write a note, Enter. Comments are held until you press **Send N**, then go back as one batch to the agent that opened the page. Each carries what an agent needs to find the element in the code: its selector and path, role and text, box, key styles, the source file when the page's dev build names it (React's `_debugSource`, `data-source-loc`), and a picture of it.
+
+In `llx` the batch starts a task (or joins the one running). Through `llx mcp` it comes back with the agent's next `window` call.
+
 ## Safe by default
 
 Reading never asks. Every command, file change and page action asks first, in one place, and a mode decides what happens: `default` asks, `plan` investigates and refuses file changes, `bypass` (`-y`) allows everything, `autonomous` allows everything and never asks you a question. `edit` stays inside the workspace; tool output is data, never instructions. There is no sandbox, though: `bash` is a real shell with your permissions. See [Modes, approvals and trust](docs/modes.md).
@@ -95,7 +97,7 @@ claude mcp add llx -- npx -y @rsaryev/llx mcp        # Claude Code
 codex mcp add llx -- npx -y @rsaryev/llx mcp         # Codex
 ```
 
-Or add the plugin in Claude Code: `/plugin marketplace add rsaryev/llx`, then `/plugin install llx@llx`. With `llx` already installed, the server's command is just `llx mcp`.
+Or add the plugin in Claude Code: `/plugin marketplace add rsaryev/llx`, then `/plugin install llx@llx`. The plugin also brings the comments you send from the window straight into Claude as a prompt. With `llx` already installed, the server's command is just `llx mcp`.
 
 The first call starts llx's daemon by itself, and the window opens when a tab is. A `goal` on a tab is carried out by llx's decision model, which needs an OpenRouter key: run `/login` in `llx` once, or pass it along with `-e OPENROUTER_API_KEY=sk-or-...` before the `--`. Without one, everything else works. More in [docs/mcp.md](docs/mcp.md).
 

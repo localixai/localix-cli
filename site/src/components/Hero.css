@@ -35,12 +35,6 @@ h1 {
   font: 400 0.8125rem/1.5 var(--mono);
 }
 
-@media (min-width: 68rem) {
-  .hero {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-    align-items: center;
-  }
-}
 
 /* First paint: the copy rises in, line by line, then the demo. */
 h1,

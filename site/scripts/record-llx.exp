@@ -1,0 +1,41 @@
+# The landing's first demo: a real llx session in the folder given (a copy of
+# evals/fixtures/fix-test): /login, a provider and a model, then a task that runs to its end, its
+# mode switched to bypass with Shift+Tab first: the screen is redrawn in place, so a prompt's text
+# cannot be waited for. See RECORDING.md.
+set timeout 300
+set send_human {.06 .12 1 .03 .25}
+proc wait {n} { expect -timeout $n eof {} timeout {} }
+cd [lindex $argv 0]
+spawn zsh -f
+wait 1
+send "PS1='%F{8}~/stats%f \$ '; clear\r"
+wait 1
+send -h "llx"
+send "\r"
+wait 3
+send -h "/login"
+wait 1
+send "\r"
+wait 3
+send -h "openr"
+wait 2
+send "\r"
+wait 2
+send "\r"
+wait 2
+send -h "haiku"
+wait 3
+send "\r"
+wait 3
+send "\r"
+wait 2
+send "\033\[Z"
+wait 1
+send "\033\[Z"
+wait 2
+send -h "the median tests fail: fix stats.py, not the tests"
+wait 1
+send "\r"
+wait 75
+send "\x04"
+wait 3

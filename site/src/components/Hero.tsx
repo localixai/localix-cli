@@ -1,4 +1,4 @@
-import { Demo } from '../demo/Demo';
+import { Demos } from '../demo/Demos';
 import { INSTALL } from '../links';
 import { InstallCommand } from './InstallCommand';
 import './Hero.css';
@@ -19,7 +19,7 @@ export function Hero() {
           macOS · Linux · or <code>npm install -g @rsaryev/llx</code>
         </p>
       </div>
-      <Demo />
+      <Demos />
     </section>
   );
 }

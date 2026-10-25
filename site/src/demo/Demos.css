@@ -1,0 +1,96 @@
+/* The demos' tabs: numbered, quiet, the shown one in white. */
+.demos-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.demos-tab {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease;
+}
+.demos-tab:hover {
+  border-color: var(--line-strong);
+  color: var(--soft);
+}
+.demos-tab[aria-selected='true'] {
+  border-color: var(--line-strong);
+  background: var(--card);
+  color: var(--white);
+}
+.demos-tab b {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+.demos-tab small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+.demos-n {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font: 500 0.75rem/1 var(--mono);
+}
+@media (max-width: 34rem) {
+  .demos-tab small {
+    display: none;
+  }
+}
+
+/* The recorded session in a terminal as plain as the window demo's. */
+.film {
+  overflow: hidden;
+  border-radius: 14px;
+  background: #0f0f0f;
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.03) inset,
+    0 40px 90px -40px rgb(0 0 0 / 0.95);
+}
+.film .ap-wrapper {
+  background: transparent;
+}
+.asciinema-player-theme-llx {
+  --term-color-foreground: #e6e6e6;
+  --term-color-background: #0f0f0f;
+  --term-color-0: #1a1a1a;
+  --term-color-1: #ef7a6d;
+  --term-color-2: #8bd49c;
+  --term-color-3: #e7c97a;
+  --term-color-4: #8fb6e8;
+  --term-color-5: #c3a6f0;
+  --term-color-6: #7fd0d6;
+  --term-color-7: #cfcfcf;
+  --term-color-8: #6b6b6b;
+  --term-color-9: #f39185;
+  --term-color-10: #a3e0b1;
+  --term-color-11: #f0d897;
+  --term-color-12: #a9c8f0;
+  --term-color-13: #d3bdf5;
+  --term-color-14: #9adde2;
+  --term-color-15: #ffffff;
+}
+
+/* A measure a terminal reads at: wider and the recording's text grows past a terminal's. */
+.demos {
+  width: 100%;
+  max-width: 60rem;
+}

@@ -181,7 +181,7 @@ impl Views {
     pub(crate) fn lane_started(&mut self, id: String, name: String) {
         let first = &mut self.sessions[0];
         if first.id.is_empty() {
-            first.id = id.clone();
+            first.id.clone_from(&id);
             first.named_by(&name);
             self.shown = id;
         } else if self.find(&id).is_none() {

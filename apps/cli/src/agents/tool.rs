@@ -43,7 +43,7 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
             let name = unique(name, &state.children);
             let mut session = self.kit.history.start();
             session.parent = Some(state.parent.clone());
-            session.name = name.clone();
+            session.name.clone_from(&name);
             session.workspace = self.kit.root().display().to_string();
             if let Some(ui) = self.kit.output.ui() {
                 ui.send(Event::Started {

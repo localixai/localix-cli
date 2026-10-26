@@ -21,7 +21,7 @@ pub(crate) struct Update {
 impl Update {
     pub(crate) fn apply(&self, session: &mut Session) {
         if let Some(title) = &self.title {
-            session.title = title.clone();
+            session.title.clone_from(title);
         }
     }
 

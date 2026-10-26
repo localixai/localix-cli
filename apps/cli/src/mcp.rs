@@ -208,5 +208,5 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 #[cfg(test)]
-#[path = "mod_tests.rs"]
+#[path = "mcp_tests.rs"]
 mod tests;

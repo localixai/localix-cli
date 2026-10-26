@@ -157,12 +157,19 @@ const BEYOND_THE_INTERFACE: &[&str] = &[
 /// The interfaces (L7): the terminal's, and the tool clients' (`llx mcp`, W9).
 const INTERFACES: [&str; 2] = ["tui", "mcp"];
 
-/// L7: each interface (`apps/cli/src/tui`, `apps/cli/src/mcp`, their tests too) speaks only
+/// L7: each interface (`apps/cli/src/tui.rs` and `tui/`, `mcp.rs` and `mcp/`, their tests too) speaks only
 /// through the protocol and the client: what it shows and what it may do, the server says.
 #[test]
 fn l7_the_interface_knows_only_the_protocol_and_the_client() {
     for interface in INTERFACES {
-        let files = sources_in(&root().join("apps/cli/src").join(interface));
+        let src = root().join("apps/cli/src");
+        let mut files = sources_in(&src.join(interface));
+        // Its root module beside its directory, and that module's tests.
+        for own in [format!("{interface}.rs"), format!("{interface}_tests.rs")] {
+            if src.join(&own).is_file() {
+                files.push(src.join(own));
+            }
+        }
         assert!(!files.is_empty(), "no sources of the interface {interface}");
         for path in files
             .iter()

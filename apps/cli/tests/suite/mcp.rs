@@ -3,7 +3,7 @@
 //! tabs it opens run where the agent started it and end when the agent closes its stdin.
 
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, sync_channel};
 use std::time::{Duration, Instant};
 
@@ -22,16 +22,21 @@ struct Agent {
 
 impl Agent {
     fn start(home: &Home, dir: &std::path::Path) -> Self {
-        let mut child = home
-            .llx(&["mcp"])
+        Self::with(home, dir, |_| {})
+    }
+
+    /// As [`Agent::start`], with `prepare` done to the command before it starts.
+    fn with(home: &Home, dir: &std::path::Path, prepare: impl FnOnce(&mut Command)) -> Self {
+        let mut command = home.llx(&["mcp"]);
+        command
             .current_dir(dir)
             // Over SSH no window opens: a test never puts one on the screen.
             .env("SSH_CONNECTION", "10.0.0.1 1 10.0.0.2 22")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
+            .stderr(Stdio::null());
+        prepare(&mut command);
+        let mut child = command.spawn().unwrap();
         let stdout = child.stdout.take().unwrap();
         let (each, lines) = sync_channel(64);
         let reader = std::thread::Builder::new().name("mcp-reader".into());
@@ -136,4 +141,51 @@ fn a_call_that_fails_is_a_result_the_agent_s_model_reads() {
     let why = answer["result"]["content"][0]["text"].as_str().unwrap();
     assert!(why.contains("9 is not running"), "{why}");
     assert_eq!(agent.close(), Some(0));
+}
+
+/// A descriptor the agent's host gives `llx mcp` beside its stdio (a channel of its own, a pipe
+/// it waits on to see the tool end) is not kept by the daemon `llx mcp` starts, which outlives
+/// it: once `llx mcp` ends, nothing of llx holds it, and the host sees it close.
+#[test]
+fn the_daemon_keeps_no_descriptor_of_the_client_that_started_it() {
+    use std::io::Read;
+    use std::os::fd::AsRawFd;
+    use std::os::unix::process::CommandExt;
+    let home = Home::new();
+    let (mut reader, writer) = std::io::pipe().unwrap();
+    let given = writer.as_raw_fd();
+    let mut agent = Agent::with(&home, home.path(), |command| {
+        // SAFETY: fcntl clears close-on-exec on one descriptor of the forked child, so `llx mcp`
+        // gets it as from its host; nothing else runs between fork and exec.
+        let give = move || match unsafe { libc::fcntl(given, libc::F_SETFD, 0) } {
+            -1 => Err(std::io::Error::last_os_error()),
+            _ => Ok(()),
+        };
+        // SAFETY: the closure calls only fcntl, which is async-signal-safe.
+        unsafe { command.pre_exec(give) };
+    });
+    let init = agent.ask(
+        1,
+        "initialize",
+        json!({"protocolVersion": "2025-06-18",
+        "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}}),
+    );
+    assert_eq!(init["result"]["serverInfo"]["name"], "llx", "{init}");
+    drop(writer);
+    assert_eq!(agent.close(), Some(0));
+    // The pipe ends when its last writer closes it: `llx mcp` has ended, and the daemon it
+    // started is still running.
+    let (ended, end) = sync_channel(1);
+    let waiting = std::thread::Builder::new().name("mcp-given".into());
+    waiting
+        .spawn(move || {
+            let mut rest = vec![];
+            let _ = reader.read_to_end(&mut rest);
+            let _ = ended.send(());
+        })
+        .unwrap();
+    assert!(
+        end.recv_timeout(Duration::from_secs(10)).is_ok(),
+        "the daemon holds the descriptor llx mcp was given"
+    );
 }

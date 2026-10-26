@@ -102,6 +102,23 @@ fn a_monitor_runs_with_the_environment_of_the_client() {
     assert_eq!(lines, [vec!["client none"]]);
 }
 
+/// A descriptor this process has open without close-on-exec when a monitor starts (one another
+/// thread is making, before it marks it close-on-exec) never reaches it: a monitor lives long,
+/// and what it holds stays open as long.
+#[cfg(unix)]
+#[test]
+fn a_monitor_inherits_only_its_output() {
+    use std::os::fd::FromRawFd;
+    // SAFETY: F_DUPFD makes a new descriptor for stderr, at 200 or above, without close-on-exec.
+    let fd = unsafe { libc::fcntl(2, libc::F_DUPFD, 200) };
+    assert!(fd >= 200, "{}", std::io::Error::last_os_error());
+    // SAFETY: fcntl just made it, and nothing else owns it.
+    let _stray = unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) };
+    let probe = format!("[ -e /dev/fd/{fd} ] && echo inherited || echo closed");
+    let (lines, _) = run(&probe, 10, &|| false);
+    assert_eq!(lines, [vec!["closed"]]);
+}
+
 #[cfg(unix)]
 #[test]
 fn a_command_that_closes_its_output_still_ends_at_its_deadline_and_its_stop() {

@@ -43,6 +43,9 @@ pub(super) fn watch(
     env.apply(&mut shell);
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut shell, 0);
+    // A monitor lives long: a descriptor it inherited by chance would stay open as long.
+    #[cfg(unix)]
+    tools::shell::streams_only(&mut shell);
     let mut child = shell
         .spawn()
         .map_err(|error| format!("the command could not start: {error}"))?;

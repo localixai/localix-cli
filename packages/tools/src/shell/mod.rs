@@ -5,6 +5,8 @@
 mod bash;
 #[cfg(unix)]
 mod filter;
+#[cfg(unix)]
+mod inherit;
 mod interactive;
 #[cfg(unix)]
 mod keys;
@@ -30,6 +32,8 @@ mod view;
 mod watch;
 
 pub use bash::BashTool;
+#[cfg(unix)]
+pub use inherit::streams_only;
 #[cfg(not(unix))]
 pub use none::{Sessions, kill_all_now, kill_with, running_anywhere, running_with};
 pub use process::{Ending, Env, SHELL};

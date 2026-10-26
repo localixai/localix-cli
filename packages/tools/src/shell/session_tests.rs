@@ -154,6 +154,17 @@ fn stdin_and_stdout_are_a_tty() {
     assert_eq!(sessions.running(), "none", "an ended command is not kept");
 }
 
+/// A descriptor this process has open without close-on-exec when a session starts never reaches
+/// it: the program gets its terminal, and nothing else.
+#[test]
+fn a_session_inherits_only_its_terminal() {
+    let (dir, sessions) = (Scratch::new(), sessions());
+    let (_stray, probe) = crate::testing::stray();
+    let turn = start(&sessions, &dir, &probe, Wait::default());
+    assert_eq!(turn.until, Until::Exited(Ending::Exit(0)), "{turn:?}");
+    assert_eq!(output(&turn), "closed");
+}
+
 #[test]
 fn output_between_calls_is_kept() {
     let (dir, sessions) = (Scratch::new(), sessions());

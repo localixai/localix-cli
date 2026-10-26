@@ -71,6 +71,12 @@ jobs:
       - name: Test (virtual display)
         if: runner.os == 'Linux'
         run: xvfb-run -a -s "-screen 0 1920x1080x24" cargo test --workspace --locked
+      # The headless build ships too (ARCHITECTURE.md A8): its lints and tests, with no browser.
+      - name: Test (headless)
+        if: runner.os == 'Linux'
+        run: |
+          cargo clippy --workspace --all-targets --locked --no-default-features -- -D warnings
+          cargo test --workspace --locked --no-default-features
 
   build:
     name: build (${{ matrix.name }})
@@ -106,6 +112,23 @@ jobs:
         shell: bash
         run: |
           "${{ matrix.smoke }}" --version
+          if [ "$RUNNER_OS" = Linux ]; then
+            # The full build links WebKitGTK; the headless archive, as a user unpacks it, must
+            # link none and run in a plain distribution that has none (this runner has it, for
+            # the full build: a container does not).
+            # (Captured first: `grep -q` ends a pipe early, which pipefail reports as a failure.)
+            full=$(ldd "${{ matrix.smoke }}")
+            case "$full" in *libwebkit2gtk-4.1*) ;; *)
+              echo "::error::the full build does not link WebKitGTK"; exit 1 ;; esac
+            headless="$RUNNER_TEMP/headless"
+            mkdir "$headless"
+            tar -xzf dist/llx-x86_64-unknown-linux-gnu-headless.tar.gz -C "$headless" llx
+            links=$(ldd "$headless/llx")
+            case "$links" in *webkit* | *gtk* | *soup* | *javascriptcore*)
+              echo "::error::the headless build links the WebView"; exit 1 ;; esac
+            docker run --rm --network none -v "$headless:/headless:ro" ubuntu:22.04 sh -c \
+              '/headless/llx --version && LLX_MODELS_REFRESH=0 /headless/llx doctor | grep "this build has no browser"'
+          fi
           if [ "$RUNNER_OS" = macOS ]; then
             # The universal download runs as it was packaged and holds both architectures.
             tar -xzf dist/llx-universal-apple-darwin.tar.gz -C "$RUNNER_TEMP" llx
@@ -171,6 +194,41 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/* \
             --verify-tag --title "llx $VERSION" --notes-file notes.md $prerelease
 
+  # `uses: rsaryev/llx@v0` follows the releases: once the release exists, the major tag (v0 for
+  # 0.x.y, v1 for 1.x.y) moves to the released commit. A prerelease leaves it where it is. Moving
+  # a tag pushes nothing the `v*.*.*` trigger above matches (`v0` has no dots), and a push made
+  # with the workflow's own token starts no workflow in any case. That token cannot point a tag at
+  # a commit whose .github/workflows differ from the default branch's (main moved on with a
+  # workflow change after the tag): the job then fails and says how to move it by hand.
+  major:
+    name: move the major tag
+    needs: [check, publish]
+    if: ${{ !contains(needs.check.outputs.version, '-') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - name: Move the major tag to the released commit
+        shell: bash
+        run: |
+          major="v${VERSION%%.*}"
+          # The commit the release tag names (an annotated tag is looked through).
+          sha=$(gh api "repos/$GH_REPO/commits/$GITHUB_REF_NAME" --jq .sha)
+          if gh api "repos/$GH_REPO/git/ref/tags/$major" > /dev/null 2>&1; then
+            move=(--method PATCH "repos/$GH_REPO/git/refs/tags/$major" -f sha="$sha" -F force=true)
+          else
+            move=(--method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$major" -f sha="$sha")
+          fi
+          if ! gh api "${move[@]}" > /dev/null; then
+            echo "::error::$major was not moved. By hand: git tag -f $major $sha && git push -f origin $major"
+            exit 1
+          fi
+          echo "$major -> $sha ($GITHUB_REF_NAME)"
+
   # The npm packages (@localixai/llx and one per platform: scripts/npm-pack.sh) from the same
   # archives, published after the release exists. Without the NPM_TOKEN secret the job ends here.
   npm:
@@ -202,5 +260,6 @@ jobs:
         run: |
           mkdir dist
           cp artifacts/dist-*/llx-* dist/
+          # shellcheck disable=SC2016 # npm expands ${NODE_AUTH_TOKEN} from its environment, not the shell
           echo '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > "$HOME/.npmrc"
           sh scripts/npm-pack.sh --publish

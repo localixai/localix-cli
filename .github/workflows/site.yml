@@ -9,6 +9,9 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      # The docs pages are built from these.
+      - 'docs/**'
+      - 'examples/README.md'
       - '.github/workflows/site.yml'
   workflow_dispatch:
 

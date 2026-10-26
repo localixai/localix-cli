@@ -1,12 +1,40 @@
-//! The code rules (ARCHITECTURE.md, S4 and S5) and the unwinding W8 relies on, checked on the
-//! manifests and sources.
+//! The code rules (ARCHITECTURE.md, S4, S5, S6 and R8) and the unwinding W8 relies on,
+//! checked on the manifests and sources.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::{root, walk};
 
+/// Working code: a source file that is not a test beside the code or a test-only helper.
+fn working(path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    name.ends_with(".rs")
+        && !name.ends_with("_tests.rs")
+        && !matches!(name, "testing.rs" | "test_support.rs" | "fakes.rs")
+}
+
+/// Every crate's working code under `src/`, and its build script, also working code (S1).
+fn working_sources() -> Vec<PathBuf> {
+    let mut files = vec![];
+    for dir in crates() {
+        walk(&dir.join("src"), &working, &mut files);
+        let build = dir.join("build.rs");
+        if build.is_file() {
+            files.push(build);
+        }
+    }
+    files
+}
+
+fn shown(path: &Path) -> String {
+    path.strip_prefix(root())
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
 /// Every crate's directory: the packages, the providers a level down, the apps.
-fn crates() -> Vec<std::path::PathBuf> {
+fn crates() -> Vec<PathBuf> {
     let mut out = vec![];
     for group in ["packages", "packages/providers", "apps"] {
         for entry in std::fs::read_dir(root().join(group)).unwrap().flatten() {
@@ -126,18 +154,12 @@ fn no_working_file_turns_a_lint_off_whole() {
     let mut found = vec![];
     for dir in crates() {
         let mut files = vec![];
-        let working = |path: &Path| {
-            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            name.ends_with(".rs")
-                && !name.ends_with("_tests.rs")
-                && !matches!(name, "testing.rs" | "test_support.rs" | "fakes.rs")
-        };
         walk(&dir.join("src"), &working, &mut files);
         for path in files {
             let text = std::fs::read_to_string(&path).unwrap();
             let whole = |line: &str| line.starts_with("#![allow") || line.starts_with("#![expect");
             if text.lines().any(|line| whole(line.trim_start())) {
-                found.push(path.strip_prefix(root()).unwrap().display().to_string());
+                found.push(shown(&path));
             }
         }
     }
@@ -173,5 +195,94 @@ fn every_build_unwinds_a_panic() {
     assert!(
         aborting.is_empty(),
         "a profile aborts on a panic (W8): {aborting:?}"
+    );
+}
+
+/// The lints allowed in working code (S4's exceptions), at most, and at least: a ratchet. Each
+/// `allow` is a rule set aside in one place for a reason; one more raises this number in the
+/// commit that adds it, where a review sees it, and one fewer lowers it, so the room a fix made
+/// is not taken again unseen.
+const ALLOWED: usize = 49;
+
+/// S4: the exceptions only fall. (Lines that are comments do not count; tests may allow freely.)
+#[test]
+fn the_lints_allowed_in_working_code_only_fall() {
+    let attributes = ["#[allow(", "#![allow(", "#[expect(", "#![expect("];
+    let mut found = 0;
+    let mut by_file = vec![];
+    for path in working_sources() {
+        let text = std::fs::read_to_string(&path).unwrap();
+        let here: usize = (text.lines().map(str::trim_start))
+            .filter(|line| !line.starts_with("//"))
+            .map(|line| {
+                attributes
+                    .iter()
+                    .map(|a| line.matches(a).count())
+                    .sum::<usize>()
+            })
+            .sum();
+        if here > 0 {
+            by_file.push(format!("  {here:>3}  {}", shown(&path)));
+        }
+        found += here;
+    }
+    assert!(
+        found <= ALLOWED,
+        "{found} lints allowed in working code, {ALLOWED} before: handle the case instead (S4), \
+         or raise ALLOWED in code.rs in this commit, with its reason\n{}",
+        by_file.join("\n")
+    );
+    assert!(
+        found >= ALLOWED,
+        "{found} lints allowed in working code, {ALLOWED} before: lower ALLOWED in code.rs to \
+         {found}, so the ratchet keeps what was paid"
+    );
+}
+
+/// S6: a file says what it is: every working file opens with its `//!`.
+#[test]
+fn every_working_file_says_what_it_is() {
+    let files = working_sources();
+    assert!(files.len() > 100, "found only {} files", files.len());
+    let silent: Vec<String> = (files.iter())
+        .filter(|path| {
+            let text = std::fs::read_to_string(path).unwrap();
+            !text.starts_with("//!")
+        })
+        .map(|path| shown(path))
+        .collect();
+    assert!(
+        silent.is_empty(),
+        "open each with a `//!` line on what it is: {silent:?}"
+    );
+}
+
+/// R8: every thread is named: a `thread::Builder` gets its `.name(` before it spawns, so a
+/// panic's message, a debugger and a profiler say whose thread it was.
+#[test]
+fn every_thread_builder_names_its_thread() {
+    let builder = "thread::Builder::new()";
+    let mut seen = 0;
+    let mut unnamed = vec![];
+    for path in working_sources() {
+        let text = std::fs::read_to_string(&path).unwrap();
+        for (at, _) in text.match_indices(builder) {
+            seen += 1;
+            let rest = &text[at + builder.len()..];
+            let end = [rest.find(".spawn"), rest.find(';')]
+                .into_iter()
+                .flatten()
+                .min()
+                .unwrap_or(rest.len());
+            if !rest[..end].contains(".name(") {
+                let line = text[..at].matches('\n').count() + 1;
+                unnamed.push(format!("{}:{line}", shown(&path)));
+            }
+        }
+    }
+    assert!(seen > 5, "found only {seen} thread builders");
+    assert!(
+        unnamed.is_empty(),
+        "a thread spawned with no name: give its Builder a `.name(` (R8): {unnamed:?}"
     );
 }

@@ -134,7 +134,8 @@ openrouter = { path = "packages/providers/openrouter" }
 queue = { path = "packages/queue" }
 provider-kit = { path = "packages/providers/kit" }
 session = { path = "packages/session" }
-tools = { path = "packages/tools" }
+# Without default features: the app chooses the browser through its own `browser` feature (A8).
+tools = { path = "packages/tools", default-features = false }
 base64 = "0.23.1"
 clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 getrandom = "0.3"

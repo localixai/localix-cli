@@ -92,6 +92,21 @@ fn the_environment_says_where_when_and_how() {
 }
 
 #[test]
+fn the_environment_says_why_there_is_no_browser() {
+    let scratch = Scratch::new();
+    let environment = Environment {
+        browser: false,
+        ..environment(scratch.path())
+    };
+    let text = gather(&environment, None);
+    let line = format!(
+        "Browser: not available here ({})",
+        tools::browser::NO_WINDOW
+    );
+    assert!(text.contains(&line), "{text}");
+}
+
+#[test]
 fn dates_are_civil() {
     assert_eq!(date(0), "1970-01-01");
     assert_eq!(date(951_782_400), "2000-02-29");

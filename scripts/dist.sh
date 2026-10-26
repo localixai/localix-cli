@@ -1,7 +1,8 @@
 #!/bin/sh
-# Builds release archives into dist/: one per target, named the way install.sh and install.ps1
-# look them up, plus SHA256SUMS. CI (.github/workflows/release.yml) runs it once per platform;
-# it needs only what the runners have: cargo with rustup, tar, and lipo (macOS) or 7z (Windows).
+# Builds release archives into dist/: one per target, named the way install.sh and the npm
+# packages look them up, plus SHA256SUMS. CI (.github/workflows/release.yml) runs it once per
+# platform; it needs only what the runners have: cargo with rustup, tar, and lipo (macOS) or 7z
+# (Windows).
 #
 #   scripts/dist.sh                            # every target this host builds
 #   scripts/dist.sh x86_64-unknown-linux-gnu   # just these
@@ -10,7 +11,9 @@
 # Linux builds its own architecture (glibc); Windows (Git Bash) builds x86_64-pc-windows-msvc.
 #
 # Archives: llx-<target>.tar.gz (.zip on Windows) holding llx (llx.exe), README.md and
-# LICENSE at the top level.
+# LICENSE at the top level. A Linux target also gets llx-<target>-headless.tar.gz: the same
+# program built without the browser (--no-default-features, ARCHITECTURE.md A8), which links no
+# WebKitGTK and runs where none is installed (CI runners, servers).
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -41,19 +44,21 @@ sha256() {
   fi | sed 's/ \*/  /' # Git Bash marks binary mode with `*`; install.sh expects two spaces
 }
 
-# package TARGET BINARY: stages the binary with the docs and archives them into dist/.
+# package NAME BINARY: stages the binary with the docs and archives them into dist/ as
+# llx-NAME.tar.gz (.zip on Windows). NAME is a target, or a target and a flavour. The loop's own
+# `target` is not touched: the variables are global in sh.
 package() {
-  target=$1
+  name=$1
   binary=$2
   stage=$(mktemp -d)
-  case "$target" in
+  case "$name" in
     *windows*)
       cp "$binary" "$stage/llx.exe"
-      archive="llx-$target.zip"
+      archive="llx-$name.zip"
       ;;
     *)
       cp "$binary" "$stage/llx"
-      archive="llx-$target.tar.gz"
+      archive="llx-$name.tar.gz"
       ;;
   esac
   cp README.md LICENSE "$stage/"
@@ -81,6 +86,13 @@ for target in $targets; do
   if command -v rustup >/dev/null 2>&1; then
     rustup target add "$target" >/dev/null
   fi
+  case "$target" in
+    *linux*)
+      # Built first: the full build is then the one left in target/ for a smoke test.
+      cargo build --release --locked --target "$target" --no-default-features -p llx
+      package "$target-headless" "$target_dir/$target/release/llx"
+      ;;
+  esac
   cargo build --release --locked --target "$target"
   case "$target" in
     *windows*) package "$target" "$target_dir/$target/release/llx.exe" ;;

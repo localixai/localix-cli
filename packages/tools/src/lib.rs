@@ -9,14 +9,19 @@
 //!   or a new file).
 //! - [`shell`]: `bash`: a command run in the workspace, its exit code and its output; on unix,
 //!   also a program that must ask, kept open in a terminal session between calls.
-//! - [`browser`]: a native browser window on the system WebView.
+//! - [`browser`]: a native browser window on the system WebView (the `browser` feature; without
+//!   it, the same names with nothing behind them).
 //! - [`ask`]: questions to the person (`contracts::person::Person`), who answers in the app.
 
 use contracts::gate::{Effect, Gate, Verdict};
 use contracts::tool::ToolError;
-use std::sync::{Mutex, MutexGuard, PoisonError};
 
 pub mod ask;
+#[cfg(feature = "browser")]
+pub mod browser;
+// The headless build's `browser` (A8): the same names, nothing behind them.
+#[cfg(not(feature = "browser"))]
+#[path = "headless.rs"]
 pub mod browser;
 pub mod fs;
 pub mod shell;
@@ -41,6 +46,9 @@ fn ask(gate: &dyn Gate, tool: &str, subject: &str, summary: &str) -> Result<(), 
 
 /// `mutex`, locked even if a holder panicked: what it guards is plain data, still usable, and a
 /// tool fails its call rather than the process.
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+#[cfg(feature = "browser")]
+fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }

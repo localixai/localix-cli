@@ -170,3 +170,20 @@ fn a_repeated_choice_keeps_the_commas_of_its_description() {
         "the runner, network or a service was down"
     );
 }
+
+#[test]
+fn stdin_is_read_up_to_256_kib_as_exec_reads_it_and_the_model_is_told_it_was_cut() {
+    let (home, model) = (Home::new(), decided("no", &[("no", 0.9)]));
+    let input = format!("{}ZZZZ-the-tail-ZZZZ", "a".repeat(256 * 1024));
+    let out = decide(&home, &model, &["decide", "Is it risky?"], &input);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert_eq!(text(&out.stdout), "no\n");
+    let (_, state) = asked(&model);
+    let state = state.to_string();
+    assert!(
+        state.contains("[stdin cut at 256 KiB: the rest was not read]"),
+        "the model is told: {}",
+        &state[state.len().saturating_sub(120)..]
+    );
+    assert!(!state.contains("ZZZZ"), "the tail was not read");
+}

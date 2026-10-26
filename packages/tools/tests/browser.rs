@@ -838,5 +838,5 @@ fn main() {
                 });
             if driven && paneled { 0 } else { 1 }
         },
-    )
+    );
 }

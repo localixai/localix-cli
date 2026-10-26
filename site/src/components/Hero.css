@@ -40,6 +40,7 @@ h1 {
 }
 .under a {
   color: var(--soft);
+  white-space: nowrap;
   text-decoration: underline;
   text-underline-offset: 3px;
   transition: color 160ms ease;
@@ -49,15 +50,19 @@ h1 {
 }
 
 
-/* Side by side on wide screens, as tokendoctor's: the film takes the larger share. */
+/* Side by side on wide screens, as tokendoctor's: the film takes the larger share. The headline
+   is sized by its own column, not the viewport, so "lightweight" never runs under the film. */
 @media (min-width: 60rem) {
   .hero {
-    grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
-    column-gap: clamp(3rem, 5vw, 8rem);
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    column-gap: clamp(3rem, 5vw, 6rem);
     align-items: center;
   }
+  .hero-copy {
+    container-type: inline-size;
+  }
   h1 {
-    font-size: clamp(2.75rem, 4.3vw, 8rem);
+    font-size: clamp(2.75rem, 16cqi, 6rem);
   }
 }
 

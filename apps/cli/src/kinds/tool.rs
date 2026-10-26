@@ -23,7 +23,8 @@ pub(crate) struct Parts<'a> {
 }
 
 /// `work` with the `window` tool built from `parts`: terminal tabs where there are terminal
-/// sessions (unix), and browser tabs where there is a page; none without a kind.
+/// sessions (unix), and browser tabs where there is a page (else a browser kind that says why
+/// there is none).
 pub(crate) fn window<T>(parts: &Parts, work: impl FnOnce(Option<&WindowTool>) -> T) -> T {
     let browser = (parts.page).map(|page| super::Browser {
         page,
@@ -39,8 +40,10 @@ pub(crate) fn window<T>(parts: &Parts, work: impl FnOnce(Option<&WindowTool>) ->
     let mut kinds: Vec<&dyn Kind> = vec![];
     #[cfg(unix)]
     kinds.push(&terminal);
-    if let Some(browser) = &browser {
-        kinds.push(browser);
+    // Without a page, the browser kind is still there, to say why a page cannot open.
+    match &browser {
+        Some(browser) => kinds.push(browser),
+        None => kinds.push(&super::Missing),
     }
     let window = WindowTool {
         kinds,

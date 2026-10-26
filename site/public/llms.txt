@@ -10,7 +10,7 @@
 
 ## Install
 
-- `curl -fsSL https://llx.sh | sh` installs `llx` into `~/.local/bin`.
+- `npm install -g @localixai/llx`, or `curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh` (macOS and Linux x86_64, checked against `SHA256SUMS`; on Linux where WebKitGTK is missing it installs the headless build, which has no browser).
 - Sign in with `/login` in a session (`llx`), or set the provider's key (for example `OPENROUTER_API_KEY`).
 
 ## Use
@@ -18,13 +18,23 @@
 - `llx` opens a session at the terminal; `llx "<task>"` opens one that starts with that task.
 - `llx exec "<task>"` (or `llx -p "<task>"`) runs one task and exits: the answer alone on stdout.
 - `llx exec --json` prints one JSON event per line; `--schema` ends with data matching a JSON Schema.
+- `llx decide "<question>"` asks the decision model one question about stdin and prints the option it picked (`--choices`, `--expect`).
 - Exit codes: 0 achieved, 1 not achieved, 2 out of turns or time, 3 environment or usage, 130 interrupted.
+
+## In CI
+
+- `uses: rsaryev/llx@v0` is a GitHub Action: it installs llx, runs `llx exec` once, and returns the answer, the exit code and the cost.
+- The agent works through the shell (`gh`, `git`, `jq` and the project's own tools): no MCP server, no GitHub tool, no built-in prompt. The workflow owns the prompt and the posting.
+- The job that runs the model holds a read-only token; a second job, with write access and no model key, posts what it answered.
+- Guide: https://llx.sh/docs/ci. Recipes: https://llx.sh/docs/recipes. Ready-made workflows: https://llx.sh/docs/examples.
 
 ## From another agent
 
 - `llx mcp` serves llx's `window` (browser pages and terminal sessions as tabs, with a `goal` carried out by llx's decision model) to any agent that speaks MCP over stdio.
 - Any MCP client: a server whose command is `llx` with the argument `mcp` (or `npx -y @localixai/llx mcp`).
+- Guide: https://llx.sh/docs/mcp.
 
 ## Links
 
-- Source and docs: https://github.com/rsaryev/llx
+- Docs: https://llx.sh/docs (each page is listed below; all of them in one file: https://llx.sh/llms-full.txt)
+- Source: https://github.com/rsaryev/llx

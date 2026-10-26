@@ -6,9 +6,14 @@
 # Environment:
 #   LLX_VERSION      a release such as 0.2.0 (default: the latest)
 #   LLX_INSTALL_DIR  where the binary goes (default: $HOME/.local/bin)
+#   LLX_HEADLESS     on Linux: 1 installs the headless build (no browser window, nothing linked
+#                    but the C runtime and OpenSSL), 0 the full one; by default the full one where
+#                    WebKitGTK 4.1 is installed and the headless one where it is not (CI runners,
+#                    servers)
 #
-# It downloads llx-<target>.tar.gz and SHA256SUMS from the release, refuses an archive whose
-# SHA-256 does not match, and replaces the binary in one rename, so a running llx is not torn.
+# It downloads llx-<target>.tar.gz (llx-<target>-headless.tar.gz) and SHA256SUMS from the release,
+# refuses an archive whose SHA-256 does not match, and replaces the binary in one rename, so a
+# running llx is not torn.
 # Everything runs from `main` on the last line: a download cut short by the network defines
 # functions at most, and runs nothing.
 set -eu
@@ -42,7 +47,7 @@ detect_target() {
     Linux)
       case "$arch" in
         x86_64 | amd64) echo x86_64-unknown-linux-gnu ;;
-        *) fail "no Linux build for $arch yet; build from source: cargo install --locked --git https://github.com/$repo cli" ;;
+        *) fail "no Linux build for $arch yet; build from source: cargo install --locked --git https://github.com/$repo llx" ;;
       esac
       ;;
     MINGW* | MSYS* | CYGWIN*)
@@ -50,6 +55,45 @@ detect_target() {
       ;;
     *) fail "no build for $os $arch" ;;
   esac
+}
+
+# Whether WebKitGTK 4.1, which the full Linux build links, is installed: ldconfig lists every
+# library the system searches (it may be off the PATH of a user); the usual directories are the
+# fallback.
+has_webkit() {
+  lib=libwebkit2gtk-4.1.so.0
+  for tool in ldconfig /sbin/ldconfig /usr/sbin/ldconfig; do
+    listed=$("$tool" -p 2>/dev/null) || continue
+    case "$listed" in *"$lib"*) return 0 ;; esac
+  done
+  for dir in /usr/lib/x86_64-linux-gnu /usr/lib64 /usr/lib /lib/x86_64-linux-gnu /lib64 /usr/local/lib; do
+    [ -e "$dir/$lib" ] && return 0
+  done
+  return 1
+}
+
+# choose TARGET: sets `archive`, the release archive to install, and `why`, which build it is and
+# why that one. Only Linux has a headless archive (ARCHITECTURE.md A8): macOS has its WebView.
+choose() {
+  archive="llx-$1.tar.gz"
+  why=""
+  case "$1" in *linux*) ;; *) return 0 ;; esac
+  case "${LLX_HEADLESS:-}" in
+    1) reason="LLX_HEADLESS=1" ;;
+    0)
+      why="the full build (LLX_HEADLESS=0)"
+      return 0
+      ;;
+    *)
+      if has_webkit; then
+        why="the full build: WebKitGTK 4.1 is installed"
+        return 0
+      fi
+      reason="WebKitGTK 4.1 is not installed; with it, run this again for the window"
+      ;;
+  esac
+  archive="llx-$1-headless.tar.gz"
+  why="the headless build, with no browser window ($reason)"
 }
 
 # download URL FILE, with curl or wget.
@@ -78,7 +122,7 @@ sha256_of() {
 
 main() {
   target=$(detect_target)
-  archive="llx-$target.tar.gz"
+  choose "$target"
   if [ -n "$version" ]; then
     base="https://github.com/$repo/releases/download/v${version#v}"
   else
@@ -88,7 +132,7 @@ main() {
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT INT TERM
 
-  say "Downloading $archive (${version:-latest})"
+  say "Downloading $archive (${version:-latest})${why:+: $why}"
   download "$base/$archive" "$tmp/$archive" || fail "could not download $base/$archive"
   download "$base/SHA256SUMS" "$tmp/SHA256SUMS" || fail "could not download $base/SHA256SUMS"
 
@@ -111,12 +155,15 @@ main() {
 
   say "Installed $("$install_dir/llx" --version 2>/dev/null || echo llx) to $install_dir/llx"
 
-  # The binary links the system WebView; on Linux that is WebKitGTK, which may not be installed.
+  # A library the binary links may be missing: the full build links WebKitGTK, both link OpenSSL.
   if [ "$(uname -s)" = Linux ] && ldd "$install_dir/llx" 2>/dev/null | grep -q 'not found'; then
     say ""
     say "llx needs libraries this system lacks:"
     ldd "$install_dir/llx" | grep 'not found' | sed 's/^[[:space:]]*/  /'
-    say "WebKitGTK 4.1 brings them, for example: sudo apt-get install libwebkit2gtk-4.1-0"
+    case "$archive" in
+      *-headless.tar.gz) ;;
+      *) say "WebKitGTK 4.1 brings them (sudo apt-get install libwebkit2gtk-4.1-0), or run this again with LLX_HEADLESS=1 for the build without a browser" ;;
+    esac
   fi
 
   case ":$PATH:" in

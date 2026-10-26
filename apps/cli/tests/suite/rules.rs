@@ -64,6 +64,61 @@ fn an_allowed_command_chained_to_another_is_refused() {
     }
 }
 
+/// A repository in the home whose `origin` is a bare one beside it, and `receive.sh`, a program a
+/// push can be told to run on the other side, which leaves `made.txt` where it ran.
+fn repository_with_a_program(home: &Home) {
+    let made = home.path().join("made.txt");
+    let script = format!(
+        "git init -q --bare remote.git && git init -q . && git remote add origin remote.git \
+         && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m x \
+         && printf '#!/bin/sh\\ntouch {}\\nexec git-receive-pack \"$@\"\\n' > receive.sh \
+         && chmod +x receive.sh",
+        made.display()
+    );
+    let mut setup = home.command("sh");
+    let status = setup
+        .arg("-c")
+        .arg(script)
+        .current_dir(home.path())
+        .spawn()
+        .unwrap()
+        .wait()
+        .unwrap();
+    assert!(status.success(), "the repository could not be set up");
+}
+
+#[test]
+fn an_allowed_git_push_cannot_be_told_a_program_to_run() {
+    let home = Home::new();
+    repository_with_a_program(&home);
+    let model = running("git push --receive-pack=./receive.sh origin HEAD:refs/heads/x");
+    let args = ["exec", "--mode", "plan", "--allow", "bash(git push *)", "x"];
+    let out = exec(&home, &model, &args, "");
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert!(!home.path().join("made.txt").exists(), "the program ran");
+    assert!(
+        said(&model, 1).contains("not allowed"),
+        "{}",
+        said(&model, 1)
+    );
+}
+
+#[test]
+fn an_allowed_git_push_still_pushes() {
+    let home = Home::new();
+    repository_with_a_program(&home);
+    let model = running("git push -u origin HEAD:refs/heads/x");
+    let args = ["exec", "--mode", "plan", "--allow", "bash(git push *)", "x"];
+    let out = exec(&home, &model, &args, "");
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert!(home.path().join("remote.git/refs/heads/x").exists());
+    assert!(
+        !said(&model, 1).contains("not allowed"),
+        "{}",
+        said(&model, 1)
+    );
+}
+
 #[test]
 fn a_deny_rule_refuses_even_with_yes_and_names_itself() {
     let (home, model) = (Home::new(), running("touch made.txt"));

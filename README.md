@@ -55,7 +55,7 @@ llx is the part of an agent that touches the world. It opens real browser pages 
   <tr>
     <td valign="top">
       <strong>A step in your pipeline</strong><br>
-      <code>llx exec</code> answers to your JSON Schema and exits with a code CI can branch on.<br>
+      A GitHub Action, and <code>llx exec</code> anywhere else: it answers to your JSON Schema and exits with a code CI can branch on.<br>
       <a href="docs/ci.md">CI →</a>
     </td>
     <td valign="top">
@@ -77,7 +77,7 @@ llx is the part of an agent that touches the world. It opens real browser pages 
 npm install -g @localixai/llx
 ```
 
-Or `curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh` (macOS and Linux x86_64, checked against `SHA256SUMS`), or `cargo install --locked --path apps/cli` from a clone. The browser is the system's WebView: WKWebView on macOS, WebKitGTK (`libwebkit2gtk-4.1-0`) on Linux.
+Or `curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh` (macOS and Linux x86_64, checked against `SHA256SUMS`), or `cargo install --locked --path apps/cli` from a clone. The browser is the system's WebView: WKWebView on macOS, WebKitGTK (`libwebkit2gtk-4.1-0`) on Linux. Where WebKitGTK is missing (a CI runner, a server), the installer and npm take the headless Linux build: the same agent, with terminal tabs only and no browser.
 
 ```bash
 cd your-project
@@ -91,16 +91,33 @@ llx doctor                             # sign-ins, models, the WebView, the shel
 
 ## In CI and scripts
 
-```console
-$ git diff origin/main... | llx decide "Does this change break the public API?"
-no
-$ llx exec --allow bash --deny edit --schema @review.schema.json "Review pull request #$PR."
-{"verdict":"request_changes","findings":[{"path":"src/config.py","line":5,…}]}
+In CI llx is the same agent as at your terminal. It works through the plain filesystem and primitive commands: `read`, `edit`, and `bash` with `gh`, `git`, `jq` and your project's own tools. There is no MCP server, no GitHub tool and no built-in prompt. Your workflow owns the prompt and the posting, so the same task runs on GitHub, GitLab or any runner with a shell. The job that runs the model holds a read-only token, and a second job posts what it answered: the write token is never near the model.
+
+```yaml
+# a step of a job, after actions/checkout
+- uses: rsaryev/llx@v0
+  id: llx
+  env:
+    OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    GH_TOKEN: ${{ github.token }} # read-only in this job
+    PR: ${{ github.event.pull_request.number }}
+  with:
+    model: anthropic/claude-haiku-5.5
+    allow: bash
+    deny: edit
+    schema: '{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}'
+    prompt: |
+      Review pull request #$PR with gh and git. Run something to confirm a problem
+      before you report it.
 ```
 
-`llx decide` asks a small decision model one question about stdin, in under a second for a fraction of a cent, and prints the option it picked; `--expect no` exits 1 on any other. `llx exec` runs the agent: in a CI container, `--allow bash --deny edit` lets it explore the checkout and run the tests while changing nothing, and `--schema` makes it answer in your JSON. The job that runs the model gets a read-only token; a separate job posts what it found.
+The answer is `steps.llx.outputs.result`, JSON matching your schema; the spend and the exit code are outputs too. For a choice among a few options, `llx decide` asks a small decision model about stdin, in under a second for a fraction of a cent:
 
-Ready-made GitHub workflows, each run for real on a self-hosted runner: [pull request review](examples/github/review.yml) with inline comments, [issue triage](examples/github/triage.yml), [explaining a failed run](examples/github/ci-failure.yml), [describing a pull request](examples/github/describe.yml), [an issue to a draft pull request](examples/github/fix-issue.yml), [answering @llx in a review thread](examples/github/reply.yml) and [a draft release](examples/github/release.yml): [examples/](examples/). More recipes, GitLab included: [docs/recipes.md](docs/recipes.md); modes and exit codes: [docs/ci.md](docs/ci.md).
+```console
+$ git diff origin/main... | llx decide "Does this change break the public API?" --expect no
+```
+
+Ready-made GitHub workflows, each run for real: [pull request review](examples/github/review.yml) with inline comments, [`@llx` in any comment, issue or review thread](examples/github/llx.yml), [issue triage](examples/github/triage.yml), [a failed run explained](examples/github/ci-failure.yml), [a described pull request](examples/github/describe.yml), [a draft release](examples/github/release.yml) and [a weekly audit](examples/github/audit.yml): [examples/](examples/README.md). The action, the two-job pattern, rules, keys, limits, security and GitLab: [docs/ci.md](docs/ci.md). Shell recipes with `gh` and `glab`: [docs/recipes.md](docs/recipes.md).
 
 ## Documentation
 

@@ -116,20 +116,25 @@ pub(crate) fn assemble(arg: Option<&str>, stdin: Option<&str>) -> Result<Prompt,
     Ok(Prompt::One(text))
 }
 
-fn read_stdin() -> Result<String, Failure> {
+/// Stdin to its end, up to [`STDIN_LIMIT`]; what `exec` and `decide` both read.
+pub(crate) fn read_stdin() -> Result<String, Failure> {
+    read_capped(std::io::stdin().lock(), STDIN_LIMIT)
+}
+
+/// `reader` up to `limit` bytes; past them, a line says the rest was not read.
+fn read_capped(reader: impl Read, limit: usize) -> Result<String, Failure> {
     let mut bytes = vec![];
-    std::io::stdin()
-        .lock()
-        .take(STDIN_LIMIT as u64 + 1)
+    reader
+        .take(limit as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|error| Failure::Environment(format!("could not read stdin: {error}")))?;
-    let cut = bytes.len() > STDIN_LIMIT;
-    bytes.truncate(STDIN_LIMIT);
+    let cut = bytes.len() > limit;
+    bytes.truncate(limit);
     let mut text = String::from_utf8_lossy(&bytes).into_owned();
     if cut {
         text.push_str(&format!(
             "\n[stdin cut at {} KiB: the rest was not read]",
-            STDIN_LIMIT / 1024
+            limit / 1024
         ));
     }
     Ok(text)

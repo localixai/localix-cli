@@ -171,4 +171,5 @@ lto = "fat"
 opt-level = "z"
 # A panic unwinds: the daemon serves many terminals, and one command's panic must end only that
 # command (ARCHITECTURE.md W8), not every session in the process.
+panic = "unwind"
 strip = true

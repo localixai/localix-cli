@@ -1,4 +1,5 @@
-//! The code rules (ARCHITECTURE.md, S4 and S5), checked on the manifests and sources.
+//! The code rules (ARCHITECTURE.md, S4 and S5) and the unwinding W8 relies on, checked on the
+//! manifests and sources.
 
 use std::path::Path;
 
@@ -143,5 +144,34 @@ fn no_working_file_turns_a_lint_off_whole() {
     assert!(
         found.is_empty(),
         "a whole file is exempt from the lints: {found:?}"
+    );
+}
+
+/// W8, R4: one request's panic ends only that request, which needs a panic that unwinds. The
+/// release profile says so in so many words, and no profile aborts: a binary smaller by an abort
+/// is a change of W8 first.
+#[test]
+fn every_build_unwinds_a_panic() {
+    let manifest = std::fs::read_to_string(root().join("Cargo.toml")).unwrap();
+    let mut section = "";
+    let mut panics = vec![];
+    for line in manifest.lines() {
+        if line.starts_with('[') {
+            section = line;
+        } else if let Some((key, value)) = line.split_once('=')
+            && key.trim() == "panic"
+            && section.starts_with("[profile.")
+        {
+            panics.push((section, value.trim().trim_matches('"')));
+        }
+    }
+    assert!(
+        panics.contains(&("[profile.release]", "unwind")),
+        "[profile.release] says `panic = \"unwind\"` (W8): {panics:?}"
+    );
+    let aborting: Vec<_> = panics.iter().filter(|(_, how)| *how != "unwind").collect();
+    assert!(
+        aborting.is_empty(),
+        "a profile aborts on a panic (W8): {aborting:?}"
     );
 }

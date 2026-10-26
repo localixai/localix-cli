@@ -17,6 +17,10 @@ else it needs, if anything, and what to change to make it yours: the model, the 
 | [release.yml](github/release.yml) | run by hand | picks the version bump and writes the notes in one answer; drafts a release a person publishes | tags like `v1.2.3`; with none, the first draft is `v0.1.0` |
 | [audit.yml](github/audit.yml) | weekly, or by hand | explores the repository, runs its tests and linters, and opens or updates one issue labeled `llx-audit` when it finds something worth a maintainer's time | |
 
+## Beyond GitHub workflows
+
+- [breaking-changes/](breaking-changes/README.md): what a change does to an HTTP API's clients, the spec's structure and what no spec diff can see (units, boundaries, the code behind the endpoints), as a script for any CI, with a GitLab job, a demo and its recorded run.
+
 ## How they are built
 
 The agent works as at a terminal: `read`, `edit` and `bash`, with `gh`, `git` and `jq` in its

@@ -181,6 +181,13 @@ fn a_catalog_decodes_only_the_models_asked_for() {
     assert_eq!(decoded(), 65 + 1);
 }
 
+impl Catalog {
+    /// Whether the built-in files under it were read.
+    fn read_built_in(&self) -> bool {
+        matches!(&self.under, Under::BuiltIn(read) if read.get().is_some())
+    }
+}
+
 #[test]
 fn a_fetched_catalog_goes_over_the_built_in_one_and_is_kept_cut_down() {
     let fetched = Catalog::parse(DOC).unwrap();
@@ -197,7 +204,7 @@ fn a_fetched_catalog_goes_over_the_built_in_one_and_is_kept_cut_down() {
         "the chat models and the decision model"
     );
     let built_in = Catalog::built_in();
-    let merged = built_in.clone().over(kept.clone());
+    let merged = kept.clone().over_built_in();
     assert_eq!(
         merged.provider("acme"),
         kept.provider("acme"),
@@ -208,6 +215,7 @@ fn a_fetched_catalog_goes_over_the_built_in_one_and_is_kept_cut_down() {
         kept.provider("openai"),
         "a fetched provider replaces the built-in one"
     );
+    assert!(!merged.read_built_in(), "the fetched one had them");
     assert_ne!(merged.provider("openai"), built_in.provider("openai"));
     assert!(kept.provider("anthropic").is_none());
     assert!(built_in.provider("anthropic").is_some());
@@ -215,6 +223,12 @@ fn a_fetched_catalog_goes_over_the_built_in_one_and_is_kept_cut_down() {
         merged.provider("anthropic"),
         built_in.provider("anthropic"),
         "a built-in provider the fetched one lacks stays"
+    );
+    assert!(merged.read_built_in());
+    let ids = merged.ids();
+    assert!(
+        ids.contains(&"acme") && ids.contains(&"anthropic"),
+        "{ids:?}"
     );
 }
 

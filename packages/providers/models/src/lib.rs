@@ -10,6 +10,7 @@ pub mod source;
 mod types;
 
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 use contracts::catalog::{Effort, ModelEntry};
 use serde_json::Value;
@@ -48,6 +49,16 @@ pub const RESPONSES: &str = "responses";
 #[derive(Debug, Clone, std::default::Default)]
 pub struct Catalog {
     providers: BTreeMap<String, Provider>,
+    under: Under,
+}
+
+/// What lies under a catalog's own providers.
+#[derive(Debug, Clone, std::default::Default)]
+enum Under {
+    #[default]
+    Nothing,
+    /// The built-in files, read the first time a provider the catalog lacks is asked for.
+    BuiltIn(OnceLock<Box<Catalog>>),
 }
 
 impl Catalog {
@@ -55,30 +66,45 @@ impl Catalog {
     /// models decoded as they are asked for.
     pub fn parse(text: &str) -> Result<Self, String> {
         let providers = serde_json::from_str(text).map_err(|error| error.to_string())?;
-        Ok(Self { providers })
+        let under = Under::Nothing;
+        Ok(Self { providers, under })
     }
 
-    /// models.dev's files built in.
+    /// models.dev's files built in, inflated.
     #[allow(
         clippy::expect_used,
         reason = "build.rs wrote this document in this shape, and the tests parse it"
     )]
     pub fn built_in() -> Self {
-        Self::parse(include_str!(concat!(env!("OUT_DIR"), "/catalog.json")))
+        let packed = include_bytes!(concat!(env!("OUT_DIR"), "/catalog.json.deflate"));
+        let inflated = miniz_oxide::inflate::decompress_to_vec(packed);
+        let text = (inflated.map_err(|error| error.to_string()))
+            .and_then(|bytes| String::from_utf8(bytes).map_err(|error| error.to_string()));
+        text.and_then(|text| Self::parse(&text))
             .expect("the built-in catalog is valid")
     }
 
-    /// This catalog with `fresh`'s providers in place of its own, and its new ones added.
-    pub fn over(mut self, fresh: Catalog) -> Self {
-        self.providers.extend(fresh.providers);
-        self
+    /// This catalog over the built-in files: a provider it lacks is the built-in one. They are
+    /// read only when such a provider is asked for, or the list of them.
+    pub fn over_built_in(self) -> Self {
+        let under = Under::BuiltIn(OnceLock::new());
+        Self { under, ..self }
+    }
+
+    fn under(&self) -> Option<&Catalog> {
+        match &self.under {
+            Under::Nothing => None,
+            Under::BuiltIn(read) => Some(read.get_or_init(|| Box::new(Self::built_in()))),
+        }
     }
 
     /// The providers llx can call (a usable model over chat completions), the popular first.
     pub fn ids(&self) -> Vec<&str> {
-        let mut ids: Vec<&str> = self
-            .providers
-            .keys()
+        let under = self
+            .under()
+            .into_iter()
+            .flat_map(|under| under.providers.keys());
+        let mut ids: Vec<&str> = (self.providers.keys().chain(under))
             .map(String::as_str)
             .filter(|id| self.callable(id))
             .collect();
@@ -89,22 +115,23 @@ impl Catalog {
                 .unwrap_or(POPULAR.len())
         };
         ids.sort_by_key(|id| (rank(id), id.to_string()));
+        ids.dedup();
         ids
     }
 
     /// Whether llx can call `id`, one of [`Catalog::ids`]: its models decoded up to the first
     /// usable one.
     pub fn callable(&self, id: &str) -> bool {
-        let found = self.providers.get(id);
+        let found = self.provider(id);
         found.is_some_and(|p| p.models().any(|(_, m)| calls(m, CHAT_COMPLETIONS)))
     }
 
     pub fn provider(&self, id: &str) -> Option<&Provider> {
-        self.providers.get(id)
+        (self.providers.get(id)).or_else(|| self.under()?.provider(id))
     }
 
     pub fn model(&self, provider: &str, id: &str) -> Option<&Model> {
-        self.providers.get(provider)?.model(id)
+        self.provider(provider)?.model(id)
     }
 
     /// `provider`'s models llx can call over chat completions, newest first.
@@ -114,7 +141,7 @@ impl Catalog {
 
     /// `provider`'s models llx can call over `protocol`, newest first.
     pub fn served(&self, provider: &str, protocol: &str) -> Vec<ModelEntry> {
-        let Some(found) = self.providers.get(provider) else {
+        let Some(found) = self.provider(provider) else {
             return vec![];
         };
         let mut models: Vec<(&str, &Model)> =
@@ -137,7 +164,7 @@ impl Catalog {
         self.model(provider, id).map(|model| entry(id, model))
     }
 
-    /// The catalog as a document to keep, cut down to the providers and models llx can call, its
+    /// The catalog's own providers as a document to keep, cut down to those llx can call, their
     /// chat models and the decision models.
     pub fn kept(&self) -> String {
         let keep = |model: &Model| model.usable() || model.decides();

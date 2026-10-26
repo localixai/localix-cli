@@ -8,7 +8,7 @@ export function Hero() {
     <section className="hero wrap">
       <div className="hero-copy">
         <h1>
-          <span className="chip">Ultrafast</span>, lightweight agent runtime.
+          <span className="nowrap"><span className="chip">Ultrafast</span>,</span> lightweight agent runtime.
         </h1>
         <p className="lede">
           A native window of real browser pages and terminals that any agent can work in. A decision step for

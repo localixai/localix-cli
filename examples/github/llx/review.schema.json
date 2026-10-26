@@ -1,0 +1,58 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": {
+      "enum": [
+        "approve",
+        "comment",
+        "request_changes"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Two or three sentences on the change and its risk."
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "description": "A line of the new file that the change added or kept."
+          },
+          "severity": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "description": "The problem, why it matters, the fix."
+          },
+          "evidence": {
+            "type": "string",
+            "description": "How it was confirmed: the file read, the caller found, the test or command run and what it showed."
+          }
+        },
+        "required": [
+          "path",
+          "line",
+          "severity",
+          "body",
+          "evidence"
+        ]
+      }
+    }
+  },
+  "required": [
+    "verdict",
+    "summary",
+    "findings"
+  ]
+}

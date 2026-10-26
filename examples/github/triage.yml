@@ -1,0 +1,60 @@
+name: llx triage
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: read # the model gets no token that can write
+    outputs:
+      kind: ${{ steps.pick.outputs.kind }}
+      priority: ${{ steps.pick.outputs.priority }}
+    steps:
+      - run: npm install -g @localixai/llx
+      - name: Pick a kind and a priority from the repository's own labels
+        id: pick
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.issue.title }}
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          # name=description for each label, so the model knows what each one means
+          options() { gh label list --limit 100 --json name,description \
+            --jq ".[] | select(.name | test(\"$1\")) | \"\(.name)=\(.description)\""; }
+          issue=$(printf '# %s\n\n%s\n' "$TITLE" "$BODY")
+          pick() { # the question, then the label pattern
+            local args=() option
+            while IFS= read -r option; do args+=(--choices "$option"); done < <(options "$2")
+            printf '%s' "$issue" | llx decide "$1" "${args[@]}"
+          }
+          kind=$(pick "What kind of issue is this?" '^(bug|feature|question|docs)$')
+          priority=$(pick "How urgent is this issue?" '^P[1-3]$')
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          echo "priority=$priority" >> "$GITHUB_OUTPUT"
+          echo "$kind, $priority"
+
+  label:
+    needs: decide
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          KIND: ${{ needs.decide.outputs.kind }}
+          PRIORITY: ${{ needs.decide.outputs.priority }}
+        # Only labels that exist: the model picked from the list, and this checks it again.
+        run: |
+          known=$(gh label list --limit 100 --json name --jq '.[].name')
+          for label in "$KIND" "$PRIORITY"; do
+            grep -qxF -- "$label" <<<"$known" && gh issue edit "$NUMBER" --add-label "$label"
+          done

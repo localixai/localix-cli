@@ -94,11 +94,13 @@ llx doctor                             # sign-ins, models, the WebView, the shel
 ```console
 $ git diff origin/main... | llx decide "Does this change break the public API?"
 no
-$ git log -1 --format=%B | llx decide "What release is this?" --choices patch,minor,major
-minor
+$ llx exec --allow bash --deny edit --schema @review.schema.json "Review pull request #$PR."
+{"verdict":"request_changes","findings":[{"path":"src/config.py","line":5,…}]}
 ```
 
-`llx decide` asks a small decision model one question about stdin, in under a second for a fraction of a cent, and prints the option it picked; `--expect no` exits 1 on any other, `--json` adds each option's probability. When the step needs to read the code, `llx exec --mode plan --schema @answer.json "…"` runs the agent read-only and prints JSON in your shape. Reviews on GitHub and GitLab, gates, triage, releases and checks after a deploy, composed with `gh`, `glab` and `git`: [docs/recipes.md](docs/recipes.md); the modes and exit codes a pipeline needs: [docs/ci.md](docs/ci.md).
+`llx decide` asks a small decision model one question about stdin, in under a second for a fraction of a cent, and prints the option it picked; `--expect no` exits 1 on any other. `llx exec` runs the agent: in a CI container, `--allow bash --deny edit` lets it explore the checkout and run the tests while changing nothing, and `--schema` makes it answer in your JSON. The job that runs the model gets a read-only token; a separate job posts what it found.
+
+Ready-made GitHub workflows, each run for real on a self-hosted runner: [pull request review](examples/github/review.yml) with inline comments, [issue triage](examples/github/triage.yml), [explaining a failed run](examples/github/ci-failure.yml), [describing a pull request](examples/github/describe.yml), [an issue to a draft pull request](examples/github/fix-issue.yml) and [a draft release](examples/github/release.yml): [examples/](examples/). More recipes, GitLab included: [docs/recipes.md](docs/recipes.md); modes and exit codes: [docs/ci.md](docs/ci.md).
 
 ## Documentation
 

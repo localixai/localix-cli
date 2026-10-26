@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "kind": {"enum": ["code", "test", "flaky", "infrastructure", "dependency"]},
+    "cause": {"type": "string", "description": "One or two sentences: what failed and why."},
+    "path": {"type": "string", "description": "The file at fault, if one is; else empty."},
+    "line": {"type": "integer", "description": "Its line, or 0."},
+    "fix": {"type": "string", "description": "The smallest change that fixes it."},
+    "evidence": {"type": "string", "description": "What was run or read to confirm it."},
+    "rerun": {"type": "boolean", "description": "True only when running it again would likely pass."}
+  },
+  "required": ["kind", "cause", "path", "line", "fix", "evidence", "rerun"]
+}

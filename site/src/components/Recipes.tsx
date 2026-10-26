@@ -2,22 +2,63 @@ import { useState } from 'react';
 import { Terminal } from './Shell';
 import './InstallCommand.css';
 
-/** Each scenario as llx composed with the tools a pipeline has; the outputs are from real runs. */
+/** Each scenario as llx composed with the tools a pipeline has; the outputs are shortened from runs in a test repository. */
 const RECIPES: [string, string][] = [
   [
-    'Review',
-    `$ gh pr diff 42 \\
-    | llx exec --mode plan "Review this diff: bugs and risks only, with file:line." \\
-    | gh pr comment 42 -F -
-- lib.py:4  A hard-coded GitHub token is committed in source; revoke it.
-- lib.py:10 split(sep) without a maximum split raises ValueError for key=a=b.
-- lib.py:17 Removing the blank-line guard sends empty lines to parse.`,
+    'PR review',
+    `# .github/workflows/review.yml: the agent explores the merged tree itself, read-only
+$ llx exec --allow bash --deny edit --schema @review.schema.json \\
+    "REPO: $REPO  PULL REQUEST: #$PR. Review it: read the diff, the files, the discussion;
+     confirm a problem by running something. Bugs and risks only."
+{"verdict":"request_changes","findings":[
+ {"path":"src/config.py","line":5,"severity":"high",
+  "body":"A line without = raises an unpacking ValueError.",
+  "evidence":"python3 -c 'load(\\"verbose\\")' -> ValueError"}]}
+# a separate job with write access posts it as inline comments`,
   ],
   [
-    'GitLab',
-    `$ glab mr diff 42 --raw \\
-    | llx exec --mode plan "Review this diff: bugs and risks only." \\
-    | glab mr note create 42`,
+    'Triage',
+    `# .github/workflows/triage.yml: on issues: opened, the repo's own labels as choices
+$ gh issue view 3 --json title,body --jq '.title + "\\n" + .body' \\
+    | llx decide "What kind of issue is this?" \\
+      --choices "bug=Something is broken" --choices "feature=A new capability" \\
+      --choices "question=Needs an answer" --choices "docs=Documentation"
+bug
+$ gh issue edit 3 --add-label bug`,
+  ],
+  [
+    'CI failure',
+    `# .github/workflows/ci-failure.yml: on workflow_run failed
+$ llx exec --allow bash --deny edit --schema @failure.schema.json \\
+    "Run $RUN failed (gh run view $RUN --log-failed). Find the cause in the code."
+{"kind":"code","path":"src/config.py","line":24,"rerun":false,
+ "cause":"port() accepts 0, the test expects ValueError.",
+ "fix":"Check 0 < number, as the docstring says."}
+# posted as one sticky comment; rerun only when the failure is flaky`,
+  ],
+  [
+    'Describe PR',
+    `# .github/workflows/describe.yml: the author's text stays, llx's part is replaced
+$ llx exec --allow bash --deny edit --schema @describe.schema.json \\
+    "Describe pull request #$PR for its reviewers: what changes, the risk, how it was tested."
+{"summary":"Adds a worker pool, a cache and a sync job.",
+ "risk":"high","risk_why":"Threads share the store without a lock.",
+ "testing":"Ran the tests: 11 tests, 1 failure, 3 errors."}`,
+  ],
+  [
+    'Fix an issue',
+    `# .github/workflows/fix-issue.yml: a maintainer labels an issue llx
+$ llx exec --allow bash --allow edit --deny 'bash(git push *)' \\
+    "ISSUE: #5. Resolve it: the smallest change, a test, run the tests. Do not commit."
+$ git diff > change.patch   # a separate job pushes it and opens a draft PR`,
+  ],
+  [
+    'Release',
+    `$ git log v1.2.0..HEAD --format=%B | llx decide "Which semantic version bump?" \\
+    --choices "major=breaks users" --choices "minor=a feature" --choices "patch=fixes only"
+minor
+$ llx exec --allow 'bash(git *)' --deny edit -o notes.md "Release notes since v1.2.0."
+$ gh release create v1.3.0 --draft --notes-file notes.md`,
   ],
   [
     'Gate',
@@ -27,32 +68,10 @@ $ echo $?
 1`,
   ],
   [
-    'Triage',
-    `$ gh pr diff 42 | llx decide "Which label fits?" --choices bug,feature,docs,chore
-bug
-$ gh run view 1234 --log-failed | llx decide "Flaky or a real bug?" --choices flaky,real
-real`,
-  ],
-  [
-    'Incident',
-    `$ gh run view 1234 --log-failed \\
-    | llx exec --mode plan --schema @incident.json "Classify this CI failure." | tee incident.out
-{"kind":"infra","severity":"medium","retry":true,"owner":"platform",
- "summary":"Checkout got HTTP 503: a transient service failure, not the code."}
-$ jq -e .retry incident.out && gh run rerun 1234 --failed`,
-  ],
-  [
-    'Release',
-    `$ git log v1.2.0..HEAD --format=%B | llx decide "What release is this?" --choices patch,minor,major
-minor
-$ git log v1.2.0..HEAD --oneline | llx exec --mode plan "Release notes, grouped by kind." \\
-    | gh release create v1.3.0 --notes-file -`,
-  ],
-  [
-    'After deploy',
-    `$ llx exec -y --schema @smoke.json \\
-    "Open https://staging.example.com, sign up with test@example.com, check it welcomes you."
-{"ok":true,"seen":"Welcome!"}`,
+    'GitLab',
+    `$ llx exec --allow bash --deny edit \\
+    "Review merge request !$CI_MERGE_REQUEST_IID (glab mr view, glab mr diff). Bugs only." \\
+    | glab mr note create $CI_MERGE_REQUEST_IID`,
   ],
 ];
 

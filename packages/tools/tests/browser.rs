@@ -514,6 +514,40 @@ fn second_page(browser: &browser::Browser, driver: &WebviewDriver, origin: &str)
     assert_eq!(left.len(), before.len(), "{left:?}");
 }
 
+/// A page loading a slow address still answers other threads at once (ARCHITECTURE.md R6: no
+/// lock held across a load): whether it is open, its driver, a tab of its own.
+fn answers_while_loading(browser: &browser::Browser, driver: &WebviewDriver, origin: &str) {
+    let (before, _) = driver.tabs();
+    let page = browser::Page::new(browser.clone(), true);
+    std::thread::scope(|scope| {
+        let opening =
+            scope.spawn(|| page.open(&format!("{origin}/slower/form.html"), "slow", None));
+        // Its tab is made at once; its document comes 3 s later.
+        let asked = std::time::Instant::now();
+        while driver.tabs().0.len() == before.len() && asked.elapsed() < Duration::from_secs(2) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let asked = std::time::Instant::now();
+        let _ = (page.is_open(), page.driver().is_ok(), page.hidden());
+        let _ = page.pinned(1);
+        let waited = asked.elapsed();
+        assert!(
+            waited < Duration::from_secs(1),
+            "the page waited on the load: {waited:?}"
+        );
+        opening.join().unwrap().expect("the slow page opens");
+    });
+    assert!(page.is_open());
+    for tab in driver
+        .tabs()
+        .0
+        .iter()
+        .filter(|t| !before.iter().any(|b| b.id == t.id))
+    {
+        driver.close_tab(tab.id).expect("its tab closes");
+    }
+}
+
 /// Visual feedback: the person turns commenting on from the strip; then a press on a button picks
 /// it instead of pressing it (a script's click still presses it), the note typed in its card is
 /// held, and Send hands the batch to the listener with the element's selector.
@@ -818,6 +852,7 @@ fn main() {
                         .wait_loaded(Duration::from_secs(10))
                         .expect("it loads");
                     second_page(&browser, &driver, &origin);
+                    answers_while_loading(&browser, &driver, &origin);
                     feedback(&browser, &driver);
                     scenario(&driver, &origin);
                 });

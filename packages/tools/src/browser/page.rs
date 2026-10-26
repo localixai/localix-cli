@@ -3,7 +3,7 @@
 //! size) is part of the view, so the hands can use it like any control; with several tabs open,
 //! it also says which tab the view is, but the hands do not switch tabs: the agent does.
 
-use std::sync::Mutex;
+use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use contracts::view::{Action, Observation, View, ViewError, ViewResult};
@@ -17,18 +17,36 @@ picked from the list that appears. A date picker takes the date and then its con
 Apply or OK). A result opens by its link; a matching link is not yet the result. In a quiz or a \
 form, the answer or option is picked before Next, Continue or Submit.";
 
-/// How long a page may take to become usable before it is used anyway.
-const LOAD_TIMEOUT: Duration = Duration::from_secs(20);
-
+/// The window as a view. Its lock is held only to look at the window or change what is held of
+/// it, never across a load or a reply of the window's loop (ARCHITECTURE.md R6): a page that
+/// loads still answers other threads. Calls in one tab are one at a time by the caller's choice
+/// (the app's lock per tab).
 pub struct Page {
     browser: Browser,
     /// Hidden unless a call asks to show it: the default the app chose for this run.
     headless: bool,
-    /// Whether the open window is hidden; it is opened again when a call wants the other.
-    hidden: Mutex<bool>,
     /// The page size the toolbar shows (`desktop`, `tablet`, `mobile`).
     size: Mutex<String>,
-    driver: Mutex<Option<WebviewDriver>>,
+    held: Mutex<Held>,
+    /// Rung when an opening ends, for the calls that wait to open the window.
+    opened: Condvar,
+}
+
+/// The window as a page holds it.
+struct Held {
+    driver: Option<WebviewDriver>,
+    /// Whether the open window is hidden; it is opened again when a call wants the other.
+    hidden: bool,
+    /// A call is opening the window: the others wait for it rather than open a second one.
+    opening: bool,
+}
+
+/// What a call that wants the window found, once no other call was opening it.
+enum Claim {
+    /// The window, open as the call wants it.
+    Open(WebviewDriver),
+    /// None open as wanted: this call opens it, the one open the other way closed first.
+    Make(Option<WebviewDriver>),
 }
 
 impl Page {
@@ -36,9 +54,13 @@ impl Page {
         Self {
             browser,
             headless,
-            hidden: Mutex::new(headless),
             size: Mutex::new("desktop".into()),
-            driver: Mutex::new(None),
+            held: Mutex::new(Held {
+                driver: None,
+                hidden: headless,
+                opening: false,
+            }),
+            opened: Condvar::new(),
         }
     }
 
@@ -46,44 +68,77 @@ impl Page {
     /// it); `title` names the window. `show` overrides the run's default for this call: a window
     /// open the other way is closed and opened again, on `url`.
     pub fn open(&self, url: &str, title: &str, show: Option<bool>) -> ViewResult<()> {
-        let mut driver = crate::lock(&self.driver);
         let hidden = show.map_or(self.headless, |show| !show);
-        let mut current = crate::lock(&self.hidden);
-        if let Some(open) = driver.as_ref().filter(|driver| driver.is_open()) {
-            if *current == hidden {
-                return open.navigate(url);
+        match self.claim(|now| now == hidden) {
+            Claim::Open(open) => open.navigate(url),
+            Claim::Make(stale) => {
+                let (driver, tab) = self.make(url, title, hidden, stale)?;
+                // A slow page is used as it is: it says it is busy until it settles.
+                driver.on(tab).wait_new();
+                Ok(())
             }
-            closed(open);
         }
-        // The window is open for someone else (another client of the daemon): this page works in
-        // a tab of its own and leaves theirs as it is.
+    }
+
+    /// Once no call is opening the window: the window if it is open as `wanted` says of its
+    /// being hidden, else this call's claim to open it. The look and the claim are one step under
+    /// the lock (R7), so two calls never open two windows; the opening itself is done with the
+    /// lock let go, while the calls that want the window wait on `opened` (R9).
+    fn claim(&self, wanted: impl Fn(bool) -> bool) -> Claim {
+        let held = self.held();
+        let mut held = (self.opened)
+            .wait_while(held, |held| held.opening)
+            .unwrap_or_else(PoisonError::into_inner);
+        let open = held.driver.clone().filter(WebviewDriver::is_open);
+        match open {
+            Some(open) if wanted(held.hidden) => Claim::Open(open),
+            stale => {
+                held.opening = true;
+                Claim::Make(stale)
+            }
+        }
+    }
+
+    /// The window made for `url` by the call that claimed it (`stale` closed first): a tab of its
+    /// own in the window open for someone else (another client of the daemon, whose tabs stay as
+    /// they are), else the window opened on it. Its driver is held at once and the claim ends,
+    /// however this does; the tab's document is not waited for. The driver and the tab's id.
+    fn make(
+        &self,
+        url: &str,
+        title: &str,
+        hidden: bool,
+        stale: Option<WebviewDriver>,
+    ) -> ViewResult<(WebviewDriver, u32)> {
+        let _claim = Claimed(self);
+        if let Some(stale) = stale {
+            closed(&stale);
+        }
         if let Some(attached) = self.browser.attach() {
-            attached
-                .new_tab(url)
+            let tab = (attached.add_tab(url))
                 .map_err(|error| ViewError::Unavailable(error.to_string()))?;
-            *driver = Some(attached);
-            return Ok(());
+            self.held().driver = Some(attached.clone());
+            return Ok((attached, tab));
         }
-        *current = hidden;
+        self.held().hidden = hidden;
         let opened = self.browser.open(Window {
             url: url.to_string(),
             title: title.to_string(),
             headless: hidden,
             viewport: Viewport::DESKTOP,
         })?;
-        // A slow page is used as it is: it says it is busy until it settles.
-        let _ = opened.wait_loaded(LOAD_TIMEOUT);
-        *driver = Some(opened);
-        Ok(())
+        let (_, tab) = opened.tabs();
+        self.held().driver = Some(opened.clone());
+        Ok((opened, tab))
     }
 
     /// Close the window, as the agent asks (not the person: the task goes on); the next call that
     /// needs it opens it again. Returns whether one was open.
     pub fn close(&self) -> bool {
-        let driver = crate::lock(&self.driver);
-        match driver.as_ref().filter(|driver| driver.is_open()) {
+        let open = self.held().driver.clone().filter(WebviewDriver::is_open);
+        match open {
             Some(open) => {
-                closed(open);
+                closed(&open);
                 true
             }
             None => false,
@@ -92,19 +147,17 @@ impl Page {
 
     /// Whether the window is (or opens) hidden.
     pub fn hidden(&self) -> bool {
-        *crate::lock(&self.hidden)
+        self.held().hidden
     }
 
     pub fn is_open(&self) -> bool {
-        crate::lock(&self.driver)
-            .as_ref()
-            .is_some_and(WebviewDriver::is_open)
+        (self.held().driver.as_ref()).is_some_and(WebviewDriver::is_open)
     }
 
     /// The open window's driver, for what only a browser has (scripts, keys, the whole text).
     pub fn driver(&self) -> ViewResult<WebviewDriver> {
-        crate::lock(&self.driver)
-            .clone()
+        let driver = self.held().driver.clone();
+        driver
             .filter(WebviewDriver::is_open)
             .ok_or_else(|| ViewError::Unavailable("the browser window is not open".into()))
     }
@@ -112,13 +165,25 @@ impl Page {
     /// The same window acting in tab `id`, whatever is shown: a page of its own to work in
     /// beside the others.
     pub fn pinned(&self, id: u32) -> Page {
+        let (driver, hidden) = {
+            let held = self.held();
+            (held.driver.as_ref().map(|d| d.on(id)), held.hidden)
+        };
         Page {
             browser: self.browser.clone(),
             headless: self.headless,
-            hidden: Mutex::new(self.hidden()),
             size: Mutex::new(crate::lock(&self.size).clone()),
-            driver: Mutex::new(crate::lock(&self.driver).as_ref().map(|d| d.on(id))),
+            held: Mutex::new(Held {
+                driver,
+                hidden,
+                opening: false,
+            }),
+            opened: Condvar::new(),
         }
+    }
+
+    fn held(&self) -> MutexGuard<'_, Held> {
+        crate::lock(&self.held)
     }
 
     /// A toolbar control: back, reload, or a page size.
@@ -145,6 +210,17 @@ impl Page {
         self.driver()?.resize(width, height)?;
         *crate::lock(&self.size) = size.to_string();
         Ok(())
+    }
+}
+
+/// A call's claim to open the window, ended however its opening ends: the calls waiting for it
+/// are woken.
+struct Claimed<'a>(&'a Page);
+
+impl Drop for Claimed<'_> {
+    fn drop(&mut self) {
+        self.0.held().opening = false;
+        self.0.opened.notify_all();
     }
 }
 

@@ -36,24 +36,29 @@ const RECIPES: Recipe[] = [
     session: `# llx.yml: someone writes in a review thread: @llx why raise here instead of skipping the line?
 - uses: rsaryev/llx@v0
   with:
-    allow: bash
+    allow: |
+      bash
+      edit
     deny: |
       bash(git push *)
       bash(git commit *)
+    schema: |
+      {"type":"object","properties":{"reply":…,"changed":…,"title":…}}
     prompt: |
-      Answer the request in the thread on #$NUMBER. Read it with gh;
-      check a claim by running it. Change code only if asked.
+      $ASKER asked you for something on $KIND #$NUMBER. Read it and its thread with gh;
+      check a claim by running it. Change the code only if they asked for a change.
 = {"reply":"Raising is intentional: AGENTS.md says load names the bad line and never
 =  skips it. A skipped typo would silently drop a setting. The tests pass.","changed":false}
-# job 3 posts the reply in the thread, and applies a patch to the branch when there is one.`,
+# job 3 posts the reply in the thread; a change becomes a commit on the branch, or a draft PR.`,
   },
   {
     tab: 'Triage',
     session: `# triage.yml, on issues: opened. The repository's own labels are the choices
 $ gh issue view 3 --json title,body --jq '.title + "\\n" + .body' \\
     | llx decide "What kind of issue is this?" \\
-      --choices "bug=Something is broken" --choices "feature=A new capability" \\
-      --choices "question=Needs an answer" --choices "docs=Documentation"
+      --choices "bug=Something isn't working" --choices "enhancement=New feature or request" \\
+      --choices "question=Further information is requested" \\
+      --choices "documentation=Improvements or additions to documentation"
 bug
 $ gh issue edit 3 --add-label bug`,
   },
@@ -66,13 +71,13 @@ $ gh issue edit 3 --add-label bug`,
     allow: bash
     deny: edit
     schema: |
-      {"type":"object","properties":{"cause":…,"fix":…,"rerun":…}}
+      {"type":"object","properties":{"cause":…,"path":…,"line":…,"fix":…,"rerun":…,"evidence":…}}
     prompt: |
       Run $RUN failed (gh run view $RUN --log-failed). Find the cause in the code.
       Say rerun only if running it again would likely pass.
-= {"kind":"code","path":"src/config.py","line":24,"rerun":false,
-=  "cause":"port() accepts 0, the test expects ValueError.",
-=  "fix":"Check 0 < number, as the docstring says."}
+= {"cause":"port() accepts 0, the test expects ValueError.","path":"src/config.py","line":24,
+=  "fix":"Check 0 < number, as the docstring says.","rerun":false,
+=  "evidence":"python3 -m unittest tests.test_config fails the same way on this commit"}
 # job 2: one sticky comment on the pull request; it reruns only a flaky failure.`,
   },
   {
@@ -84,11 +89,13 @@ $ gh issue edit 3 --add-label bug`,
     allow: bash
     deny: edit
     schema: |
-      {"type":"object","properties":{"summary":…,"risk":…,"testing":…}}
+      {"type":"object","properties":{"summary":…,"changes":…,"risk":…,"risk_why":…,"testing":…}}
     prompt: |
-      Describe pull request #$PR for its reviewers: what changes, the risk, how it was tested.
-= {"summary":"Adds a worker pool, a cache and a sync job. Threads share the store without a lock.",
-=  "risk":"high","testing":"Ran the tests: 11 tests, 1 failure, 3 errors."}`,
+      Describe pull request #$PR for a reviewer who has not read it: what it does and why,
+      what could break and for whom, what the tests cover. Describe; do not review.
+= {"summary":"Adds a worker pool, a cache and a sync job.","changes":["…"],
+=  "risk":"high","risk_why":"Threads share the store without a lock.",
+=  "testing":"Ran the tests: 11 tests, 1 failure, 3 errors."}`,
   },
   {
     tab: 'Release',

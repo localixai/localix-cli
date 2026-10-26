@@ -1,34 +1,10 @@
-//! The catalog's types: a provider and its models as models.dev's v2 API publishes them, and
-//! what a model's facts say (usable, its price, its address).
+//! The catalog's types: a model as models.dev's v2 API publishes it, and what its facts say
+//! (usable, its price, its address).
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-/// A provider, as the v2 API publishes it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Provider {
-    pub name: String,
-    /// The environment variables its key is read from.
-    #[serde(default)]
-    pub env: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub doc: Option<String>,
-    /// Its models: one that does not read as a model is left out, not the whole catalog.
-    #[serde(default, deserialize_with = "lenient")]
-    pub models: BTreeMap<String, Model>,
-}
-
-fn lenient<'de, D: serde::Deserializer<'de>>(
-    deserializer: D,
-) -> Result<BTreeMap<String, Model>, D::Error> {
-    let raw = BTreeMap::<String, Value>::deserialize(deserializer)?;
-    Ok(raw
-        .into_iter()
-        .filter_map(|(id, value)| Some((id, serde_json::from_value(value).ok()?)))
-        .collect())
-}
 
 /// A model one provider serves, resolved: the lab's facts with the host's own over them. Only
 /// what llx reads is kept.

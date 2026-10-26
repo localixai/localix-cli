@@ -94,10 +94,10 @@ impl Provider {
             .collect()
     }
 
-    /// The provider `id` names, when the catalog lists it.
+    /// The provider `id` names, when the catalog lists it (and no other is looked at).
     pub(crate) fn named(id: &str) -> Option<Self> {
         let id = id.trim().to_ascii_lowercase();
-        catalog().ids().contains(&id.as_str()).then_some(Self(id))
+        catalog().callable(&id).then_some(Self(id))
     }
 
     pub(crate) fn id(&self) -> &str {
@@ -108,7 +108,7 @@ impl Provider {
     pub(crate) fn name(&self) -> String {
         catalog()
             .provider(&self.0)
-            .map_or_else(|| self.0.clone(), |p| p.name.clone())
+            .map_or_else(|| self.0.clone(), |p| p.name().to_string())
     }
 
     /// How it is signed in to, where that is not just a key: said where the provider is picked.
@@ -125,18 +125,27 @@ impl Provider {
     }
 
     /// The models it is called with: over the ChatGPT backend with a ChatGPT sign-in, else over
-    /// chat completions (unit tests read no sign-in: the same on every machine).
+    /// chat completions.
     pub(crate) fn models(&self) -> Vec<ModelEntry> {
-        let chatgpt = self.0 == "openai" && !cfg!(test) && openai::tokens::load(APP).is_some();
-        self.served(chatgpt)
+        self.served(self.chatgpt())
+    }
+
+    /// Whether it is called over the ChatGPT backend: OpenAI with a ChatGPT sign-in (unit tests
+    /// read no sign-in: the same on every machine).
+    fn chatgpt(&self) -> bool {
+        self.0 == "openai" && !cfg!(test) && openai::tokens::load(APP).is_some()
     }
 
     /// Its models over the ChatGPT backend (`chatgpt`, the Responses API), else over chat
     /// completions.
     pub(crate) fn served(&self, chatgpt: bool) -> Vec<ModelEntry> {
+        catalog().served(&self.0, self.protocol(chatgpt))
+    }
+
+    fn protocol(&self, chatgpt: bool) -> &'static str {
         match chatgpt && self.0 == "openai" {
-            true => catalog().served(&self.0, RESPONSES),
-            false => catalog().models(&self.0),
+            true => RESPONSES,
+            false => CHAT_COMPLETIONS,
         }
     }
 
@@ -153,12 +162,14 @@ impl Provider {
 
     /// llx's default where it has one and the catalog lists it, else the newest model.
     pub(crate) fn default_model(&self) -> String {
-        let models = self.models();
+        let protocol = self.protocol(self.chatgpt());
         let stated = DEFAULTS.iter().find(|(p, _)| *p == self.0).map(|(_, m)| *m);
-        match stated.filter(|id| models.iter().any(|m| m.id == *id)) {
-            Some(id) => id.to_string(),
-            None => models.first().map_or_else(String::new, |m| m.id.clone()),
+        // The stated model alone is decoded; every one only when it is not served, for the newest.
+        if let Some(id) = stated.filter(|id| catalog().serves(&self.0, id, protocol)) {
+            return id.to_string();
         }
+        let models = catalog().served(&self.0, protocol);
+        models.first().map_or_else(String::new, |m| m.id.clone())
     }
 
     /// Where the sign-in comes from, in words with no secret in them; `None` when signed out.
@@ -207,7 +218,7 @@ impl Provider {
     fn variables(&self) -> Vec<String> {
         catalog()
             .provider(&self.0)
-            .map_or_else(Vec::new, |p| p.env.clone())
+            .map_or_else(Vec::new, |p| p.env().to_vec())
     }
 
     /// Where its pasted key is kept (OpenRouter's where it always was).
@@ -267,10 +278,10 @@ impl Provider {
                 let address = model
                     .and_then(|m| m.address(CHAT_COMPLETIONS))
                     .or_else(|| {
-                        let first = catalog.provider(id)?.models.values();
-                        first.filter_map(|m| m.address(CHAT_COMPLETIONS)).next()
+                        let mut models = catalog.provider(id)?.models();
+                        models.find_map(|(_, m)| m.address(CHAT_COMPLETIONS))
                     })?;
-                let name = catalog.provider(id).map_or(id, |p| p.name.as_str());
+                let name = catalog.provider(id).map_or(id, |p| p.name());
                 openrouter::client::OpenRouter::at(address, key, APP, name)
             }
         };

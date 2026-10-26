@@ -127,3 +127,23 @@ fn decide_never_reads_the_model_catalog() {
         extra / MB
     );
 }
+
+#[test]
+fn exec_decodes_only_the_provider_it_thinks_with() {
+    let run = |home: &Home| {
+        let model = Model::start(vec![Reply::text("Done.\nRESULT: achieved")]);
+        let mut command = home.with_model(&model, &["exec", "hi"]);
+        command.current_dir(home.path());
+        let (code, stdout, stderr, peak) = measured(command, "");
+        assert_eq!(stdout, "Done.\n", "{stderr}");
+        (code, stdout, stderr, peak)
+    };
+    let (base, extra) = cost(run);
+    // The file read and indexed is about twice its size; decoding every model of it, as a
+    // catalog read whole does, is about fifteen times.
+    assert!(
+        extra < 12 * MB,
+        "exec took {} MB more than its {base} MB with a 4 MB catalog",
+        extra / MB
+    );
+}

@@ -89,6 +89,12 @@ fn a_model_served_over_another_protocol_is_listed_for_that_protocol_alone() {
     let ids = |models: Vec<ModelEntry>| models.into_iter().map(|m| m.id).collect::<Vec<_>>();
     assert_eq!(ids(catalog.served("openai", RESPONSES)), ["gpt", "pro"]);
     assert_eq!(ids(catalog.models("openai")), ["gpt"]);
+    assert!(catalog.serves("openai", "pro", RESPONSES));
+    assert!(!catalog.serves("openai", "pro", CHAT_COMPLETIONS));
+    assert!(
+        !catalog.serves("acme", "gone", CHAT_COMPLETIONS),
+        "deprecated"
+    );
 }
 
 #[test]
@@ -111,12 +117,85 @@ fn models_are_the_usable_ones_newest_first_with_their_window() {
 }
 
 #[test]
+fn a_model_that_does_not_read_is_left_out_and_not_its_provider() {
+    let catalog = Catalog::parse(DOC).unwrap();
+    let acme = catalog.provider("acme").unwrap();
+    assert!(acme.model("odd").is_none(), "its name is a number");
+    assert!(acme.models().all(|(id, _)| id != "odd"));
+    assert!(catalog.callable("acme"));
+    assert!(!catalog.kept().contains("\"odd\""));
+    let unread = Catalog::parse(r#"{"x": {"name": "X", "models": {"odd": {"name": 7}}}}"#);
+    let unread = unread.unwrap();
+    assert!(unread.provider("x").is_some() && !unread.callable("x"));
+    // The document itself is read whole: one cut short is no catalog.
+    let cut = DOC.get(..DOC.len() - 10).unwrap();
+    assert!(Catalog::parse(cut).is_err());
+}
+
+/// A refreshed catalog's shape at scale: `providers` providers of `models` callable models each.
+fn large(providers: usize, models: usize) -> String {
+    let model = |p: usize, m: usize| {
+        format!(
+            r#""m{m}": {{"name": "M{m}", "release_date": "2026-01-{:02}",
+            "modalities": {{"output": ["text"]}}, "capabilities": {{"tools": {{"supported": true}}}},
+            "api": {{"chat-completions": {{"base_url": "https://api.p{p}.dev/v1"}}}}}}"#,
+            m % 28 + 1
+        )
+    };
+    let provider = |p: usize| {
+        let models: Vec<String> = (0..models).map(|m| model(p, m)).collect();
+        format!(
+            r#""p{p}": {{"name": "P{p}", "env": ["P{p}_KEY"], "models": {{{}}}}}"#,
+            models.join(",")
+        )
+    };
+    let providers: Vec<String> = (0..providers).map(provider).collect();
+    format!("{{{}}}", providers.join(","))
+}
+
+#[test]
+fn a_catalog_decodes_only_the_models_asked_for() {
+    let catalog = Catalog::parse(&large(40, 25)).unwrap();
+    let decoded = || {
+        catalog
+            .providers
+            .values()
+            .map(Provider::decoded)
+            .sum::<usize>()
+    };
+    assert_eq!(decoded(), 0, "read, and nothing decoded");
+    // What a run asks of the provider it thinks with: that it is one, its key, the model chosen.
+    assert!(catalog.callable("p7"));
+    assert_eq!(catalog.provider("p7").unwrap().env(), ["P7_KEY"]);
+    assert_eq!(catalog.entry("p7", "m3").unwrap().name, "M3");
+    assert_eq!(decoded(), 2, "its first callable model, and the one chosen");
+    // The providers llx can call, as /login lists them: one model each.
+    assert_eq!(catalog.ids().len(), 40);
+    assert_eq!(decoded(), 2 + 39);
+    // One provider's models listed: all of its own, and no other's.
+    assert_eq!(catalog.models("p9").len(), 25);
+    assert_eq!(decoded(), 41 + 24);
+    // Whether a model is served: that model alone.
+    assert!(catalog.serves("p3", "m5", CHAT_COMPLETIONS));
+    assert!(!catalog.serves("p3", "m5", RESPONSES));
+    assert_eq!(decoded(), 65 + 1);
+}
+
+#[test]
 fn a_fetched_catalog_goes_over_the_built_in_one_and_is_kept_cut_down() {
     let fetched = Catalog::parse(DOC).unwrap();
     let kept = Catalog::parse(&fetched.kept()).unwrap();
-    let models = &kept.provider("acme").unwrap().models;
-    assert_eq!(models.len(), 3, "the chat models and the decision model");
-    assert!(models.contains_key("decide"), "{models:?}");
+    let models: Vec<&str> = kept
+        .provider("acme")
+        .unwrap()
+        .models()
+        .map(|m| m.0)
+        .collect();
+    assert_eq!(
+        models,
+        ["decide", "new", "old"],
+        "the chat models and the decision model"
+    );
     let built_in = Catalog::built_in();
     let merged = built_in.clone().over(kept.clone());
     assert_eq!(
@@ -200,7 +279,7 @@ fn the_built_in_files_resolve_as_models_dev_resolves_them() {
     );
     // The mid-conversation flags of a usable model are always published: unset is false.
     for (provider, found) in &catalog.providers {
-        for (id, model) in found.models.iter().filter(|(_, m)| m.usable()) {
+        for (id, model) in found.models().filter(|(_, m)| m.usable()) {
             let flags = &model.capabilities;
             assert!(
                 flags.system_updates.is_some() && flags.effort_updates.is_some(),
@@ -222,7 +301,7 @@ fn the_built_in_files_match_models_dev_s_own_resolution() {
     let mut differences = vec![];
     let mut compared = 0;
     for id in ours.providers.keys() {
-        for (model_id, mine) in &ours.provider(id).unwrap().models {
+        for (model_id, mine) in ours.provider(id).unwrap().models() {
             let Some(theirs) = published.model(id, model_id) else {
                 differences.push(format!("{id}/{model_id}: not published"));
                 continue;

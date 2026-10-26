@@ -12,7 +12,8 @@ license.workspace = true
 contracts.workspace = true
 provider-kit.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+# raw_value: a catalog is read as an index of raw JSON, each model decoded when asked for.
+serde_json = { workspace = true, features = ["raw_value"] }
 
 # The TOML database is read at build time only: nothing of it is in the binary but its data.
 [build-dependencies]

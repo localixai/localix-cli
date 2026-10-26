@@ -1,10 +1,13 @@
+import '../styles/syntax.css';
+
 /** One token of a shell line, and how it reads. */
 type Kind = 'cmd' | 'flag' | 'str' | 'op' | 'plain' | 'comment';
 
 const TOKEN = /(#.*$|'[^']*'|"[^"]*"|\s+|\\$|\||>|[^\s|>]+)/g;
 
-/** A shell line split into tokens: the first word of a command, flags, strings, pipes. */
-function tokens(line: string, continued: boolean): [Kind, string][] {
+/** A shell line split into tokens: the first word of a command, flags, strings, pipes (the docs'
+ *  code blocks use it too). */
+export function shellTokens(line: string, continued: boolean): [Kind, string][] {
   let first = !continued || line.startsWith('|');
   return (line.match(TOKEN) ?? []).map((text): [Kind, string] => {
     if (/^\s+$/.test(text)) return ['plain', text];
@@ -79,7 +82,7 @@ export function Terminal({ session, label, yaml = false }: { session: string; la
         return (
           <span key={at} className="code-line">
             <span className="tk-prompt">{continued ? '  ' : '$ '}</span>
-            {tokens(continued ? line.trimStart() : line.slice(2), continued).map(([kind, text], n) => (
+            {shellTokens(continued ? line.trimStart() : line.slice(2), continued).map(([kind, text], n) => (
               <span key={n} className={`tk-${kind}`}>
                 {text}
               </span>

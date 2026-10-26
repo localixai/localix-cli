@@ -96,10 +96,14 @@ jobs:
         run: |
           set -euo pipefail
           marker='<!-- llx:ci-failure -->'
-          body=$(jq -r --arg marker "$marker" --arg run "$GITHUB_SERVER_URL/$GH_REPO/actions/runs/$RUN" '
+          body=$(jq -r --arg marker "$marker" --arg run "$GITHUB_SERVER_URL/$GH_REPO/actions/runs/$RUN" \
+            --argjson attempt "$ATTEMPT" '
             "\($marker)\n### The tests failed\(if .rerun then " (flaky)" else "" end)\n\n\(.cause)\n\n"
             + (if .path == "" then "" else "**Where:** `\(.path)\(if .line > 0 then ":\(.line)" else "" end)`\n\n" end)
-            + "**Fix:** \(.fix)\n\n<details><summary>Evidence</summary>\n\n\(.evidence)\n\n</details>\n\n<sub>[run](\($run))</sub>"' <<< "$RESULT")
+            + "**Fix:** \(.fix)\n\n"
+            + (if .rerun | not then "" elif $attempt < 2 then "The failed jobs run once more.\n\n"
+               else "It failed again on attempt \($attempt), so it is not run again.\n\n" end)
+            + "<details><summary>Evidence</summary>\n\n\(.evidence)\n\n</details>\n\n<sub>[run](\($run))</sub>"' <<< "$RESULT")
           if [ -n "$PR" ]; then
             id=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate \
               --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | sed -n 1p)

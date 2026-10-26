@@ -40,17 +40,50 @@ pub struct Finished {
 
 /// A `result` call read, or what to fix.
 pub fn take(args: &Value, schema: &Value) -> Result<Finished, String> {
-    let data = args.get("data").cloned().unwrap_or(Value::Null);
-    let mut problems = vec![];
-    violations(schema, &data, "data", &mut problems);
-    if !problems.is_empty() {
-        return Err(problems.join("; "));
-    }
+    let achieved = args["achieved"].as_bool().unwrap_or(true);
+    let Some(data) = args.get("data") else {
+        return beside(args, schema, achieved);
+    };
+    check(schema, data)?;
+    Ok(Finished {
+        data: data.clone(),
+        summary: args["summary"].as_str().unwrap_or("").to_string(),
+        achieved,
+    })
+}
+
+/// A call whose fields sit beside `achieved` instead of inside `data`. Models do it when the
+/// schema has a field the call has too (a description's `summary`): the fields are the data when
+/// they match the schema, and otherwise the model is told where they go.
+fn beside(args: &Value, schema: &Value, achieved: bool) -> Result<Finished, String> {
+    let mut fields = args.as_object().cloned().unwrap_or_default();
+    fields.remove("achieved");
+    let summary = match schema.pointer("/properties/summary") {
+        Some(_) => None,
+        None => fields.remove("summary"),
+    };
+    let data = Value::Object(fields);
+    check(schema, &data)
+        .map_err(|why| format!("no `data`: put the schema's fields inside `data` ({why})"))?;
     Ok(Finished {
         data,
-        summary: args["summary"].as_str().unwrap_or("").to_string(),
-        achieved: args["achieved"].as_bool().unwrap_or(true),
+        summary: summary
+            .as_ref()
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        achieved,
     })
+}
+
+/// Whether `data` matches `schema`, or every way it does not.
+fn check(schema: &Value, data: &Value) -> Result<(), String> {
+    let mut problems = vec![];
+    violations(schema, data, "data", &mut problems);
+    match problems.is_empty() {
+        true => Ok(()),
+        false => Err(problems.join("; ")),
+    }
 }
 
 /// Where `value` breaks `schema`: type, required properties, enum, items, nested objects.

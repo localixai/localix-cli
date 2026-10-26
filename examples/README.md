@@ -14,7 +14,7 @@ else it needs, if anything, and what to change to make it yours: the model, the 
 | [triage.yml](github/triage.yml) | an issue opens | picks a kind and a priority among the repository's own labels with `llx decide`, and adds them | two labels of each: GitHub's default labels give the kinds; create `P1`, `P2`, `P3` |
 | [ci-failure.yml](github/ci-failure.yml) | the tests fail on a pull request | reads the failed log, finds the cause in the code, says whether it is flaky; one comment it updates, and one rerun of the failed jobs when flaky | your tests workflow's `name:` on the line marked in the file |
 | [describe.yml](github/describe.yml) | a pull request opens | writes a summary, each change, the risk and the testing below the author's text, in a block it replaces | |
-| [release.yml](github/release.yml) | run by hand | picks the version bump and writes the notes in one answer; drafts a release a person publishes | tags like `v1.2.3` |
+| [release.yml](github/release.yml) | run by hand | picks the version bump and writes the notes in one answer; drafts a release a person publishes | tags like `v1.2.3`; with none, the first draft is `v0.1.0` |
 | [audit.yml](github/audit.yml) | weekly, or by hand | explores the repository, runs its tests and linters, and opens or updates one issue labeled `llx-audit` when it finds something worth a maintainer's time | |
 
 ## How they are built
@@ -35,11 +35,12 @@ workflow, where you can read it, and so is what gets posted.
   throwaway and the job has no token that can write, so it changes nothing it can commit.
   `llx.yml` allows edits and denies `git commit` and `git push`; its patch goes to the posting
   job, which refuses a change to `.github/`.
-- **The key.** llx removes the provider key from the variables the commands it runs get, but a
-  command can still read it from another process of the job, such as the step's own shell, and a
-  hosted runner gives passwordless `sudo`. With `bash` allowed, assume the key can leak: use a
-  key made for CI, with a spend limit (an OpenRouter key can have one). Where the input is from
-  strangers, name what the agent may run (`allow: bash(gh pr view *)`).
+- **The key.** llx removes the provider key from the variables the commands it runs get. While
+  the agent runs, llx is the only process of the step that holds it (the action runs llx in place
+  of the step's shell), and on Linux llx cannot be read through `/proc` by a process without
+  root. But a hosted runner gives passwordless `sudo`, so with `bash` allowed, assume the key can
+  leak: use a key made for CI, with a spend limit (an OpenRouter key can have one). Where the
+  input is from strangers, name what the agent may run (`allow: bash(gh pr view *)`).
 - **Who can trigger it.** `llx.yml` answers only owners, members and collaborators. Pull
   requests from forks are skipped: they get no secrets, and their code would run next to the
   key. No workflow uses `pull_request_target`.
@@ -51,9 +52,9 @@ workflow, where you can read it, and so is what gets posted.
 
 ## Notes
 
-- A push or a pull request made with the workflow's token (`llx.yml`) starts no other workflow,
-  so your tests do not run on llx's change until someone pushes to it, or the posting job uses a
-  GitHub App's token.
+- The workflows that a push or a pull request made with the workflow's token (`llx.yml`) starts
+  wait for a person to approve them: your tests run on llx's change once someone does, or at
+  once when the posting job uses a GitHub App's token.
 - A workflow started by a review comment runs the version of the file on the pull request's
   merge ref: a fix on `main` reaches an open pull request once `main` is merged into it.
 - `gh pr view --comments` needs `checks: read`; the prompts use

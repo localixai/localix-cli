@@ -18,5 +18,7 @@ mod repo;
 mod rules;
 mod sessions;
 mod sign_in;
+#[cfg(unix)]
+mod startup;
 mod tui;
 mod usage;

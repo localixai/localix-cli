@@ -84,9 +84,9 @@ every new file already goes where its target crate will be.
 
 ## Core rules (the agent and the hands)
 
-- **C1**: the core decides, the shell acts. Effects leave the core through a port (`Chat`,
-  `Tool`, `Gate`, `Person`, `View`, `Inbox`, `History`); the core opens no file, socket or
-  process and reads no environment variable.
+- **C1** _checked_ on the sources: the core decides, the shell acts. Effects leave the core
+  through a port (`Chat`, `Tool`, `Gate`, `Person`, `View`, `Inbox`, `History`); the core opens
+  no file, socket or process and reads no environment variable.
 - **C2**: time and limits come in as values (a budget, a deadline, a strategy); a test sets them.
 - **C3**: strategies, not special cases. What may be done another way is a trait with an
   implementation the app chooses: `history::Strategy` and its `Stage`s, the inbox, the gate, the
@@ -215,8 +215,8 @@ every new file already goes where its target crate will be.
 - **R7**: a check and the act that depends on it are one critical section or one atomic
   operation; two locks are always taken in one order, and a mutex is never locked twice on a
   thread.
-- **R8**: every thread is named and started with `thread::Builder` (its failure an error, not a
-  panic: _checked_), and is joined, or owned by what stops it.
+- **R8**: every thread is named (_checked_) and started with `thread::Builder` (its failure an
+  error, not a panic: _checked_), and is joined, or owned by what stops it.
 - **R9**: wait on events, not on time: a `Condvar`, `recv_timeout`, a deadline. A `sleep` is a
   backoff, and says so where it is (_checked_).
 - **R10** _checked_: a child process always has a deadline and a way to be stopped. (Debt: the
@@ -245,11 +245,13 @@ every new file already goes where its target crate will be.
     implicit `Arc` clone.
 
   Tests may unwrap, panic and print (`clippy.toml`); an integration-test crate says so once, at
-  its root.
+  its root. The `allow`s in working code are counted, and the count only falls: a new one raises
+  it in `code.rs` in the same commit, where a review sees it (_checked_).
 - **S5** _checked_: `unsafe` lives only where the OS is called: `tools` and the apps. The
   vocabulary, the core, the stores and the providers have none.
-- **S6**: one idea per file, named for it; a file's `//!` says what it is. A directory module
-  (`shell/`, `browser/`) groups the files of one tool or one subsystem.
+- **S6**: one idea per file, named for it; a file's `//!` says what it is (_checked_: every
+  working file opens with one). A directory module (`shell/`, `browser/`) groups the files of
+  one tool or one subsystem.
 - **S7**: comments say why; rustfmt defaults; English only (_checked_).
 - **S8**: TDD: a bug's test fails first at the layer a person meets it; a feature's tests are
   written from what a person does and sees. A test that cannot fail is deleted.
@@ -300,6 +302,7 @@ every new file already goes where its target crate will be.
 ## Budgets
 
 - 50,000 lines of working code (S2), 300 per file (S1).
-- The release binary under 5 MiB (CI; raised from 3 MiB by the owner for the daemon and a release
-  that unwinds a panic, W8); a bundled data file counts.
+- The release binary under 5 MiB (CI: `scripts/check --only size`, which warns past 4 MB; raised
+  from 3 MiB by the owner for the daemon and a release that unwinds a panic, W8); a bundled data
+  file counts.
 - Line coverage at least 85% (`scripts/coverage.sh`), raised with coverage, never lowered.

@@ -60,8 +60,11 @@ fn main() {
                 "models": models}),
         );
     }
-    let out = Path::new(&std::env::var("OUT_DIR").unwrap()).join("catalog.json");
-    fs::write(out, Value::Object(providers).to_string()).unwrap();
+    // Deflated: 200 KB of JSON is 14 KB in the binary, inflated only by a run that reads it.
+    let document = Value::Object(providers).to_string();
+    let packed = miniz_oxide::deflate::compress_to_vec(document.as_bytes(), 10);
+    let out = Path::new(&std::env::var("OUT_DIR").unwrap()).join("catalog.json.deflate");
+    fs::write(out, packed).unwrap();
 }
 
 /// A provider model file, resolved.

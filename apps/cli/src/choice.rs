@@ -115,9 +115,11 @@ pub(crate) fn resolve(
         None => match &saved {
             Some(saved) => saved.provider.clone(),
             None => {
+                // The rest of the catalog is listed only when neither is signed in to.
+                let rest = std::iter::once_with(Provider::all).flatten();
                 let first = [Provider::openrouter(), Provider::openai()];
-                let first = first.into_iter().chain(Provider::all());
-                let signed = first.into_iter().find(|p| p.signed_in_by(vars).is_some());
+                let mut first = first.into_iter().chain(rest);
+                let signed = first.find(|p| p.signed_in_by(vars).is_some());
                 signed.unwrap_or_else(Provider::openrouter)
             }
         },

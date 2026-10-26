@@ -24,13 +24,14 @@ fn paths(app: App) -> Option<(PathBuf, PathBuf)> {
     ))
 }
 
-/// The catalog: the built-in one, under the last fetched one when there is one.
+/// The catalog: the built-in one, under the last fetched one when there is one (and read only
+/// for a provider that one lacks).
 pub fn load(app: App) -> Catalog {
     let fetched = paths(app)
         .and_then(|(cache, _)| store::read(&cache))
         .and_then(|text| Catalog::parse(&text).ok());
     match fetched {
-        Some(fetched) => Catalog::built_in().over(fetched),
+        Some(fetched) => fetched.over_built_in(),
         None => Catalog::built_in(),
     }
 }

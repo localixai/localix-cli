@@ -20,11 +20,13 @@ pub fn path(app: App, name: &str) -> Option<PathBuf> {
     dir(app).map(|dir| dir.join(name))
 }
 
-/// The file's text, trimmed; `None` when it is missing or empty.
+/// The file's text, trimmed; `None` when it is missing or empty. Trimmed in place: a file of
+/// megabytes (the model catalog) is not held twice.
 pub fn read(path: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(path).ok()?;
-    let text = text.trim();
-    (!text.is_empty()).then(|| text.to_string())
+    let mut text = std::fs::read_to_string(path).ok()?;
+    text.truncate(text.trim_end().len());
+    text.drain(..text.len() - text.trim_start().len());
+    (!text.is_empty()).then_some(text)
 }
 
 /// Write `text` to `path`, readable by the person alone: whole or not at all, through a new file

@@ -1,9 +1,10 @@
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
 use contracts::catalog::{Effort, ModelEntry, Selection};
 use contracts::chat::{Chat, Message, Request};
+use provider_kit::http::Reply;
 use serde_json::json;
 
 use super::*;
@@ -14,73 +15,66 @@ const APP: crate::App = crate::App {
     version: "0",
 };
 
-/// A server on 127.0.0.1 that answers each request with the next of `replies` (status, body),
-/// or never when they run out; it keeps every request body, and counts the connections.
-#[allow(
-    clippy::disallowed_methods,
-    reason = "a test's server: a connection held open says nothing for 30 s, longer than any timeout tested"
-)]
-fn serve(replies: Vec<(u16, &'static str)>) -> (String, Arc<Mutex<Vec<Value>>>) {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    let seen = Arc::new(Mutex::new(vec![]));
-    let kept = Arc::clone(&seen);
-    let server = std::thread::Builder::new().name("llx-test-server".into());
-    server.spawn(move || {
-        let mut replies = replies.into_iter();
-        for stream in listener.incoming().flatten() {
-            let mut reader = BufReader::new(stream.try_clone().unwrap());
-            let mut length = 0;
-            loop {
-                let mut line = String::new();
-                if reader.read_line(&mut line).unwrap_or(0) == 0 || line.trim().is_empty() {
-                    break;
-                }
-                if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
-                    length = value.trim().parse().unwrap_or(0);
-                }
-            }
-            let mut body = vec![0; length];
-            let _ = reader.read_exact(&mut body);
-            kept.lock()
-                .unwrap()
-                .push(serde_json::from_slice(&body).unwrap_or(Value::Null));
-            let Some((status, text)) = replies.next() else {
-                // Hold the connection open and say nothing.
-                let holder = std::thread::Builder::new().name("llx-test-silent".into());
-                holder
-                    .spawn(move || {
-                        let _keep = stream;
-                        std::thread::sleep(Duration::from_secs(30));
-                    })
-                    .unwrap();
-                continue;
-            };
-            let mut stream = stream;
-            let _ = write!(
-                stream,
-                "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
-                text.len()
-            );
-        }
-    })
-    .unwrap();
-    (base, seen)
+/// An `Http` that gives each request the next of its answers (a reply, or why none came), and
+/// keeps every request body.
+struct Scripted {
+    answers: Mutex<Vec<Result<Reply, HttpError>>>,
+    sent: Arc<Mutex<Vec<Value>>>,
+}
+
+impl Http for Scripted {
+    #[allow(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
+    fn post(&self, _: &str, _: &[(&str, &str)], body: &str) -> Result<Reply, HttpError> {
+        let body = serde_json::from_str(body).unwrap_or(Value::Null);
+        self.sent.lock().unwrap().push(body);
+        let next = self.answers.lock().unwrap().pop();
+        next.unwrap_or_else(|| Err(HttpError::Unanswered("nothing scripted".into())))
+    }
+}
+
+/// `client` on a scripted `Http` answering `answers` in order; the bodies it was sent.
+fn scripted(
+    client: OpenRouter,
+    answers: Vec<Result<(u16, &str), HttpError>>,
+) -> (OpenRouter, Arc<Mutex<Vec<Value>>>) {
+    let answers = (answers.into_iter().rev())
+        .map(|answer| {
+            answer.map(|(status, body)| Reply {
+                status,
+                body: body.into(),
+            })
+        })
+        .collect();
+    let sent = Arc::new(Mutex::new(vec![]));
+    let http = Scripted {
+        answers: Mutex::new(answers),
+        sent: Arc::clone(&sent),
+    };
+    let client = OpenRouter {
+        http: Box::new(http),
+        ..client
+    };
+    (client, sent)
+}
+
+fn lab() -> OpenRouter {
+    OpenRouter::at("http://lab.test", "k".into(), APP, "Lab")
 }
 
 #[test]
 fn an_overloaded_answer_is_retried_and_a_refused_key_is_not() {
-    let (base, seen) = serve(vec![(503, "{}"), (200, r#"{"ok":1}"#)]);
-    let client = OpenRouter::at(&base, "k".into(), APP, "Lab");
+    let (client, sent) = scripted(lab(), vec![Ok((503, "{}")), Ok((200, r#"{"ok":1}"#))]);
     assert_eq!(client.post("/x", &json!({})).unwrap().0, json!({"ok": 1}));
-    assert_eq!(seen.lock().unwrap().len(), 2);
+    assert_eq!(sent.lock().unwrap().len(), 2);
 
-    let (base, seen) = serve(vec![(401, r#"{"error":{"message":"User not found."}}"#)]);
-    let error = OpenRouter::at(&base, "k".into(), APP, "Lab")
-        .post("/x", &json!({}))
-        .unwrap_err();
+    let refused = r#"{"error":{"message":"User not found."}}"#;
+    let (client, sent) = scripted(lab(), vec![Ok((401, refused))]);
+    let error = client.post("/x", &json!({})).unwrap_err();
     assert_eq!(error, ApiError::Auth("User not found.".into()));
-    assert_eq!(seen.lock().unwrap().len(), 1);
+    assert_eq!(sent.lock().unwrap().len(), 1);
     assert_eq!(
         format!("Lab {error}"),
         "Lab refused the key: User not found.; type /login, or check the key's variable"
@@ -88,25 +82,39 @@ fn an_overloaded_answer_is_retried_and_a_refused_key_is_not() {
 }
 
 #[test]
-fn a_request_that_times_out_is_not_sent_again() {
+fn a_request_sent_and_not_answered_is_not_sent_again_and_one_not_sent_is() {
     // A reply being written is billed: sending it again pays for it twice.
-    let (base, seen) = serve(vec![]);
-    let client = OpenRouter {
-        agent: provider_kit::http::agent(APP, Duration::from_millis(500)),
-        ..OpenRouter::at(&base, "k".into(), APP, "Lab")
-    };
+    let unanswered = HttpError::Unanswered("timed out".into());
+    let (client, sent) = scripted(lab(), vec![Err(unanswered)]);
+    let error = client.post("/x", &json!({})).unwrap_err();
+    assert_eq!(error, ApiError::Network("timed out".into()));
+    assert_eq!(sent.lock().unwrap().len(), 1, "sent once");
+    let unsent = HttpError::Unsent("connection refused".into());
+    let (client, sent) = scripted(lab(), vec![Err(unsent), Ok((200, "{}"))]);
+    assert_eq!(client.post("/x", &json!({})).unwrap().0, json!({}));
+    assert_eq!(sent.lock().unwrap().len(), 2, "sent again");
+}
+
+#[test]
+fn a_decision_not_answered_is_asked_once_more() {
+    // A decision is short and cheap: one that hangs is better asked again than waited on.
+    let deciding = OpenRouter::deciding("k".into(), APP);
+    assert!(deciding.is_openrouter());
+    let unanswered = || Err(HttpError::Unanswered("timed out".into()));
+    let (client, sent) = scripted(deciding, vec![unanswered(), unanswered(), unanswered()]);
     let error = client.post("/x", &json!({})).unwrap_err();
     assert!(matches!(error, ApiError::Network(_)), "{error:?}");
-    assert_eq!(seen.lock().unwrap().len(), 1, "sent once");
+    assert_eq!(sent.lock().unwrap().len(), 2, "sent twice, not more");
 }
 
 #[test]
 fn openrouter_at_another_address_is_still_sent_openrouters_fields() {
-    // The test servers stand in for OpenRouter at a local address: they must see its wire.
-    let (base, seen) = serve(vec![(200, r#"{"choices":[{"message":{"content":"hi"}}]}"#)]);
-    let client = OpenRouter::openrouter_at(Some(base.clone()), "k".into(), APP);
-    assert!(client.is_openrouter());
-    assert!(!OpenRouter::at(&base, "k".into(), APP, "Lab").is_openrouter());
+    // A server standing in for OpenRouter at a local address must see its wire.
+    let reply = r#"{"choices":[{"message":{"content":"hi"}}]}"#;
+    let local = OpenRouter::openrouter_at(Some("http://127.0.0.1:1".into()), "k".into(), APP);
+    assert!(local.is_openrouter());
+    assert!(!lab().is_openrouter());
+    let (client, sent) = scripted(local, vec![Ok((200, reply))]);
     let model = ModelEntry {
         id: "lab/model".into(),
         name: "Model".into(),
@@ -125,25 +133,38 @@ fn openrouter_at_another_address_is_still_sent_openrouters_fields() {
         may_call: true,
     };
     assert_eq!(chat.complete(request).unwrap().text.as_deref(), Some("hi"));
-    let sent = seen.lock().unwrap()[0].clone();
+    let sent = sent.lock().unwrap()[0].clone();
     assert_eq!(sent["reasoning"], json!({"effort": "high"}));
     assert_eq!(sent["usage"], json!({"include": true}));
 }
 
+/// A server whose one answer promises 100 bytes, sends a few, and closes the connection.
+fn cut_short() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::Builder::new().name("llx-test-cut".into());
+    server
+        .spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            while reader.read_line(&mut line).unwrap_or(0) > 2 {
+                line.clear();
+            }
+            let mut stream = stream;
+            let head = "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 100";
+            let _ = write!(stream, "{head}\r\n\r\n{{\"choices\"");
+        })
+        .unwrap();
+    base
+}
+
 #[test]
-fn a_decision_is_quick_and_one_that_times_out_is_asked_once_more() {
-    // A decision is short and cheap: one that hangs is better asked again than waited on.
-    let deciding = OpenRouter::deciding("k".into(), APP);
-    let global = deciding.agent.config().timeouts().global;
-    assert_eq!(global, Some(Duration::from_secs(90)));
-    assert!(deciding.is_openrouter());
-    let (base, seen) = serve(vec![]);
-    let client = OpenRouter {
-        agent: provider_kit::http::agent(APP, Duration::from_millis(300)),
-        base,
-        ..deciding
-    };
+fn an_answer_cut_short_is_said_so_not_taken_for_one_that_is_not_json() {
+    let client = OpenRouter::at(&cut_short(), "k".into(), APP, "Lab");
     let error = client.post("/x", &json!({})).unwrap_err();
-    assert!(matches!(error, ApiError::Network(_)), "{error:?}");
-    assert_eq!(seen.lock().unwrap().len(), 2, "sent twice, not more");
+    let ApiError::Network(why) = &error else {
+        panic!("{error:?}");
+    };
+    assert!(why.contains("answer"), "{why}");
 }

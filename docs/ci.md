@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -83,7 +83,8 @@ One of `prompt` and `prompt-file` is needed. The rest are optional.
 | `timeout` | 900 | Seconds. Always passed, so a run always has a deadline. |
 | `working-directory` | the workspace | Where the agent works. |
 | `version` | the action's own | The llx release to install. `system` uses the `llx` already on the PATH, for a self-hosted runner that builds it. |
-| `args` | | More arguments for `llx exec`, split on spaces. They come from the workflow, so they are trusted. |
+| `args` | | More arguments for `llx exec`, split on blanks and lines. They come from the workflow, so they are trusted. |
+| `install-only` | | `true` installs llx, puts it on the PATH and runs nothing, for a step of your own (`llx decide`). The outputs stay empty. |
 
 ### Outputs
 
@@ -125,7 +126,7 @@ jobs:
     outputs:
       result: ${{ steps.llx.outputs.result }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -287,7 +288,7 @@ Three details matter on a runner:
 
 - **The split is the boundary.** The model's job has a token that can only read, and no way to write. The posting job has the write token, no model key, and runs nothing from the pull request.
 - **`--allow bash --deny edit` refuses the `edit` tool, not writes.** A command can still write a file. In CI the checkout is throwaway, so the agent changes nothing it can commit: the job has no token that can write.
-- **The key can leak.** llx removes the provider's key from the variables a command gets, but a command can read it from `/proc/<llx pid>/environ`. On Linux llx marks itself non-dumpable, which stops that for a user without root; a hosted runner gives passwordless `sudo`. With bash allowed on input from strangers, assume the key can leak: use a dedicated key with a spend limit, and narrow rules (`bash(gh pr view *)`).
+- **The key can leak.** llx removes the provider's key from the variables a command gets, but a command can read it from `/proc/<llx pid>/environ`. On Linux llx marks itself non-dumpable, which stops that for a user without root, and the action runs llx in place of its step's shell, so no other process of the step holds the key while the agent works. A hosted runner gives passwordless `sudo`, which reads anything. With bash allowed on input from strangers, assume the key can leak: use a dedicated key with a spend limit, and narrow rules (`bash(gh pr view *)`).
 - **Instruction files come from the checkout.** `AGENTS.md` and `CLAUDE.md` are read from the working tree, and on a pull request the PR controls them. The token is read-only, so the worst case is a bad answer or a leaked key.
 - **Event values go through `env:`**, named in the prompt (`$PR`). Never paste `${{ }}` into a script or a prompt: a title is text anyone can write. Text written by others is data, and the prompt says so.
 - **The posting job never runs code from the pull request.** It checks out nothing, or the base.
@@ -351,7 +352,7 @@ llx-post:
 
 - **A workflow triggered by a review comment runs from the pull request's merge ref.** `pull_request_review_comment` takes the workflow file from there, so a workflow you fixed on `main` is not the one that runs on an open pull request until `main` is merged into it. A comment on the conversation tab (`issue_comment`) runs the workflow from the default branch.
 - **`gh pr view --comments` needs `checks: read`.** Prefer `gh pr view "$PR" --json title,body,comments,reviews`, which does not ask for it.
-- **Checks on a pull request opened with `github.token` wait for approval.** A GitHub App token runs them at once. Opening a pull request from a workflow also needs "Allow GitHub Actions to create and approve pull requests" in the repository's Actions settings.
+- **Runs started by `github.token` wait for approval.** A push or a pull request made with the workflow's own token starts its workflows as "action required", waiting for someone with write access to approve them. A GitHub App token runs them at once. Opening a pull request from a workflow also needs "Allow GitHub Actions to create and approve pull requests" in the repository's Actions settings.
 - **Triage needs the labels.** [triage.yml](../examples/github/triage.yml) picks from the repository's own labels, at least two of each kind, and skips with a notice when they are missing.
 - **The CI-failure workflow names the tests workflow.** [ci-failure.yml](../examples/github/ci-failure.yml) starts on `workflow_run` of one workflow by its `name:`. Edit that one line to yours.
 - **A prompt is not a script.** The action replaces `$NAME` for variables that are set and nothing else, so `$(gh pr view ...)` stays as text. Let the agent run the command: say in the prompt which one.

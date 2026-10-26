@@ -158,7 +158,7 @@ jobs:
     outputs:
       result: ${{ steps.llx.outputs.result }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0, persist-credentials: false }
       - uses: rsaryev/llx@v0
         id: llx

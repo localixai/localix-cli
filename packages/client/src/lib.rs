@@ -84,7 +84,10 @@ impl Client {
                                 let _ = reply.send(done);
                             }
                         }
-                        frame => deliver(frame),
+                        frame @ (ToClient::Event { .. }
+                        | ToClient::Gap
+                        | ToClient::Ask { .. }
+                        | ToClient::Resolved { .. }) => deliver(frame),
                     }
                 }
                 // The server is gone: what waits for it ends now, and what is sent later too.
@@ -166,7 +169,14 @@ impl Begun {
         };
         match done {
             Done::Failed { why } => Err(CallError::Failed(why)),
-            done => Ok(done),
+            done @ (Done::Ok
+            | Done::Initialized { .. }
+            | Done::Interrupted { .. }
+            | Done::Work { .. }
+            | Done::Attached { .. }
+            | Done::Status { .. }
+            | Done::Tools { .. }
+            | Done::Tool { .. }) => Ok(done),
         }
     }
 }

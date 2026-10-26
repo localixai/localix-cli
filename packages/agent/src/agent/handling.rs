@@ -5,7 +5,7 @@ use contracts::chat::ToolCall;
 use contracts::tool::{ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
-use super::{Agent, MAX_FIXES, RETURNED, Run, Status, Tally};
+use super::{Agent, MAX_FIXES, RETURNED, Run, Status, Tally, Went};
 use crate::calls::{self, Outcome};
 use crate::schema;
 
@@ -22,7 +22,7 @@ impl Agent<'_> {
             |call: &ToolCall| call.name != schema::TOOL && calls::parallel(self.tools, specs, call);
         let mut ends = false;
         let mut start = 0;
-        (tally.failed, tally.succeeded) = (false, false);
+        tally.turn = Went::Nothing;
         while start < calls.len() && !ends {
             let end = calls::batch_end(calls, start, parallel);
             if end - start == 1 {
@@ -36,10 +36,10 @@ impl Agent<'_> {
             }
             start = end;
         }
-        if tally.succeeded {
-            tally.failures = 0;
-        } else if tally.failed {
-            tally.failures += 1;
+        match tally.turn {
+            Went::Succeeded => tally.failures = 0,
+            Went::Failed => tally.failures += 1,
+            Went::Nothing => {}
         }
         run.conversation.settle();
         ends
@@ -68,8 +68,8 @@ impl Agent<'_> {
     /// Count `outcome` and answer `call` with it; whether the run ends with it.
     fn record(call: &ToolCall, outcome: Outcome, run: &mut Run, tally: &mut Tally) -> bool {
         match &outcome {
-            Ok(_) => tally.succeeded = true,
-            Err(ToolError::Failed(_)) => tally.failed = true,
+            Ok(_) => tally.turn = Went::Succeeded,
+            Err(ToolError::Failed(_)) => tally.turn = tally.turn.max(Went::Failed),
             Err(ToolError::Fatal(why)) => run.status = Status::Error(why.clone()),
         }
         let ends = matches!(outcome, Err(ToolError::Fatal(_)));

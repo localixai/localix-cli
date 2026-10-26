@@ -94,10 +94,10 @@ impl Provider {
             .collect()
     }
 
-    /// The provider `id` names, when the catalog lists it.
+    /// The provider `id` names, when the catalog lists it (and no other is looked at).
     pub(crate) fn named(id: &str) -> Option<Self> {
         let id = id.trim().to_ascii_lowercase();
-        catalog().ids().contains(&id.as_str()).then_some(Self(id))
+        catalog().callable(&id).then_some(Self(id))
     }
 
     pub(crate) fn id(&self) -> &str {
@@ -108,7 +108,7 @@ impl Provider {
     pub(crate) fn name(&self) -> String {
         catalog()
             .provider(&self.0)
-            .map_or_else(|| self.0.clone(), |p| p.name.clone())
+            .map_or_else(|| self.0.clone(), |p| p.name().to_string())
     }
 
     /// How it is signed in to, where that is not just a key: said where the provider is picked.
@@ -125,18 +125,27 @@ impl Provider {
     }
 
     /// The models it is called with: over the ChatGPT backend with a ChatGPT sign-in, else over
-    /// chat completions (unit tests read no sign-in: the same on every machine).
+    /// chat completions.
     pub(crate) fn models(&self) -> Vec<ModelEntry> {
-        let chatgpt = self.0 == "openai" && !cfg!(test) && openai::tokens::load(APP).is_some();
-        self.served(chatgpt)
+        self.served(self.chatgpt())
+    }
+
+    /// Whether it is called over the ChatGPT backend: OpenAI with a ChatGPT sign-in (unit tests
+    /// read no sign-in: the same on every machine).
+    fn chatgpt(&self) -> bool {
+        self.0 == "openai" && !cfg!(test) && openai::tokens::load(APP).is_some()
     }
 
     /// Its models over the ChatGPT backend (`chatgpt`, the Responses API), else over chat
     /// completions.
     pub(crate) fn served(&self, chatgpt: bool) -> Vec<ModelEntry> {
+        catalog().served(&self.0, self.protocol(chatgpt))
+    }
+
+    fn protocol(&self, chatgpt: bool) -> &'static str {
         match chatgpt && self.0 == "openai" {
-            true => catalog().served(&self.0, RESPONSES),
-            false => catalog().models(&self.0),
+            true => RESPONSES,
+            false => CHAT_COMPLETIONS,
         }
     }
 
@@ -153,12 +162,14 @@ impl Provider {
 
     /// llx's default where it has one and the catalog lists it, else the newest model.
     pub(crate) fn default_model(&self) -> String {
-        let models = self.models();
+        let protocol = self.protocol(self.chatgpt());
         let stated = DEFAULTS.iter().find(|(p, _)| *p == self.0).map(|(_, m)| *m);
-        match stated.filter(|id| models.iter().any(|m| m.id == *id)) {
-            Some(id) => id.to_string(),
-            None => models.first().map_or_else(String::new, |m| m.id.clone()),
+        // The stated model alone is decoded; every one only when it is not served, for the newest.
+        if let Some(id) = stated.filter(|id| catalog().serves(&self.0, id, protocol)) {
+            return id.to_string();
         }
+        let models = catalog().served(&self.0, protocol);
+        models.first().map_or_else(String::new, |m| m.id.clone())
     }
 
     /// Where the sign-in comes from, in words with no secret in them; `None` when signed out.
@@ -179,28 +190,13 @@ impl Provider {
     /// The key and where it comes from: its variable (as the catalog names them) in `vars`, else
     /// the one saved for llx.
     pub(crate) fn key_in(&self, vars: Vars) -> Option<(String, String)> {
-        if let Some((name, key)) = self.variables().into_iter().find_map(|name| {
-            let key = var(vars, &name).filter(|k| !k.trim().is_empty())?;
-            Some((name, key.trim().to_string()))
-        }) {
-            return Some((key, name));
-        }
-        let path = self.key_path()?;
-        let key = provider_kit::store::read(&path)?;
-        Some((key, format!("the key in {}", path.display())))
+        key_from(&self.variables(), vars, self.key_path())
     }
 
     /// What a run that is not signed in says: a session's /login, or the variable its key is
     /// read from.
     pub(crate) fn how_to_sign_in(&self) -> String {
-        let login = format!(
-            "not signed in to {}: open a session (`llx`) and type /login",
-            self.name()
-        );
-        match self.variables().first() {
-            Some(variable) => format!("{login}, or set {variable}"),
-            None => login,
-        }
+        sign_in_words(&self.name(), self.variables().first().map(String::as_str))
     }
 
     /// Whether the key comes from the environment, which no saved one replaces.
@@ -222,7 +218,7 @@ impl Provider {
     fn variables(&self) -> Vec<String> {
         catalog()
             .provider(&self.0)
-            .map_or_else(Vec::new, |p| p.env.clone())
+            .map_or_else(Vec::new, |p| p.env().to_vec())
     }
 
     /// Where its pasted key is kept (OpenRouter's where it always was).
@@ -282,10 +278,10 @@ impl Provider {
                 let address = model
                     .and_then(|m| m.address(CHAT_COMPLETIONS))
                     .or_else(|| {
-                        let first = catalog.provider(id)?.models.values();
-                        first.filter_map(|m| m.address(CHAT_COMPLETIONS)).next()
+                        let mut models = catalog.provider(id)?.models();
+                        models.find_map(|(_, m)| m.address(CHAT_COMPLETIONS))
                     })?;
-                let name = catalog.provider(id).map_or(id, |p| p.name.as_str());
+                let name = catalog.provider(id).map_or(id, |p| p.name());
                 openrouter::client::OpenRouter::at(address, key, APP, name)
             }
         };
@@ -334,14 +330,45 @@ pub(crate) fn decider(model: &str) -> Option<Box<dyn Decider>> {
     decider_in(model, None)
 }
 
-/// [`decider`], OpenRouter's key read in `vars`.
+/// [`decider`], OpenRouter's key read in `vars`: its variable as its package names it, not as
+/// the catalog does, so that `llx decide` reads no catalog (A4: the fact is the package's).
 pub(crate) fn decider_in(model: &str, vars: Vars) -> Option<Box<dyn Decider>> {
-    let (key, _) = Provider::openrouter().key_in(vars)?;
+    let names = [openrouter::auth::KEY_VARIABLE.to_string()];
+    let (key, _) = key_from(&names, vars, Provider::openrouter().key_path())?;
     let client = openrouter::client::OpenRouter::deciding(key, APP);
     Some(Box::new(openrouter::system_one::SystemOne {
         client,
         model: model.to_string(),
     }))
+}
+
+/// What `llx decide` says with no key for the decision model, read off no catalog.
+pub(crate) fn how_to_decide() -> String {
+    sign_in_words(openrouter::NAME, Some(openrouter::auth::KEY_VARIABLE))
+}
+
+/// The first of `names` set in `vars`, trimmed, and its name; else the key saved at `saved`, and
+/// where it is.
+fn key_from(names: &[String], vars: Vars, saved: Option<PathBuf>) -> Option<(String, String)> {
+    let set = names.iter().find_map(|name| {
+        let key = var(vars, name).filter(|k| !k.trim().is_empty())?;
+        Some((key.trim().to_string(), name.clone()))
+    });
+    if set.is_some() {
+        return set;
+    }
+    let path = saved?;
+    let key = provider_kit::store::read(&path)?;
+    Some((key, format!("the key in {}", path.display())))
+}
+
+/// Not signed in to `name`: a session's /login, or the `variable` its key is read from.
+fn sign_in_words(name: &str, variable: Option<&str>) -> String {
+    let login = format!("not signed in to {name}: open a session (`llx`) and type /login");
+    match variable {
+        Some(variable) => format!("{login}, or set {variable}"),
+        None => login,
+    }
 }
 
 /// Ask models.dev for a newer catalog, at most once a day, on a thread of its own: the next

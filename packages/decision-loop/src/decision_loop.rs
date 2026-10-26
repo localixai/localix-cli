@@ -4,6 +4,8 @@
 //! history, until the model says DONE or BLOCKED, the action budget is spent, or runs keep
 //! stopping without changing the view.
 
+use std::time::Duration;
+
 use contracts::hands::{Hands, Outcome, Report, Task};
 use contracts::model::Decider;
 use contracts::view::View;
@@ -19,6 +21,8 @@ const MAX_STALLS: usize = 2;
 pub struct DecisionLoop<'a> {
     pub decider: &'a dyn Decider,
     pub on_step: &'a (dyn Fn(&GoalStep) + Sync),
+    /// Waits before a view is looked at again ([`GoalRun::pause`]).
+    pub pause: &'a (dyn Fn(Duration) + Sync),
     /// Actions for one task.
     pub max_actions: usize,
 }
@@ -42,6 +46,7 @@ impl DecisionLoop<'_> {
                 view,
                 decider: self.decider,
                 on_step: self.on_step,
+                pause: self.pause,
                 max_actions: SEGMENT.min(left),
             }
             .resume(goal, values, steps);

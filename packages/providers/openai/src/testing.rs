@@ -3,7 +3,7 @@
 
 use std::sync::Mutex;
 
-use provider_kit::http::{Http, Reply};
+use provider_kit::http::{Http, HttpError, Reply};
 use serde_json::{Value, json};
 
 /// A JWT with `claims` (the signature is not checked by the reader).
@@ -65,7 +65,12 @@ impl Http for Scripted {
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
-    fn post(&self, address: &str, headers: &[(&str, &str)], body: &str) -> Result<Reply, String> {
+    fn post(
+        &self,
+        address: &str,
+        headers: &[(&str, &str)],
+        body: &str,
+    ) -> Result<Reply, HttpError> {
         self.sent.lock().unwrap().push(Sent {
             address: address.into(),
             headers: headers
@@ -74,10 +79,7 @@ impl Http for Scripted {
                 .collect(),
             body: body.into(),
         });
-        self.replies
-            .lock()
-            .unwrap()
-            .pop()
-            .ok_or_else(|| "no reply scripted".into())
+        let next = self.replies.lock().unwrap().pop();
+        next.ok_or_else(|| HttpError::Unsent("no reply scripted".into()))
     }
 }

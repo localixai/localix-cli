@@ -1830,6 +1830,7 @@ name = "models"
 version = "0.2.0"
 dependencies = [
  "contracts",
+ "miniz_oxide",
  "provider-kit",
  "serde",
  "serde_json",
@@ -2204,7 +2205,6 @@ dependencies = [
  "contracts",
  "provider-kit",
  "serde_json",
- "ureq",
 ]
 
 [[package]]

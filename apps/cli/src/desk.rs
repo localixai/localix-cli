@@ -222,8 +222,15 @@ impl<'e> Desk<'e> {
         let wake = self.wake.clone();
         // The lane's own interface is the desk's, tagged with its id, as `lane` tags it.
         let tagged = self.ui.for_lane(&id);
-        scope.spawn(move || {
-            let _leaving = Leaving { lanes, id, wake };
+        // Outside the thread: when the OS refuses one, the closure drops it, and the lane leaves.
+        let leaving = Leaving {
+            lanes,
+            id: id.clone(),
+            wake,
+        };
+        let thread = std::thread::Builder::new().name("llx-lane".into());
+        let started = thread.spawn_scoped(scope, move || {
+            let _leaving = leaving;
             let work: Work = Box::new(move |rig| {
                 // `--image` goes with the first lane's first task.
                 if first {
@@ -236,6 +243,11 @@ impl<'e> Desk<'e> {
             });
             start(shared, seat, work)
         });
+        if let Err(why) = started {
+            drop(self.ui.for_lane(&id).ends());
+            let said = format!("llx: session {id} could not start (no thread: {why})");
+            self.ui.send(Event::Error(said));
+        }
     }
 }
 

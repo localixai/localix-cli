@@ -12,7 +12,11 @@ use crate::common::model::{Model, Reply, said};
 /// `exec args…` with `stdin` piped in, run to its end as CI runs it: with no terminal at all (a
 /// session of its own, so not even `/dev/tty` is there to ask on).
 pub(crate) fn exec(home: &Home, model: &Model, args: &[&str], stdin: &str) -> Output {
-    let mut command = home.with_model(model, args);
+    exec_as(home, home.with_model(model, args), stdin)
+}
+
+/// `command` run as [`exec`] runs it.
+fn exec_as(home: &Home, mut command: std::process::Command, stdin: &str) -> Output {
     #[cfg(unix)]
     {
         let lead = || {
@@ -203,4 +207,43 @@ fn the_time_limit_holds_while_the_task_waits_on_a_quiet_monitor() {
     );
     assert_eq!(out.status.code(), Some(2), "{stderr}");
     assert!(stderr.contains("time limit"), "{stderr}");
+}
+
+/// `DECISION_LOOP_DEBUG=1`, for a developer (AGENTS.md): each of the hands' decisions, its state
+/// and its answers, on stderr.
+#[cfg(unix)]
+#[test]
+fn decision_loop_debug_traces_each_decision_on_stderr() {
+    let home = Home::new();
+    let model = Model::start(vec![
+        Reply::call(
+            "window",
+            json!({"action": "open", "kind": "terminal", "command": "echo ready; cat"}),
+        ),
+        Reply::call(
+            "window",
+            json!({"action": "interact", "tab": "t1", "goal": "see that it is ready"}),
+        ),
+        Reply::Decided("DONE".into(), vec![("DONE".into(), 0.95)]),
+        Reply::text("Ready.\nRESULT: achieved"),
+    ]);
+    let mut command = home.with_model(&model, &["exec", "-y", "look"]);
+    command.env("DECISION_LOOP_DEBUG", "1");
+    let out = exec_as(&home, command, "");
+    let stderr = text(&out.stderr);
+    assert_eq!(out.status.code(), Some(0), "{stderr}");
+    let state = stderr
+        .lines()
+        .find(|line| line.starts_with("decision state: {"));
+    assert!(
+        state.is_some_and(|state| state.contains("see that it is ready")),
+        "{stderr}"
+    );
+    let answers = stderr
+        .lines()
+        .find(|line| line.starts_with("decision answers: {"));
+    assert!(
+        answers.is_some_and(|answers| answers.contains("DONE")),
+        "{stderr}"
+    );
 }

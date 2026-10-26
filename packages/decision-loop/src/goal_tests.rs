@@ -1,5 +1,14 @@
 use super::*;
 
+/// The app's pause, as the binary gives it: a test's view has no change event either.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a poll, as the app's: a view has no change event"
+)]
+fn pause(time: Duration) {
+    std::thread::sleep(time);
+}
+
 #[test]
 fn a_loop_is_a_state_seen_again_not_a_repeated_action() {
     // Open search, close it, open it again: the third visit to the same state is a loop.
@@ -131,6 +140,7 @@ mod covered {
             view: &driver,
             decider: &model,
             on_step: &|_| {},
+            pause: &pause,
             max_actions: 5,
         }
         .run("Click Next", &[]);
@@ -189,6 +199,7 @@ mod covered {
             view: &driver,
             decider: &model,
             on_step: &|_| {},
+            pause: &pause,
             max_actions: 5,
         }
         .run("Answer three questions", &[]);

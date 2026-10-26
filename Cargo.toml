@@ -158,6 +158,8 @@ block2 = "0.6"
 objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "WKWebView", "WKWebViewConfiguration"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+# Already in the tree through ureq's gzip: the built-in model catalog, kept deflated.
+miniz_oxide = "0.9.1"
 sha2 = "0.11.1"
 gtk = "0.18"
 tao = "0.37"
@@ -172,4 +174,5 @@ lto = "fat"
 opt-level = "z"
 # A panic unwinds: the daemon serves many terminals, and one command's panic must end only that
 # command (ARCHITECTURE.md W8), not every session in the process.
+panic = "unwind"
 strip = true

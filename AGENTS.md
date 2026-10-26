@@ -66,7 +66,7 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
   - `testing.rs`: test-only: temporary directories, and a gate that records what it is asked.
 - `packages/providers/`: the models' providers, a package each, told who calls them (`App`).
   - `kit/`: what they share, with no port: `http.rs` (`Http`, a POST answered with a status and a body; `Web` on the OS's TLS; forms and queries), `oauth.rs` (PKCE, random state, a pasted redirect, a token's claims, opening the system browser), `loopback.rs` (the sign-in callback on 127.0.0.1: route and `state` checked, `/cancel` to give way), `page.rs` (the browser's success and failure pages), `store.rs` (credential files, 0600), `sse.rs` (server-sent events).
-  - `models/`: the model catalog, the one source of model facts (MODELS.md): `data/` is models.dev's own files for the popular providers (`scripts/models_sync.py` copies them from a clone), `build.rs` resolves them as models.dev does into its v2 shape, `lib.rs` types it (providers, chat and decision models, windows, levels and defaults, cache flags, API addresses), `source.rs` fetches models.dev's v2 API at most once a day (ETag) and keeps it in `<config>/models.json`, over the built-in files.
+  - `models/`: the model catalog, the one source of model facts (MODELS.md): `data/` is models.dev's own files for the popular providers (`scripts/models_sync.py` copies them from a clone), `build.rs` resolves them as models.dev does into its v2 shape (built in deflated, and read only when no fetched catalog has the provider asked for), `lib.rs` types it (providers, chat and decision models, windows, levels and defaults, cache flags, API addresses), `provider.rs` (a provider read as an index of raw JSON, each model decoded the first time it is asked for: a run decodes the few it uses), `source.rs` fetches models.dev's v2 API at most once a day (ETag) and keeps it in `<config>/models.json`, over the built-in files.
   - `openrouter/`: `chat.rs` (chat completions, tool calling; OpenRouter's `reasoning`, cost and prompt-cache marks, or `reasoning_effort` for any other OpenAI-compatible host), `system_one.rs` (the decision models), `client.rs` (OpenRouter, or any address the catalog gives; a timed-out request is not sent again, but a decision is, once), `auth.rs` (the OpenRouter key: environment, pasted, or a PKCE sign-in).
   - `openai/`: a ChatGPT sign-in: `auth.rs` (the OAuth flow: authorize, exchange, refresh), `tokens.rs` (the tokens, the account id from their claims, `openai.json`), `responses.rs` (the chat port over the ChatGPT backend's Responses API, streamed; refresh before expiry and once on 401).
   - A new provider is a package here implementing `Chat` (and `Decider` where it has decision models) with a catalog, and one arm per `match` in `apps/cli/src/providers.rs`.
@@ -100,12 +100,14 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
   - `interrupt.rs`: Ctrl-C, SIGTERM and a closed window stop the task, not the process (in the daemon a closed window stops nothing: `window_closed_served`). `Process` (a generation each stop raises) for the signal handler; an `Interrupt` per session, so stopping one leaves the others; the stops by session id (`register` returns a `Known` that forgets it when what it stops ends; a job is known by `job_key(lane, id)`), for the interface's keys and `x`.
   - `desk.rs`: the lanes of a session at the terminal, each a whole session on a thread of its own over `compose::Shared`; opens one per request (`/new`, a saved session from the list; never two for one id in the process, at most `MAX_LANES`), waking on its requests and its lanes' ends, answers the list with the saved sessions, ends when the last lane does. A connection that ends (its requests' sender dropped) stops every lane's work, unless `Request::Background` came first: then the lanes go on with no interface, their prompts waiting for the next. `desk/ending.rs`: the lanes table, the guards that end them however they end, and "Exit and stop tasks" (every lane stopped, at most 2 s, then the process ends; in the daemon the desk's terminal sessions are killed and its client ended). `desk/test_support.rs` (test-only): lanes on gated models and a person at a real `App`.
   - `brake.rs`: stops between model turns, on `--timeout` (not counting time spent waiting on the person) or when stdout's reader is gone.
+  - `hands.rs`: what the hands get from the app (C1, C2): the pause between two looks at a view, and the decision model traced on stderr with `DECISION_LOOP_DEBUG=1`.
   - `input.rs`: the prompt from arguments and stdin, and `--schema`.
   - `output.rs`, with `output/human.rs` (the trace on stderr), `output/json.rs` (`--json` events) and `output/observer.rs` (`Output` as the agent's `Observer`).
   - `error.rs` (`Failure`) and `exit.rs` (the exit-code contract).
   - `testing.rs`: test-only helpers.
-  - `tests/all.rs`: the one integration-test binary. `common/`: a home per test, a scripted model, a pseudo-terminal read through `vt100` (a session there runs in a daemon of its home, stopped when the test ends: `home::stop_daemon`). `suite/`: the binary end to end, with no network (`suite/tui/`: flows at a real terminal, unix only); `suite/repo/architecture.rs`: the layer rules; `suite/repo/budget.rs`: the size budget.
+  - `tests/all.rs`: the one integration-test binary. `common/`: a home per test, a scripted model, a pseudo-terminal read through `vt100` (a session there runs in a daemon of its home, stopped when the test ends: `home::stop_daemon`). `suite/`: the binary end to end, with no network (`suite/tui/`: flows at a real terminal, unix only); `suite/repo/architecture.rs`: the layer rules; `suite/repo/core.rs`: the core names no effect (C1); `suite/repo/budget.rs`: the size budget.
 - `evals/`: live tasks, both coding (fixtures in `evals/fixtures/`) and browser (real sites). `benchmarks/`: their history.
+- `scripts/`: `check` (the checks' one entry point, below) with `checks/`: `plan.sh` and `plan.awk` (the checks a change needs, from its paths), `run.sh` (each check's command), `tree.sh` (the changed paths, the tree's fingerprint and stamp), `tools.sh` (the pinned linters), `mdlinks.sh` (Markdown's relative links), `check_test.sh` (their tests); `hooks/` (git's `pre-commit` and `pre-push`, Claude Code's `claude-stop`, wired in `.claude/settings.json`), `setup` (the git hooks installed); the release scripts (`dist.sh`, `npm-pack.sh`, `release-notes.sh`, `install.sh`), `coverage.sh`, `models_sync.py`.
 
 ## Rules
 
@@ -126,7 +128,7 @@ Behaviour:
 - Tool content (files, command output, pages) is untrusted data. Never let it reach a request as an instruction; mark it so where the agent reads it.
 - No task- or site-specific wording in the agent's prompt, the tool descriptions or the hands' instructions. A rule earns its place by the evals, and stays general.
 - Synchronous code: threads where needed, no async runtime. Tools, gates, the chat model and the person are `Send + Sync`: a turn's calls and the agents run on threads.
-- The release binary stays small (under 4 MB). No browser engine, and no dependency that is not already in the tree unless it earns its size; std first. Check `ls -la target/release/llx` after adding one. CI fails above 5 MiB.
+- The release binary stays small (under 4 MB). No browser engine, and no dependency that is not already in the tree unless it earns its size; std first. Check `scripts/check --only size` after adding one: it fails above 5 MiB (CI's size job runs it) and warns above 4 MB.
 - The browser window never takes keyboard focus and never stops rendering. An action is settled when the DOM has been quiet for 100 ms (at most 700 ms), and when a navigation it started has a parsed document.
 - Exit codes (`apps/cli/src/exit.rs`) and the `--json` events (`apps/cli/src/output/json.rs`, `SCHEMA`) are a public contract. Change them only with a schema bump and a CHANGELOG entry.
 
@@ -163,14 +165,29 @@ Update these together:
 
 ## Checks
 
+`scripts/check` is the one entry point, and the same commands run everywhere: by hand, in the git hooks, in Claude Code's Stop hook, and in CI (each step of `.github/workflows/ci.yml` is `scripts/check --only NAME`). It prints a plan (each check, its scope, why), runs it in one fixed order, stops at the first failure with that check's output, and ends with one summary line; exit 0, 1, or 2 for a usage error. `scripts/check --list` names the checks, `--plan` prints the plan for the paths on stdin.
+
+What runs when:
+
+- Before you say a change is done: `scripts/check`. The checks the branch's change needs: everything changed since the merge base with main, plus the working tree (staged, unstaged, untracked).
+- When a Claude Code agent ends its turn: `scripts/check --fast` (`scripts/hooks/claude-stop`, in `.claude/settings.json`), only when the working tree changed since a check last saw it (a stamp in `target/llx-check/`), so an unchanged tree costs nothing. A failure blocks the stop with its output; the same failing tree is let through the second time, with a note. It changes no file and stops after 240 s. `LLX_STOP_CHECK=off` turns it off.
+- `git commit`: `scripts/check --fast --staged` on what the commit stages (a staged file with unstaged edits is refused: the checks read the working tree). `git push`: `scripts/check`, or `--all` when main is pushed. Install both once with `scripts/setup` (`git config core.hooksPath scripts/hooks`); `--no-verify` skips them.
+- CI: every check, a job for each group (`check`, `headless`, `size`, `site`, `action`). `scripts/check --all` runs the same set locally, in CI's order; add `--coverage` before a release.
+
+The plan comes from the changed paths alone (`scripts/checks/plan.awk`, with an example of each rule in `scripts/checks/check_test.sh`): a crate's directory brings `fmt`, `clippy` and `clippy-headless` and `test` and `test-headless` (the headless build, A8) for the crate and its dependents (cargo metadata's graph; `--fast`: clippy on the crate alone); the root `Cargo.toml`, `Cargo.lock`, `clippy.toml` or `rust-toolchain.toml` the same for the workspace; a manifest, the lock or the toolchain the release `size`; anything the repository's rules (`repo`: `suite::repo`, unless the tests run them); `site/`, `docs/` or `examples/README.md` the `site` build; `action.yml` or `action/` the `action` tests; a shell script `shellcheck`; a workflow, `action.yml` or an example `actionlint`, and an example the `examples` conventions; Markdown, or a path gone, `mdlinks` (relative links and anchors). `--fast` leaves out the headless build, the tests, the size and the site. The linters are pinned (shellcheck, actionlint, yq, jq in `scripts/checks/tools.sh`): downloaded once into `~/.cache/llx/tools`, each checked against its SHA-256, never the one on the PATH.
+
+Ratchets: the line budget and the 300-line files (`budget.rs`), the `allow`s in working code, which only fall (`code.rs`, S4), the coverage floor (`scripts/coverage.sh`), and the binary's cap (`size`: fails above 5 MiB, warns above 4 MB, reports the headless build too).
+
+What the checks run (`scripts/checks/run.sh`), and the rest by hand:
+
 ```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace            # unit tests, apps/cli/tests/all.rs (the binary, the layer rules), packages/tools/tests/browser.rs (a real headless window)
-cargo clippy --workspace --all-targets --no-default-features -- -D warnings && cargo test --workspace --no-default-features   # the headless build (A8)
+cargo fmt --all --check                                       # fmt
+cargo clippy --workspace --all-targets -- -D warnings          # clippy (and with --no-default-features: clippy-headless, A8)
+cargo test --workspace            # test: unit tests, apps/cli/tests/all.rs (the binary, the layer rules), packages/tools/tests/browser.rs (a real headless window); --no-default-features: test-headless
+cargo test -p llx --test all -- suite::repo::                  # repo: the repository's rules alone
 cargo nextest run --workspace     # the same tests under cargo-nextest
-scripts/coverage.sh               # line coverage with cargo-llvm-cov; fails under 85% (raised with coverage, never lowered)
-cargo build --release && ls -la target/release/llx
+scripts/coverage.sh               # coverage: line coverage with cargo-llvm-cov; fails under 85% (raised with coverage, never lowered)
+cargo build --release             # size: target/release/llx under 5 MiB, warned above 4 MB
 python3 evals/run.py --repeat 3   # live, paid; run for agent, prompt, tool, loop or probe changes
 python3 evals/run.py --only code  # the coding tasks alone
 ```

@@ -27,12 +27,18 @@ impl WindowTool<'_> {
         // Every tab of the call opens at once; the reports keep the order they were asked in.
         let opened: Vec<Result<Opened, ToolError>> = std::thread::scope(|scope| {
             let opening: Vec<_> = (kinds.iter().zip(&asked))
-                .map(|(kind, spec)| scope.spawn(move || kind.open(spec)))
+                .map(|(kind, spec)| {
+                    let thread = std::thread::Builder::new().name("llx-tab-open".into());
+                    thread.spawn_scoped(scope, move || kind.open(spec))
+                })
                 .collect();
-            let joined = opening.into_iter().map(|thread| thread.join());
-            joined
-                .map(|done| done.unwrap_or_else(|_| Err(failed("opening it failed"))))
-                .collect()
+            let joined = opening.into_iter().map(|started| match started {
+                Ok(thread) => thread
+                    .join()
+                    .unwrap_or_else(|_| Err(failed("opening it failed"))),
+                Err(why) => Err(failed(&format!("it could not start (no thread: {why})"))),
+            });
+            joined.collect()
         });
         let (mut reports, mut states, mut image) = (vec![], vec![], None);
         for (kind, opened) in kinds.into_iter().zip(opened) {

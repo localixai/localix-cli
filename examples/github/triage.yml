@@ -39,7 +39,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TITLE: ${{ github.event.issue.title }}
           BODY: ${{ github.event.issue.body }}
-          KINDS: '^(bug|enhancement|feature|question|documentation|docs)$' # the labels that name a kind
+          KINDS: '^(bug|enhancement|question|documentation)$' # the labels that name a kind
           PRIORITIES: '^P[0-3]$' # the labels that name a priority
         run: |
           set -euo pipefail

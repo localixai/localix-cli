@@ -42,6 +42,7 @@ validate() {
   in_range "${INPUT_MAX_TURNS:-50}" 10000 || die "max-turns is a number from 1 to 10000"
   in_range "${INPUT_TIMEOUT:-900}" 86400 || die "timeout is a number of seconds from 1 to 86400"
   [[ -z ${INPUT_MODE:-} || $INPUT_MODE =~ ^[A-Za-z0-9_-]+$ ]] || die "mode is a name"
+  case "${INPUT_BROWSER:-}" in '' | true | false) ;; *) die "browser is true or false" ;; esac
   if [ -n "${INPUT_WORKING_DIRECTORY:-}" ]; then
     cd -- "$INPUT_WORKING_DIRECTORY" 2>/dev/null || die "working-directory does not exist"
   fi
@@ -62,8 +63,9 @@ install_llx() {
   version=${version#v}
   [ -n "$version" ] || version=$(default_version)
   [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+([.+-][0-9A-Za-z.-]+)?$ ]] || die "no llx release to install (version '$version')"
-  case "$(uname -s)-$(uname -m)" in
-    Linux-x86_64) target=x86_64-unknown-linux-gnu-headless ;; # no browser engine: agents in CI need none
+  case "$(uname -s)-$(uname -m)$(browser_on_linux && echo -browser)" in
+    Linux-x86_64) target=x86_64-unknown-linux-gnu-headless ;; # no browser engine unless asked
+    Linux-x86_64-browser) target=x86_64-unknown-linux-gnu ;;
     Darwin-*) target=universal-apple-darwin ;;
     *) die "no llx build for $(uname -s) $(uname -m); build it and use version: system" ;;
   esac
@@ -83,6 +85,22 @@ install_llx() {
   fi
   export PATH="$bin:$PATH"
   [ -z "${GITHUB_PATH:-}" ] || echo "$bin" >>"$GITHUB_PATH"
+}
+
+# Whether the run wants a browser on a Linux runner, where the default build has none.
+browser_on_linux() {
+  [ "${INPUT_BROWSER:-}" = true ] && [ "$(uname -s)" = Linux ]
+}
+
+# The browser's libraries on a Linux runner, from apt when they are missing: WebKitGTK's runtime
+# and xvfb, for a display where the runner has none.
+browser_deps() {
+  browser_on_linux || return 0
+  if ldconfig -p 2>/dev/null | grep -q libwebkit2gtk-4.1 && command -v xvfb-run >/dev/null; then return 0; fi
+  if ! { sudo apt-get update -q >&2 &&
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends libwebkit2gtk-4.1-0 xvfb >&2; }; then
+    die "could not install WebKitGTK and xvfb for the browser"
+  fi
 }
 
 # $NAME and ${NAME} become the variable's value when it is set, in one pass over the text; a name
@@ -108,6 +126,7 @@ prepare() {
   [ -z "${GITHUB_OUTPUT:-}" ] || echo "dir=$dir" >>"$GITHUB_OUTPUT"
   validate
   install_llx
+  browser_deps
   [ -z "${INPUT_INSTALL_ONLY:-}" ] || return 0
   : >"$dir/result.txt"
   {
@@ -124,7 +143,11 @@ prepare() {
     [ -z "${INPUT_REASONING:-}" ] || printf 'LLX_REASONING=%s\0' "$INPUT_REASONING"
   } >"$dir/env"
 
-  cmd=("$(command -v llx)" exec --json -v -o "$dir/result.txt" --max-turns "${INPUT_MAX_TURNS:-50}" --timeout "${INPUT_TIMEOUT:-900}")
+  # With no display on the runner, the browser's window is on a virtual one.
+  if browser_on_linux && [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    cmd=("$(command -v xvfb-run)" -a -s "-screen 0 1920x1080x24")
+  fi
+  cmd+=("$(command -v llx)" exec --json -v -o "$dir/result.txt" --max-turns "${INPUT_MAX_TURNS:-50}" --timeout "${INPUT_TIMEOUT:-900}")
   [ -z "${INPUT_SCHEMA:-}" ] || cmd+=(--schema "$INPUT_SCHEMA")
   [ -z "${INPUT_MODE:-}" ] || cmd+=(--mode "$INPUT_MODE")
   rules --allow "${INPUT_ALLOW:-}"

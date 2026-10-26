@@ -65,7 +65,7 @@ jobs:
 
 The key and any value from the event go in the step's `env:`. The prompt names them (`$BASE`): the action replaces `$NAME` and `${NAME}` with those variables that are set, and nothing else. No command runs, no other shell syntax is read, and a name that is not set stays as written.
 
-The action runs on Linux x86_64 runners, where it installs the headless build (no browser, so `window` has terminal tabs only), and on macOS runners. On another system it stops with a clear error. It needs `jq` and `perl`, which the hosted runners have.
+The action runs on Linux x86_64 runners, where it installs the headless build (no browser, so `window` has terminal tabs only) unless `browser` is `true`, and on macOS runners. On another system it stops with a clear error. It needs `jq` and `perl`, which the hosted runners have.
 
 ### Inputs
 
@@ -84,6 +84,7 @@ One of `prompt` and `prompt-file` is needed. The rest are optional.
 | `working-directory` | the workspace | Where the agent works. |
 | `version` | the action's own | The llx release to install. `system` uses the `llx` already on the PATH, for a self-hosted runner that builds it. |
 | `args` | | More arguments for `llx exec`, split on blanks and lines. They come from the workflow, so they are trusted. |
+| `browser` | | `true` gives the agent a browser on a Linux runner: the build with the system WebView instead of the headless one, WebKitGTK's runtime and `xvfb` from apt when they are missing, and llx on a virtual display (`xvfb-run`, 1920x1080). Allow it as any other effect (`allow: browser`). macOS runners always have one. |
 | `install-only` | | `true` installs llx, puts it on the PATH and runs nothing, for a step of your own (`llx decide`). The outputs stay empty. |
 
 ### Outputs
@@ -282,7 +283,7 @@ Three details matter on a runner:
 
 - **Redirect stdout to a file.** A runner reads workflow commands (`::add-mask::`, `::set-output`) in a step's output, and the answer is model text. llx keeps its own trace on stderr safe when `GITHUB_ACTIONS` is set, but the answer is yours to place: `> review.json`, or `-o review.json`.
 - **Close stdin** with `</dev/null`. A runner may leave it open as a pipe, and llx would wait on it to add it to the prompt.
-- **A browser, if the task opens pages.** On Linux that is the full build, which needs the WebKitGTK runtime (`libwebkit2gtk-4.1-0`) installed before llx, and a display: run under `xvfb-run -a -s "-screen 0 1920x1080x24"`. The action installs the headless build, which has no browser, so a task that opens a page installs llx itself, or runs on macOS. Screenshots and comment pictures are macOS only.
+- **A browser, if the task opens pages.** On Linux that is the full build, which needs the WebKitGTK runtime (`libwebkit2gtk-4.1-0`) installed before llx, and a display: run under `xvfb-run -a -s "-screen 0 1920x1080x24"`. The action does all of it with `browser: true`. Screenshots and comment pictures work on both.
 
 ## Security
 

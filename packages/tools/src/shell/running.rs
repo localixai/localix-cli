@@ -148,17 +148,30 @@ impl Session {
         until: Until,
         waited: Duration,
         stalled: Option<(usize, usize)>,
+        reading: Reading,
     ) -> Turn {
+        let output = match reading {
+            Reading::Take => self.pty.shared.lock().take(),
+            Reading::Leave => None,
+        };
         Turn {
             id: self.id,
             command: self.command.clone(),
             until,
             waited,
             age: self.started.elapsed(),
-            output: self.pty.shared.lock().take(),
+            output,
             stalled,
         }
     }
+}
+
+/// Whether a call takes the output it waited for, as the agent's own calls do, or leaves it for
+/// the agent's next call: the helper's steps in a goal, whose effects the agent then reads.
+#[derive(Clone, Copy)]
+pub(super) enum Reading {
+    Take,
+    Leave,
 }
 
 impl Drop for Session {

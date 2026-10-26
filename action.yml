@@ -70,6 +70,13 @@ inputs:
     description: More llx exec arguments, split on blanks and lines. They come from the workflow, so they are trusted.
     required: false
     default: ''
+  browser:
+    description: >-
+      true gives the agent a browser: on a Linux runner, the llx build with the system WebView instead
+      of the headless one, WebKitGTK and xvfb from apt when they are missing, and llx run on a virtual
+      display. Allow it with allow (browser). macOS runners always have one.
+    required: false
+    default: ''
   install-only:
     description: >-
       true installs llx, puts it on PATH and runs nothing, for steps that run llx themselves (llx decide).
@@ -125,6 +132,7 @@ runs:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_ARGS: ${{ inputs.args }}
         INPUT_INSTALL_ONLY: ${{ inputs.install-only }}
+        INPUT_BROWSER: ${{ inputs.browser }}
       run: bash "$GITHUB_ACTION_PATH/action/run.sh" prepare
     # llx takes this shell's place: while the agent runs, no other process of the step holds the
     # step's variables, the provider's key among them.

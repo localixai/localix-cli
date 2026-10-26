@@ -18,6 +18,7 @@ use std::net::TcpListener;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::time::Duration;
 
+use contracts::tool::Tool;
 use tools::browser::{self, Action, BrowserError, Driver, Observation, WebviewDriver, Window};
 
 #[path = "support/panel.rs"]
@@ -418,6 +419,7 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
 
     tabs(driver, origin);
     screenshots(driver, origin);
+    rerendered(driver, origin);
 
     // A dialog in an open shadow root (a consent web component): its controls are offered, as a
     // dialog; what it covers names it; its button closes it.
@@ -637,10 +639,10 @@ fn feedback(browser: &browser::Browser, driver: &WebviewDriver) {
     assert!(what.starts_with("The person sent 1 comment(s)"), "{what}");
     assert!(what.contains(": make it red"), "{what}");
     assert!(what.contains("Selector: #veiled"), "{what}");
-    // Its picture, taken from the screen, in a file the agent can read: on macOS, the one
-    // system the window captures on; elsewhere the comment comes without one.
+    // Its picture, taken from the screen, in a file the agent can read: on macOS and Linux,
+    // where the window captures; elsewhere the comment comes without one.
     let picture = what.split("Picture of it: ").nth(1);
-    if cfg!(target_os = "macos") {
+    if cfg!(any(target_os = "macos", target_os = "linux")) {
         let file = picture
             .unwrap_or_default()
             .lines()
@@ -774,6 +776,18 @@ fn tabs(driver: &WebviewDriver, origin: &str) {
     }
     assert_eq!(titles(driver), (vec!["Tabs".into()], 1));
     assert_eq!(driver.observe().unwrap().title, "Tabs");
+    // A driver pinned to a tab that is closed, or never was, acts nowhere: it never falls back to
+    // the tab shown, where a goal's clicks would land on another page.
+    for gone in [2, 9] {
+        let pinned = driver.on(gone);
+        assert!(
+            matches!(pinned.observe(), Err(BrowserError::Unavailable(ref why)) if why.contains("closed")),
+            "tab {gone}"
+        );
+        assert!(pinned.evaluate("document.title = 'moved'").is_err());
+        assert!(pinned.navigate(&format!("{origin}/second.html")).is_err());
+    }
+    assert_eq!(driver.observe().unwrap().title, "Tabs");
     // A new tab reuses a closed one's place.
     assert_eq!(driver.new_tab(&format!("{origin}/second.html")).unwrap(), 2);
     assert!(driver.close_tab(2).unwrap());
@@ -783,15 +797,6 @@ fn tabs(driver: &WebviewDriver, origin: &str) {
 fn screenshots(driver: &WebviewDriver, origin: &str) {
     driver.navigate(&format!("{origin}/canvas.html")).unwrap();
     let viewport = driver.observe().unwrap().viewport;
-    if !cfg!(target_os = "macos") {
-        // Pictures are macOS's only for now: elsewhere the call says so, and nothing breaks.
-        let refused = driver.screenshot(None);
-        assert!(
-            matches!(refused, Err(BrowserError::Refused(_))),
-            "{refused:?}"
-        );
-        return;
-    }
     let page = driver.screenshot(None).unwrap();
     assert_eq!(&page.jpeg[..3], [0xFF, 0xD8, 0xFF], "a JPEG");
     let ratio = |w: u32, h: u32| f64::from(w) / f64::from(h);
@@ -821,10 +826,95 @@ fn screenshots(driver: &WebviewDriver, origin: &str) {
     );
 }
 
+/// A page that renders its controls again on every click (as a framework does): a ref to a
+/// button replaced by its equal still acts, on the new one in the same place among its equals;
+/// once a new equal came before it, the ref is stale rather than a guess.
+fn rerendered(driver: &WebviewDriver, origin: &str) {
+    driver.navigate(&format!("{origin}/rerender.html")).unwrap();
+    let page = driver.observe().unwrap();
+    let adds: Vec<String> = page
+        .elements
+        .iter()
+        .filter(|e| e.role == "button" && e.name == "Add one")
+        .map(|e| e.reference.clone())
+        .collect();
+    assert_eq!(adds.len(), 2, "{:#?}", page.elements);
+    act(
+        driver,
+        &page,
+        Action::Click {
+            reference: adds[0].clone(),
+        },
+    );
+    // Both buttons are new nodes now: the second's old ref finds the new second.
+    act(
+        driver,
+        &page,
+        Action::Click {
+            reference: adds[1].clone(),
+        },
+    );
+    assert_eq!(driver.observe().unwrap().title, "apples:1 pears:1");
+    act(
+        driver,
+        &page,
+        Action::Click {
+            reference: find(&page, "button", "Grow").into(),
+        },
+    );
+    let gone = driver.act(
+        &page.epoch,
+        &Action::Click {
+            reference: adds[1].clone(),
+        },
+    );
+    assert!(matches!(gone, Err(BrowserError::Stale(_))), "{gone:?}");
+    assert_eq!(driver.observe().unwrap().title, "plums:0 apples:1 pears:1");
+}
+
+/// The tool waits for text a page shows late (`wait_for`), and says when it did not come within
+/// `yield_ms`.
+fn waits(browser: &browser::Browser, origin: &str) {
+    let page = browser::Page::new(browser.clone(), true);
+    let tool = browser::BrowserTool {
+        page: &page,
+        gate: &contracts::gate::Open,
+    };
+    let came = tool
+        .call(
+            &serde_json::json!({"url": format!("{origin}/late.html"), "wait_for": "Results ready"}),
+        )
+        .unwrap_or_else(|error| panic!("{error:?}"));
+    assert!(
+        came.report.contains("\"Results ready\" appeared after"),
+        "{}",
+        came.report
+    );
+    assert!(
+        came.state.as_deref().unwrap_or("").contains("3 found"),
+        "{:?}",
+        came.state
+    );
+    let missed = tool
+        .call(&serde_json::json!({"wait_for": "Nothing like this", "yield_ms": 300}))
+        .unwrap_or_else(|error| panic!("{error:?}"));
+    assert!(
+        missed
+            .report
+            .contains("\"Nothing like this\" did not appear within 0.3s"),
+        "{}",
+        missed.report
+    );
+}
+
 /// Two tests, `driver` and `panel`, as the standard harness lists and runs tests, so a test
 /// runner that asks for the list (`--list --format terse`) and then runs each by name finds them.
 /// The event loop takes the main thread once per process, so the chosen ones run in one loop.
 fn main() {
+    // The panel's and the glass's windows are shown ones: rendered, and never over what the
+    // person is watching.
+    // SAFETY: the first thing the process does, before any thread starts.
+    unsafe { std::env::set_var("LLX_WINDOWS", "unseen") };
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--list") {
         if !args.iter().any(|arg| arg == "--ignored") {
@@ -877,6 +967,7 @@ fn main() {
                     starts_at_once(&browser, &driver, &origin);
                     feedback(&browser, &driver);
                     scenario(&driver, &origin);
+                    waits(&browser, &origin);
                 });
             // The driver's scenario ends with its window closed: the panel's opens it again.
             let paneled = !paneling

@@ -3623,6 +3623,7 @@ dependencies = [
  "tao",
  "url",
  "vt100",
+ "webkit2gtk",
  "wry",
 ]
 

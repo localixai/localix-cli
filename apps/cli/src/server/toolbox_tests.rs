@@ -17,11 +17,16 @@ struct Connected {
     served: Option<std::thread::JoinHandle<()>>,
 }
 
+fn connected(scratch: &Scratch) -> Connected {
+    owned(scratch, &Arc::default())
+}
+
+/// As [`connected`], for owner `me` of `owners`.
 #[expect(
     clippy::disallowed_methods,
     reason = "the in-process transport's channels, as the socket's connection makes them"
 )]
-fn connected(scratch: &Scratch) -> Connected {
+fn owned(scratch: &Scratch, owners: &Arc<Owners>) -> Connected {
     let (to_server, incoming) = channel();
     let (out, from_server) = channel();
     let terminals: Arc<AtomicU32> = Arc::default();
@@ -30,6 +35,7 @@ fn connected(scratch: &Scratch) -> Connected {
         browser: None,
         lanes: crate::arrivals::listening(None),
         terminals: Arc::clone(&terminals),
+        owners: Arc::clone(owners),
     };
     let first = ToServer::Call {
         id: 1,
@@ -38,7 +44,7 @@ fn connected(scratch: &Scratch) -> Connected {
             place: Some(Place {
                 cwd: scratch.path().display().to_string(),
                 env: std::env::vars().collect(),
-                args: vec!["mcp".into()],
+                args: vec!["window".into(), "me".into()],
                 ..Place::default()
             }),
             build: String::new(),
@@ -126,7 +132,30 @@ fn a_tool_client_is_offered_the_window_and_its_kinds() {
 }
 
 #[test]
-fn a_terminal_tab_runs_where_the_client_is_and_ends_with_its_connection() {
+fn an_owner_s_tabs_outlive_its_connection_until_it_releases_them() {
+    let scratch = Scratch::new();
+    let owners: Arc<Owners> = Arc::default();
+    let first = owned(&scratch, &owners);
+    let open = json!({"action": "open", "kind": "terminal", "command": "cat"});
+    first.window(2, "c1", open);
+    assert!(told(first.done(2)).contains("t1"));
+    let terminals = first.end();
+    assert_eq!(tools::shell::running_with(&terminals).len(), 1);
+    assert_eq!(owners.holding(), 1);
+    // The next connection of the owner finds its tab.
+    let next = owned(&scratch, &owners);
+    let typed = json!({"action": "interact", "tab": "t1", "input": "again\n", "wait_for": "again"});
+    next.window(2, "c2", typed);
+    assert!(told(next.done(2)).contains("again"));
+    next.call(3, Command::Release);
+    assert_eq!(next.done(3), Done::Ok);
+    assert!(tools::shell::running_with(&terminals).is_empty());
+    assert_eq!(owners.holding(), 0);
+    next.end();
+}
+
+#[test]
+fn a_terminal_tab_runs_where_the_client_is() {
     let scratch = Scratch::new();
     let client = connected(&scratch);
     let open = json!({"action": "open", "kind": "terminal", "command": "pwd; cat"});
@@ -140,6 +169,8 @@ fn a_terminal_tab_runs_where_the_client_is_and_ends_with_its_connection() {
     let typed = json!({"action": "interact", "tab": "t1", "input": "hello\n", "wait_for": "hello"});
     client.window(3, "c2", typed);
     assert!(told(client.done(3)).contains("hello"));
+    client.call(4, Command::Release);
+    assert_eq!(client.done(4), Done::Ok);
     let terminals = client.end();
     assert!(tools::shell::running_with(&terminals).is_empty());
 }

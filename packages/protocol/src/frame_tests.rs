@@ -261,7 +261,7 @@ fn every_frame_to_the_server_comes_back_the_same_through_json() {
         ToServer::Call {
             id: 13,
             command: Command::Tool {
-                call: "mcp-7-1".into(),
+                call: "window-7-1".into(),
                 name: "window".into(),
                 arguments: json!({"action": "list"}),
             },

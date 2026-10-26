@@ -280,3 +280,35 @@ fn a_target_refused_as_covered_is_not_offered_again_until_the_view_changes() {
         "the view changed since"
     );
 }
+
+#[test]
+fn the_operation_is_chosen_knowing_the_values_it_may_type() {
+    // A goal that says "type the given expression" names no text: without the values the model
+    // cannot tell that typing would progress, and calls it blocked.
+    let mut terminal = view(vec![element("input", "textbox", "terminal input")]);
+    terminal.outline = ">>>".into();
+    let values = vec!["7 + 7".to_string()];
+    let asked = |values: &[String]| {
+        ask(&AskInput {
+            goal: "Type the given expression at the prompt and press Enter",
+            conventions: "",
+            view: &terminal,
+            values,
+            history: &[],
+        })
+        .state
+    };
+    assert_eq!(asked(&values)["values"], json!(["7 + 7"]));
+    assert!(asked(&[]).get("values").is_none(), "no values, no key");
+    // A view read as its text and controls is told them the same way.
+    let form = view(vec![element("e1", "textbox", "City")]);
+    let state = ask(&AskInput {
+        goal: "g",
+        conventions: "",
+        view: &form,
+        values: &values,
+        history: &[],
+    })
+    .state;
+    assert_eq!(state["values"], json!(["7 + 7"]));
+}

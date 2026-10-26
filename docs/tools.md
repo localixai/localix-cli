@@ -49,12 +49,12 @@ A goal, an address, keys, a script, starting a program and typing into it are ap
 
 A native WebView. The headless Linux build (the installer takes it where WebKitGTK is missing) has no browser: `window` has terminal tabs only, and `llx doctor` says so.
 
-- The agent opens an http(s) address (one with no scheme opens over http on this machine, `localhost`, `127.*`, `0.0.0.0` or `[::1]`, and over https elsewhere), or hands a short task with the exact values to type to the decision model, which clicks, types, selects and scrolls one step at a time.
+- The agent opens an http(s) address (one with no scheme opens over http on this machine, `localhost`, `127.*`, `0.0.0.0` or `[::1]`, and over https elsewhere) or an HTML file of the project by its path (`demo/shop.html`, or a directory with an `index.html`): its directory is served on the loopback under a prefix of its own, so its styles, scripts, `fetch` and storage work as on a site, with no server to start. Only files inside the workspace are served, never a dot-file (`.env`, `.git`) nor a path the tools may not read, or hands a short task with the exact values to type to the decision model, which clicks, types, selects and scrolls one step at a time.
 - It can also press keys, run a script in the page, read the whole text, change the page size, take a screenshot, or close the window (the next call opens a fresh one).
 - Up to 8 tabs in the one window: `tab: "new"` opens an address in a new tab, `tab: 2` switches to tab 2, `close_tab: 2` closes it, and a link with `target=_blank` or a `window.open` opens a tab instead of being lost. Every other part of a call acts on the tab shown; the list of tabs comes back only when it changed.
-- The strip along the top has `‹` and `›` (back and forward in the page shown) and, at the right, a clock icon: the pages the tabs have shown, newest first, as a list over the window; a click on one opens it in a new tab. With the tabs of more than one project (several sessions share the window), a row of the projects goes above them, and the tabs under it are the shown project's.
+- The strip along the top has `‹` and `›` (back and forward in the page shown) and, at the right, a clock icon: the tabs the window has held, browser pages and terminals alike, newest first, each project's together, as a list over the window. A browser tab is listed with the last page it showed: open, a click shows it; closed, a click opens that page in a new tab. A terminal whose tab you closed runs on out of sight, its screen still live: a click makes it a tab again (so does the agent's `show`). One whose session ended keeps its last screen, which a click shows (the last 8 are kept). With the tabs of more than one project (several sessions share the window), a row of the projects goes above them, and the tabs under it are the shown project's.
 - Tabs out of sight keep running and drawing (they stand beside the window, not hidden), and on macOS they share one cookie store, as in a browser.
-- Each call returns what happened and the page as an outline. A screenshot (`screenshot: true`, cropped to an element with a CSS `selector`) is the WebView's own picture, canvas and WebGL included, sent to the model as a JPEG of at most 1280 pixels on its long side, after the call's result; only the newest three stay in the conversation. Screenshots work on macOS; elsewhere the call says they are not supported.
+- Each call returns what happened and the page as an outline. A screenshot (`screenshot: true`, cropped to an element with a CSS `selector`) is the WebView's own picture, canvas and WebGL included, sent to the model as a JPEG of at most 1280 pixels on its long side, after the call's result; only the newest three stay in the conversation. Screenshots work on macOS and Linux; elsewhere the call says they are not supported.
 - It asks the gate before anything a page sees; a screenshot and a close do not ask.
 
 ## ask
@@ -81,4 +81,4 @@ Work that comes back later.
 
 ## From another agent
 
-`llx mcp` serves `window` to other agents; see [MCP](mcp.md).
+Other agents call `window` from their shell with `llx window`; see [In other agents](agents.md).

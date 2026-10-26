@@ -39,10 +39,13 @@ def events(stdout):
 
 
 def workdir(task):
-    """A fresh directory for one run: the fixture copied in, or nothing."""
+    """A fresh directory for one run: the fixture copied in, or nothing; with `site`, that
+    directory of the repository beside it under its own name (`demo/`), opened by its path."""
     path = tempfile.mkdtemp(prefix=f"llx-eval-{task['id']}-")
     if task.get("fixture"):
         shutil.copytree(os.path.join(FIXTURES, task["fixture"]), path, dirs_exist_ok=True)
+    if task.get("site"):
+        shutil.copytree(os.path.join(ROOT, task["site"]), os.path.join(path, task["site"]))
     return path
 
 
@@ -230,7 +233,7 @@ def select(tasks, only):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--only", help="comma-separated task ids or kinds (code, browser)")
+    parser.add_argument("--only", help="comma-separated task ids or kinds (code, browser, demo)")
     parser.add_argument("--repeat", type=int, default=1, help="runs per task")
     parser.add_argument("--jobs", type=int, default=3, help="runs at once")
     parser.add_argument("--bin", default=os.path.join(ROOT, "target/release/llx"))

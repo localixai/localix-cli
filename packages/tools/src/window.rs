@@ -87,6 +87,18 @@ pub struct Opened {
     pub output: ToolOutput,
 }
 
+/// `wait_for` as every kind that waits reads it: text its tab shows.
+pub fn wait_for_field() -> Value {
+    json!({"type": "string", "description": "Return as soon as the tab shows this exact text: \
+    a terminal's output (the program's answer, not what was typed), a page's text."})
+}
+
+/// `yield_ms`, the longest a call waits: a terminal's output to settle, or `wait_for`.
+pub fn yield_field() -> Value {
+    json!({"type": "integer", "minimum": 100, "maximum": 30000, "description": "The longest the \
+    call waits, in ms: for a terminal's output to settle or wait_for; a page waits at most 15000."})
+}
+
 /// A kind of tab: how its tabs are opened, acted in, read, pictured and closed.
 pub trait Kind: Send + Sync {
     /// What `kind` names in `open`, and what the window calls its tabs.

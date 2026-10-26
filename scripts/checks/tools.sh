@@ -86,10 +86,13 @@ tool() {
     echo "check: $5 has SHA-256 $tool_got, expected $6; not used" >&2
     return 1
   fi
+  # The archive unpacks into a directory of its own: a member named as the tool (actionlint's)
+  # would otherwise be moved onto itself, which GNU mv refuses.
   if [ "$4" = - ]; then
     mv "$tool_part/download" "$tool_part/$1"
-  elif ! tar -xzf "$tool_part/download" -C "$tool_part" "$4" ||
-    ! mv "$tool_part/$4" "$tool_part/$1"; then
+  elif ! mkdir "$tool_part/unpacked" ||
+    ! tar -xzf "$tool_part/download" -C "$tool_part/unpacked" "$4" ||
+    ! mv "$tool_part/unpacked/$4" "$tool_part/$1"; then
     rm -rf "$tool_part"
     return 1
   fi

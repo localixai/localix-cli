@@ -86,6 +86,18 @@ pub(super) struct Open {
     pub title: String,
     pub webview: WebView,
     pub slot: Arc<Slot>,
+    pub held: Held,
+}
+
+/// How the window holds a panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Held {
+    /// A tab of the window.
+    Live,
+    /// Its tab closed by the person: still painted, out of sight, until shown again.
+    Hidden,
+    /// Its caller let it go: its last frame stays, for the history menu to show.
+    Ended,
 }
 
 /// What a panel opens with: its id, title, page, ground (the page's own colour, if it has one),
@@ -129,6 +141,7 @@ pub(super) fn open(
         title,
         webview,
         slot,
+        held: Held::Live,
     })
 }
 

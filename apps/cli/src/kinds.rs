@@ -2,6 +2,7 @@
 //! a browser tab over the browser (`BrowserTool`, its page and its tabs), a terminal tab over a
 //! terminal session (`bash`'s sessions). The window tool knows neither, and neither knows it.
 
+mod changes;
 mod missing;
 #[cfg(unix)]
 mod terminal;
@@ -20,20 +21,20 @@ use serde_json::{Map, Value, json};
 use tools::browser::{BrowserTool, Page};
 use tools::window::{Kind, Opened};
 
-/// Lines of a page's changes at most; past them, the page is read whole.
-const CHANGES: usize = 30;
+use changes::changes;
 
 /// Where a browser tab opens when no address is given.
 const SEARCH_PAGE: &str = "https://duckduckgo.com/";
 
 /// The browser's locks: one for what changes its tabs (opening, closing), and one per tab, so
-/// work in one tab never waits on another's.
+/// work in one tab never waits on another's; and the pages on disk it opened, served.
 #[derive(Default)]
 pub(crate) struct BrowserLocks {
     tabs_change: Mutex<()>,
     tabs: [Mutex<()>; tools::browser::MAX_TABS + 1],
     /// Each tab's page as the model last read it whole.
     seen: Mutex<std::collections::HashMap<u32, String>>,
+    served: tools::served::Served,
 }
 
 impl BrowserLocks {
@@ -48,9 +49,23 @@ pub(crate) struct Browser<'a> {
     pub page: &'a Page,
     pub gate: &'a dyn contracts::gate::Gate,
     pub locks: &'a BrowserLocks,
+    /// Where a page's path resolves, and what may not be served.
+    pub workspace: &'a tools::workspace::Workspace,
 }
 
 impl Browser<'_> {
+    /// Where `url` opens: a page on disk at the address it is served at, else the web address;
+    /// and how the person reads it, for the gate.
+    fn address(&self, url: &str) -> Result<(String, String), ToolError> {
+        match self.locks.served.address(self.workspace, url)? {
+            Some(served) => Ok((
+                served.clone(),
+                format!("{} (served at {served})", url.trim()),
+            )),
+            None => tools::browser::address(url).map(|web| (web.clone(), web)),
+        }
+    }
+
     /// `fields` of `args`.
     fn picked(args: &Value, fields: &[&str]) -> Value {
         let mut call = Map::new();
@@ -126,7 +141,8 @@ impl Kind for Browser<'_> {
         vec![
             (
                 "url",
-                json!({"type": "string", "description": "browser: an address to open."}),
+                json!({"type": "string", "description": "browser: an address to open, or an \
+                HTML file's path."}),
             ),
             (
                 "keys",
@@ -157,6 +173,8 @@ impl Kind for Browser<'_> {
                 json!({"type": "string", "description": "screenshot: crop it to the \
                 first element this CSS selector matches."}),
             ),
+            ("wait_for", tools::window::wait_for_field()),
+            ("yield_ms", tools::window::yield_field()),
         ]
     }
 
@@ -165,10 +183,10 @@ impl Kind for Browser<'_> {
             .get("url")
             .and_then(Value::as_str)
             .unwrap_or(SEARCH_PAGE);
-        let url = tools::browser::address(url)?;
+        let (url, shown) = self.address(url)?;
         // Asked before any lock: the person may take their time, and nobody else's tabs wait on
         // them (ARCHITECTURE.md R6).
-        let effect = format!("open {url} in a new tab");
+        let effect = format!("open {shown} in a new tab");
         let asked = contracts::gate::Effect {
             tool: "browser",
             subject: "",
@@ -187,8 +205,11 @@ impl Kind for Browser<'_> {
             (self.page.start(&url)).map_err(|error| ToolError::Failed(error.to_string()))?
         };
         let _ = self.page.pinned(id).driver().map(|tab| tab.wait_new());
-        let read = self.in_tab(id, &json!({}))?;
-        let report = format!("Opened {url}.");
+        let read = self.in_tab(id, &Self::picked(args, &["wait_for", "yield_ms"]))?;
+        let report = match read.report.is_empty() {
+            true => format!("Opened {url}."),
+            false => format!("Opened {url}.\n{}", read.report),
+        };
         Ok(Opened {
             id,
             output: self.read_whole(id, ToolOutput { report, ..read }),
@@ -204,8 +225,15 @@ impl Kind for Browser<'_> {
             "read",
             "offset",
             "size",
+            "wait_for",
+            "yield_ms",
         ];
-        let done = self.in_tab(id, &Self::picked(args, &fields))?;
+        let mut call = Self::picked(args, &fields);
+        // A page on disk goes to the browser as the address it is served at.
+        if let Some(url) = args.get("url").and_then(Value::as_str) {
+            call["url"] = json!(self.address(url)?.0);
+        }
+        let done = self.in_tab(id, &call)?;
         Ok(self.after(id, done))
     }
 
@@ -243,29 +271,6 @@ impl Kind for Browser<'_> {
             _tab: self.locks.tab(id),
         }))
     }
-}
-
-/// The lines of `after` not in `before` (`+`) and of `before` not in `after` (`-`), when there
-/// are at most `CHANGES` of them.
-fn changes(before: &str, after: &str) -> Option<String> {
-    let (old, new): (Vec<&str>, Vec<&str>) = (before.lines().collect(), after.lines().collect());
-    let gone = old
-        .iter()
-        .filter(|line| !new.contains(line))
-        .map(|line| format!("- {line}"));
-    let came = new
-        .iter()
-        .filter(|line| !old.contains(line))
-        .map(|line| format!("+ {line}"));
-    let changed: Vec<String> = gone.chain(came).collect();
-    if changed.len() > CHANGES {
-        return None;
-    }
-    let lines = match changed.is_empty() {
-        true => "(no visible change)".to_string(),
-        false => changed.join("\n"),
-    };
-    Some(format!("### Page changes since the last snapshot\n{lines}"))
 }
 
 /// A tab's page, worked in alone while the helper acts on it.

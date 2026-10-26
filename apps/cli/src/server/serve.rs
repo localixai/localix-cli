@@ -264,8 +264,8 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
             Done::Ok
         }),
         // A session's tools are its agent's: a tool client gets its own toolbox (W9).
-        Command::Tools | Command::Tool { .. } => Done::Failed {
-            why: "a session's tools are its agent's: `llx mcp` calls them".into(),
+        Command::Tools | Command::Tool { .. } | Command::Release => Done::Failed {
+            why: "a session's tools are its agent's: `llx window` calls them".into(),
         },
     }
 }

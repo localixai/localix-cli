@@ -7,8 +7,6 @@
 
 use serde_json::json;
 
-use super::history::Visit;
-
 /// The strip's height, in points.
 pub(super) const HEIGHT: f64 = 34.0;
 /// The row of projects above it, drawn when the tabs of more than one project are in the window.
@@ -52,8 +50,8 @@ pub(super) enum Click {
     Forward,
     /// The history menu opens or closes.
     History,
-    /// The page at this place of the history menu.
-    Visit(usize),
+    /// The history menu's entry of this number.
+    Visit(u64),
     /// Commenting on the pages turns on or off.
     Comment,
     /// The comments held go to whoever listens, and their marks leave the pages.
@@ -130,12 +128,48 @@ pub(super) fn script(items: &[Item], shown: Key) -> String {
     format!("S({})", json!({"tabs": tabs, "shown": shown.name()}))
 }
 
-/// The call that opens the history menu on `visits` (newest first), or closes it.
-pub(super) fn menu(visits: Option<&[Visit]>) -> String {
-    let shown = visits.map(|visits| {
-        let rows: Vec<_> = visits
+/// What became of a tab the history menu lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum State {
+    Open,
+    /// A terminal the person closed: its program runs on, its screen live out of sight.
+    Hidden,
+    /// A terminal whose session ended: its last screen is kept.
+    Ended,
+    /// A browser tab closed: its page opens again in a new one.
+    Closed,
+}
+
+/// An entry of the history menu.
+pub(super) struct Row {
+    pub at: u64,
+    pub key: Key,
+    pub title: String,
+    /// A browser tab's page.
+    pub detail: String,
+    pub state: State,
+    pub group: String,
+}
+
+/// The call that opens the history menu on `rows` (newest first), or closes it.
+pub(super) fn menu(rows: Option<&[Row]>) -> String {
+    let shown = rows.map(|rows| {
+        let rows: Vec<_> = rows
             .iter()
-            .map(|visit| json!({"url": visit.url, "title": visit.title}))
+            .map(|row| {
+                let kind = match row.key {
+                    Key::Web(_) => "web",
+                    Key::Term(_) => "term",
+                };
+                let state = match row.state {
+                    State::Open => "open",
+                    State::Hidden => "hidden",
+                    State::Ended => "ended",
+                    State::Closed => "closed",
+                };
+                json!({"at": row.at, "key": row.key.name(), "kind": kind, "title": row.title,
+                    "detail": row.detail, "state": state, "group": row.group})
+            })
             .collect();
         rows
     });

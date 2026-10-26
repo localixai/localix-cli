@@ -232,5 +232,42 @@ CURL
   has "install: a given version, with or without v" "$(cat "$tmp/run/urls")" "/download/v1.2.3/"
 fi
 
+# The browser on a Linux runner (here a Linux one is played: uname, sudo, ldconfig and xvfb-run
+# are stubs): the build with the engine, its libraries from apt when they are missing, and llx
+# under a virtual display. Without it, the headless build and nothing else.
+if [ -x "$tmp/fake/curl" ]; then
+  mkdir -p "$tmp/linux"
+  printf '#!/usr/bin/env bash\ncase "$1" in -m) echo x86_64 ;; *) echo Linux ;; esac\n' >"$tmp/linux/uname"
+  printf '#!/usr/bin/env bash\necho "$*" >>"$STUB_DIR/sudo"\n' >"$tmp/linux/sudo"
+  printf '#!/usr/bin/env bash\n' >"$tmp/linux/ldconfig"
+  cat >"$tmp/linux/xvfb-run" <<'XVFB'
+#!/usr/bin/env bash
+echo "$*" >"$STUB_DIR/xvfb"
+while [ $# -gt 0 ]; do case "$1" in -a) shift ;; -s) shift 2 ;; *) break ;; esac; done
+exec "$@"
+XVFB
+  chmod +x "$tmp/linux/"*
+  for linux in x86_64-unknown-linux-gnu x86_64-unknown-linux-gnu-headless; do
+    tar -czf "$tmp/dl/llx-$linux.tar.gz" -C "$tmp/dl" llx
+  done
+  linux_sum() { (sha256sum "$tmp/dl/llx-$1.tar.gz" 2>/dev/null || shasum -a 256 "$tmp/dl/llx-$1.tar.gz") | cut -d ' ' -f 1; }
+  linux_path="$tmp/linux:$tmp/fake:$(dirname "$(command -v jq)"):$(dirname "$(command -v perl)"):/usr/bin:/bin"
+  run_action PATH="$linux_path" STUB_DL="$tmp/dl" STUB_TARGET=x86_64-unknown-linux-gnu \
+    STUB_SUM="$(linux_sum x86_64-unknown-linux-gnu)" INPUT_VERSION=1.2.3 INPUT_BROWSER=true STUB_ANSWER=browsed
+  eq "browser: the run" "0 browsed" "$rc $(output result)"
+  has "browser: the build with the engine" "$(cat "$tmp/run/urls")" "/download/v1.2.3/llx-x86_64-unknown-linux-gnu.tar.gz"
+  has "browser: WebKitGTK and xvfb from apt, as they are missing" "$(cat "$tmp/run/sudo" 2>/dev/null)" \
+    "apt-get install -y -q --no-install-recommends libwebkit2gtk-4.1-0 xvfb"
+  has "browser: llx runs on a virtual display" "$(cat "$tmp/run/xvfb" 2>/dev/null)" "-screen 0 1920x1080x24"
+  run_action PATH="$linux_path" STUB_DL="$tmp/dl" STUB_TARGET=x86_64-unknown-linux-gnu-headless \
+    STUB_SUM="$(linux_sum x86_64-unknown-linux-gnu-headless)" INPUT_VERSION=1.2.3 STUB_ANSWER=plain
+  eq "no browser: the run" "0 plain" "$rc $(output result)"
+  has "no browser: the headless build" "$(cat "$tmp/run/urls")" "llx-x86_64-unknown-linux-gnu-headless.tar.gz"
+  if [ -e "$tmp/run/sudo" ] || [ -e "$tmp/run/xvfb" ]; then fail "no browser: nothing installed, no display"; else pass "no browser: nothing installed, no display"; fi
+fi
+run_action INPUT_BROWSER=yes
+eq "browser: a value that is not true or false" "3 not-ready" "$rc $(output status)"
+has "browser: the reason" "$(summary)" "browser is true or false"
+
 [ "$failures" -eq 0 ] || { echo "$failures failed" >&2; exit 1; }
 echo "all passed"

@@ -167,16 +167,17 @@ pub(crate) fn scenario(browser: &Browser, driver: &WebviewDriver) {
     });
     browser.click(&format!("close {tab}"));
     until_shown("w1");
-    let deadline = Instant::now() + wait;
-    while panel.paint(frame(&lines(&["after"]), 0, 0, None)) {
-        assert!(Instant::now() < deadline, "the panel still says it is open");
-        std::thread::sleep(Duration::from_millis(20));
-    }
     assert_eq!(showing(browser).map(|s| s.1), Some(vec!["w1".to_string()]));
     let heard = heard.lock().unwrap().clone();
     assert_eq!(heard.len(), 1, "{heard:?}");
     assert_eq!(heard[0].0, tab);
     assert!(heard[0].1.contains("its program runs on"), "{heard:?}");
+    // Out of sight, its screen stays live: what the program prints still reaches it.
+    assert!(panel.paint(frame(&lines(&["after"]), 0, 0, None)));
+    shown(browser, &panel, second, |read| read["rows"][0] == "after");
+    // The agent shows it again.
+    browser.act(&tab, false).unwrap();
+    until_shown(&tab);
 
     // Gone, and the browser carries on.
     drop(panel);
@@ -350,6 +351,18 @@ pub(crate) fn first(browser: &Browser) {
     let listed = browser.listing().unwrap_or_default();
     let groups: Vec<&str> = listed.iter().map(|tab| tab.group.as_str()).collect();
     assert_eq!(groups, ["alpha", "beta <i>"]);
+    // Closed by the person, a terminal is in the history menu, still running; a click there makes
+    // it a tab again, its screen as live as before.
+    browser.click("close t8");
+    labels(json!([]));
+    browser.click("history");
+    let at = menu_entry(browser, "t8", "hidden");
+    browser.click(&format!("visit {at}"));
+    labels(json!(["alpha", "beta <i>"]));
+    assert!(other.paint(frame(&lines(&["back"]), 0, 0, None)));
+    shown(browser, &other, Duration::from_secs(10), |read| {
+        read["rows"][0] == "back"
+    });
     drop(other);
     labels(json!([]));
     history_menu(browser);
@@ -376,17 +389,58 @@ fn history_menu(browser: &Browser) {
             std::thread::sleep(Duration::from_millis(20));
         }
     };
-    let menu = "[document.getElementById('menu').style.display, [...document.querySelectorAll('#menu .e')].map(e => e.textContent)]";
+    let menu = "[document.getElementById('menu').style.display, document.querySelector('#menu .v[data-key=\"t8\"]')?.dataset.state ?? null]";
     said(
         "[bk.title, fw.title, hs.title]",
         json!(["Back", "Forward", "History"]),
     );
+    // The terminal that ended is there, its last screen kept.
     browser.click("history");
-    said(menu, json!(["block", ["No pages yet"]]));
+    said(menu, json!(["block", "ended"]));
     browser.click("history");
-    said(menu, json!(["none", []]));
+    said(menu, json!(["none", null]));
     browser.click("history");
-    said(menu, json!(["block", ["No pages yet"]]));
+    said(menu, json!(["block", "ended"]));
     browser.click("back");
-    said(menu, json!(["none", []]));
+    said(menu, json!(["none", null]));
+    // A click on it shows that screen, which is no tab: none is shown, and the agent's are as they
+    // were.
+    browser.click("history");
+    said(menu, json!(["block", "ended"]));
+    let at = menu_entry(browser, "t8", "ended");
+    let before = browser.listing().unwrap_or_default();
+    browser.click(&format!("visit {at}"));
+    said(menu, json!(["none", null]));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while browser
+        .listing()
+        .unwrap_or_default()
+        .iter()
+        .any(|tab| tab.shown)
+    {
+        assert!(Instant::now() < deadline, "{:?}", browser.listing());
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let after = browser.listing().unwrap_or_default();
+    let ids = |listed: &[tools::browser::Listed]| -> Vec<String> {
+        listed.iter().map(|tab| tab.id.clone()).collect()
+    };
+    assert_eq!(ids(&after), ids(&before));
+    let back = before.iter().find(|tab| tab.shown).unwrap().id.clone();
+    browser.click(&format!("show {back}"));
+}
+
+/// Entry `key` of the history menu once it says `state`: its number.
+fn menu_entry(browser: &Browser, key: &str, state: &str) -> u64 {
+    let row = format!("document.querySelector('#menu .v[data-key=\"{key}\"]')");
+    let read = format!("{row} && [{row}.dataset.state, +{row}.dataset.at]");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let read = browser.peek_strip(&read).unwrap_or(Value::Null);
+        if read[0] == state {
+            return read[1].as_u64().unwrap();
+        }
+        assert!(Instant::now() < deadline, "{key} in the menu: {read}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }

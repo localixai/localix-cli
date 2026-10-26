@@ -154,10 +154,10 @@ const BEYOND_THE_INTERFACE: &[&str] = &[
     "openrouter::",
 ];
 
-/// The interfaces (L7): the terminal's, and the tool clients' (`llx mcp`, W9).
-const INTERFACES: [&str; 2] = ["tui", "mcp"];
+/// The interfaces (L7): the terminal's, and the tool clients' (`llx window`, W9).
+const INTERFACES: [&str; 2] = ["tui", "call"];
 
-/// L7: each interface (`apps/cli/src/tui.rs` and `tui/`, `mcp.rs` and `mcp/`, their tests too) speaks only
+/// L7: each interface (`apps/cli/src/tui.rs` and `tui/`, `call.rs`, their tests too) speaks only
 /// through the protocol and the client: what it shows and what it may do, the server says.
 #[test]
 fn l7_the_interface_knows_only_the_protocol_and_the_client() {

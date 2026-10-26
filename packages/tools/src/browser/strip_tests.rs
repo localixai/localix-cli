@@ -146,14 +146,31 @@ fn the_toolbar_and_the_history_button_say_what_they_are() {
 
 #[test]
 fn the_history_menu_reaches_the_page_as_data() {
-    use super::super::history::Visit;
-    let visit = Visit {
-        url: "https://a.example/\"</script>".into(),
-        title: "A".into(),
+    let row = |at, key, state| Row {
+        at,
+        key,
+        title: "\"</script><b>x</b>".into(),
+        detail: "https://a.example/".into(),
+        state,
+        group: "llx".into(),
     };
-    let open = menu(Some(std::slice::from_ref(&visit)));
-    assert!(open.starts_with("M([{"), "{open}");
-    assert!(open.contains(r#""title":"A""#), "{open}");
-    assert!(open.contains(r#"\"</script>"#), "{open}");
+    let rows = [
+        row(7, Key::Term(2), State::Hidden),
+        row(3, Key::Web(1), State::Closed),
+    ];
+    let open = menu(Some(&rows));
+    let json = open
+        .strip_prefix("M(")
+        .and_then(|s| s.strip_suffix(')'))
+        .unwrap();
+    let data: serde_json::Value = serde_json::from_str(json).unwrap();
+    assert_eq!(data[0]["at"], 7);
+    assert_eq!(data[0]["key"], "t2");
+    assert_eq!(data[0]["kind"], "term");
+    assert_eq!(data[0]["state"], "hidden");
+    assert_eq!(data[0]["title"], "\"</script><b>x</b>");
+    assert_eq!(data[1]["kind"], "web");
+    assert_eq!(data[1]["state"], "closed");
+    assert_eq!(data[1]["detail"], "https://a.example/");
     assert_eq!(menu(None), "M(null)");
 }

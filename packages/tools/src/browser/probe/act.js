@@ -27,7 +27,8 @@
   // frame, on top of its document and the frame on top of the page.
   function target(args) {
     if (args.epoch !== epoch()) throw new Error('stale: the page changed since the snapshot')
-    const e = nodeOf(args.ref)
+    const was = nodeOf(args.ref)
+    const e = was?.isConnected && was.ownerDocument?.defaultView && visible(was) ? was : again(args.ref)
     const view = e?.ownerDocument?.defaultView
     if (!e || !view || !e.isConnected || !visible(e)) throw new Error('stale: the element is gone')
     if (e.matches(':disabled') || e.closest('[aria-disabled="true"]')) throw new Error('disabled')

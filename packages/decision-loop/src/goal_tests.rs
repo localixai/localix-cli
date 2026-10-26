@@ -211,3 +211,107 @@ mod covered {
         );
     }
 }
+
+mod typing {
+    use std::collections::BTreeMap;
+    use std::sync::Mutex;
+
+    use serde_json::Value;
+
+    use super::*;
+    use contracts::model::{Answer, Decision, Question};
+    use contracts::view::{Action, Element, View, ViewResult};
+
+    /// A terminal's input line: each typing adds to what is there, so the view always changes.
+    struct Line {
+        typed: Mutex<String>,
+    }
+
+    impl View for Line {
+        #[expect(
+            clippy::unwrap_in_result,
+            reason = "a test's fake: a poisoned lock fails the test"
+        )]
+        fn observe(&self) -> ViewResult<Observation> {
+            let typed = self.typed.lock().unwrap().clone();
+            Ok(Observation {
+                outline: String::new(),
+                epoch: "1".into(),
+                location: "terminal".into(),
+                title: "python3".into(),
+                text: format!(">>> {typed}"),
+                scroll: 0,
+                elements: vec![Element {
+                    reference: "e1".into(),
+                    role: "textbox".into(),
+                    name: "terminal input".into(),
+                    value: None,
+                    states: vec![],
+                    editable: true,
+                    dialog: false,
+                    options: vec![],
+                }],
+                omitted: 0,
+                busy: false,
+            })
+        }
+        #[expect(
+            clippy::unwrap_in_result,
+            reason = "a test's fake: a poisoned lock fails the test"
+        )]
+        fn act(&self, _: &str, action: &Action) -> ViewResult<()> {
+            if let Action::Type { text, .. } = action {
+                self.typed.lock().unwrap().push_str(text);
+            }
+            Ok(())
+        }
+    }
+
+    /// Types the one value it was given, whatever the view shows.
+    struct Typist;
+
+    impl Decider for Typist {
+        fn decide(
+            &self,
+            _: &Value,
+            _: &BTreeMap<String, Question>,
+        ) -> Result<Decision, DecideError> {
+            let sure = |choice: &str| Answer::Choice {
+                choice: choice.into(),
+                probabilities: [(choice.to_string(), 1.0)].into(),
+                confidence: 1.0,
+            };
+            Ok(Decision {
+                answers: [
+                    ("operation".to_string(), sure("TYPE_TEXT")),
+                    ("type_entry".to_string(), sure("e1=v1")),
+                ]
+                .into(),
+                ..Decision::default()
+            })
+        }
+    }
+
+    /// A goal the values cannot carry out ("define a function", with only its argument given):
+    /// the helper types the value once, then stops instead of typing it again and again, each
+    /// time adding it to the line.
+    #[test]
+    fn the_same_value_typed_into_the_same_field_again_stops_the_run() {
+        let line = Line {
+            typed: Mutex::new(String::new()),
+        };
+        let outcome = GoalRun {
+            view: &line,
+            decider: &Typist,
+            on_step: &|_| {},
+            pause: &pause,
+            max_actions: 40,
+        }
+        .run(
+            "define a function sq, then call it with the given number",
+            &["12".into()],
+        );
+        assert_eq!(outcome.stop, Stop::Repeated);
+        assert_eq!(*line.typed.lock().unwrap(), "12", "typed once");
+    }
+}

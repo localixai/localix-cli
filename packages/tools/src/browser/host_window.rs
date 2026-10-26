@@ -27,7 +27,6 @@ pub(super) fn on_window(
         // The person closed the window: the browser's calls fail and the task is told, and the
         // terminals' callers let their screens go.
         WindowEvent::CloseRequested => {
-            open.let_go();
             let browser = open.web.is_some();
             *deck = None;
             shared.heard("window", Heard::Did(CLOSED_WINDOW));

@@ -16,6 +16,28 @@ fn closed(command: &Cmd, shared: &Shared) {
     }
 }
 
+/// `script` run in `webview`, its call `id` answered by the page; a tab closed answers at once.
+fn eval(
+    webview: Option<&wry::WebView>,
+    id: u64,
+    script: &str,
+    failed: &'static str,
+    shared: &Arc<Shared>,
+) {
+    let Some(webview) = webview else {
+        return shared.answer(id, Err(format!("{failed}: the tab is closed")));
+    };
+    let answer = Arc::clone(shared);
+    let sent = webview.evaluate_script_with_callback(script, move |started| {
+        if started.trim() != "true" {
+            answer.answer(id, Err(failed.into()));
+        }
+    });
+    if let Err(error) = sent {
+        shared.answer(id, Err(format!("{failed}: {error}")));
+    }
+}
+
 /// A command of the browser's own, on its tabs in the window.
 pub(super) fn on_browser(
     command: Cmd,
@@ -37,26 +59,19 @@ pub(super) fn on_browser(
             failed,
             tab,
             ..
-        } => {
-            let answer = Arc::clone(shared);
-            let sent = tabs
-                .at(tab)
-                .evaluate_script_with_callback(&script, move |started| {
-                    if started.trim() != "true" {
-                        answer.answer(id, Err(failed.into()));
-                    }
-                });
-            if let Err(error) = sent {
-                shared.answer(id, Err(format!("{failed}: {error}")));
-            }
-            return;
-        }
+        } => return eval(tabs.at(tab), id, &script, failed, shared),
         Cmd::Resize(width, height) => open.resize(width, height),
-        Cmd::Capture { clip, reply, tab } => return capture(tabs.at(tab), clip, reply),
+        Cmd::Capture { clip, reply, tab } => match tabs.at(tab) {
+            Some(webview) => return capture(webview, clip, reply),
+            None => {
+                let _ = reply.send(Err("the tab is closed".into()));
+                return;
+            }
+        },
         Cmd::Noted(noted) => {
             let (reply, shot) = std::sync::mpsc::sync_channel(1);
-            if noted.clip.is_some() {
-                capture(tabs.at(Some(noted.tab)), noted.clip, reply);
+            if let (Some(_), Some(webview)) = (noted.clip, tabs.at(Some(noted.tab))) {
+                capture(webview, noted.clip, reply);
             }
             return crate::browser::comments::pictured(noted, shot, shared, proxy);
         }
@@ -64,8 +79,10 @@ pub(super) fn on_browser(
         // works in a tab of its own beside the one shown.
         // An address the system cannot read never reaches WebKit: its load would panic here.
         Cmd::Navigate(url, tab) => {
-            if let Some(url) = crate::browser::guard::loadable(&url) {
-                let _ = tabs.at(tab).load_url(&url);
+            if let (Some(url), Some(webview)) =
+                (crate::browser::guard::loadable(&url), tabs.at(tab))
+            {
+                let _ = webview.load_url(&url);
             }
             if tab.is_none() {
                 open.show(Shown::Web);

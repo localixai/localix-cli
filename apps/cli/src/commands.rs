@@ -8,8 +8,6 @@ pub(crate) mod ended;
 pub(crate) mod entry;
 pub(crate) mod extras;
 pub(crate) mod login;
-#[cfg(unix)]
-pub(crate) mod mcp;
 pub(crate) mod model;
 pub(crate) mod repl;
 pub(crate) mod rewind;
@@ -18,6 +16,8 @@ pub(crate) mod run;
 pub(crate) mod serve;
 pub(crate) mod sessions;
 pub(crate) mod signin;
+#[cfg(unix)]
+pub(crate) mod window;
 
 use crate::cli::{Cli, Command, ExecCommand, joined};
 use crate::error::Failure;
@@ -52,7 +52,7 @@ pub(crate) fn dispatch(cli: Cli, at: At) -> Result<i32, Failure> {
         #[cfg(unix)]
         Some(Command::Serve(serve)) => serve::serve(serve.action.as_ref()),
         #[cfg(unix)]
-        Some(Command::Mcp) => mcp::mcp(),
+        Some(Command::Window(args)) => window::window(&args),
     }
 }
 

@@ -19,7 +19,7 @@ use super::capture::{Clip, Shot};
 use super::comments::Comments;
 use super::history::History;
 use super::panel;
-use super::strip::Click;
+use super::strip::{Click, Key};
 pub use super::told::{Heard, Listed, Tab};
 use super::viewport::Viewport;
 
@@ -33,12 +33,13 @@ mod web;
 mod window;
 pub use events::host;
 
-/// One script from seven files: snapshot, same-origin frames, the outline, actions, keys, the
-/// person's comments, then evaluate and the IPC entry point.
+/// One script from eight files: snapshot, same-origin frames, the outline, refs found again after
+/// a render, actions, keys, the person's comments, then evaluate and the IPC entry point.
 pub(super) const PROBE: &str = concat!(
     include_str!("probe/snapshot.js"),
     include_str!("probe/frames.js"),
     include_str!("probe/outline.js"),
+    include_str!("probe/refind.js"),
     include_str!("probe/act.js"),
     include_str!("probe/keys.js"),
     include_str!("probe/feedback.js"),
@@ -152,7 +153,7 @@ pub(super) struct Shared {
     listener: Mutex<Option<Listener>>,
     /// The group (a project) of each tab, by key, as its opener named it.
     pub(super) groups: Mutex<HashMap<String, String>>,
-    /// The web pages the tabs have shown, for the strip's history menu.
+    /// The tabs the window has held, for the strip's history menu.
     pub(super) history: History,
     /// The person's comments on the pages, until they send them.
     pub(super) comments: Comments,
@@ -208,6 +209,8 @@ impl Shared {
         }
         crate::lock(&self.loads).clear();
         crate::lock(&self.tabs).clear();
+        let groups = crate::lock(&self.groups).clone();
+        self.history.web(&[], &groups);
         self.loaded.notify_all();
     }
 
@@ -231,14 +234,14 @@ impl Shared {
             entry.url = url.to_string();
         }
         if matches!(event, PageLoadEvent::Finished) {
-            self.history.visited(url);
+            self.history.loaded(tab, url);
         }
         self.loaded.notify_all();
     }
 
     pub(super) fn titled(&self, tab: u32, title: String) {
+        self.history.titled(Key::Web(tab), &title);
         if let Some(entry) = crate::lock(&self.tabs).iter_mut().find(|t| t.id == tab) {
-            self.history.titled(&entry.url, &title);
             entry.title = title;
         }
     }
@@ -257,6 +260,9 @@ impl Shared {
             }
         }
         tabs.sort_by_key(|tab| tab.id);
+        drop(tabs);
+        let groups = crate::lock(&self.groups).clone();
+        self.history.web(ids, &groups);
         self.active.store(active, Ordering::SeqCst);
         self.loaded.notify_all();
     }

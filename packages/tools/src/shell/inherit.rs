@@ -53,13 +53,16 @@ fn close_on_exec() {
 }
 
 /// Mark every descriptor above stderr close-on-exec, in one system call (Linux 5.11 on). An older
-/// kernel refuses it, and the command inherits what it did before; std makes its own descriptors
-/// close-on-exec in one step there, so only the terminal's two ends were ever at risk.
+/// kernel, or an emulator (Rosetta's x86_64 Linux), refuses it: then each number below the
+/// descriptor limit is marked in turn, as on macOS.
 #[cfg(target_os = "linux")]
 fn close_on_exec() {
+    /// The most numbers marked one by one: a limit raised past it is rare, and a fork waits on
+    /// every call.
+    const MOST: libc::rlim_t = 65_536;
     let (first, last): (libc::c_uint, libc::c_uint) = (3, libc::c_uint::MAX);
     // SAFETY: close_range only marks descriptors of the forked child close-on-exec.
-    unsafe {
+    let marked = unsafe {
         libc::syscall(
             libc::SYS_close_range,
             first,
@@ -67,6 +70,21 @@ fn close_on_exec() {
             libc::CLOSE_RANGE_CLOEXEC,
         )
     };
+    if marked == 0 {
+        return;
+    }
+    let mut limit = libc::rlimit {
+        rlim_cur: 1024,
+        rlim_max: 1024,
+    };
+    // SAFETY: getrlimit writes the limit into the struct it is given, a system call with no lock.
+    unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &raw mut limit) };
+    let end = libc::c_int::try_from(limit.rlim_cur.min(MOST)).unwrap_or(1024);
+    for fd in 3..end {
+        // SAFETY: fcntl sets one descriptor flag of the forked child, or fails on a number that
+        // is not open.
+        unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) };
+    }
 }
 
 /// Elsewhere commands inherit what they always did.

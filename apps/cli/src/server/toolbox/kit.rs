@@ -1,6 +1,7 @@
 //! What a toolbox is built from at its client's place, and the `window` tool built from it for
 //! each call: the agent's own tool and kinds, on a gate and a stop of that call's (K7).
 
+use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
@@ -40,6 +41,8 @@ pub(super) struct Kit {
     page: Option<Page>,
     locks: BrowserLocks,
     sessions: Sessions,
+    /// Their numbering, which names the sessions running.
+    terminals: Arc<AtomicU32>,
     held: Option<Held>,
     decider: LiveDecider,
     /// What commands never see: the providers' keys.
@@ -66,7 +69,8 @@ impl Kit {
             let owner = (Arc::clone(&hosted.lanes), Weak::new(), group.clone());
             windows::panels(browser, place::theme(place), owner)
         });
-        let sessions = windows::terminals(watch, shown).numbered(Arc::clone(&hosted.terminals));
+        let terminals = Arc::clone(&hosted.terminals);
+        let sessions = windows::terminals(watch, shown).numbered(Arc::clone(&terminals));
         let chosen = place
             .env
             .iter()
@@ -83,6 +87,7 @@ impl Kit {
             page,
             locks: BrowserLocks::default(),
             sessions,
+            terminals,
             held,
             decider,
             hidden,
@@ -117,20 +122,26 @@ impl Kit {
         wire::called(called)
     }
 
-    /// The tabs its client opened in the window and left open, closed; its terminal sessions
-    /// end as the kit is dropped.
+    /// Whether a tab it opened is still open: a terminal session running, or a page.
+    pub(super) fn holds(&self) -> bool {
+        !tools::shell::running_with(&self.terminals).is_empty()
+            || self
+                .held
+                .as_ref()
+                .is_some_and(|held| !held.pages().is_empty())
+    }
+
+    /// Its terminal sessions ended, and the pages its client opened in the window and left open
+    /// closed.
     pub(super) fn close(&self) {
+        self.sessions.close_all();
         let Some(held) = &self.held else {
             return;
         };
-        let opened = std::mem::take(&mut *lock(&held.opened));
-        // Only those still open, of its project: an id the client closed may name another's now.
-        let listed = held.tabs.tabs().unwrap_or_default();
-        for tab in listed.iter().filter(|tab| tab.group == held.tabs.group) {
-            if tab.id.starts_with('w') && opened.contains(&tab.id) {
-                let _ = held.tabs.act(Act::Close, &tab.id);
-            }
+        for page in held.pages() {
+            let _ = held.tabs.act(Act::Close, &page);
         }
+        lock(&held.opened).clear();
     }
 
     /// `work` with the `window` tool as the agent has it, on a gate that allows (the client
@@ -196,6 +207,19 @@ struct Held {
 }
 
 impl Held {
+    /// The pages its client opened that are still open, of its project: an id the client closed
+    /// may name another's now.
+    fn pages(&self) -> Vec<String> {
+        let opened = lock(&self.opened).clone();
+        let listed = self.tabs.tabs().unwrap_or_default();
+        let own = listed
+            .into_iter()
+            .filter(|tab| tab.group == self.tabs.group);
+        own.map(|tab| tab.id)
+            .filter(|id| id.starts_with('w') && opened.contains(id))
+            .collect()
+    }
+
     /// The tabs a `close` call named are no longer the client's to close.
     fn closed(&self, arguments: &Value) {
         let one = arguments.get("tab").and_then(Value::as_str);

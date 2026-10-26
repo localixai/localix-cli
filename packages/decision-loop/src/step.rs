@@ -155,7 +155,7 @@ impl std::fmt::Display for Stop {
             ),
             Self::Done { .. } => f.write_str("the model judged the goal done"),
             Self::Blocked => f.write_str("the model is blocked: nothing offered can progress"),
-            Self::Repeated => f.write_str("the same action twice without a visible change"),
+            Self::Repeated => f.write_str("the same action again, which gained nothing"),
             Self::Cycling => f.write_str("the view keeps returning to the same state"),
             Self::ActionFailed(error) => write!(f, "the action failed: {error}"),
             Self::Unreachable(error) => write!(f, "the decision model is unreachable: {error}"),

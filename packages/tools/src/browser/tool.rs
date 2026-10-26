@@ -6,9 +6,11 @@ use contracts::gate::Gate;
 use contracts::tool::{Image, Tool, ToolError, ToolOutput, ToolSpec};
 use contracts::view::View;
 use serde_json::Value;
+use std::time::Instant;
 
 use super::args::{
-    Args, DEFAULT_KEY_DELAY_MS, DESCRIPTION, MAX_KEY_DELAY_MS, address, effects, given, parameters,
+    Args, DEFAULT_KEY_DELAY_MS, DEFAULT_WAIT_MS, DESCRIPTION, MAX_KEY_DELAY_MS, MAX_WAIT_MS,
+    address, effects, given, parameters,
 };
 use super::{Driver, Page, Shot};
 use crate::ask;
@@ -73,6 +75,10 @@ impl Tool for BrowserTool<'_> {
                 Ok(value) => report.push(format!("### Script result\n{value}")),
                 Err(error) => report.push(format!("The script failed: {error}")),
             }
+        }
+        if let Some(text) = given(&args.wait_for) {
+            let most = args.yield_ms.unwrap_or(DEFAULT_WAIT_MS).min(MAX_WAIT_MS);
+            report.push(wait_for(&driver, text, most));
         }
         let image = match args.screenshot {
             true => Self::screenshot(&driver, given(&args.selector), &mut report),
@@ -214,6 +220,31 @@ fn without_refs(outline: &str) -> String {
     }
     out.push_str(rest);
     out
+}
+
+/// Waits until the page's text shows `text`, at most `most` ms, polled in the page on a timer
+/// (animation frames stop in a window in the background); says whether it came and when.
+fn wait_for(driver: &impl Driver, text: &str, most: u64) -> String {
+    let wanted = Value::String(text.to_string());
+    let source = format!(
+        "const wanted = {wanted}; const until = performance.now() + {most}; \
+         const shows = () => (document.body?.innerText ?? '').includes(wanted); \
+         while (!shows() && performance.now() < until) await sleep(100); shows()"
+    );
+    let started = Instant::now();
+    let seconds = |ms: u128| format!("{}.{}s", ms / 1000, ms % 1000 / 100);
+    match driver.evaluate(&source).as_deref() {
+        Ok("true") => format!(
+            "\"{text}\" appeared after {}",
+            seconds(started.elapsed().as_millis())
+        ),
+        Ok(_) => format!(
+            "\"{text}\" did not appear within {}: the page may still be working; wait again, \
+             or read what it shows",
+            seconds(u128::from(most))
+        ),
+        Err(error) => format!("Waiting for \"{text}\" failed: {error}"),
+    }
 }
 
 #[cfg(test)]

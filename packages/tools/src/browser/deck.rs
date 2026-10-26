@@ -2,7 +2,9 @@
 //! strip along its top (strip.rs) that names them and switches between them. The browser's tabs
 //! are the agent's (tabs.rs): showing a terminal moves them aside, still rendering, and never
 //! changes the tab the agent acts on. A shown window opens with the first of either; a headless
-//! one is the browser's alone, with no strip. It closes when nothing is left in it.
+//! one is the browser's alone, with no strip. It closes when nothing is left in it. A terminal
+//! the person closes stays live out of sight, and one whose session ended keeps its last screen,
+//! both for the history menu (deck_history.rs) to show again.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,17 +15,23 @@ use wry::{NewWindowResponse, WebView, WebViewBuilder};
 
 use super::frame::{self, Frame, Look};
 use super::host::{Cmd, Shared, Window};
-use super::panel::{self, Open, Opening};
+use super::panel::{self, Held, Open, Opening};
 use super::strip::{self, HEIGHT};
 
 #[path = "deck_acts.rs"]
 mod acts;
+#[path = "deck_history.rs"]
+mod history;
 #[path = "deck_layout.rs"]
 mod layout;
 use super::tab_view::build;
 use super::tabs::Tabs;
 use super::viewport::Viewport;
 pub(super) use acts::After;
+pub(super) use history::Revisit;
+
+/// How many ended terminals keep their last screen.
+const ENDED_KEPT: usize = 8;
 
 /// What fills the window under the strip.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -160,6 +168,8 @@ impl Deck {
             self.frame.ground(ground);
         }
         let open = panel::open(opening, &self.frame.native, self.look, proxy.clone())?;
+        // A session's id used again: the screen kept of the one before is not this one's.
+        self.terms.retain(|kept| kept.id != open.id);
         self.shown = Shown::Term(open.id);
         self.terms.push(open);
         Ok(())
@@ -169,14 +179,46 @@ impl Deck {
         self.terms.iter().find(|open| open.id == id)
     }
 
-    /// Take terminal `id` out, telling its caller; whether anything is left in the window.
-    pub(super) fn remove_term(&mut self, id: u32) -> bool {
-        if let Some(at) = self.terms.iter().position(|open| open.id == id) {
-            let gone = self.terms.remove(at);
-            gone.slot.alive.store(false, Ordering::SeqCst);
+    /// Terminal `id`'s caller let it go: its last screen is kept, out of the tabs, the oldest
+    /// such one let go past a few. Whether anything is left in the window.
+    pub(super) fn end_term(&mut self, id: u32) -> bool {
+        if let Some(open) = self.terms.iter_mut().find(|open| open.id == id) {
+            open.held = Held::Ended;
+            open.slot.alive.store(false, Ordering::SeqCst);
+        }
+        let ended = |open: &&Open| open.held == Held::Ended;
+        if self.terms.iter().filter(ended).count() > ENDED_KEPT
+            && let Some(at) = self.terms.iter().position(|open| open.held == Held::Ended)
+        {
+            self.terms.remove(at);
         }
         self.settle();
-        self.web.is_some() || !self.terms.is_empty()
+        self.holds()
+    }
+
+    /// The person closed terminal `id`'s tab: its program runs on, and its screen is painted
+    /// out of sight until it is shown again. Whether anything is left in the window.
+    pub(super) fn hide_term(&mut self, id: u32) -> bool {
+        self.held(id, Held::Live, Held::Hidden);
+        self.settle();
+        self.holds()
+    }
+
+    /// Terminal `id` a tab again, if the person had closed it.
+    pub(super) fn unhide_term(&mut self, id: u32) {
+        self.held(id, Held::Hidden, Held::Live);
+    }
+
+    fn held(&mut self, id: u32, from: Held, to: Held) {
+        let found = self.terms.iter_mut().find(|open| open.id == id);
+        if let Some(open) = found.filter(|open| open.held == from) {
+            open.held = to;
+        }
+    }
+
+    /// Whether the window holds a tab: the browser, or a terminal's.
+    fn holds(&self) -> bool {
+        self.web.is_some() || self.terms.iter().any(|open| open.held == Held::Live)
     }
 
     /// The browser is gone from the window (closed by the agent, or its last tab by the person);
@@ -184,11 +226,11 @@ impl Deck {
     pub(super) fn remove_web(&mut self) -> bool {
         self.web = None;
         self.settle();
-        !self.terms.is_empty()
+        self.holds()
     }
 
     /// Every terminal's caller is told the window is gone.
-    pub(super) fn let_go(&self) {
+    fn let_go(&self) {
         for open in &self.terms {
             open.slot.alive.store(false, Ordering::SeqCst);
         }
@@ -211,18 +253,27 @@ impl Deck {
         }
     }
 
-    /// What is shown is still there: else the newest terminal, else the browser.
+    /// What is shown is still a tab: else the newest terminal's, else the browser. (An ended
+    /// screen the history menu showed is let go of here too.)
     fn settle(&mut self) {
         let gone = match self.shown {
             Shown::Web => self.web.is_none(),
-            Shown::Term(id) => self.term(id).is_none(),
+            Shown::Term(id) => self.term(id).is_none_or(|open| open.held != Held::Live),
         };
         if gone {
-            self.shown = match self.terms.last() {
+            let live = self.terms.iter().rev().find(|open| open.held == Held::Live);
+            self.shown = match live {
                 Some(open) => Shown::Term(open.id),
                 None => Shown::Web,
             };
         }
+    }
+}
+
+impl Drop for Deck {
+    /// Every terminal's caller is told the window is gone, a hidden one's too.
+    fn drop(&mut self) {
+        self.let_go();
     }
 }
 

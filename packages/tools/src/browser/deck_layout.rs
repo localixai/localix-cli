@@ -89,8 +89,8 @@ impl Deck {
             .collect();
         let shown = shown.and_then(|id| Key::parse(&id)).unwrap_or(Key::Web(0));
         let _ = strip.evaluate_script(&strip::script(&items, shown));
-        let visits = self.menu.then(|| shared.history.list());
-        let _ = strip.evaluate_script(&strip::menu(visits.as_deref()));
+        let rows = self.menu.then(|| self.rows(shared));
+        let _ = strip.evaluate_script(&strip::menu(rows.as_deref()));
         let held = shared.comments.count();
         let _ = strip.evaluate_script(&strip::commenting(self.commenting, held));
     }

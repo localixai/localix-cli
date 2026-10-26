@@ -213,13 +213,10 @@
     return null
   }
 
-  function snapshot() {
-    if (!document.body) return null
-    for (const [id, e] of nodes) if (!e.isConnected || !e.ownerDocument.defaultView) nodes.delete(id)
-    const elements = []
-    let omitted = 0
-    const frames = subframes()
-    // An overlay frame first: it is what the page is about now, and the element cap must not cut it.
+  // The controls a snapshot offers, in its order: visible, with a role, on screen or just below
+  // it. An overlay frame first: it is what the page is about now, and the element cap must not
+  // cut it.
+  function* offered(frames) {
     const docs = [...frames.filter((f) => f.overlay), { doc: document, frame: null }, ...frames.filter((f) => !f.overlay)]
     for (const { doc, frame, ...at } of docs) for (const e of deep(doc.body)) {
       if (!isControl(e)) continue
@@ -231,6 +228,17 @@
       if (frame && (own.bottom <= 0 || own.right <= 0 || own.top >= frame.clientHeight || own.left >= frame.clientWidth)) continue
       if (!role || !(inViewport(box) || justBelow(box))) continue
       if (role === 'gridcell' && e.querySelector('button,[role="button"]')) continue
+      yield { e, role, box, at }
+    }
+  }
+
+  function snapshot() {
+    if (!document.body) return null
+    for (const [id, e] of nodes) if (!e.isConnected || !e.ownerDocument.defaultView) nodes.delete(id)
+    const elements = []
+    let omitted = 0
+    const frames = subframes()
+    for (const { e, role, box, at } of offered(frames)) {
       if (elements.length >= MAX_ELEMENTS) { omitted++; continue }
       const element = { ref: refOf(e), role, name: dayOf(e, labelOf(e)) }
       const value = valueOf(e, role)
@@ -246,6 +254,7 @@
       }
       elements.push(element)
     }
+    mark(elements)
     return {
       epoch: epoch(),
       url: location.href,

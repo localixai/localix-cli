@@ -28,19 +28,5 @@ pub(super) fn loadable(url: &str) -> Option<String> {
 
 /// 32 hex characters from the clock and the address space; unguessable to a page in one run.
 pub(super) fn token() -> String {
-    use std::collections::hash_map::RandomState;
-    use std::fmt::Write as _;
-    use std::hash::{BuildHasher, Hasher};
-    let mut out = String::new();
-    for _ in 0..2 {
-        let mut hasher = RandomState::new().build_hasher();
-        hasher.write_u128(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos(),
-        );
-        let _ = write!(out, "{:016x}", hasher.finish());
-    }
-    out
+    crate::served::token()
 }

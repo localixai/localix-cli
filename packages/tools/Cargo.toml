@@ -18,6 +18,7 @@ browser = [
     "dep:wry",
     "dep:url",
     "dep:gtk",
+    "dep:webkit2gtk",
     "dep:objc2",
     "dep:objc2-web-kit",
     "dep:block2",
@@ -58,9 +59,11 @@ block2 = { workspace = true, optional = true }
 objc2 = { workspace = true, optional = true }
 objc2-web-kit = { workspace = true, optional = true }
 
-# Already in the tree through tao and wry: a page's place in the window's GTK box.
+# Already in the tree through tao and wry: a page's place in the window's GTK box, and the
+# WebView's own snapshot for a screenshot.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { workspace = true, optional = true }
+webkit2gtk = { workspace = true, optional = true }
 
 [dev-dependencies]
 # The terminal page's own script is allowed by its hash: a test checks the one written down

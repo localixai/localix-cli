@@ -135,13 +135,14 @@ fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, la
     let Ok(first) = incoming.recv() else {
         return;
     };
-    // A tool client (`llx mcp`) gets a toolbox, not a desk (W9).
+    // A tool client (`llx window`) gets its owner's toolbox, not a desk (W9).
     if toolbox::wanted(&first) {
         let hosted = toolbox::Hosted {
             host: Some(Arc::clone(host)),
             browser,
             lanes: Arc::clone(lanes),
             terminals: Arc::default(),
+            owners: host.owners(),
         };
         return toolbox::serve(first, &incoming, &out, &hosted);
     }

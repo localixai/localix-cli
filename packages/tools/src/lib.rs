@@ -11,6 +11,7 @@
 //!   also a program that must ask, kept open in a terminal session between calls.
 //! - [`browser`]: a native browser window on the system WebView (the `browser` feature; without
 //!   it, the same names with nothing behind them).
+//! - [`served`]: a page on disk opened as a site: its directory served on the loopback.
 //! - [`ask`]: questions to the person (`contracts::person::Person`), who answers in the app.
 
 use contracts::gate::{Effect, Gate, Verdict};
@@ -24,6 +25,7 @@ pub mod browser;
 #[path = "headless.rs"]
 pub mod browser;
 pub mod fs;
+pub mod served;
 pub mod shell;
 pub mod window;
 pub mod workspace;

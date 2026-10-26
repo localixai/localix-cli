@@ -60,6 +60,8 @@ pub enum Command {
         name: String,
         arguments: serde_json::Value,
     },
+    /// A tool client's owner is done (W9): its tabs close and its terminal sessions end.
+    Release,
 }
 
 /// What the person sent: the text, and the pictures attached to it.

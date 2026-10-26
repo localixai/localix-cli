@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snake</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  canvas {
+    display: block;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+  }
+  canvas:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+  }
+  .stage > .over {
+    font-size: var(--step-1);
+  }
+</style>
+</head>
+<body>
+<main class="arcade">
+  <h1>Snake</h1>
+  <p class="lead">Eat the apples, grow longer, and keep clear of the walls and your own tail.</p>
+  <div class="stats" aria-live="polite">
+    <div class="stat"><span>Score</span><strong id="score">0</strong></div>
+    <div class="stat"><span>Length</span><strong id="length">3</strong></div>
+    <div class="stat"><span>Moves</span><strong id="moves">0</strong></div>
+    <div class="stat"><span>Best</span><strong id="best">0</strong></div>
+  </div>
+  <div class="chips" role="group" aria-label="Speed" id="speeds">
+    <button type="button" aria-pressed="false" data-ms="0">Step</button>
+    <button type="button" aria-pressed="false" data-ms="260">Slow</button>
+    <button type="button" aria-pressed="true" data-ms="140">Normal</button>
+    <button type="button" aria-pressed="false" data-ms="80">Fast</button>
+  </div>
+  <div class="stage"><div class="square">
+    <canvas id="field" width="480" height="480" tabindex="0" aria-label="Snake field, 20 by 20" aria-describedby="said"></canvas>
+    <div class="over" id="over">
+      <span id="over-text">Press an arrow key to start</span>
+      <div><button type="button" class="primary" id="play">Play</button></div>
+    </div>
+  </div></div>
+  <p class="sr-only" id="said" aria-live="polite"></p>
+  <p class="keys">Steer with <kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd>, pause with <kbd>Space</kbd>. On Step, the snake moves one square per key.</p>
+</main>
+<script src="kit.js"></script>
+<script>
+  header("Snake");
+  const N = 20;
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("field");
+  const pen = canvas.getContext("2d");
+  const DIRS = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+  let random;
+  let snake;
+  let heading;
+  let turns;
+  let food;
+  let score = 0;
+  let moves = 0;
+  let best = 0;
+  let state = "ready"; // ready, playing, paused, over
+  let ms = 140;
+  let timer = null;
+
+  function reset() {
+    random = seeded(77);
+    snake = [[10, 10], [9, 10], [8, 10]];
+    heading = [1, 0];
+    turns = [];
+    score = 0;
+    moves = 0;
+    place();
+  }
+
+  /** An apple on a free square, the same squares in the same order every game. */
+  function place() {
+    do food = [Math.floor(random() * N), Math.floor(random() * N)];
+    while (snake.some(([x, y]) => x === food[0] && y === food[1]));
+  }
+
+  function step() {
+    if (turns.length) heading = turns.shift();
+    const [hx, hy] = snake[0];
+    const head = [hx + heading[0], hy + heading[1]];
+    const eats = head[0] === food[0] && head[1] === food[1];
+    const body = eats ? snake : snake.slice(0, -1);
+    const hit = head[0] < 0 || head[1] < 0 || head[0] >= N || head[1] >= N || body.some(([x, y]) => x === head[0] && y === head[1]);
+    if (hit) return end();
+    snake = [head, ...body];
+    moves++;
+    if (eats) {
+      score += 10;
+      best = Math.max(best, score);
+      place();
+      $("said").textContent = `Apple eaten. Score ${score}.`;
+    }
+    draw();
+  }
+
+  function end() {
+    state = "over";
+    stop();
+    $("over-text").textContent = `Game over. Score ${score}.`;
+    $("play").textContent = "Play again";
+    $("over").hidden = false;
+    $("said").textContent = `Game over with ${score} points.`;
+    draw();
+  }
+
+  const stop = () => clearInterval(timer);
+  const go = () => {
+    stop();
+    if (ms) timer = setInterval(step, ms);
+  };
+
+  function play() {
+    if (state === "over" || state === "ready") reset();
+    state = "playing";
+    $("over").hidden = true;
+    go();
+    draw();
+    canvas.focus();
+  }
+
+  function color(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function draw() {
+    const cell = canvas.width / N;
+    pen.clearRect(0, 0, canvas.width, canvas.height);
+    pen.fillStyle = color("--sunk");
+    for (let x = 0; x < N; x++) for (let y = (x % 2); y < N; y += 2) pen.fillRect(x * cell, y * cell, cell, cell);
+    pen.fillStyle = color("--danger");
+    pen.beginPath();
+    pen.arc((food[0] + 0.5) * cell, (food[1] + 0.5) * cell, cell * 0.36, 0, Math.PI * 2);
+    pen.fill();
+    snake.forEach(([x, y], i) => {
+      pen.fillStyle = color("--accent");
+      pen.globalAlpha = i ? Math.max(0.45, 1 - i * 0.03) : 1;
+      pen.beginPath();
+      pen.roundRect(x * cell + 2, y * cell + 2, cell - 4, cell - 4, 6);
+      pen.fill();
+    });
+    pen.globalAlpha = 1;
+    $("score").textContent = score;
+    $("length").textContent = snake.length;
+    $("moves").textContent = moves;
+    $("best").textContent = best;
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if ((event.target instanceof Element && event.target.closest("input, select, textarea, button"))) return;
+    const dir = DIRS[event.key];
+    if (event.key === " ") {
+      event.preventDefault();
+      if (state === "playing") {
+        state = "paused";
+        stop();
+        $("over-text").textContent = "Paused";
+        $("play").textContent = "Go on";
+        $("over").hidden = false;
+      } else if (state === "paused") play();
+      return;
+    }
+    if (!dir) return;
+    event.preventDefault();
+    if (state !== "playing") play();
+    const last = turns.at(-1) || heading;
+    // A turn straight back into the neck is ignored, as in every snake.
+    if (dir[0] !== -last[0] || dir[1] !== -last[1]) turns.push(dir);
+    if (!ms) step();
+  });
+
+  $("play").addEventListener("click", play);
+  $("speeds").addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button) return;
+    ms = Number(button.dataset.ms);
+    for (const b of $("speeds").children) b.setAttribute("aria-pressed", String(b === button));
+    if (state === "playing") go();
+    canvas.focus();
+  });
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+
+  reset();
+  draw();
+</script>
+</body>
+</html>

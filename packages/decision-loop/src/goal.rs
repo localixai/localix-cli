@@ -2,7 +2,8 @@
 //! decision request, one action, repeat, bounded.
 //!
 //! It never decides success. It stops on DONE or BLOCKED, an unreadable answer, a failed action,
-//! the step cap, or the same action twice without a visible change, and returns the trace and the
+//! the step cap, or the same action again where it gains nothing (no visible change, or a value
+//! typed again into the field it was just typed into), and returns the trace and the
 //! final view: the caller reads the view and judges.
 
 use std::time::Duration;
@@ -264,12 +265,19 @@ impl GoalRun<'_> {
             walk.outcome.view = Some(view);
             return walk.end(Stop::NoDecision("a step without its value".into()));
         };
-        let repeated = walk.outcome.steps.last().is_some_and(|last| {
+        let same = walk.outcome.steps.last().filter(|last| {
             last.operation == step.operation
                 && last.reference == step.reference
                 && last.value == step.value
-                && last.changed == Some(false)
         });
+        // The same value typed into the same field right after typing it is never progress: a
+        // form's field holds it already, a terminal's line gets it twice. The run stops before
+        // typing it again (a goal its values cannot carry out typed one forever).
+        if same.is_some() && step.operation == Operation::TypeText {
+            walk.outcome.view = Some(view);
+            return walk.end(Stop::Repeated);
+        }
+        let repeated = same.is_some_and(|last| last.changed == Some(false));
         match self.view.act(&view.epoch, &action) {
             // A target gone since the snapshot (a popup still opening) is a stale read, not a
             // failed action: look again and decide again, once per step.

@@ -31,8 +31,10 @@ body{margin:0;cursor:default;user-select:none;-webkit-user-select:none}
 #menu{position:absolute;right:8px;width:min(380px,calc(100vw - 16px));max-height:calc(100vh - 100px);overflow-y:auto;box-sizing:border-box;padding:5px;border-radius:10px;background:var(--ground);box-shadow:0 0 0 1px color-mix(in srgb,currentColor 14%,transparent),0 10px 30px rgba(0,0,0,.28);display:none;z-index:3}
 .v{padding:7px 9px;border-radius:7px}
 .v:hover{background:color-mix(in srgb,currentColor 9%,transparent)}
+.v .h{display:flex;align-items:center;gap:7px}
 .v .n{display:block;font-size:12.5px}
-.v .u{display:block;margin-top:3px;font-size:11px;opacity:.5;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.v.off .h{opacity:.62}
+.v .u{display:block;margin-top:3px;padding-left:17px;font-size:11px;opacity:.5;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .e{padding:12px 9px;opacity:.5}
 #cm.on{opacity:1;color:#fff;background:#4f7cff}
 .s{display:none;flex:none;height:24px;padding:0 10px;border-radius:7px;align-items:center;font-weight:600;background:#4f7cff;color:#fff}
@@ -105,35 +107,46 @@ function S(data) {
     return item;
   }));
 }
-// The history menu: the pages as a list, newest first; null closes it. Titles and addresses
-// are set as text.
-function M(visits) {
+// The history menu: the tabs the window has held, newest first, each with what became of it;
+// null closes it. Titles, pages and projects are set as text.
+const SAID = { open: "open", hidden: "closed · still running", ended: "ended", closed: "closed" };
+function M(rows) {
   const menu = document.getElementById("menu");
-  const open = visits !== null;
+  const open = rows !== null;
   menu.style.display = document.getElementById("back").style.display = open ? "block" : "none";
   document.getElementById("hs").className = open ? "b on" : "b";
   if (!open) return menu.replaceChildren();
   menu.style.top = document.getElementById("head").offsetHeight + 2 + "px";
-  if (visits.length === 0) {
+  if (rows.length === 0) {
     const none = document.createElement("div");
     none.className = "e";
-    none.textContent = "No pages yet";
+    none.textContent = "No tabs yet";
     menu.replaceChildren(none);
     return;
   }
-  menu.replaceChildren(...visits.map((visit, at) => {
-    const row = document.createElement("div");
-    row.className = "v";
-    row.title = visit.url;
+  const several = new Set(rows.map((row) => row.group)).size > 1;
+  menu.replaceChildren(...rows.map((row) => {
+    const item = document.createElement("div");
+    item.className = row.state === "open" ? "v" : "v off";
+    item.dataset.at = row.at;
+    item.dataset.key = row.key;
+    item.dataset.state = row.state;
+    item.title = row.detail || row.title;
+    const icon = document.createElement("span");
+    icon.className = "i";
+    icon.textContent = row.kind === "term" ? ">_" : "◐";
     const name = document.createElement("span");
     name.className = "n";
-    name.textContent = visit.title || visit.url;
-    const url = document.createElement("span");
-    url.className = "u";
-    url.textContent = visit.url;
-    row.append(name, url);
-    row.addEventListener("click", () => window.ipc.postMessage("visit " + at));
-    return row;
+    name.textContent = row.title || row.detail || (row.kind === "term" ? "Terminal" : "New tab");
+    const head = document.createElement("span");
+    head.className = "h";
+    head.append(icon, name);
+    const about = document.createElement("span");
+    about.className = "u";
+    about.textContent = [several ? row.group || "—" : "", row.detail, SAID[row.state]].filter(Boolean).join(" · ");
+    item.append(head, about);
+    item.addEventListener("click", () => window.ipc.postMessage("visit " + row.at));
+    return item;
   }));
 }
 // The comment button, on while the person comments on the pages, and Send while some are held.

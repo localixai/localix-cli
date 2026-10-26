@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use super::process::{Ending, Env};
 use super::pty;
-use super::running::Session;
+use super::running::{Reading, Session};
 use super::watch::{self, Watch};
 
 pub const MAX_SESSIONS: usize = 4;
@@ -175,7 +175,8 @@ impl Sessions {
         })?;
         let owner = super::running::owner(self.numbers.as_ref());
         let session = Session::new(id, shown(command), pty, owner);
-        Ok(self.go_on(session, wait, stop, None, show.unwrap_or(self.shown)))
+        let show = show.unwrap_or(self.shown);
+        Ok(self.go_on(session, wait, stop, None, show, Reading::Take))
     }
 
     /// Type `input` and press `keys` in session `id` (neither, to only read it), then wait.
@@ -187,6 +188,31 @@ impl Sessions {
         wait: Wait,
         show: Option<bool>,
         stop: &(dyn Fn() -> bool + Sync),
+    ) -> Result<Turn, String> {
+        self.typed(id, (input, keys), wait, show, stop, Reading::Take)
+    }
+
+    /// Type and press as `send` does, for the helper: what it makes appear stays new output for
+    /// the agent's next call, which reads it after the goal.
+    pub(super) fn press(
+        &self,
+        id: u32,
+        typed: (&[u8], &[String]),
+        wait: Wait,
+        stop: &(dyn Fn() -> bool + Sync),
+    ) -> Result<(), String> {
+        self.typed(id, typed, wait, None, stop, Reading::Leave)
+            .map(|_| ())
+    }
+
+    fn typed(
+        &self,
+        id: u32,
+        (input, keys): (&[u8], &[String]),
+        wait: Wait,
+        show: Option<bool>,
+        stop: &(dyn Fn() -> bool + Sync),
+        reading: Reading,
     ) -> Result<Turn, String> {
         let session = self.take(id)?;
         match show {
@@ -200,7 +226,7 @@ impl Sessions {
             true => Some(session.pty.type_in(input, keys)).filter(|(sent, all)| sent < all),
             false => None,
         };
-        Ok(self.go_on(session, wait, stop, stalled, false))
+        Ok(self.go_on(session, wait, stop, stalled, false, reading))
     }
 
     /// End session `id`, and everything it started.
@@ -208,7 +234,8 @@ impl Sessions {
         let mut session = self.take(id)?;
         let killed = session.end();
         self.release(id);
-        Ok(session.turn(Until::Closed { killed }, Duration::ZERO, None))
+        let until = Until::Closed { killed };
+        Ok(session.turn(until, Duration::ZERO, None, Reading::Take))
     }
 
     /// End every session; how many there were.
@@ -229,10 +256,11 @@ impl Sessions {
         stop: &(dyn Fn() -> bool + Sync),
         stalled: Option<(usize, usize)>,
         open: bool,
+        reading: Reading,
     ) -> Turn {
         let begun = std::time::Instant::now();
         let until = session.wait(wait, stop);
-        let turn = session.turn(until, begun.elapsed(), stalled);
+        let turn = session.turn(until, begun.elapsed(), stalled, reading);
         match until {
             // A stop ends the wait, not the program: a REPL or a program the person watches goes
             // on, until it is closed.

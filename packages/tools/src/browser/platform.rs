@@ -3,13 +3,21 @@
 use tao::event_loop::EventLoopWindowTarget;
 use tao::window::WindowBuilder;
 
+/// With `LLX_WINDOWS=unseen` (the tests', AGENTS.md) a shown window is everything it is, strip,
+/// glass and panels, but on screen it is what a headless one is: clear, passing clicks through,
+/// with no Dock icon, so a test run never covers what the person is watching (macOS).
+#[cfg(target_os = "macos")]
+fn unseen() -> bool {
+    std::env::var_os("LLX_WINDOWS").is_some_and(|value| value == "unseen")
+}
+
 /// Whether the app is in the Dock while its window is shown, so a click on its icon brings the
 /// window back from another desktop. A headless window has no icon: the app stays an accessory.
 /// Showing the icon never activates the app (the window still never takes the keyboard).
 #[cfg(target_os = "macos")]
 pub(super) fn dock<T>(target: &EventLoopWindowTarget<T>, shown: bool) {
     use tao::platform::macos::{ActivationPolicy, EventLoopWindowTargetExtMacOS};
-    let policy = match shown {
+    let policy = match shown && !unseen() {
         true => ActivationPolicy::Regular,
         false => ActivationPolicy::Accessory,
     };
@@ -39,39 +47,45 @@ pub(super) fn conceal(builder: WindowBuilder) -> WindowBuilder {
 /// WebKit stops animation frames and timers in a window it considers hidden, and a driven window
 /// usually sits behind the terminal that started it. So occlusion detection, a WKWebView switch,
 /// is off. A shown window is an ordinary one: it comes to the front once, without taking focus,
-/// and goes behind other windows like any other. A headless window floats, in case the switch is
-/// missing, but it is fully transparent and passes clicks through: it covers nothing.
+/// and goes behind other windows like any other. A headless window is fully transparent, passes
+/// clicks through, and goes behind every window, as Bun's and WebKit's own test windows do: on
+/// screen, so WebKit sees it shown and the display it is on stays awake, under whatever the person
+/// watches. Only where the switch is missing does it float, so that nothing covers it.
 #[cfg(target_os = "macos")]
 pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
     use objc2::msg_send;
     use objc2::runtime::Bool;
     use wry::WebViewExtMacOS;
 
-    // NSWindowCollectionBehavior: open in the Space the person is in, even over a full-screen app,
-    // so a new window never switches Spaces under them; a headless one also stays out of
-    // window cycling and Mission Control.
+    // NSWindowCollectionBehavior: a shown window opens in the Space the person is in, so it never
+    // switches Spaces under them, and it goes full screen as any window does (its green button);
+    // a headless one joins every Space, even over a full-screen app, and stays out of window
+    // cycling and Mission Control.
     const CAN_JOIN_ALL_SPACES: usize = 1 << 0;
     const MOVE_TO_ACTIVE_SPACE: usize = 1 << 1;
     const TRANSIENT: usize = 1 << 3;
     const IGNORES_CYCLE: usize = 1 << 6;
+    const FULL_SCREEN_PRIMARY: usize = 1 << 7;
     const FULL_SCREEN_AUXILIARY: usize = 1 << 8;
-    keep_tab_rendering(webview);
+    let switched = keep_tab_rendering(webview);
+    let headless = headless || unseen();
     let window = webview.ns_window();
     // It never takes focus.
     let behavior = if headless {
         CAN_JOIN_ALL_SPACES | TRANSIENT | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY
     } else {
-        MOVE_TO_ACTIVE_SPACE | FULL_SCREEN_AUXILIARY
+        MOVE_TO_ACTIVE_SPACE | FULL_SCREEN_PRIMARY
     };
     // SAFETY: wry's NSWindow is alive while its WebView is; it takes an
     // NSWindowCollectionBehavior (an NSUInteger).
     let _: () = unsafe { msg_send![&*window, setCollectionBehavior: behavior] };
-    // NSWindow levels: only an invisible window floats (3), above every ordinary one (0).
-    let level: isize = if headless { 3 } else { 0 };
+    // NSWindow levels: an invisible window floats (3), above every ordinary one (0), only when
+    // nothing else keeps it drawing.
+    let level: isize = if headless && !switched { 3 } else { 0 };
     // SAFETY: as above; an NSWindowLevel is an NSInteger.
     let _: () = unsafe { msg_send![&*window, setLevel: level] };
-    // SAFETY: as above; it takes no argument and returns nothing.
-    let _: () = unsafe { msg_send![&*window, orderFrontRegardless] };
+    // A headless window is invisible before it is ever on screen: made clear after it came to the
+    // front, it flashed over whatever the person was watching, once for every `exec` and test.
     if headless {
         // SAFETY: as above; it takes a CGFloat.
         let _: () = unsafe { msg_send![&*window, setAlphaValue: 0.0f64] };
@@ -80,11 +94,21 @@ pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
         // SAFETY: as above; it takes a BOOL.
         let _: () = unsafe { msg_send![&*window, setHasShadow: Bool::NO] };
     }
+    if headless && switched {
+        // SAFETY: as above; `orderBack:` takes a sender, which may be nil, and returns nothing.
+        let _: () = unsafe {
+            msg_send![&*window, orderBack: std::ptr::null::<objc2::runtime::AnyObject>()]
+        };
+    } else {
+        // SAFETY: as above; it takes no argument and returns nothing.
+        let _: () = unsafe { msg_send![&*window, orderFrontRegardless] };
+    }
 }
 
 /// A page keeps drawing while covered: WebKit's occlusion detection is off for its WebView.
+/// Whether it is: the switch is private, and a later WebKit may not have it.
 #[cfg(target_os = "macos")]
-pub(super) fn keep_tab_rendering(webview: &wry::WebView) {
+pub(super) fn keep_tab_rendering(webview: &wry::WebView) -> bool {
     use objc2::runtime::Bool;
     use objc2::{msg_send, sel};
     use wry::WebViewExtMacOS;
@@ -104,10 +128,13 @@ pub(super) fn keep_tab_rendering(webview: &wry::WebView) {
     let _: () = unsafe { msg_send![&*view, setHidden: Bool::YES] };
     // SAFETY: as above.
     let _: () = unsafe { msg_send![&*view, setHidden: Bool::NO] };
+    available
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(super) fn keep_tab_rendering(_webview: &wry::WebView) {}
+pub(super) fn keep_tab_rendering(_webview: &wry::WebView) -> bool {
+    false
+}
 
 #[cfg(not(target_os = "macos"))]
 pub(super) fn keep_rendering(_webview: &wry::WebView, _headless: bool) {}

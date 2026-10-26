@@ -27,12 +27,90 @@ const SETTLE_MS: u64 = 1500;
 const CONVENTIONS: &str = "This is a terminal: the text is its screen. Type with `input` (what \
 is typed is not sent until Enter), and press a key with its button (`key:Enter`). A menu moves \
 with the Up and Down keys and is chosen with Enter; the marked line (❯, >) is the one chosen. A \
-prompt waits at the end of the last line. Ctrl-C interrupts the program.";
+prompt waits at the end of the last line. What the screen held before the goal began stays above \
+a line that says so: only what is below it came from this goal's steps, and a step done once is \
+not done again. Ctrl-C interrupts the program.";
+
+/// The line a goal's view puts between what the screen held when the goal began and what came
+/// since.
+pub(super) const BEGAN: &str = "──── the goal began here; below is what came since ────";
 
 pub struct TerminalView<'a> {
-    pub sessions: &'a Sessions,
-    pub id: u32,
-    pub stop: &'a (dyn Fn() -> bool + Sync),
+    sessions: &'a Sessions,
+    id: u32,
+    stop: &'a (dyn Fn() -> bool + Sync),
+    /// The screen's rows above the cursor's when the goal began.
+    before: Vec<String>,
+}
+
+impl<'a> TerminalView<'a> {
+    /// Session `id` as the view of a goal that begins now, or why it has none.
+    pub fn new(
+        sessions: &'a Sessions,
+        id: u32,
+        stop: &'a (dyn Fn() -> bool + Sync),
+    ) -> Result<Self, String> {
+        let screen = sessions.screen(id)?;
+        let mut before = lines(&rows(&screen));
+        // The cursor's row is typed into next: what is above it stays as it is.
+        before.truncate(cursor_row(&screen).saturating_sub(1));
+        Ok(Self {
+            sessions,
+            id,
+            stop,
+            before,
+        })
+    }
+
+    /// The rows with the line between before and since, where the rows begun with still show
+    /// (scrolled up, or not); a screen drawn over, or with nothing before, reads as it is.
+    fn parted(&self, rows: &str) -> String {
+        let now = lines(rows);
+        let stable = &self.before;
+        let scrolled = (0..stable.len()).find(|&s| {
+            let kept = &stable[s..];
+            now.len() > kept.len() && now[..kept.len()] == *kept
+        });
+        match scrolled {
+            Some(s) => {
+                let at = stable.len() - s;
+                format!(
+                    "{}\n{BEGAN}\n{}",
+                    now[..at].join("\n"),
+                    now[at..].join("\n")
+                )
+            }
+            None => rows.to_string(),
+        }
+    }
+}
+
+/// A screen's rows, without the line that says its size and cursor.
+fn rows(screen: &str) -> String {
+    screen
+        .split_once('\n')
+        .map_or("", |(_, rows)| rows)
+        .to_string()
+}
+
+/// The cursor's row, from 1, as the screen's first line says it (`cursor at row R col C`).
+fn cursor_row(screen: &str) -> usize {
+    let head = screen.lines().next().unwrap_or_default();
+    let row = head.split_once("cursor at row ").map(|(_, rest)| rest);
+    let digits = row.map(|rest| rest.split(' ').next().unwrap_or_default());
+    digits.and_then(|digits| digits.parse().ok()).unwrap_or(0)
+}
+
+/// The rows as lines, the empty ones at the end left out.
+fn lines(rows: &str) -> Vec<String> {
+    let mut lines: Vec<String> = rows
+        .lines()
+        .map(|line| line.trim_end().to_string())
+        .collect();
+    while lines.last().is_some_and(String::is_empty) {
+        lines.pop();
+    }
+    lines
 }
 
 impl View for TerminalView<'_> {
@@ -42,10 +120,7 @@ impl View for TerminalView<'_> {
 
     fn observe(&self) -> ViewResult<Observation> {
         let screen = (self.sessions.screen(self.id)).map_err(ViewError::Unavailable)?;
-        let rows = screen
-            .split_once('\n')
-            .map_or("", |(_, rows)| rows)
-            .to_string();
+        let rows = self.parted(&rows(&screen));
         let mut hash = std::collections::hash_map::DefaultHasher::new();
         rows.hash(&mut hash);
         let button = |key: &str| Element {
@@ -96,10 +171,8 @@ impl View for TerminalView<'_> {
             needle: None,
             yield_ms: Some(SETTLE_MS),
         };
-        let typed = self
-            .sessions
-            .send(self.id, input.as_bytes(), &keys, wait, None, self.stop);
-        typed.map(|_| ()).map_err(ViewError::Unavailable)
+        let typed = (input.as_bytes(), keys.as_slice());
+        (self.sessions.press(self.id, typed, wait, self.stop)).map_err(ViewError::Unavailable)
     }
 }
 

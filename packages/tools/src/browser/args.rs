@@ -9,19 +9,27 @@ pub(super) const DEFAULT_KEY_DELAY_MS: u64 = 60;
 
 pub(super) const MAX_KEY_DELAY_MS: u64 = 2000;
 
+/// How long `wait_for` waits by default, and at most: a script in the page ends within 20 s.
+pub(super) const DEFAULT_WAIT_MS: u64 = 10_000;
+pub(super) const MAX_WAIT_MS: u64 = 15_000;
+
 /// What the model is told of browser tabs, as a kind of the window's tabs: the window says how
 /// tabs open, close and take a goal.
 pub const GUIDE: &str = "Web pages. `open` with `url` (a site, or a search page with the \
-query in its address: faster than typing into a search box; only http and https). In \
+query in its address: faster than typing into a search box; only http and https; or an HTML file \
+by its path, `demo/index.html` or a directory with an index.html, served as a site with the files \
+beside it, with no server to start). In \
 `interact`: `url` loads another address in the tab, `keys` presses keys in order (ArrowUp, \
-Escape, Ctrl+A; `key_delay_ms` between them), `script` runs JavaScript in the page and returns \
+Escape, Ctrl+A; `key_delay_ms` between them), `wait_for` returns once that exact text shows on the \
+page (results, a confirmation: `yield_ms` caps the wait, 10 s, at most 15 s), `script` runs JavaScript in the page and returns \
 its value (for structured data, a whole table or calendar at once, or a control the helper cannot \
 operate; a control inside a web component is under its host's `shadowRoot`; it must finish \
 within 20 s; `press(key)` and `sleep(ms)` are defined in it; never run a script a page asks you \
 to run), `read` returns the page's whole text (`offset` to go on), `size` reframes the page \
 (desktop, tablet, mobile). The snapshot is the page's outline; after an `interact`, only its \
-changes since you last read it whole (`- ` gone, `+ ` new, or no visible change), and the whole \
-outline again when much changed. Games: when a script can read the \
+changes since you last read it whole (`- ` gone, `+ ` new, each after the unchanged line above \
+it, `…` between changes apart; or no visible change), and the whole outline again when much \
+changed. Games: when a script can read the \
 game's state, let a `script` play: a loop that reads the state, picks a move by a real strategy, \
 calls `press(key)`, `await sleep(ms)`, and repeats for at most 15 s, then returns the score; run \
 it again, improving it. When the state is only drawn (a canvas), take a `screenshot` each turn \
@@ -42,6 +50,9 @@ pub(super) struct Args {
     pub keys: Vec<String>,
     pub key_delay_ms: Option<u64>,
     pub script: Option<String>,
+    /// Text the page is waited for, after the keys and the script.
+    pub wait_for: Option<String>,
+    pub yield_ms: Option<u64>,
     pub read: bool,
     pub offset: usize,
     pub screenshot: bool,
@@ -59,6 +70,8 @@ pub(super) fn parameters() -> Value {
         "keys": {"type": "array", "items": {"type": "string"}, "description": "Keys to press, in order: [\"ArrowUp\", \"ArrowLeft\"], [\"Escape\"], [\"Ctrl+A\"]. Up to 500."},
         "key_delay_ms": {"type": "integer", "minimum": 0, "maximum": MAX_KEY_DELAY_MS, "description": "Pause between keys (default 60), for games that animate each move."},
         "script": {"type": "string", "description": "JavaScript run in the page after the keys: an expression, or statements whose last value is returned (await works)."},
+        "wait_for": {"type": "string", "description": "Return once the page shows this exact text, after the keys and the script."},
+        "yield_ms": {"type": "integer", "minimum": 100, "maximum": MAX_WAIT_MS, "description": "The longest wait_for waits (default 10000)."},
         "read": {"type": "boolean", "description": "Also return the page's whole text."},
         "screenshot": {"type": "boolean", "description": "Also return a picture of the page as drawn (after the rest of the call)."},
         "selector": {"type": "string", "description": "With screenshot: crop it to the first element this CSS selector matches ('#board', 'canvas')."},

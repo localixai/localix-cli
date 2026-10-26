@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up your workspace</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .wizard > * {
+    max-width: 36rem;
+  }
+  .progress {
+    list-style: none;
+    display: flex;
+    gap: 0.5rem;
+    padding: 0;
+    margin: 1.5rem 0 2rem;
+    counter-reset: step;
+  }
+  .progress li {
+    flex: 1;
+    font-size: var(--step--1);
+    color: var(--muted);
+    counter-increment: step;
+  }
+  .progress li::before {
+    content: "";
+    display: block;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--line);
+    margin-bottom: 0.45rem;
+  }
+  .progress li.done::before,
+  .progress li[aria-current="step"]::before {
+    background: var(--accent);
+  }
+  .progress li[aria-current="step"] {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .step {
+    display: grid;
+    gap: 1.15rem;
+  }
+  .step h2 {
+    margin: 0;
+  }
+  fieldset {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.6rem;
+  }
+  legend {
+    font-weight: 550;
+    margin-bottom: 0.4rem;
+  }
+  .option {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.2rem 0.75rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--panel);
+    cursor: pointer;
+    font-weight: 450;
+  }
+  .option input {
+    margin-top: 0.2rem;
+  }
+  .option strong {
+    font-weight: 600;
+  }
+  .option small {
+    grid-column: 2;
+    color: var(--muted);
+  }
+  .option:has(input:checked) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .slug {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--panel);
+    padding-left: 0.75rem;
+  }
+  .slug span {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .slug input {
+    border: 0 !important;
+    padding-left: 0.15rem !important;
+  }
+  .slug:has(input[aria-invalid="true"]) {
+    border-color: var(--danger);
+  }
+  .review {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.5rem 1rem;
+    align-items: center;
+    margin: 0;
+  }
+  .review dt {
+    color: var(--muted);
+  }
+  .review dd {
+    margin: 0;
+    font-weight: 550;
+  }
+  .review button {
+    min-height: 2rem;
+    font-size: var(--step--1);
+  }
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 1.75rem;
+  }
+</style>
+</head>
+<body>
+<main class="wizard">
+  <h1>Set up your workspace</h1>
+  <p class="lead">A few questions, then your workspace is ready to use.</p>
+  <ol class="progress" id="progress" aria-label="Steps"></ol>
+  <form id="form" novalidate>
+    <section class="step" data-step="Use" aria-labelledby="h-use">
+      <h2 id="h-use">Who is it for?</h2>
+      <fieldset>
+        <legend class="sr-only">Who will use the workspace</legend>
+        <label class="option"><input type="radio" name="use" value="Just me" checked><strong>Just me</strong><small>Notes, plans and files of your own.</small></label>
+        <label class="option"><input type="radio" name="use" value="A team"><strong>A team</strong><small>Shared projects, roles and a member list.</small></label>
+      </fieldset>
+    </section>
+
+    <section class="step" data-step="Team" data-only="A team" aria-labelledby="h-team" hidden>
+      <h2 id="h-team">Your team</h2>
+      <div class="field">
+        <label for="team">Team name</label>
+        <input id="team" name="team" autocomplete="off" aria-describedby="team-error">
+        <span class="error" id="team-error"></span>
+      </div>
+      <div class="field">
+        <label for="size">How many people</label>
+        <select id="size" name="size">
+          <option>2 to 5</option>
+          <option>6 to 20</option>
+          <option>21 to 100</option>
+          <option>More than 100</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="step" data-step="Address" aria-labelledby="h-address" hidden>
+      <h2 id="h-address">Its address</h2>
+      <div class="field">
+        <label for="slug">Workspace address</label>
+        <div class="slug"><span>larch.work/</span><input id="slug" name="slug" autocomplete="off" aria-describedby="slug-hint slug-error"></div>
+        <span class="hint" id="slug-hint">Lowercase letters, numbers and dashes, 3 to 24 of them.</span>
+        <span class="error" id="slug-error"></span>
+      </div>
+      <div class="field">
+        <label for="zone">Time zone</label>
+        <select id="zone" name="zone">
+          <option>Europe/Lisbon</option>
+          <option selected>Europe/Berlin</option>
+          <option>Europe/Helsinki</option>
+          <option>America/New_York</option>
+          <option>America/Los_Angeles</option>
+          <option>Asia/Tokyo</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="step" data-step="Updates" aria-labelledby="h-updates" hidden>
+      <h2 id="h-updates">What should we send you?</h2>
+      <fieldset>
+        <legend class="sr-only">Emails</legend>
+        <label class="check"><input type="checkbox" name="updates" value="Daily summary" checked> A summary each morning</label>
+        <label class="check"><input type="checkbox" name="updates" value="Mentions" checked> When someone mentions you</label>
+        <label class="check"><input type="checkbox" name="updates" value="Weekly report"> A report every Monday</label>
+      </fieldset>
+    </section>
+
+    <section class="step" data-step="Review" aria-labelledby="h-review" hidden>
+      <h2 id="h-review">Check and finish</h2>
+      <dl class="review" id="review"></dl>
+    </section>
+
+    <div class="nav">
+      <button type="button" id="back">Back</button>
+      <button type="submit" class="primary" id="next">Continue</button>
+    </div>
+  </form>
+
+  <section id="ready" hidden tabindex="-1">
+    <h2>Your workspace is ready</h2>
+    <p id="ready-text"></p>
+    <button type="button" id="restart">Set up another</button>
+  </section>
+</main>
+<script src="kit.js"></script>
+<script>
+  header("Onboarding");
+  const form = document.getElementById("form");
+  const $ = (id) => document.getElementById(id);
+  const all = [...form.querySelectorAll(".step")];
+  let at = 0;
+
+  /** The steps this person goes through: the team's only for a team. */
+  const steps = () => all.filter((s) => !s.dataset.only || s.dataset.only === form.elements.use.value);
+
+  function fail(id, message) {
+    $(id).setAttribute("aria-invalid", String(Boolean(message)));
+    $(`${id}-error`).textContent = message;
+    if (message) $(id).focus();
+    return !message;
+  }
+
+  function valid(step) {
+    switch (step.dataset.step) {
+      case "Team":
+        return fail("team", $("team").value.trim() ? "" : "Give your team a name.");
+      case "Address":
+        return fail("slug", /^[a-z0-9-]{3,24}$/.test($("slug").value) ? "" : "Use 3 to 24 lowercase letters, numbers or dashes.");
+      default:
+        return true;
+    }
+  }
+
+  function answers() {
+    const updates = [...form.querySelectorAll("[name=updates]:checked")].map((c) => c.value);
+    const team = form.elements.use.value === "A team";
+    return [
+      ["For", form.elements.use.value, "Use"],
+      ...(team ? [["Team", `${$("team").value.trim()}, ${$("size").value} people`, "Team"]] : []),
+      ["Address", `larch.work/${$("slug").value}`, "Address"],
+      ["Time zone", $("zone").value, "Address"],
+      ["Emails", updates.length ? updates.join(", ") : "None", "Updates"],
+    ];
+  }
+
+  function draw() {
+    const list = steps();
+    at = Math.min(at, list.length - 1);
+    for (const step of all) step.hidden = step !== list[at];
+    $("progress").innerHTML = list
+      .map((s, i) => `<li class="${i < at ? "done" : ""}"${i === at ? ' aria-current="step"' : ""}>${s.dataset.step}</li>`)
+      .join("");
+    $("back").disabled = at === 0;
+    $("next").textContent = at === list.length - 1 ? "Create workspace" : "Continue";
+    if (list[at].dataset.step === "Review") {
+      $("review").innerHTML = answers()
+        .map(([name, value, step]) => `<dt>${name}</dt><dd>${esc(value)}</dd><button type="button" data-go="${step}" aria-label="Change ${name.toLowerCase()}">Change</button>`)
+        .join("");
+    }
+  }
+
+  form.addEventListener("change", (event) => {
+    if (event.target.name === "use") draw();
+  });
+  $("back").addEventListener("click", () => {
+    at--;
+    draw();
+  });
+  $("review").addEventListener("click", (event) => {
+    const go = event.target.dataset.go;
+    if (!go) return;
+    at = steps().findIndex((s) => s.dataset.step === go);
+    draw();
+  });
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const list = steps();
+    if (!valid(list[at])) return;
+    if (at < list.length - 1) {
+      at++;
+      draw();
+      list[at].querySelector("input, select")?.focus();
+      return;
+    }
+    const reference = `WS-${$("slug").value.toUpperCase()}-${list.length}${form.querySelectorAll("[name=updates]:checked").length}`;
+    $("ready-text").textContent = `larch.work/${$("slug").value} is open for ${form.elements.use.value === "A team" ? $("team").value.trim() : "you"}. Your reference is ${reference}.`;
+    form.hidden = true;
+    $("progress").hidden = true;
+    $("ready").hidden = false;
+    $("ready").focus();
+  });
+
+  $("restart").addEventListener("click", () => {
+    form.reset();
+    at = 0;
+    form.hidden = false;
+    $("progress").hidden = false;
+    $("ready").hidden = true;
+    draw();
+  });
+
+  draw();
+</script>
+</body>
+</html>

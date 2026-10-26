@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trail reports</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .feed > * {
+    max-width: 38rem;
+  }
+  .posts {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+  .post {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+    padding: 1rem 1.1rem;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 0.85rem;
+  }
+  .face {
+    grid-row: span 3;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-weight: 650;
+    color: var(--ink);
+  }
+  .who {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+  .who strong {
+    font-weight: 600;
+  }
+  .who span {
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+  .post p {
+    margin: 0;
+  }
+  .post .acts {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+  }
+  .acts button {
+    min-height: 2.1rem;
+    padding: 0 0.75rem;
+    font-size: var(--step--1);
+    border-radius: 999px;
+  }
+  .acts button[aria-pressed="true"] {
+    color: var(--danger);
+    border-color: var(--danger);
+    background: var(--danger-soft);
+  }
+  .skeleton .face,
+  .skeleton .bar {
+    background: var(--sunk);
+  }
+  .skeleton .bar {
+    height: 0.8rem;
+    border-radius: 999px;
+    margin: 0.35rem 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .skeleton .face,
+    .skeleton .bar {
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+  }
+  @keyframes pulse {
+    50% {
+      opacity: 0.45;
+    }
+  }
+  .fresh {
+    position: sticky;
+    top: 0.75rem;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+  }
+  .fresh button {
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+    box-shadow: var(--shadow);
+  }
+  .end {
+    text-align: center;
+    padding: 1.5rem 0;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<main class="feed">
+  <h1>Trail reports</h1>
+  <p class="lead">What hikers saw on the valley's trails this week.</p>
+  <div class="fresh" id="fresh" hidden><button type="button" id="show-fresh"></button></div>
+  <ul class="posts" id="posts" aria-live="polite" aria-busy="true"></ul>
+  <div class="end" id="end">
+    <button type="button" id="more" hidden>Load more reports</button>
+    <span id="status"></span>
+  </div>
+</main>
+<script src="kit.js"></script>
+<script>
+  header("Trail reports");
+  const random = seeded(4242);
+  const PEOPLE = ["Jonas Berg", "Ana Costa", "Liam Doyle", "Sofia Marin", "Tariq Aziz", "Hanna Lind", "Mei Chen", "Pavel Novak", "Rosa Ortiz", "Elias Weber"];
+  const PLACES = ["the north ridge", "Kessel lake", "the larch forest", "Hollin brook", "the upper meadows", "the old quarry path", "the saddle", "Fernside"];
+  const SEEN = [
+    "Snow from about 1,900 m up. Spikes help on the last stretch.",
+    "Muddy after the rain but the views were clear all morning.",
+    "Two chamois crossed right in front of us.",
+    "The path is cleared of fallen trees again.",
+    "Crowded at the top by eleven. Go early.",
+    "The hut was serving soup until three.",
+    "Signposts are missing at the second fork: keep left.",
+    "Ice on the bridge planks in the shade.",
+  ];
+  const HOURS = 24 * 7;
+  const TOTAL = 50;
+  const BATCH = 10;
+  const POSTS = Array.from({ length: TOTAL }, (_, n) => ({
+    id: n + 1,
+    by: pick(random, PEOPLE),
+    text: `On ${pick(random, PLACES)}: ${pick(random, SEEN)}`,
+    hours: Math.round(((n + random()) / TOTAL) * HOURS),
+    likes: Math.floor(random() * 60),
+  }));
+  // One report a task can look for, far enough down that only scrolling reaches it.
+  Object.assign(POSTS[33], { by: "Mira Okafor", text: "The waterfall above Hollin is frozen solid, a wall of blue ice. Worth the climb.", likes: 87 });
+  const FRESH = [
+    { id: 101, by: "Ana Costa", text: "Fresh snow on the saddle this morning, about 10 cm.", hours: 0, likes: 2 },
+    { id: 102, by: "Tariq Aziz", text: "The bus to the trailhead runs every hour again.", hours: 0, likes: 5 },
+    { id: 103, by: "Hanna Lind", text: "Kessel lake is starting to freeze at the edges.", hours: 0, likes: 1 },
+  ];
+  const liked = new Set();
+  let loaded = 0;
+  let loading = false;
+  const $ = (id) => document.getElementById(id);
+
+  const hue = (name) => [...name].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
+  const ago = (h) => (h < 1 ? "just now" : h < 24 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`);
+  const initials = (name) => name.split(" ").map((w) => w[0]).join("");
+
+  function post(p) {
+    const likes = p.likes + (liked.has(p.id) ? 1 : 0);
+    return `<li class="post" data-id="${p.id}">
+      <span class="face" style="background: hsl(${hue(p.by)} 45% 60% / 0.3)" aria-hidden="true">${initials(p.by)}</span>
+      <div class="who"><strong>${esc(p.by)}</strong><span>${ago(p.hours)}</span></div>
+      <p>${esc(p.text)}</p>
+      <div class="acts"><button type="button" data-like aria-pressed="${liked.has(p.id)}" aria-label="Like, ${likes} likes">♥ ${likes}</button></div>
+    </li>`;
+  }
+
+  const skeleton = () =>
+    Array.from({ length: 3 }, () => `<li class="post skeleton" aria-hidden="true"><span class="face"></span><div class="bar" style="width: 40%"></div><div class="bar"></div><div class="bar" style="width: 70%"></div></li>`).join("");
+
+  function more() {
+    if (loading || loaded >= TOTAL) return;
+    loading = true;
+    $("posts").setAttribute("aria-busy", "true");
+    $("posts").insertAdjacentHTML("beforeend", skeleton());
+    $("more").hidden = true;
+    $("status").textContent = "Loading reports";
+    setTimeout(() => {
+      $("posts").querySelectorAll(".skeleton").forEach((s) => s.remove());
+      const batch = POSTS.slice(loaded, loaded + BATCH);
+      $("posts").insertAdjacentHTML("beforeend", batch.map(post).join(""));
+      loaded += batch.length;
+      loading = false;
+      $("posts").setAttribute("aria-busy", "false");
+      $("more").hidden = loaded >= TOTAL;
+      $("status").textContent = loaded >= TOTAL ? "That's every report from this week." : "";
+    }, loaded ? 600 : 900);
+  }
+
+  new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && more(), { rootMargin: "200px" }).observe($("end"));
+  $("more").addEventListener("click", more);
+
+  $("posts").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-like]");
+    if (!button) return;
+    const id = Number(button.closest("[data-id]").dataset.id);
+    if (liked.has(id)) liked.delete(id);
+    else liked.add(id);
+    const p = [...POSTS, ...FRESH].find((x) => x.id === id);
+    button.outerHTML = post(p).match(/<button[\s\S]*?<\/button>/)[0];
+  });
+
+  setTimeout(() => {
+    $("show-fresh").textContent = `${FRESH.length} new reports`;
+    $("fresh").hidden = false;
+  }, 6000);
+  $("show-fresh").addEventListener("click", () => {
+    $("posts").insertAdjacentHTML("afterbegin", FRESH.map(post).join(""));
+    $("fresh").hidden = true;
+    window.scrollTo({ top: 0 });
+  });
+
+  more();
+</script>
+</body>
+</html>

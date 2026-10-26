@@ -51,7 +51,7 @@ every new file already goes where its target crate will be.
 | Adapters | `providers/{models,openai,openrouter}` | `contracts`, `kit` |
 | Client | `client` (in process; the socket in D3) | `protocol` |
 | Server | `apps/server` (target) | every package but `client` |
-| Interface | `apps/tui` (target), `mcp` (the tool clients') | `client`, `protocol` |
+| Interface | `apps/tui` (target), `call` (the tool clients': `llx window`) | `client`, `protocol` |
 | Binary | `apps/cli` | `server`, `tui`, `client` |
 
 ## Dependency rules
@@ -70,7 +70,7 @@ every new file already goes where its target crate will be.
 - **L6** _checked_: `protocol` depends on no workspace crate. Its types are wire
   DTOs; domain types never derive its serde shapes, and it never re-exports one.
 - **L7** _checked_ on the sources (and with the crate, once it is one): an interface (the
-  terminal's `tui`, the tool clients' `mcp`) depends only on `client` and `protocol`: never on
+  terminal's `tui`, the tool clients' `call`) depends only on `client` and `protocol`: never on
   the agent, tools, providers, the session store or the server, nor on the app's other modules.
   What it needs to show, the protocol carries (Codex's `verify_tui_core_boundary`).
 - **L8** _checked_ for the client: the server is the only crate that serves the protocol and
@@ -167,9 +167,10 @@ every new file already goes where its target crate will be.
   and no code branches on a mode's name.
 - **K6**: one place maps failures to the exit-code contract (`exit.rs`); the `--json` events and
   exit codes change only with a schema bump and a CHANGELOG entry.
-- **K7**: a tool client's calls are approved by the client that makes them (its own permission
-  prompt, before the call reaches llx): the toolbox's gate is the `bypass` mode's rules, and
-  refuses once the call is stopped. The person is never asked through llx for them.
+- **K7**: a tool client's calls are approved by the agent that makes them (its own permission
+  prompt for the `llx window` command, before the call reaches llx): the toolbox's gate is the
+  `bypass` mode's rules, and refuses once the call is stopped. The person is never asked through
+  llx for them.
 
 ## Protocol rules (the seam between interface and server)
 
@@ -193,13 +194,18 @@ every new file already goes where its target crate will be.
 - **W7**: a request carries what the server needs to act on it (the session's id); no hidden
   state per connection but who is attached.
 - **W8**: one request's panic or failure never ends the server: it becomes that request's error.
-- **W9**: a tool client (`llx mcp`, which serves MCP to another agent) is an interface that calls
-  the agent's tools, not a session: its handshake's command line says `mcp`, and the server gives
-  it a toolbox (`window`) at its place, with no chat model. Its connection is its session: the
-  tabs it opens are its own and end with it. `tools`/`tool` calls run at once, each on a thread
-  of its own, answered when done (W1); `halt` with a call's id stops it. What the person sends
-  from its tabs (their comments) is its own too: held for it, and handed back with its next
-  `window` call after that call's report, marked, as untrusted page data with the person's notes.
+- **W9**: a tool client is `llx window`, one call per process: a command any agent runs from its
+  own shell (no MCP server: llx extends the agent that runs it through commands it composes, as
+  `exec` and `decide` do). It is an interface that calls the agent's tools, not a session: its
+  handshake's command line says `window` and names its owner (the directory, or `--as`), and the
+  server gives it that owner's toolbox (`window`) at its place, with no chat model. The toolbox
+  outlives the connection: an owner's tabs stay between its calls, until `llx window --end`, the
+  person closes them, or the daemon stops; while an owner has one, the daemon is in use (a new
+  build does not replace it). The call runs on a thread of its own and is answered when done; the
+  connection ending (its process killed) stops it. A picture it returns is written to a file the
+  output names. What the person sends from the owner's tabs (their comments) is held for the
+  owner, and handed back with its next call after that call's report, marked, as untrusted page
+  data with the person's notes.
 
 ## Concurrency and errors
 
@@ -282,7 +288,8 @@ every new file already goes where its target crate will be.
   provider package if none fits, one arm in `providers.rs`.
 - **A model:** nothing in llx: it arrives with the catalog's refresh.
 - **A tool capability:** an `action` of an existing tool, or the shell. A tool client gets the
-  same `Tool` the agent has, from the toolbox (W9), never a copy of it. A new tool is a decision
+  same `Tool` the agent has, from the toolbox (W9), never a copy of it, and its description and
+  parameters as that tool states them (`llx window` with no call prints them). A new tool is a decision
   recorded here. `window` (the owner's decision): everything the agent opens to look at and work
   in is a tab of one window, each kind a `tools::window::Kind` the app gives; a `goal` belongs to
   every tab.
@@ -294,6 +301,14 @@ every new file already goes where its target crate will be.
   (C7, K5); the agent reaches GitHub, as anything else, with `gh` and `git` through `bash`. It
   reads the exit codes and `--json` events (K6), so a schema bump updates it in the same commit.
   Ready-made workflows live in `examples/`, each run for real before it is published.
+- **A host's plugin:** `plugins/<host>/` (Claude Code's: `plugins/claude-code/`, the plugin
+  `llx`, listed in `.claude-plugin/marketplace.json` at the root so it installs from this
+  repository). It teaches the host's agent to call llx's commands from its own shell (a skill,
+  `guide`) and adds only what a command cannot (the person's comments from the window brought as
+  a turn of their own, the tabs ended with the session): no MCP server, no tool of its own, no
+  copy of a tool's description or of llx's logic (W9). It reads llx's output as a person would,
+  so a change to what `llx window`, `llx serve status` or the exit codes print updates it in the
+  same commit.
 - **A history stage:** a `Stage` in `agent/src/history.rs`, placed by its value in
   `Pipeline::default`, with a test, the long-dialogue simulation still passing.
 - **A protocol method:** its `*Params`/`*Response` in `protocol`, served in the server, called
@@ -309,8 +324,8 @@ every new file already goes where its target crate will be.
 - **D4** (done): attach and detach: the ring, replayed questions, the quit question, back to
   the sessions moved to the background.
 - **D5** (done): the window grouped by project.
-- **D6**: tool clients (W9, K7): `llx mcp` serves `window` to other agents over MCP, through
-  the daemon.
+- **D6** (done): tool clients (W9, K7): `llx window`, the agent's `window` as a command any
+  agent runs from its shell, through the daemon; it replaced `llx mcp`, an MCP server.
 
 ## Budgets
 

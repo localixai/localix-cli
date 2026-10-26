@@ -13,7 +13,7 @@ const USAGE: &str = "llx [OPTIONS] [PROMPT]\n       \
 const ABOUT: &str = "llx: an ultrafast, lightweight agent runtime: a native window of browser pages and terminals for any agent, a decision step for scripts and CI, a minimal agent for the terminal";
 
 const LONG_ABOUT: &str = "llx: an ultrafast, lightweight agent runtime. A native window of browser pages and terminals \
-any agent can work in (llx mcp serves it to Claude Code, Codex or Cursor), a decision step for \
+any agent can work in (llx window, from its shell), a decision step for \
 scripts and CI (llx decide), and a minimal agent for the terminal (llx).
 
 It works in a directory (the current one, or -C DIR) with seven tools: read, edit, bash (on \
@@ -145,17 +145,40 @@ pub(crate) enum Command {
     /// lives on until `llx serve stop`.
     #[cfg(unix)]
     Serve(ServeArgs),
-    /// Serve llx's `window` to another agent over MCP on stdio (Claude Code, Codex, Cursor).
+    /// One call of llx's `window` from your shell: browser pages and terminals as tabs of one
+    /// window the person watches.
     ///
-    /// Browser pages and terminal sessions as tabs of one window the person watches, grouped by
-    /// project; a `goal` on any tab is carried out by the decision model (an OpenRouter key).
-    /// The agent's own model thinks: no chat model is used. It runs in the daemon, started if
-    /// none runs; its tabs end when the agent closes its stdin. Comments the person sends from
-    /// its tabs (Comment, then Send, in the window's strip) come back with the agent's next
-    /// `window` call. Add it with
-    /// `claude mcp add llx -- llx mcp`.
+    /// For another agent (Claude Code, Codex, a script) that works in llx's window: it opens a page
+    /// or a terminal, acts in it (clicks, keys, a script, or a `goal` the decision model carries out,
+    /// which needs an OpenRouter key), reads it, and takes screenshots. The agent's own model thinks:
+    /// no chat model is used. CALL is the `window` tool's arguments as one JSON object (`-` reads
+    /// them from stdin); `llx window` alone prints the tool's description and arguments. The report
+    /// is printed, and a screenshot is saved to a file whose path is printed. It runs in the daemon,
+    /// started if none runs, and the tabs stay for their owner between calls until `--end`.
+    /// Comments the person sends from them (Comment, then Send, in the window's strip) come back
+    /// with the owner's next call. Exit 0 when done, 1 when the call failed (the output says why),
+    /// 3 when llx could not be reached or CALL is not a JSON object.
+    ///
+    ///     llx window '{"action": "open", "kind": "browser", "url": "https://example.com"}'
+    ///     llx window '{"action": "interact", "tab": "w1", "goal": "accept only the needed cookies"}'
+    ///     llx window '{"action": "open", "kind": "terminal", "command": "python3 -q"}'
+    ///     llx window --end
     #[cfg(unix)]
-    Mcp,
+    #[command(verbatim_doc_comment)]
+    Window(WindowArgs),
+}
+
+#[derive(Args, Debug)]
+pub(crate) struct WindowArgs {
+    /// Whose tabs: the calls of one owner share them, another's are apart. Default: the project
+    /// (the nearest directory at or above this one with a `.git`, else this one)
+    #[arg(long = "as", value_name = "OWNER")]
+    pub owner: Option<String>,
+    /// Close the owner's tabs and end its terminal sessions
+    #[arg(long, conflicts_with = "call")]
+    pub end: bool,
+    /// The call: the `window` tool's arguments as a JSON object; `-` reads them from stdin
+    pub call: Option<String>,
 }
 
 #[derive(Args, Debug)]

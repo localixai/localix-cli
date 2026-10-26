@@ -57,15 +57,8 @@ impl Kind for Terminal<'_> {
                 json!({"type": "string", "description": "terminal: text to type; a line \
                 break is Enter. At most 4096 bytes."}),
             ),
-            (
-                "wait_for",
-                json!({"type": "string", "description": "terminal: return as soon as \
-                its output shows this exact text."}),
-            ),
-            (
-                "yield_ms",
-                json!({"type": "integer", "minimum": 100, "maximum": 30000}),
-            ),
+            ("wait_for", tools::window::wait_for_field()),
+            ("yield_ms", tools::window::yield_field()),
         ]
     }
 
@@ -121,11 +114,7 @@ impl Kind for Terminal<'_> {
     }
 
     fn view(&self, id: u32) -> Result<Box<dyn View + '_>, ToolError> {
-        self.sessions.command(id).map_err(ToolError::Failed)?;
-        Ok(Box::new(tools::shell::TerminalView {
-            sessions: self.sessions,
-            id,
-            stop: self.stop,
-        }))
+        let view = tools::shell::TerminalView::new(self.sessions, id, self.stop);
+        Ok(Box::new(view.map_err(ToolError::Failed)?))
     }
 }

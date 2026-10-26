@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pine and Pot</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem 1rem;
+    margin: 1.5rem 0 1.25rem;
+  }
+  .tools .chips {
+    grid-column: 1 / -1;
+  }
+  .tools select {
+    width: auto;
+  }
+  .products {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  }
+  .product {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+  }
+  .swatch {
+    aspect-ratio: 4 / 3;
+    border-radius: var(--radius-control);
+    display: grid;
+    place-items: center;
+    font-size: 2.6rem;
+  }
+  .product h2 {
+    font-size: var(--step-0);
+    margin: 0;
+  }
+  .product p {
+    margin: 0.2rem 0 0;
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+  .product .buy {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .price {
+    font-weight: 650;
+  }
+  .count {
+    min-width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 0.75rem;
+    display: inline-grid;
+    place-items: center;
+    padding: 0 0.35rem;
+  }
+  .empty {
+    padding: 3rem 0;
+    color: var(--muted);
+  }
+  /* The cart: a dialog drawn as a drawer at the right edge. */
+  dialog.cart {
+    margin: 0 0 0 auto;
+    height: 100vh;
+    max-height: 100vh;
+    width: min(26rem, 100vw);
+    max-width: 100vw;
+    border-radius: var(--radius-panel) 0 0 var(--radius-panel);
+    border-right: 0;
+    display: none;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  dialog.cart[open] {
+    display: flex;
+  }
+  .cart header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .cart h2 {
+    margin: 0;
+  }
+  .lines {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    flex: 1;
+    overflow-y: auto;
+  }
+  .lines li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .stepper {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .stepper button {
+    border: 0;
+    min-height: 2.25rem;
+    width: 2.25rem;
+    padding: 0;
+    background: transparent;
+  }
+  .stepper output {
+    min-width: 2rem;
+    text-align: center;
+  }
+  .sum {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.35rem;
+  }
+  .sum .total {
+    font-weight: 700;
+    font-size: var(--step-1);
+  }
+  .promo {
+    display: flex;
+    gap: 0.5rem;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="row" style="justify-content: space-between">
+    <div>
+      <h1>Plants for every window</h1>
+      <p class="lead" style="margin: 0">Grown in our greenhouse, sent in their pots. Free delivery over $50.</p>
+    </div>
+    <button type="button" id="open-cart" aria-haspopup="dialog">Cart <span class="count" id="count">0</span></button>
+  </div>
+
+  <div class="tools">
+    <div class="field">
+      <label class="sr-only" for="search">Search plants</label>
+      <input id="search" type="search" placeholder="Search plants">
+    </div>
+    <div class="field">
+      <label class="sr-only" for="sort">Sort</label>
+      <select id="sort">
+        <option value="featured">Featured</option>
+        <option value="low">Price, low to high</option>
+        <option value="high">Price, high to low</option>
+        <option value="name">Name</option>
+      </select>
+    </div>
+    <div class="chips" role="group" aria-label="Category" id="chips"></div>
+  </div>
+
+  <p class="small muted" id="shown" aria-live="polite"></p>
+  <ul class="products" id="products"></ul>
+</main>
+
+<dialog class="cart" id="cart" aria-labelledby="cart-title">
+  <header>
+    <h2 id="cart-title">Your cart</h2>
+    <button type="button" class="icon quiet" id="close-cart" aria-label="Close cart">✕</button>
+  </header>
+  <ul class="lines" id="lines"></ul>
+  <form class="promo" id="promo">
+    <label class="sr-only" for="code">Promo code</label>
+    <input id="code" placeholder="Promo code" autocomplete="off">
+    <button type="submit">Apply</button>
+  </form>
+  <p class="small" id="promo-note" aria-live="polite" style="margin: -0.5rem 0 0"></p>
+  <div class="sum">
+    <span class="muted">Subtotal</span><span id="subtotal"></span>
+    <span class="muted">Discount</span><span id="discount"></span>
+    <span class="muted">Delivery</span><span id="delivery"></span>
+    <span class="total">Total</span><span class="total" id="total"></span>
+  </div>
+  <button type="button" class="primary" id="checkout">Check out</button>
+</dialog>
+
+<script src="kit.js"></script>
+<script>
+  header("Pine and Pot");
+  const PLANTS = [
+    { id: "monstera", name: "Monstera", kind: "Tropical", price: 38, light: "Bright, indirect light", leaf: "🌿", hue: 150 },
+    { id: "boston", name: "Boston fern", kind: "Ferns", price: 24, light: "Shade and humidity", leaf: "🌿", hue: 120 },
+    { id: "maidenhair", name: "Maidenhair fern", kind: "Ferns", price: 19, light: "Soft, indirect light", leaf: "🍃", hue: 105 },
+    { id: "bird", name: "Bird's nest fern", kind: "Ferns", price: 27, light: "Low light", leaf: "🌱", hue: 135 },
+    { id: "echeveria", name: "Echeveria", kind: "Succulents", price: 9, light: "Full sun", leaf: "🪴", hue: 170 },
+    { id: "jade", name: "Jade plant", kind: "Succulents", price: 16, light: "Full sun", leaf: "🪴", hue: 95 },
+    { id: "aloe", name: "Aloe vera", kind: "Succulents", price: 12, light: "Bright light", leaf: "🌵", hue: 80 },
+    { id: "basil", name: "Sweet basil", kind: "Herbs", price: 6, light: "Sunny sill", leaf: "🌿", hue: 110 },
+    { id: "rosemary", name: "Rosemary", kind: "Herbs", price: 8, light: "Full sun", leaf: "🌿", hue: 140 },
+    { id: "mint", name: "Mint", kind: "Herbs", price: 5, light: "Part shade", leaf: "🍃", hue: 160 },
+    { id: "olive", name: "Olive tree", kind: "Trees", price: 64, light: "Full sun", leaf: "🌳", hue: 75 },
+    { id: "fig", name: "Fiddle leaf fig", kind: "Trees", price: 52, light: "Bright, indirect light", leaf: "🌳", hue: 125 },
+  ];
+  const KINDS = ["All", ...new Set(PLANTS.map((p) => p.kind))];
+  const CODES = { SAVE10: 0.1 };
+  const FREE_OVER = 50;
+  const DELIVERY = 6;
+  const cart = new Map();
+  let kind = "All";
+  let code = "";
+
+  const $ = (id) => document.getElementById(id);
+
+  $("chips").innerHTML = KINDS.map((k) => `<button type="button" aria-pressed="${k === kind}">${k}</button>`).join("");
+  $("chips").addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button) return;
+    kind = button.textContent;
+    for (const b of $("chips").children) b.setAttribute("aria-pressed", String(b === button));
+    show();
+  });
+  $("search").addEventListener("input", show);
+  $("sort").addEventListener("change", show);
+
+  function show() {
+    const words = $("search").value.trim().toLowerCase();
+    const order = {
+      featured: () => 0,
+      low: (a, b) => a.price - b.price,
+      high: (a, b) => b.price - a.price,
+      name: (a, b) => a.name.localeCompare(b.name),
+    }[$("sort").value];
+    const shown = PLANTS.filter((p) => (kind === "All" || p.kind === kind) && p.name.toLowerCase().includes(words)).sort(order);
+    $("shown").textContent = `${shown.length} ${shown.length === 1 ? "plant" : "plants"}`;
+    $("products").innerHTML = shown.length
+      ? shown
+          .map(
+            (p) => `<li class="product">
+              <div class="swatch" style="background: hsl(${p.hue} 30% 50% / 0.16)" aria-hidden="true">${p.leaf}</div>
+              <div><h2>${p.name}</h2><p>${p.kind}. ${p.light}.</p></div>
+              <div class="buy"><span class="price">${money.format(p.price)}</span>
+                <button type="button" data-add="${p.id}" aria-label="Add ${p.name} to cart">Add to cart</button></div>
+            </li>`,
+          )
+          .join("")
+      : `<li class="empty">No plants match. Try another name or category.</li>`;
+  }
+
+  $("products").addEventListener("click", (event) => {
+    const id = event.target.closest("[data-add]")?.dataset.add;
+    if (!id) return;
+    cart.set(id, (cart.get(id) || 0) + 1);
+    const plant = PLANTS.find((p) => p.id === id);
+    toast(`${plant.name} added to cart`);
+    totals();
+  });
+
+  function totals() {
+    const lines = [...cart].map(([id, qty]) => ({ plant: PLANTS.find((p) => p.id === id), qty }));
+    const subtotal = lines.reduce((sum, l) => sum + l.plant.price * l.qty, 0);
+    const discount = Math.round(subtotal * (CODES[code] || 0) * 100) / 100;
+    const after = subtotal - discount;
+    const delivery = subtotal === 0 || after >= FREE_OVER ? 0 : DELIVERY;
+    $("count").textContent = lines.reduce((sum, l) => sum + l.qty, 0);
+    $("lines").innerHTML = lines.length
+      ? lines
+          .map(
+            (l) => `<li><div><strong>${l.plant.name}</strong><div class="small muted">${money.format(l.plant.price)} each</div></div>
+              <span>${money.format(l.plant.price * l.qty)}</span>
+              <span class="stepper" role="group" aria-label="${l.plant.name} quantity">
+                <button type="button" data-less="${l.plant.id}" aria-label="One fewer ${l.plant.name}">−</button>
+                <output aria-live="polite">${l.qty}</output>
+                <button type="button" data-more="${l.plant.id}" aria-label="One more ${l.plant.name}">+</button>
+              </span>
+              <button type="button" class="quiet small" data-drop="${l.plant.id}">Remove</button></li>`,
+          )
+          .join("")
+      : `<li class="muted">Your cart is empty.</li>`;
+    $("subtotal").textContent = money.format(subtotal);
+    $("discount").textContent = discount ? `−${money.format(discount)}` : money.format(0);
+    $("delivery").textContent = delivery ? money.format(delivery) : "Free";
+    $("total").textContent = money.format(after + delivery);
+    $("checkout").disabled = !lines.length;
+  }
+
+  $("lines").addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button) return;
+    const { less, more, drop } = button.dataset;
+    const id = less || more || drop;
+    const qty = (cart.get(id) || 0) + (more ? 1 : less ? -1 : -Infinity);
+    if (qty > 0) cart.set(id, qty);
+    else cart.delete(id);
+    totals();
+  });
+
+  $("promo").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const typed = $("code").value.trim().toUpperCase();
+    if (CODES[typed]) {
+      code = typed;
+      $("promo-note").textContent = `${typed} applied: ${CODES[typed] * 100}% off.`;
+      $("promo-note").style.color = "var(--accent)";
+    } else {
+      $("promo-note").textContent = typed ? `${typed} is not a valid code.` : "Enter a code first.";
+      $("promo-note").style.color = "var(--danger)";
+    }
+    totals();
+  });
+
+  $("open-cart").addEventListener("click", () => $("cart").showModal());
+  $("close-cart").addEventListener("click", () => $("cart").close());
+  $("cart").addEventListener("click", (event) => {
+    if (event.target === $("cart")) $("cart").close();
+  });
+  $("checkout").addEventListener("click", () => {
+    $("cart").close();
+    toast(`Order placed: ${$("total").textContent}. This is a demo; nothing was charged.`, 4000);
+  });
+
+  show();
+  totals();
+</script>
+</body>
+</html>

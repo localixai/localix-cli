@@ -106,5 +106,95 @@
    "properties": {"price": {"type": "string"}, "airline": {"type": "string"}},
    "required": ["price", "airline"]
   }
+ },
+ {
+   "id": "demo-signup",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/signup.html and sign up Ada Lovelace with the email ada@example.com and the password \"Analytical1843\", on a half plot with 4 volunteer hours a month. Tell me the member number it gives.",
+   "contains": ["FG-1914"]
+ },
+ {
+   "id": "demo-shop",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/shop.html. Put two of the cheapest fern and one olive tree in the cart, apply the promo code SAVE10, and tell me the total.",
+   "matches": ["\\$?91\\.80"]
+ },
+ {
+   "id": "demo-todos",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/todos.html. Add \"Water the ferns\", rename \"Repot the basil\" to \"Repot the basil and mint\", mark the plumber task done, then clear the done tasks. How many tasks are left, and which?",
+   "matches": ["\\b4\\b"],
+   "contains": ["Repot the basil and mint", "Water the ferns"]
+ },
+ {
+   "id": "demo-orders",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/orders.html. Which refunded order has the largest total? Give its number, its customer and its total.",
+   "contains": ["1052", "Tess Costa"],
+   "matches": ["186(\\.00)?"]
+ },
+ {
+   "id": "demo-booking",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/booking.html and book Kessel Hut for 3 guests, arriving on 12 December and leaving on the morning of 15 December. Tell me the total and the booking reference.",
+   "contains": ["KH-261212-33"],
+   "matches": ["435(\\.00)?"]
+ },
+ {
+   "id": "demo-news",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/news.html, allow only the necessary cookies, close the newsletter popup, and open the story about the stone bridge. Who wrote it, and how many people gave to the collection?",
+   "contains": ["Marta Kessling", "312"]
+ },
+ {
+   "id": "demo-onboarding",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/onboarding.html and set up a workspace for a team called Trail crew of 6 to 20 people, at the address trail-crew, keeping the other answers as they are. Tell me the reference it gives at the end.",
+   "contains": ["WS-TRAIL-CREW-52"]
+ },
+ {
+   "id": "demo-feed",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/feed.html and find the report by Mira Okafor about the waterfall. How many likes does it have?",
+   "matches": ["\\b87\\b"]
+ },
+ {
+   "id": "demo-settings",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/settings.html. Set the language to Português, turn off the email digest, set the text size to 120%, and save. Tell me what the page says it saved.",
+   "contains": ["Português", "120%"],
+   "matches": ["Saved:[^\\n]*Mentions"]
+ },
+ {
+   "id": "demo-lights",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/lights.html and solve puzzle 1, so every light is off. Tell me how many moves it took.",
+   "contains": ["solved"]
+ },
+ {
+   "id": "demo-2048",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/2048.html and play until the board has a tile of 256 or more. Give the best tile and the score.",
+   "schema": {"type": "object", "properties": {"best_tile": {"type": "integer"}, "score": {"type": "integer"}}, "required": ["best_tile", "score"]},
+   "matches": ["\"best_tile\": (256|512|1024|2048|4096)\\b"]
+ },
+ {
+   "id": "demo-snake",
+   "kind": "demo",
+   "site": "demo",
+   "goal": "Open demo/snake.html and play Snake until the score is at least 50. Give the final score.",
+   "schema": {"type": "object", "properties": {"score": {"type": "integer"}}, "required": ["score"]},
+   "matches": ["\"score\": ([5-9]\\d|\\d{3,})\\b"]
  }
 ]

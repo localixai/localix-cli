@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2048</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: 0.6rem;
+    padding: 0.6rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+  }
+  .tile {
+    border-radius: var(--radius-control);
+    background: var(--sunk);
+    display: grid;
+    place-items: center;
+    font: 700 min(2.2rem, 9cqmin) / 1 var(--head);
+    color: var(--ink);
+  }
+  .tile[data-v] {
+    background: color-mix(in srgb, var(--accent) var(--mix), var(--sunk));
+  }
+  .tile.light {
+    color: var(--accent-ink);
+  }
+  .tile.small {
+    font-size: min(1.6rem, 6.5cqmin);
+  }
+  .tile.new {
+    animation: grow 0.14s ease-out;
+  }
+  @keyframes grow {
+    from {
+      transform: scale(0.6);
+    }
+  }
+</style>
+</head>
+<body>
+<main class="arcade">
+  <h1>2048</h1>
+  <p class="lead">Slide the tiles. Two of the same number join into one. Reach 2048.</p>
+  <div class="stats" aria-live="polite">
+    <div class="stat"><span>Score</span><strong id="score">0</strong></div>
+    <div class="stat"><span>Best tile</span><strong id="best">2</strong></div>
+    <div class="stat"><span>Moves</span><strong id="moves">0</strong></div>
+  </div>
+  <div class="stage"><div class="square">
+    <div class="grid" id="grid" role="grid" aria-label="Tiles, 4 by 4"></div>
+    <div class="over" id="over" hidden>
+      <span id="over-text"></span>
+      <div class="row" style="justify-content: center">
+        <button type="button" id="keep" hidden>Keep going</button>
+        <button type="button" class="primary" id="new-over">New game</button>
+      </div>
+    </div>
+  </div></div>
+  <div class="row" style="justify-content: center">
+    <button type="button" id="new">New game</button>
+  </div>
+  <p class="keys">Slide with <kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd> or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>. Every game starts the same way.</p>
+</main>
+<script src="kit.js"></script>
+<script>
+  header("2048");
+  const SIZE = 4;
+  const GOAL = 2048;
+  const $ = (id) => document.getElementById(id);
+  let random;
+  let cells = [];
+  let score = 0;
+  let moves = 0;
+  let fresh = -1;
+  let won = false;
+  let kept = false;
+
+  function spawn() {
+    const empty = cells.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
+    if (!empty.length) return;
+    fresh = empty[Math.floor(random() * empty.length)];
+    cells[fresh] = random() < 0.9 ? 2 : 4;
+  }
+
+  function start() {
+    random = seeded(2048);
+    cells = Array(SIZE * SIZE).fill(0);
+    score = 0;
+    moves = 0;
+    won = false;
+    kept = false;
+    spawn();
+    spawn();
+    draw();
+  }
+
+  /** The indexes of each line, in the order tiles slide along it. */
+  function lines(direction) {
+    const out = [];
+    for (let a = 0; a < SIZE; a++) {
+      const line = [];
+      for (let b = 0; b < SIZE; b++) {
+        const [r, c] = {
+          left: [a, b],
+          right: [a, SIZE - 1 - b],
+          up: [b, a],
+          down: [SIZE - 1 - b, a],
+        }[direction];
+        line.push(r * SIZE + c);
+      }
+      out.push(line);
+    }
+    return out;
+  }
+
+  function slide(direction) {
+    let moved = false;
+    for (const line of lines(direction)) {
+      const values = line.map((i) => cells[i]).filter(Boolean);
+      const merged = [];
+      while (values.length) {
+        const v = values.shift();
+        if (values[0] === v) {
+          values.shift();
+          merged.push(v * 2);
+          score += v * 2;
+        } else merged.push(v);
+      }
+      line.forEach((i, n) => {
+        const v = merged[n] || 0;
+        if (cells[i] !== v) moved = true;
+        cells[i] = v;
+      });
+    }
+    return moved;
+  }
+
+  const stuck = () =>
+    !cells.includes(0) &&
+    cells.every((v, i) => (i % SIZE === SIZE - 1 || cells[i + 1] !== v) && (i + SIZE >= cells.length || cells[i + SIZE] !== v));
+
+  function draw() {
+    const top = Math.max(...cells);
+    $("grid").innerHTML = cells
+      .map((v, i) => {
+        const level = v ? Math.log2(v) : 0;
+        const classes = ["tile", level >= 6 && "light", v >= 1024 && "small", i === fresh && "new"].filter(Boolean).join(" ");
+        const style = v ? ` data-v="${v}" style="--mix: ${Math.min(100, 8 + level * 8)}%"` : "";
+        return `<div class="${classes}" role="gridcell"${style} aria-label="${v || "empty"}">${v || ""}</div>`;
+      })
+      .join("");
+    $("score").textContent = score;
+    $("best").textContent = top;
+    $("moves").textContent = moves;
+    won = won || top >= GOAL;
+    const over = stuck();
+    $("over").hidden = !(over || (won && !kept));
+    $("over-text").textContent = over ? `No moves left. Score ${score}.` : `You made ${GOAL}!`;
+    $("keep").hidden = over;
+  }
+
+  const KEYS = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", a: "left", d: "right", w: "up", s: "down" };
+  document.addEventListener("keydown", (event) => {
+    const direction = KEYS[event.key.length === 1 ? event.key.toLowerCase() : event.key];
+    if (!direction || (event.target instanceof Element && event.target.closest("input, select, textarea")) || !$("over").hidden) return;
+    event.preventDefault();
+    if (!slide(direction)) return;
+    moves++;
+    spawn();
+    draw();
+  });
+  $("new").addEventListener("click", start);
+  $("new-over").addEventListener("click", start);
+  $("keep").addEventListener("click", () => {
+    kept = true;
+    draw();
+  });
+
+  start();
+</script>
+</body>
+</html>

@@ -30,6 +30,7 @@ pub(crate) fn window<T>(parts: &Parts, work: impl FnOnce(Option<&WindowTool>) ->
         page,
         gate: parts.gate,
         locks: parts.locks,
+        workspace: parts.bash.workspace,
     });
     #[cfg(unix)]
     let terminal = super::Terminal {

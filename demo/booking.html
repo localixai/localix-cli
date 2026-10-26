@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kessel Hut</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    gap: 2rem;
+    align-items: start;
+    margin-top: 1.5rem;
+  }
+  .month {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+  .month h2 {
+    margin: 0;
+    font-size: var(--step-1);
+  }
+  .days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.25rem;
+  }
+  .days .name {
+    text-align: center;
+    color: var(--muted);
+    font-size: var(--step--1);
+    padding-bottom: 0.25rem;
+  }
+  .days button {
+    min-height: 3.2rem;
+    padding: 0.3rem 0;
+    flex-direction: column;
+    gap: 0.15rem;
+    border-color: transparent;
+    font-weight: 550;
+  }
+  .days button small {
+    font-size: 0.7rem;
+    font-weight: 450;
+    color: var(--muted);
+  }
+  .days button:disabled {
+    opacity: 1;
+    color: var(--muted);
+    text-decoration: line-through;
+    background: transparent;
+  }
+  .days button.past:disabled {
+    text-decoration: none;
+    opacity: 0.45;
+  }
+  .days button.within {
+    background: var(--accent-soft);
+    border-radius: 0;
+  }
+  .days button[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  .days button[aria-pressed="true"] small {
+    color: inherit;
+  }
+  .days button.today {
+    border-color: var(--line);
+  }
+  .legend {
+    display: flex;
+    gap: 1.25rem;
+    margin-top: 0.75rem;
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+  .summary dl {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.4rem;
+    margin: 1rem 0;
+  }
+  .summary dt {
+    color: var(--muted);
+  }
+  .summary dd {
+    margin: 0;
+    text-align: right;
+  }
+  .summary .total {
+    font-weight: 700;
+    font-size: var(--step-1);
+    color: var(--ink);
+  }
+  .guests {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .guests .stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .guests output {
+    min-width: 2rem;
+    text-align: center;
+    font-weight: 600;
+  }
+  .note {
+    min-height: 1.5em;
+  }
+  @media (max-width: 52rem) {
+    .layout {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>A room at Kessel Hut</h1>
+  <p class="lead">Six beds at 2,140 m, above the Kessel lake. Pick the night you arrive, then the morning you leave.</p>
+  <div class="layout">
+    <section class="panel" aria-labelledby="month-name">
+      <div class="month">
+        <button type="button" class="icon" id="prev" aria-label="Previous month">‹</button>
+        <h2 id="month-name" aria-live="polite"></h2>
+        <button type="button" class="icon" id="next" aria-label="Next month">›</button>
+      </div>
+      <div class="days" id="days"></div>
+      <div class="legend"><span>Today is Tuesday, 1 December 2026</span><span><s>12</s> booked</span></div>
+    </section>
+
+    <aside class="panel summary" aria-labelledby="stay">
+      <h2 id="stay" style="font-size: var(--step-1)">Your stay</h2>
+      <p class="note" id="note" aria-live="polite">Choose the night you arrive.</p>
+      <div class="guests">
+        <span id="guests-label">Guests</span>
+        <span class="stepper" role="group" aria-labelledby="guests-label">
+          <button type="button" class="icon" id="fewer" aria-label="One guest fewer">−</button>
+          <output id="guests" aria-live="polite">2</output>
+          <button type="button" class="icon" id="more" aria-label="One guest more">+</button>
+        </span>
+      </div>
+      <dl id="price"></dl>
+      <button type="button" class="primary" id="book" style="width: 100%" disabled>Request booking</button>
+      <p class="small muted" style="margin: 0.75rem 0 0">Weeknights $110, Friday and Saturday nights $140. Each guest past two adds $15 a night. Cleaning $30.</p>
+    </aside>
+  </div>
+</main>
+
+<dialog id="booked" aria-labelledby="booked-title">
+  <h2 id="booked-title">Booking requested</h2>
+  <p id="booked-text"></p>
+  <form method="dialog"><button class="primary">Done</button></form>
+</dialog>
+
+<script src="kit.js"></script>
+<script>
+  header("Kessel Hut");
+  const TODAY = new Date(2026, 11, 1);
+  const BOOKED = new Set([
+    "2026-12-05", "2026-12-06", "2026-12-19", "2026-12-20", "2026-12-24", "2026-12-25", "2026-12-26",
+    "2026-12-31", "2027-01-01", "2027-01-09", "2027-01-16", "2027-01-17", "2027-01-30", "2027-02-13", "2027-02-14",
+  ]);
+  const FIRST_MONTH = new Date(2026, 11, 1);
+  const LAST_MONTH = new Date(2027, 2, 1);
+  const MAX_GUESTS = 6;
+  const CLEANING = 30;
+  const NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const long = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const short = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+  let shown = new Date(FIRST_MONTH);
+  let arrive = null;
+  let leave = null;
+  let guests = 2;
+  const $ = (id) => document.getElementById(id);
+
+  const key = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const plus = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  const rate = (d) => ([5, 6].includes(d.getDay()) ? 140 : 110);
+
+  /** The nights between arriving and leaving: each one slept at the hut. */
+  function nights(from, to) {
+    const all = [];
+    for (let d = from; d < to; d = plus(d, 1)) all.push(d);
+    return all;
+  }
+
+  function draw() {
+    $("month-name").textContent = shown.toLocaleString("en-GB", { month: "long", year: "numeric" });
+    $("prev").disabled = shown <= FIRST_MONTH;
+    $("next").disabled = shown >= LAST_MONTH;
+    const first = new Date(shown.getFullYear(), shown.getMonth(), 1);
+    const offset = (first.getDay() + 6) % 7;
+    const count = new Date(shown.getFullYear(), shown.getMonth() + 1, 0).getDate();
+    let html = NAMES.map((n) => `<span class="name" aria-hidden="true">${n}</span>`).join("");
+    html += "<span></span>".repeat(offset);
+    for (let day = 1; day <= count; day++) {
+      const d = new Date(shown.getFullYear(), shown.getMonth(), day);
+      const past = d < TODAY;
+      const booked = BOOKED.has(key(d));
+      // The morning you leave may be a booked night: you sleep elsewhere that night.
+      const leaving = arrive && !leave && d > arrive && !nights(arrive, d).some((n) => BOOKED.has(key(n)));
+      const disabled = past || (booked && !leaving);
+      const picked = (arrive && key(d) === key(arrive)) || (leave && key(d) === key(leave));
+      const within = arrive && leave && d > arrive && d < leave;
+      const state = past ? ", past" : booked ? ", booked" : `, ${money.format(rate(d))}`;
+      const classes = [past && "past", within && "within", key(d) === key(TODAY) && "today"].filter(Boolean).join(" ");
+      html += `<button type="button" class="${classes}" data-day="${key(d)}" aria-pressed="${Boolean(picked)}" ${disabled ? "disabled" : ""}
+        aria-label="${long.format(d)}${state}">${day}<small aria-hidden="true">${past || booked ? "" : "$" + rate(d)}</small></button>`;
+    }
+    $("days").innerHTML = html;
+    summary();
+  }
+
+  function summary() {
+    $("guests").textContent = guests;
+    $("fewer").disabled = guests <= 1;
+    $("more").disabled = guests >= MAX_GUESTS;
+    if (!arrive) {
+      $("note").textContent = "Choose the night you arrive.";
+    } else if (!leave) {
+      $("note").textContent = `Arriving ${short.format(arrive)}. Now choose the morning you leave.`;
+    }
+    if (!arrive || !leave) {
+      $("price").innerHTML = "";
+      $("book").disabled = true;
+      return;
+    }
+    const stay = nights(arrive, leave);
+    const base = stay.reduce((sum, d) => sum + rate(d), 0);
+    const extra = Math.max(0, guests - 2) * 15 * stay.length;
+    const total = base + extra + CLEANING;
+    $("note").textContent = `${short.format(arrive)} to ${short.format(leave)}, ${stay.length} ${stay.length === 1 ? "night" : "nights"}`;
+    $("price").innerHTML = `<dt>${stay.length} ${stay.length === 1 ? "night" : "nights"}</dt><dd>${money.format(base)}</dd>
+      <dt>Extra guests</dt><dd>${money.format(extra)}</dd><dt>Cleaning</dt><dd>${money.format(CLEANING)}</dd>
+      <dt class="total">Total</dt><dd class="total" id="total">${money.format(total)}</dd>`;
+    $("book").disabled = false;
+  }
+
+  $("days").addEventListener("click", (event) => {
+    const day = event.target.closest("[data-day]")?.dataset.day;
+    if (!day) return;
+    const [y, m, d] = day.split("-").map(Number);
+    const picked = new Date(y, m - 1, d);
+    const across = arrive && !leave && picked > arrive && nights(arrive, picked).some((n) => BOOKED.has(key(n)));
+    if (!arrive || leave || picked <= arrive || across) {
+      if (BOOKED.has(day)) return;
+      arrive = picked;
+      leave = null;
+    } else {
+      leave = picked;
+    }
+    draw();
+    if (across) $("note").textContent = `Booked nights fall before ${short.format(picked)}, so you now arrive on ${short.format(picked)}. Choose the morning you leave.`;
+    $("days").querySelector(`[data-day="${day}"]`)?.focus();
+  });
+
+  $("prev").addEventListener("click", () => {
+    shown = new Date(shown.getFullYear(), shown.getMonth() - 1, 1);
+    draw();
+  });
+  $("next").addEventListener("click", () => {
+    shown = new Date(shown.getFullYear(), shown.getMonth() + 1, 1);
+    draw();
+  });
+  $("fewer").addEventListener("click", () => ((guests = Math.max(1, guests - 1)), summary()));
+  $("more").addEventListener("click", () => ((guests = Math.min(MAX_GUESTS, guests + 1)), summary()));
+
+  $("book").addEventListener("click", () => {
+    const code = `KH-${key(arrive).replaceAll("-", "").slice(2)}-${nights(arrive, leave).length}${guests}`;
+    $("booked-text").textContent = `${short.format(arrive)} to ${short.format(leave)} for ${guests} ${guests === 1 ? "guest" : "guests"}, ${$("total").textContent}. Your reference is ${code}.`;
+    $("booked").showModal();
+  });
+
+  draw();
+</script>
+</body>
+</html>

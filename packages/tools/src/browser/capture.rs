@@ -2,21 +2,30 @@
 //! video included), not the DOM drawn again. JPEG, at most `MAX_EDGE` pixels on its long side, so
 //! a screenshot costs the model about as much as a long page outline.
 
+#[cfg(not(target_os = "linux"))]
 use std::sync::mpsc::SyncSender;
+
+#[cfg(target_os = "linux")]
+mod gtk;
+#[cfg(target_os = "linux")]
+pub(super) use gtk::capture;
 
 /// The long side of a picture, in pixels.
 #[cfg_attr(
-    not(any(target_os = "macos", test)),
+    not(any(target_os = "macos", target_os = "linux", test)),
     expect(
         dead_code,
-        reason = "the compositor's picture is taken only on macOS; its tests use it everywhere"
+        reason = "the compositor's picture is taken on macOS and Linux; its tests use it everywhere"
     )
 )]
 pub(super) const MAX_EDGE: f64 = 1280.0;
 /// JPEG quality: text stays legible, a full page stays near 150 KB.
 #[cfg_attr(
-    not(target_os = "macos"),
-    expect(dead_code, reason = "the compositor's picture is taken only on macOS")
+    not(any(target_os = "macos", target_os = "linux")),
+    expect(
+        dead_code,
+        reason = "the compositor's picture is taken on macOS and Linux"
+    )
 )]
 const QUALITY: f64 = 0.7;
 
@@ -39,10 +48,10 @@ pub struct Shot {
 
 /// The size to draw `width`×`height` at so its long side is at most `MAX_EDGE`.
 #[cfg_attr(
-    not(any(target_os = "macos", test)),
+    not(any(target_os = "macos", target_os = "linux", test)),
     expect(
         dead_code,
-        reason = "the compositor's picture is taken only on macOS; its tests use it everywhere"
+        reason = "the compositor's picture is taken on macOS and Linux; its tests use it everywhere"
     )
 )]
 pub(super) fn fitted(width: f64, height: f64) -> (f64, f64) {
@@ -122,7 +131,7 @@ pub(super) fn capture(
     };
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 #[expect(
     clippy::needless_pass_by_value,
     reason = "one signature on every system: macOS hands the reply to WebKit's completion handler"
@@ -133,7 +142,7 @@ pub(super) fn capture(
     reply: SyncSender<Result<Shot, String>>,
 ) {
     let _ = reply.send(Err(
-        "screenshots are not supported on this system yet (macOS only); use `read` or `script`"
+        "screenshots are not supported on this system yet (macOS and Linux only); use `read` or `script`"
             .into(),
     ));
 }

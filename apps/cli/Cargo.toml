@@ -1,9 +1,9 @@
 [package]
 name = "llx"
-description = "Ultrafast, lightweight agent runtime: a native window of browser pages and terminals for any agent (MCP), a decision step for scripts and CI, and a minimal agent for the terminal"
+description = "The agent runtime other agents build on: a window of browser pages and terminals any agent can work in, helpers on any model, decisions for scripts and CI, and a minimal agent for the terminal"
 homepage = "https://llx.sh"
 repository = "https://github.com/rsaryev/llx"
-keywords = ["agent", "coding-agent", "cli", "llm", "mcp"]
+keywords = ["agent", "agent-runtime", "coding-agent", "cli", "llm"]
 categories = ["command-line-utilities", "development-tools"]
 version.workspace = true
 edition.workspace = true

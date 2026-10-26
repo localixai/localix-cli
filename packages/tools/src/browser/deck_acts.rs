@@ -4,6 +4,7 @@
 use wry::WebView;
 
 use super::super::host::{Heard, Listed, STRIP, Shared};
+use super::super::panel::Held;
 use super::super::strip::{self, Click, Key};
 use super::{Deck, Shown};
 
@@ -53,6 +54,10 @@ impl Deck {
             }
         };
         self.menu = false;
+        // The agent shows a terminal the person closed: a tab again.
+        if let Click::Show(Key::Term(id)) = click {
+            self.unhide_term(id);
+        }
         if !self.listing(shared).iter().any(|tab| tab.id == key.name()) {
             let ids: Vec<String> = self.listing(shared).into_iter().map(|tab| tab.id).collect();
             return Err(format!(
@@ -82,7 +87,7 @@ impl Deck {
                 self.show(Shown::Term(id));
                 After::Kept
             }
-            Click::Close(Key::Term(id)) => match self.remove_term(id) {
+            Click::Close(Key::Term(id)) => match self.hide_term(id) {
                 true => After::Kept,
                 false => After::Empty,
             },
@@ -114,12 +119,6 @@ impl Deck {
             let _ = web.active().evaluate_script(script);
         }
         After::Kept
-    }
-
-    /// The history menu is done with: its page is about to open in the browser.
-    pub(crate) fn leave_menu(&mut self) {
-        self.menu = false;
-        self.show(Shown::Web);
     }
 
     /// Panel `id`'s page, or the strip's (`STRIP`).
@@ -155,7 +154,7 @@ impl Deck {
                 });
             }
         }
-        for open in &self.terms {
+        for open in self.terms.iter().filter(|open| open.held == Held::Live) {
             let title = open.title.strip_prefix("llx · ").unwrap_or(&open.title);
             out.push(Listed {
                 id: Key::Term(open.id).name(),

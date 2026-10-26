@@ -58,10 +58,23 @@ impl WebviewDriver {
         self.shared.open.load(Ordering::SeqCst)
     }
 
+    /// The window is open, and so is the tab it is pinned to: a pinned call never goes to the tab
+    /// shown instead, where a goal's clicks would land on another page.
     fn open_or_closed(&self) -> BrowserResult<()> {
-        match self.is_open() {
-            true => Ok(()),
-            false => Err(closed()),
+        if !self.is_open() {
+            return Err(closed());
+        }
+        match self.tab {
+            Some(id)
+                if !crate::lock(&self.shared.tabs)
+                    .iter()
+                    .any(|tab| tab.id == id) =>
+            {
+                Err(BrowserError::Unavailable(format!(
+                    "tab {id} is closed: list shows the tabs open"
+                )))
+            }
+            Some(_) | None => Ok(()),
         }
     }
 

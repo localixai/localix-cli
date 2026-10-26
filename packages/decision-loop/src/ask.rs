@@ -223,7 +223,7 @@ fn state(input: &AskInput, elements: &[&Element]) -> Value {
     let goal = input.goal;
     // An outline says the view's words and controls once, in reading order and by structure
     // (which question a radio answers); a view without one is read as its text and its controls.
-    if input.view.outline.is_empty() {
+    let mut state = if input.view.outline.is_empty() {
         json!({
             "goal": goal,
             "view": {"location": input.view.location, "title": input.view.title, "text": input.view.text},
@@ -236,7 +236,13 @@ fn state(input: &AskInput, elements: &[&Element]) -> Value {
             "view": {"location": input.view.location, "title": input.view.title, "outline": input.view.outline},
             "recent_actions": recent,
         })
+    };
+    // What may be typed: a goal that says "the given text" names none, and the operation is
+    // chosen knowing whether typing can progress.
+    if !input.values.is_empty() {
+        state["values"] = json!(input.values);
     }
+    state
 }
 
 impl Ask {

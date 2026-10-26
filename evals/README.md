@@ -5,7 +5,7 @@ Live tasks for the release binary: coding tasks on small fixtures, and browser t
 ```bash
 cargo build --release
 OPENROUTER_API_KEY=sk-or-... python3 evals/run.py           # every task once
-python3 evals/run.py --only code                           # one kind: code or browser
+python3 evals/run.py --only code                           # one kind: code, browser or demo
 python3 evals/run.py --only fix-test,login --repeat 3      # some tasks, for stability
 python3 evals/run.py --jobs 6                              # more runs at once (default 3)
 LLX_MODEL=<id> LLX_DECISION_MODEL=<id> python3 evals/run.py   # other models
@@ -45,7 +45,7 @@ Terminal tabs (a session, on a machine with a display): start one with a task li
 
 ## Tasks
 
-A task in `tasks.json` has an `id`, a `kind` (`code` or `browser`) and a `goal`. It can also have a `fixture`, `contains`, `matches`, `uses`, `avoids`, `check`, `schema` and `args` (more llx arguments, such as `["--mode", "plan"]`).
+A task in `tasks.json` has an `id`, a `kind` (`code`, `browser`, or `demo`: a browser task on the sites of [`demo/`](../demo/index.html)) and a `goal`. It can also have a `fixture`, a `site` (a directory of the repository copied beside the fixture under its own name, so the goal opens `demo/shop.html` by its path), `contains`, `matches`, `uses`, `avoids`, `check`, `schema` and `args` (more llx arguments, such as `["--mode", "plan"]`).
 
 | Id | Kind | What it exercises |
 | --- | --- | --- |
@@ -63,5 +63,17 @@ A task in `tasks.json` has an `id`, a `kind` (`code` or `browser`) and a `goal`.
 | hn-top | browser | Following a link to another page; `--schema` data with its address |
 | quiz-choose | browser | A consent banner inside a same-origin iframe; choosing an answer before Next |
 | flights-search | browser | Google Flights end to end: consent, one-way, cities with suggestions, a date picker, results that arrive after the page is quiet; `--schema` data |
+| demo-signup | demo | A form that checks what is typed: a name, an email, a password with a rule, a radio card, a select, a required checkbox; the member number read back |
+| demo-shop | demo | The cheapest of a category found, two of it and another item added, a promo code in a drawer, the total read |
+| demo-todos | demo | Enter to add, editing in place, a checkbox by its label, clearing; the list read back |
+| demo-orders | demo | Sixty rows over six pages: a filter and a sorted column, or a script that reads the table |
+| demo-booking | demo | A custom calendar: the month moved, a range of nights picked, a stepper; the price and the reference |
+| demo-news | demo | A cookie banner and a newsletter dialog that arrives later and covers it; an article's facts |
+| demo-onboarding | demo | A form in steps whose second step exists only for a team, a review, a reference |
+| demo-feed | demo | A post that only scrolling loads: skeletons, more on scroll, new posts arriving on top |
+| demo-settings | demo | Tabs, a switch, a slider set to a value, an ARIA combobox filtered by typing, the summary saved |
+| demo-lights | demo | A puzzle solved: the state read and the moves worked out, not guessed |
+| demo-2048 | demo | A game played by keys toward a goal; `--schema` data |
+| demo-snake | demo | A canvas with no outline, in real time or by steps; `--schema` data |
 
 Add a task when a real failure shows something general the suite does not cover yet. Keep its fixture tiny and limited to the standard library, and make its `check` pass only for a correct result. Do not add one that only rewards wording.

@@ -160,6 +160,8 @@ pub(crate) fn isolate(command: &mut Command, home: &Path) {
         .env("LLX_SESSIONS", home.join("sessions"))
         .env("LLX_MODELS_REFRESH", "0")
         .env("LLX_XTERM", "0")
+        // A session's windows render, and none comes over what the person is watching.
+        .env("LLX_WINDOWS", "unseen")
         .env("OPENROUTER_BASE_URL", "http://127.0.0.1:1");
 }
 

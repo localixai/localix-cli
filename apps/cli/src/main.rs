@@ -8,6 +8,8 @@ mod agents;
 mod arrivals;
 mod attach;
 mod brake;
+#[cfg(unix)]
+mod call;
 mod checkpoints;
 mod choice;
 mod cli;
@@ -30,8 +32,6 @@ mod interrupt;
 mod jobs;
 mod kinds;
 mod live;
-#[cfg(unix)]
-mod mcp;
 mod meta;
 mod mode;
 mod modes;

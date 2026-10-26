@@ -60,13 +60,14 @@ impl Tabs {
         &self.slots[self.active as usize - 1].webview
     }
 
-    /// Tab `id` while it is open, else the one acted on.
-    pub(super) fn at(&self, id: Option<u32>) -> &WebView {
-        let open = id.and_then(|id| self.slots.get((id as usize).wrapping_sub(1)));
-        match open.filter(|slot| slot.open) {
-            Some(slot) => &slot.webview,
-            None => self.active(),
-        }
+    /// Tab `id` while it is open, else none; with no id, the one acted on. A tab closed after its
+    /// driver looked is never swapped for another.
+    pub(super) fn at(&self, id: Option<u32>) -> Option<&WebView> {
+        let Some(id) = id else {
+            return Some(self.active());
+        };
+        let slot = self.slots.get((id as usize).wrapping_sub(1));
+        slot.filter(|slot| slot.open).map(|slot| &slot.webview)
     }
 
     fn ids(&self) -> Vec<u32> {

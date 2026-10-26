@@ -5,11 +5,11 @@
 <h1 align="center">llx</h1>
 
 <p align="center">
-  <strong>Ultrafast, lightweight agent runtime</strong>
+  <strong>The agent runtime other agents build on</strong>
 </p>
 
 <p align="center">
-  A native window of real browser pages and terminals that any agent can work in, a decision step for scripts and CI, and a minimal agent for your terminal. One binary under 4 MB, no plugins.
+  Building blocks in one binary under 4 MB: a window of real browser pages and terminals any agent can work in, helpers on any model, decisions for scripts and CI. And a minimal agent for your terminal, too.
 </p>
 
 <p align="center">
@@ -32,7 +32,7 @@ llx is the part of an agent that touches the world. It opens real browser pages 
 | --- | --- | --- |
 | **You** | `llx` | A minimal agent at your terminal, with seven tools: `read`, `edit`, `bash`, `window`, `ask`, `agents`, `jobs` |
 | **Your scripts and CI** | `llx exec --json --schema …` | One task, then exit: JSON events, an answer in the shape you define, exit codes to branch on |
-| **Your other agents** | `llx mcp` | The same window, served over MCP to Claude Code, Codex, Cursor or any client |
+| **Your other agents** | `llx window` · `llx exec` · `llx decide` | Commands they run from their shell: the same window, helpers on any model, quick decisions. They extend Claude Code or Codex, never replace them |
 
 <table>
   <tr>
@@ -49,7 +49,7 @@ llx is the part of an agent that touches the world. It opens real browser pages 
     <td width="33%" valign="top">
       <strong>Point at the problem</strong><br>
       Click an element on a page, write a note, Send. The agent gets its selector, source file, styles and a picture.<br>
-      <a href="docs/mcp.md">Comments →</a>
+      <a href="docs/agents.md">Comments →</a>
     </td>
   </tr>
   <tr>
@@ -87,7 +87,13 @@ llx doctor                             # sign-ins, models, the WebView, the shel
 
 ## In other agents
 
-`llx mcp` serves the window to any MCP client over stdio. Configure a server whose command is `llx` with the argument `mcp` (or, with nothing installed, `npx` with `-y @localixai/llx mcp`). A `goal` on a tab needs an OpenRouter key (`/login` in llx once, or `OPENROUTER_API_KEY`); everything else works without one. See [docs/mcp.md](docs/mcp.md).
+llx extends the agent you already use: it calls llx from its shell, block by block, as its task needs. `llx window '{"action": "open", "kind": "browser", "url": "…"}'` opens a tab of the window the person watches (`llx window` alone prints every action and argument), and the tabs stay between calls until `llx window --end`; `llx exec` hands a task to a helper on any provider and model, so the agent's own tokens go where they matter; `llx decide` answers a yes or no about some text in a second. A page you are building opens by its path (`"url": "demo/index.html"`), with no server to start; [`demo/`](demo/index.html) holds twelve small sites to try it on. A `goal` on a tab needs an OpenRouter key (`/login` in llx once, or `OPENROUTER_API_KEY`); everything else works without one. See [docs/agents.md](docs/agents.md).
+
+In Claude Code, the plugin teaches Claude all of this and brings your comments from the window as a turn of their own:
+
+```
+/plugin install llx --marketplace rsaryev/llx
+```
 
 ## In CI and scripts
 
@@ -121,7 +127,7 @@ Ready-made GitHub workflows, each run for real: [pull request review](examples/g
 
 ## Documentation
 
-[Using llx](docs/usage.md) · [CI](docs/ci.md) · [Recipes](docs/recipes.md) · [Tools](docs/tools.md) · [Modes and trust](docs/modes.md) · [MCP](docs/mcp.md) · [Reference](docs/reference.md) · [Daemon](docs/daemon.md) · [Architecture](ARCHITECTURE.md) · [Models](MODELS.md) · [Changelog](CHANGELOG.md)
+[Using llx](docs/usage.md) · [CI](docs/ci.md) · [Recipes](docs/recipes.md) · [Tools](docs/tools.md) · [Modes and trust](docs/modes.md) · [In other agents](docs/agents.md) · [Reference](docs/reference.md) · [Daemon](docs/daemon.md) · [Architecture](ARCHITECTURE.md) · [Models](MODELS.md) · [Changelog](CHANGELOG.md)
 
 ## Contributing
 

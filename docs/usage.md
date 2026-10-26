@@ -67,7 +67,7 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 - `decide QUESTION`: ask the decision model one question about stdin (`--choices a,b,…` instead of yes or no, `--expect CHOICE` to exit 1 on any other, `--json` for the probabilities and the cost) and print the option it picked. No agent, no tools; it needs an OpenRouter key. The [reference](reference.md#llx-decide) has its options and exit codes.
 - `resume [ID | --last] [PROMPT]`: go on with a session at the terminal. `--last` is the newest session that ran in this workspace (else the newest of all, with a note).
 - `doctor`: check that everything a run needs is in place.
-- `mcp`: serve `window` to another agent over MCP on stdio (unix; see [From another agent](mcp.md)).
+- `window`: one call of `window` from another agent's shell, its tabs kept for their owner between calls (unix; see [In other agents](agents.md)).
 - `serve`: the daemon the sessions run in (unix). `serve status` says whether it runs (its pid, its build, the terminals attached, the sessions open and working, those moved to the background, the jobs; exit 1 when none runs), `serve stop` ends it, stopping every session's task first.
 
 ## In a session

@@ -205,6 +205,33 @@ else
 fi
 rm -rf "$sample"
 
+# A pinned tool fetched into an empty cache, from an archive whose member has the tool's own name
+# (actionlint's): a stub curl hands over the archive, so no network is used.
+sample=target/llx-check/tools-sample
+rm -rf "$sample"
+mkdir -p "$sample/src"
+printf '#!/bin/sh\necho fake 1.0\n' >"$sample/src/fake"
+tar -czf "$sample/fake.tar.gz" -C "$sample/src" fake
+if fetched=$(
+  LLX_TOOLS_DIR="$sample/cache"
+  . scripts/checks/tools.sh
+  sum=$(tool_sha256 "$sample/fake.tar.gz")
+  tool_table() { printf 'fake 1.0 %s fake https://example.invalid/fake.tar.gz %s\n' "$(tool_platform)" "$sum"; }
+  curl() {
+    while [ $# -gt 1 ]; do
+      if [ "$1" = -o ]; then cp "$sample/fake.tar.gz" "$2"; fi
+      shift
+    done
+  }
+  bin=$(tool fake 2>/dev/null) && "$bin"
+) && [ "$fetched" = "fake 1.0" ]; then
+  pass "tools: an archive's member named as the tool is fetched into an empty cache"
+else
+  fail "tools: fetching an archive whose member is named as the tool"
+  printf '%s\n' "$fetched" | sed 's/^/    /'
+fi
+rm -rf "$sample"
+
 if [ "$failures" -gt 0 ]; then
   echo "check-test: $failures failed"
   exit 1

@@ -12,7 +12,7 @@ use tao::event::Event;
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
 
 use super::super::comments::Comments;
-use super::super::deck::{After, Deck};
+use super::super::deck::{After, Deck, Revisit};
 use super::super::frame;
 use super::super::guard::token;
 use super::super::history::History;
@@ -142,13 +142,14 @@ impl On<'_> {
             }
             Cmd::Unpanel(id) => {
                 if let Some(open) = self.deck.as_mut() {
-                    match open.remove_term(id) {
+                    match open.end_term(id) {
                         true => open.refresh(shared),
                         false => *self.deck = None,
                     }
                 }
             }
             Cmd::Titled(id, title) => {
+                shared.history.titled(Key::Term(id), &title);
                 if let Some(open) = self.deck.as_mut() {
                     open.titled(id, title);
                     open.refresh(shared);
@@ -230,6 +231,7 @@ impl On<'_> {
 
     fn panel(&mut self, opening: Opening) {
         let alive = Arc::clone(&opening.4);
+        self.shared.history.opened(Key::Term(opening.0), &opening.1);
         let opened = match self.deck.as_mut() {
             Some(open) => open.add_term(opening, self.proxy),
             None => Deck::for_term(self.target, opening, self.proxy).map(|open| {
@@ -259,12 +261,13 @@ impl On<'_> {
         }
     }
 
-    /// A page of the history menu opens in a tab of its own.
-    fn visit(&mut self, at: usize) {
-        let url = self.shared.history.list().get(at).map(|v| v.url.clone());
-        if let (Some(url), Some(open)) = (url, self.deck.as_mut()) {
-            open.leave_menu();
-            let _ = self.proxy.send_event(Cmd::NewTab { url, reply: None });
+    /// An entry of the history menu shown again; a closed page opens in a tab of its own.
+    fn visit(&mut self, at: u64) {
+        let entry = self.shared.history.get(at);
+        if let (Some(entry), Some(open)) = (entry, self.deck.as_mut()) {
+            if let Revisit::Load(url) = open.revisit(&entry, self.shared) {
+                let _ = self.proxy.send_event(Cmd::NewTab { url, reply: None });
+            }
             open.refresh(self.shared);
         }
     }

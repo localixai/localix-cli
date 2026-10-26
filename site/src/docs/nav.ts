@@ -21,11 +21,11 @@ export const NAV: NavGroup[] = [
   },
   {
     title: 'Reference',
-    blurb: 'The seven tools, modes and approvals, the MCP server, the exit codes and the JSON events.',
+    blurb: 'The seven tools, modes and approvals, llx in other agents, the exit codes and the JSON events.',
     pages: [
       { slug: 'tools', source: 'docs/tools.md' },
       { slug: 'modes', source: 'docs/modes.md' },
-      { slug: 'mcp', source: 'docs/mcp.md' },
+      { slug: 'agents', source: 'docs/agents.md' },
       { slug: 'reference', source: 'docs/reference.md' },
     ],
   },

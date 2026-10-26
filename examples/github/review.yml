@@ -58,7 +58,7 @@ jobs:
 
             Read the change and what was already said about it:
               gh pr view $PR --json title,body,author,comments,reviews
-              gh pr diff $PR
+              gh pr diff $PR   (if GitHub finds it too large: git diff HEAD^1 HEAD)
               gh api repos/$GH_REPO/pulls/$PR/comments   (inline comments; yours begin with <!-- llx:finding -->)
             Then look at whatever else you need: the code around the change, its callers and tests,
             the project's own notes on how it is built and tested.
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: read # gh pr diff needs it on a private repository
+      contents: read # the pull request's files, on a private repository
       pull-requests: write # the only token that can write; this job holds no model key and checks out nothing
     steps:
       - name: Post the review
@@ -103,12 +103,13 @@ jobs:
         run: |
           set -euo pipefail
           # The lines of the new file that the diff shows: GitHub refuses a comment anywhere else.
-          gh pr diff "$PR" | awk '
-            /^diff --git / { head = 1; path = ""; next }
-            head && /^\+\+\+ b\// { path = substr($0, 7); next }
-            /^@@/ { head = 0; split($3, a, ","); line = substr(a[1], 2) + 0; next }
-            head || /^-/ { next }
-            /^[ +]/ { if (path != "") print path ":" line; line++ }' > shown.txt
+          # Read file by file: `gh pr diff` fails past 300 files or 20,000 lines, and a file too
+          # large for a patch only sends its findings to the summary.
+          gh api "repos/$GH_REPO/pulls/$PR/files" --paginate \
+            --jq '.[] | select(.patch) | "FILE \(.filename)\n\(.patch)"' | awk '
+            /^FILE / { path = substr($0, 6); next }
+            /^@@/ { split($3, a, ","); line = substr(a[1], 2) + 0; next }
+            /^[ +]/ { print path ":" line; line++ }' > shown.txt
           # Where llx has commented before, outdated or not.
           gh api "repos/$GH_REPO/pulls/$PR/comments" --paginate --jq '
             .[] | select(.body | startswith("<!-- llx:finding -->")) | "\(.path):\(.line // .original_line)"' > said.txt

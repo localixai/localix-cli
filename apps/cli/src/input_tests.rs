@@ -79,3 +79,20 @@ fn reading_stdin_is_said_where_it_could_wait_unseen() {
         "a terminal is not read"
     );
 }
+
+#[test]
+fn stdin_is_read_up_to_its_limit_and_a_longer_one_says_the_rest_was_not() {
+    let read = |bytes: &[u8]| read_capped(bytes, 2048).unwrap();
+    let full = "a".repeat(2048);
+    assert_eq!(read(full.as_bytes()), full, "exactly the limit is whole");
+    let over = format!("{full}b");
+    assert_eq!(
+        read(over.as_bytes()),
+        format!("{full}\n[stdin cut at 2 KiB: the rest was not read]")
+    );
+    assert_eq!(
+        read(b"\xff ok"),
+        "\u{fffd} ok",
+        "not text is read as far as it goes"
+    );
+}

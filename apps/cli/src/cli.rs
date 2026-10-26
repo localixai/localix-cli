@@ -123,7 +123,8 @@ pub(crate) enum Command {
     ///
     /// A small, fast model picks one of the choices (yes or no unless --choices says otherwise),
     /// in about a second, for a fraction of a cent: a gate in a script or CI. It needs an
-    /// OpenRouter key. Example: `git diff | llx decide "Does this break the public API?"`.
+    /// OpenRouter key. Stdin is read up to 256 KiB, as `exec` reads it. Example:
+    /// `git diff | llx decide "Does this break the public API?"`.
     Decide(Box<DecideArgs>),
     /// Go on with a saved session, at the terminal.
     ///

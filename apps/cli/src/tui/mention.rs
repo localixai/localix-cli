@@ -62,21 +62,21 @@ impl Files {
     /// The files whose paths hold `query`'s letters in order, the closest first.
     pub(crate) fn matching(&self, query: &str) -> Vec<String> {
         let query = query.to_lowercase();
-        let mut found: Vec<(usize, &String)> = (self.list.iter())
-            .filter_map(|(lower, path)| score(lower, &query).map(|s| (s, path)))
-            .collect();
-        let closer = |a: &(usize, &String), b: &(usize, &String)| {
-            (a.0.cmp(&b.0))
-                .then(a.1.len().cmp(&b.1.len()))
-                .then(a.1.cmp(b.1))
-        };
-        // Only the closest are shown: they are picked first, and only they are sorted.
-        if found.len() > SHOWN {
-            found.select_nth_unstable_by(SHOWN, closer);
-            found.truncate(SHOWN);
+        let found = (self.list.iter())
+            .filter_map(|(lower, path)| score(lower, &query).map(|s| (s, path.len(), path)));
+        // Only the closest are shown: each match goes in among them, in order, or not at all.
+        let mut closest = Vec::with_capacity(SHOWN + 1);
+        for one in found {
+            let at = closest.partition_point(|kept| *kept < one);
+            if at < SHOWN {
+                closest.insert(at, one);
+                closest.truncate(SHOWN);
+            }
         }
-        found.sort_by(closer);
-        found.into_iter().map(|(_, path)| path.clone()).collect()
+        closest
+            .into_iter()
+            .map(|(_, _, path)| path.clone())
+            .collect()
     }
 
     #[cfg(test)]

@@ -43,7 +43,8 @@ and a push runs `scripts/check` (everything when pushing main); `--no-verify` sk
 in Claude Code run `scripts/check --fast` when they end a turn (`.claude/settings.json`).
 
 Under it are the usual commands, which you can still run alone: `cargo fmt --all --check`,
-`cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (on a Linux
+`cargo clippy --workspace --all-targets -- -D warnings` (then, on libraries and binaries,
+`-D unused_crate_dependencies`), `cargo test --workspace` (on a Linux
 server with no display, `scripts/check` runs the tests under `xvfb-run`), the same two without
 default features (the headless build), the release binary's size (under 5 MiB, warned above
 4 MB), the site's build, the action's tests, and the linters: shellcheck, actionlint, the example

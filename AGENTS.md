@@ -184,6 +184,7 @@ What the checks run (`scripts/checks/run.sh`), and the rest by hand:
 ```bash
 cargo fmt --all --check                                       # fmt
 cargo clippy --workspace --all-targets -- -D warnings          # clippy (and with --no-default-features: clippy-headless, A8)
+cargo clippy --workspace --lib --bins -- -D warnings -D unused_crate_dependencies  # then, in both: no dependency unused (tests left out)
 cargo test --workspace            # test: unit tests, apps/cli/tests/all.rs (the binary, the layer rules), packages/tools/tests/browser.rs (a real headless window); --no-default-features: test-headless
 cargo test -p llx --test all -- suite::repo::                  # repo: the repository's rules alone
 cargo nextest run --workspace     # the same tests under cargo-nextest

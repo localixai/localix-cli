@@ -19,7 +19,7 @@ run_check() {
 describe() {
   case $1 in
     fmt) echo "cargo fmt --all --check" ;;
-    clippy) echo "cargo clippy --all-targets -D warnings, default features" ;;
+    clippy) echo "cargo clippy --all-targets -D warnings, then unused dependencies; default features" ;;
     clippy-headless) echo "the same without default features: the headless build (A8)" ;;
     repo) echo "the repository's rules: cargo test -p $REPO_CRATE --test all -- suite::repo::" ;;
     test) echo "cargo test, default features (Linux with no display: under xvfb-run)" ;;
@@ -53,11 +53,20 @@ with_display() {
 }
 
 check_fmt() { cargo fmt --all --check -- --color "${CARGO_TERM_COLOR:-auto}"; }
+# A dependency no library or binary uses, in either build: test targets are left out, as each
+# uses only some of its crate's dependencies and would name the rest. Workspace-wide: `--lib`
+# on a scope of the binary alone finds no library, and the whole is quick once checked.
+unused_dependencies() {
+  cargo clippy --locked --workspace --lib --bins "$@" -- -D warnings -D unused_crate_dependencies
+}
 # shellcheck disable=SC2086 # a scope is cargo's words: `-p a -p b` or `--workspace`
-check_clippy() { cargo clippy --locked --all-targets $run_scope -- -D warnings; }
+check_clippy() {
+  cargo clippy --locked --all-targets $run_scope -- -D warnings && unused_dependencies
+}
 # shellcheck disable=SC2086
 check_clippy_headless() {
-  cargo clippy --locked --all-targets --no-default-features $run_scope -- -D warnings
+  cargo clippy --locked --all-targets --no-default-features $run_scope -- -D warnings &&
+    unused_dependencies --no-default-features
 }
 check_repo() { cargo test --locked -p "$REPO_CRATE" --test all -- suite::repo::; }
 # shellcheck disable=SC2086

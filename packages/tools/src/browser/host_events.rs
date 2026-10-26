@@ -25,10 +25,11 @@ use super::{Browser, Cmd, Heard, Shared, WINDOW_CLOSED, Window};
 
 /// Take the main thread for the browser's event loop and run `work` on a worker thread with a
 /// handle that opens the window when it is needed. The event loop never returns, so the process
-/// exits here, with the code `work` returns. When the person closes the window, every call waiting
-/// on it fails, `on_close` runs (the app decides what that means for its task), and the window
-/// opens again on its next use.
-pub fn host<F>(on_close: fn(), work: F) -> !
+/// exits here, with the code `work` returns (the `i32` is the type the headless build's `host`
+/// shares, which does return). When the person closes the window, every call waiting on it fails,
+/// `on_close` runs (the app decides what that means for its task), and the window opens again on
+/// its next use.
+pub fn host<F>(on_close: fn(), work: F) -> i32
 where
     F: FnOnce(Browser) -> i32 + Send + 'static,
 {

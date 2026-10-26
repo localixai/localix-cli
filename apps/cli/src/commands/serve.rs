@@ -101,9 +101,10 @@ fn host(config: &Path, path: PathBuf) -> Result<i32, Failure> {
     if !tools::browser::has_display() {
         return Ok(work(None));
     }
-    tools::browser::host(interrupt::window_closed_served, move |browser| {
-        work(Some(browser))
-    })
+    Ok(tools::browser::host(
+        interrupt::window_closed_served,
+        move |browser| work(Some(browser)),
+    ))
 }
 
 /// The lock, waiting a little for a daemon that is ending to let it go.

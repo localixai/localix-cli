@@ -15,6 +15,12 @@ publish = false
 name = "llx"
 path = "src/main.rs"
 
+[features]
+default = ["browser"]
+# The browser window and its engine; off, the headless build (for CI and servers) has terminal
+# tabs only and links no WebView (ARCHITECTURE.md A8).
+browser = ["tools/browser"]
+
 # The composition root (rule L4): the only package that depends on tools, providers and stores.
 [dependencies]
 base64.workspace = true

@@ -1,6 +1,7 @@
 //! Windows show where somebody watches. llx asks its terminal for its colours, which the terminal
 //! sessions' windows take, only when those windows will show: in a session, where a display is
-//! (on macOS always; on Linux the test clears `DISPLAY`). A session in autonomous mode or over
+//! (on macOS always; on Linux the test clears `DISPLAY`), and the build has a browser to hold them
+//! (the headless build, ARCHITECTURE.md A8, asks nothing). A session in autonomous mode or over
 //! SSH, and `exec`, ask nothing and open no window, whatever a call asks.
 
 use super::LONG;
@@ -18,7 +19,8 @@ fn asked(term: &Term) -> bool {
 fn only_a_watched_session_asks_for_the_terminal_s_colours() {
     let model = Model::start(vec![]);
     let watched = Term::start(&model, &[]);
-    assert_eq!(asked(&watched), cfg!(target_os = "macos"), "a session");
+    let windowed = cfg!(all(target_os = "macos", feature = "browser"));
+    assert_eq!(asked(&watched), windowed, "a session");
     drop(watched);
     let ssh = [("SSH_CONNECTION", "10.0.0.2 52000 10.0.0.1 22")];
     let term = Term::spawn(&model, &[], &ssh);

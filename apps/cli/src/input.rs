@@ -1,6 +1,7 @@
 //! What a run is asked: the prompt from the command line and stdin, and the `--schema` its
 //! answer must match.
 
+use std::fmt::Write as _;
 use std::io::{IsTerminal, Read};
 
 use serde_json::Value;
@@ -132,10 +133,11 @@ fn read_capped(reader: impl Read, limit: usize) -> Result<String, Failure> {
     bytes.truncate(limit);
     let mut text = String::from_utf8_lossy(&bytes).into_owned();
     if cut {
-        text.push_str(&format!(
+        let _ = write!(
+            text,
             "\n[stdin cut at {} KiB: the rest was not read]",
             limit / 1024
-        ));
+        );
     }
     Ok(text)
 }

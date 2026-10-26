@@ -2,6 +2,7 @@
 //! goal, not an accident; when a change does not fit, code is removed, the limit is not raised.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use super::{root, walk};
@@ -70,12 +71,12 @@ fn the_project_stays_under_its_size_limit() {
     let total: usize = packages.values().sum();
     let mut report = format!("{total} lines of working code, the hard limit is {LIMIT}\n");
     for (name, lines) in &packages {
-        report.push_str(&format!("  {lines:>6}  {name}\n"));
+        let _ = writeln!(report, "  {lines:>6}  {name}");
     }
     report.push_str("the largest files:\n");
     for (lines, path) in files.iter().take(10) {
         let shown = path.strip_prefix(root()).unwrap_or(path);
-        report.push_str(&format!("  {lines:>6}  {}\n", shown.display()));
+        let _ = writeln!(report, "  {lines:>6}  {}", shown.display());
     }
     println!("{report}");
     assert!(

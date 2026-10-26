@@ -3,6 +3,7 @@
 //! waits on the person, cyan for code. The 16 ANSI colours, so the terminal's theme picks the
 //! shades. A line goes out as ANSI, or as plain text where colour is off.
 
+use std::fmt::Write as _;
 use std::io::IsTerminal;
 
 use ratatui::style::{Color, Modifier, Style};
@@ -58,7 +59,7 @@ pub(crate) fn ansi(line: &Line, colour: bool) -> String {
         if codes.is_empty() {
             out.push_str(&span.content);
         } else {
-            out.push_str(&format!("\x1b[{codes}m{}\x1b[0m", span.content));
+            let _ = write!(out, "\x1b[{codes}m{}\x1b[0m", span.content);
         }
     }
     out

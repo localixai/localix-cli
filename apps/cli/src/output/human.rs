@@ -1,6 +1,8 @@
 //! The words of the trace that are not blocks of their own: a model turn for `-v`, what the run
 //! spent, and the answer split between stdout and stderr.
 
+use std::fmt::Write as _;
+
 use contracts::chat::Usage;
 
 use super::Summary;
@@ -23,28 +25,30 @@ pub(crate) fn spend(summary: &Summary) -> String {
     let seconds = |ms: u64| ms as f64 / 1000.0;
     let mut out = String::new();
     if agent.calls > 0 {
-        out.push_str(&format!(
-            "agent    {} · {} · {} out · ${:.4} · {:.1}s\n",
+        let _ = writeln!(
+            out,
+            "agent    {} · {} · {} out · ${:.4} · {:.1}s",
             agent.model,
             tokens_in(agent.input_tokens, agent.cached_tokens),
             thousands(agent.output_tokens),
             agent.cost,
             seconds(agent.millis)
-        ));
+        );
     }
     if decision.calls > 0 {
-        out.push_str(&format!(
-            "hands    {} · {} calls · {} in · {} out · ${:.4} · {:.1}s\n",
+        let _ = writeln!(
+            out,
+            "hands    {} · {} calls · {} in · {} out · ${:.4} · {:.1}s",
             decision.model,
             decision.calls,
             thousands(decision.input_tokens),
             thousands(decision.output_tokens),
             decision.cost,
             seconds(decision.millis)
-        ));
+        );
     }
     if !summary.session.is_empty() {
-        out.push_str(&format!("session  {}\n", summary.session));
+        let _ = writeln!(out, "session  {}", summary.session);
     }
     out
 }

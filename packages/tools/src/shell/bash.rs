@@ -2,6 +2,7 @@
 //! git, search. The model reads the exit code and both streams; a failing command is an answer,
 //! not an error.
 
+use std::fmt::Write as _;
 use std::time::Duration;
 
 use contracts::gate::Gate;
@@ -238,7 +239,7 @@ fn report(finished: &Finished, place: Option<&str>) -> String {
         Ending::Unknown => format!("ended in {seconds}"),
     };
     if let Some(place) = place {
-        head.push_str(&format!(" (in {place})"));
+        let _ = write!(head, " (in {place})");
     }
     let mut out = vec![head];
     for (name, text) in [("stdout", &finished.stdout), ("stderr", &finished.stderr)] {

@@ -2,6 +2,8 @@
 //! drives it. A view shows controls by refs and is acted on by a ref and an operation, never a
 //! selector or coordinates. A view knows nothing of who drives it.
 
+use std::fmt::Write as _;
+
 use serde::{Deserialize, Serialize};
 
 /// Something a decision model can see and act on: a document, a screen.
@@ -71,13 +73,13 @@ impl Element {
     pub fn describe(&self) -> String {
         let mut line = self.role.clone();
         if !self.name.is_empty() {
-            line.push_str(&format!(" \"{}\"", self.name));
+            let _ = write!(line, " \"{}\"", self.name);
         }
         if let Some(value) = self.value.as_deref().filter(|value| !value.is_empty()) {
-            line.push_str(&format!(" = \"{value}\""));
+            let _ = write!(line, " = \"{value}\"");
         }
         if !self.states.is_empty() {
-            line.push_str(&format!(" [{}]", self.states.join(", ")));
+            let _ = write!(line, " [{}]", self.states.join(", "));
         }
         line
     }

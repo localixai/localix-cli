@@ -3,6 +3,7 @@
 //! size) is part of the view, so the hands can use it like any control; with several tabs open,
 //! it also says which tab the view is, but the hands do not switch tabs: the agent does.
 
+use std::fmt::Write as _;
 use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -266,10 +267,7 @@ impl View for Page {
                 .iter()
                 .map(|tab| format!("{} \"{}\"", tab.id, tab.title))
                 .collect();
-            bar.push_str(&format!(
-                "\n  - tabs: {} (this is {active})",
-                names.join(", ")
-            ));
+            let _ = write!(bar, "\n  - tabs: {} (this is {active})", names.join(", "));
         }
         view.outline = format!("{bar}\n{}", view.outline);
         view.elements.splice(0..0, controls);

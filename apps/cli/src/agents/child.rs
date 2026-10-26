@@ -1,6 +1,7 @@
 //! One task of an agent, on its own thread: its conversation goes on (or opens with a brief), its
 //! answer is posted to the main agent, and the task is recorded in its session.
 
+use std::fmt::Write as _;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -196,13 +197,14 @@ fn keep(
         }
     };
     if !unread.is_empty() {
-        answer.push_str(&format!(
+        let _ = write!(
+            answer,
             "\n\n(it ended before reading: {}; `send` again to have it act on them)",
             unread.join(" | ")
-        ));
+        );
     }
     if let Err(error) = saved {
-        answer.push_str(&format!("\n\n(its session was not saved: {error})"));
+        let _ = write!(answer, "\n\n(its session was not saved: {error})");
     }
     if open {
         let came = crate::arrivals::report(&name, id, status, &answer);

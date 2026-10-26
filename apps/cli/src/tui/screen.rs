@@ -5,6 +5,7 @@
 //! it again, inside one synchronized update so the terminal never shows the half-drawn state.
 //! Every row is at most the width, so the rows drawn are the rows counted.
 
+use std::fmt::Write as _;
 use std::io::{self, Write};
 
 use ratatui::text::Line;
@@ -99,11 +100,11 @@ impl<W: Write> Screen<W> {
             Some(Cursor { row, column }) => {
                 let row = row - skipped;
                 if row < last {
-                    out.push_str(&format!("\x1b[{}A", last - row));
+                    let _ = write!(out, "\x1b[{}A", last - row);
                 }
                 out.push('\r');
                 if column > 0 {
-                    out.push_str(&format!("\x1b[{column}C"));
+                    let _ = write!(out, "\x1b[{column}C");
                 }
                 out.push_str("\x1b[?25h");
                 self.cursor = row;
@@ -183,7 +184,7 @@ impl<W: Write> Screen<W> {
 
     fn erase_into(&self, out: &mut String) {
         if self.cursor > 0 {
-            out.push_str(&format!("\x1b[{}A", self.cursor));
+            let _ = write!(out, "\x1b[{}A", self.cursor);
         }
         out.push_str("\r\x1b[J");
     }

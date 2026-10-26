@@ -1,5 +1,7 @@
 //! The tabs by id: opening several at once, closing them, listing them, and the tab an id names.
 
+use std::fmt::Write as _;
+
 use contracts::tool::{ToolError, ToolOutput};
 use serde_json::Value;
 
@@ -121,7 +123,7 @@ impl WindowTool<'_> {
         for tab in tabs {
             let mut line = format!("{}  {}  {}", tab.id, tab.kind, tab.title);
             if !tab.detail.is_empty() && tab.detail != tab.title {
-                line.push_str(&format!(" — {}", tab.detail));
+                let _ = write!(line, " — {}", tab.detail);
             }
             let group = format!("group {}", tab.group);
             let marks: Vec<&str> = [
@@ -133,7 +135,7 @@ impl WindowTool<'_> {
             .filter_map(|(on, mark)| on.then_some(mark))
             .collect();
             if !marks.is_empty() {
-                line.push_str(&format!("  ({})", marks.join(", ")));
+                let _ = write!(line, "  ({})", marks.join(", "));
             }
             out.push(line);
         }

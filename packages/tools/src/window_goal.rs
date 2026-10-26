@@ -1,6 +1,8 @@
 //! A `goal` on a tab: the kind's own fields first, the goal handed to the helper with the tab's
 //! view once the gate allows it, then what the helper did and the snapshot after.
 
+use std::fmt::Write as _;
+
 use contracts::hands::{Outcome, Report, Task};
 use contracts::tool::{ToolError, ToolOutput};
 use serde_json::{Value, json};
@@ -46,7 +48,7 @@ impl WindowTool<'_> {
         let mut summary = format!("goal on {tab}: {}", goal.replace('\n', " \u{23ce} "));
         if !values.is_empty() {
             let quoted: Vec<String> = values.iter().map(|v| format!("\"{v}\"")).collect();
-            summary.push_str(&format!(" (may type {})", quoted.join(", ")));
+            let _ = write!(summary, " (may type {})", quoted.join(", "));
         }
         crate::ask(self.gate, kind.name(), "", &summary)?;
         let done = {
@@ -90,7 +92,7 @@ fn helper(done: &Report, values: &[String]) -> String {
     };
     let mut out = format!("### Helper: {outcome}");
     for (i, step) in done.steps.iter().enumerate() {
-        out.push_str(&format!("\n{}. {step}", i + 1));
+        let _ = write!(out, "\n{}. {step}", i + 1);
     }
     let typed = |value: &String| (done.steps.iter()).any(|s| s.contains(&format!("\"{value}\"")));
     let unused: Vec<String> = (values.iter())
@@ -98,7 +100,7 @@ fn helper(done: &Report, values: &[String]) -> String {
         .map(|value| format!("\"{value}\""))
         .collect();
     if !unused.is_empty() {
-        out.push_str(&format!("\nValues never typed: {}.", unused.join(", ")));
+        let _ = write!(out, "\nValues never typed: {}.", unused.join(", "));
     }
     out
 }

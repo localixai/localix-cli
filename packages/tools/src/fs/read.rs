@@ -1,6 +1,7 @@
 //! `read`: a file's lines, numbered, a window at a time; or a directory's entries. The file is
 //! streamed, so a huge log costs only the window shown (and a count of its lines).
 
+use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
@@ -182,9 +183,10 @@ fn lines(
     );
     if last < total {
         let next = last + 1;
-        report.push_str(&format!(
+        let _ = write!(
+            report,
             "\n\n(lines {next}-{total} not shown: read again with offset {next} to continue)"
-        ));
+        );
     }
     Ok(report)
 }

@@ -1,5 +1,6 @@
 //! The `jobs` tool: the model starts a monitor or a schedule, lists them and stops them.
 
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::Scope;
@@ -20,6 +21,8 @@ const MAX_SCHEDULES: usize = 50;
 const WEEK: u64 = 7 * 86_400;
 /// Batches a monitor may give before it is stopped as a firehose.
 const MAX_EVENTS: usize = 100;
+/// What a monitor stopped at `MAX_EVENTS` says to do.
+const RESTART: &str = "start it again with a filter that prints only the lines you act on";
 /// A watch's deadline at most in `exec`, where nobody is waiting.
 const EXEC_WATCH: Duration = Duration::from_secs(600);
 
@@ -96,7 +99,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
             let lines = |lines: Vec<String>, dropped: usize| {
                 let mut text = lines.join("\n");
                 if dropped > 0 {
-                    text.push_str(&format!("\n… {dropped} more lines"));
+                    let _ = write!(text, "\n… {dropped} more lines");
                 }
                 // A job no longer listed (`/new` let it go) says nothing more; a new one may
                 // have its name, never its id.
@@ -107,10 +110,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                 job.events += 1;
                 if job.events >= MAX_EVENTS {
                     job.stop.store(true, Ordering::SeqCst);
-                    text.push_str(&format!(
-                        "\n(stopped after {MAX_EVENTS} batches: start it again with a \
-                         filter that prints only the lines you act on)"
-                    ));
+                    let _ = write!(text, "\n(stopped after {MAX_EVENTS} batches: {RESTART})");
                 }
                 drop(state);
                 kit.queue.post(crate::arrivals::monitor(&label, &text));

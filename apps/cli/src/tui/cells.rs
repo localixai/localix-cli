@@ -10,6 +10,8 @@
 //! ─ Worked for 48s · 6 turns · $0.0087 ──────────────────────
 //! ```
 
+use std::fmt::Write as _;
+
 use ratatui::text::{Line, Span};
 
 use super::markdown;
@@ -88,7 +90,7 @@ pub(crate) fn earlier(turns: &[protocol::Turn], width: usize) -> Vec<Vec<Line<'s
     let skipped = turns.len().saturating_sub(EARLIER);
     let mut said = count(turns.len() as u64, "earlier task");
     if skipped > 0 {
-        said.push_str(&format!(" · the last {EARLIER} shown"));
+        let _ = write!(said, " · the last {EARLIER} shown");
     }
     let mut out = vec![note(&said, width)];
     for turn in &turns[skipped..] {

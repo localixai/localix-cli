@@ -3,6 +3,7 @@
 //! [`crate::instructions`]). It is the same for every task and session in a workspace on a day,
 //! so the prompt cache keeps it: nothing in it changes by the minute.
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use contracts::history::Session;
@@ -125,7 +126,7 @@ fn earlier(session: &Session, root: &Path) -> String {
         turns.join("\n")
     );
     if !session.location.is_empty() {
-        out.push_str(&format!("\nThe browser was last at: {}", session.location));
+        let _ = write!(out, "\nThe browser was last at: {}", session.location);
     }
     out.push_str("\n</previous_session>");
     out

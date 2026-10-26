@@ -17,6 +17,7 @@
 //!   ← 2 other sessions (1 working, 1 waiting for you)
 //! ```
 
+use std::fmt::Write as _;
 use std::time::Instant;
 
 use ratatui::style::Style;
@@ -156,7 +157,7 @@ fn others(app: &App) -> Option<String> {
     let s = if lanes.len() == 1 { "" } else { "s" };
     let mut said = format!("← {} other session{s}", lanes.len());
     if !notes.is_empty() {
-        said.push_str(&format!(" ({})", notes.join(", ")));
+        let _ = write!(said, " ({})", notes.join(", "));
     }
     Some(said)
 }

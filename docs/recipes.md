@@ -5,10 +5,17 @@ stdin and write stdout, so the CLIs you already have read the input and post the
 recipe is one line you can run as is; the outputs below are from real runs.
 
 - `llx decide`: one of a few options, about a second, a fraction of a cent. No tools.
-- `llx exec --mode plan`: the agent reads the code and answers; it changes nothing.
+- `llx exec --mode plan`: the agent reads the code and answers. The `edit` tool is refused, and
+  so is a command when no one is there to approve it.
+- `llx exec --allow bash --deny edit`: the agent may run commands to explore and confirm, and
+  edits no file with its tool.
 - `llx exec -y`: the agent may act (pages, commands, edits). Only on input you trust.
 
-Both need `OPENROUTER_API_KEY` (`exec` takes any provider: [docs/ci.md](ci.md)).
+Both need `OPENROUTER_API_KEY` (`exec` takes any provider: [docs/ci.md](ci.md#keys-and-models)).
+
+These one-liners run at a terminal, with your own `gh` or `glab` login. In CI the job that runs
+the model must not hold the token that posts: read [docs/ci.md](ci.md#the-two-job-pattern) for the
+GitHub Action and the two-job pattern, and [In a workflow](#in-a-workflow) below.
 
 ## Review
 
@@ -101,27 +108,8 @@ jq -e .retry incident.out && gh run rerun 1234 --failed
  "next":"Retry the job; if 503s persist, check GitHub's status."}
 ```
 
-In a workflow it runs when another one fails:
-
-```yaml
-on:
-  workflow_run: { workflows: [CI], types: [completed] }
-permissions: { actions: write, contents: read }
-jobs:
-  incident:
-    if: github.event.workflow_run.conclusion == 'failure'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm install -g @localixai/llx
-      - run: |
-          gh run view ${{ github.event.workflow_run.id }} --log-failed | tail -n 300 \
-            | llx exec --mode plan --max-turns 4 --schema @.github/incident.json "Classify this CI failure." > incident.out
-          jq -e .retry incident.out && gh run rerun ${{ github.event.workflow_run.id }} --failed || true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-```
+In a workflow it runs when another one fails, and the rerun is a second job with its own token:
+[examples/github/ci-failure.yml](../examples/github/ci-failure.yml).
 
 ## Releases
 
@@ -144,7 +132,8 @@ llx exec -y --schema '{"type":"object","properties":{"ok":{"type":"boolean"},"se
 {"ok":true,"seen":"Welcome!"}
 ```
 
-On Linux runners it needs a display: `xvfb-run -a llx exec …`.
+On a Linux runner it needs the full build, which needs WebKitGTK 4.1 installed before llx, and a
+display: `xvfb-run -a llx exec …`. The headless build has no browser ([docs/ci.md](ci.md#without-the-action)).
 
 ## On a schedule
 
@@ -154,47 +143,61 @@ tail -n 200 /var/log/app.log | llx decide "Should someone be paged now?" --choic
 
 ## In a workflow
 
-GitHub Actions, a review on each pull request:
+A workflow is the same recipe with the work split in two jobs. The first runs the model with a
+read-only token and answers as data; the second posts it, with the write token and no model key.
+The action runs `llx exec` for the first:
 
 ```yaml
 on: pull_request
-permissions: { contents: read, pull-requests: write }
 jobs:
   review:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    permissions: { contents: read, pull-requests: read }
+    outputs:
+      result: ${{ steps.llx.outputs.result }}
     steps:
-      - uses: actions/checkout@v4
-      - run: npm install -g @localixai/llx
-      - run: |
-          gh pr diff ${{ github.event.number }} \
-            | llx exec --mode plan --max-turns 10 "Review this diff: bugs and risks only." \
-            | gh pr comment ${{ github.event.number }} -F -
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: rsaryev/llx@v0
+        id: llx
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        with:
+          model: anthropic/claude-haiku-5.5
+          allow: bash
+          deny: edit
+          prompt: |
+            Review pull request #$PR with gh and git. Bugs and risks only, as a short markdown list.
+  post:
+    needs: review
+    runs-on: ubuntu-latest
+    permissions: { pull-requests: write }
+    steps:
+      - run: gh pr comment "$PR" --body "$BODY"
         env:
           GH_TOKEN: ${{ github.token }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          BODY: ${{ needs.review.outputs.result }}
 ```
 
-GitLab CI, on merge requests (`CI_JOB_TOKEN` cannot write notes: a project access token with
-`api` scope, in a masked variable):
-
-```yaml
-review:
-  rules: [{ if: $CI_PIPELINE_SOURCE == "merge_request_event" }]
-  timeout: 10m
-  script:
-    - npm install -g @localixai/llx
-    - glab mr diff $CI_MERGE_REQUEST_IID --raw
-      | llx exec --mode plan --max-turns 10 "Review this diff: bugs and risks only."
-      | glab mr note create $CI_MERGE_REQUEST_IID
-  variables: { GITLAB_TOKEN: $REVIEW_TOKEN }
-```
+Without the action, a script step installs llx and runs `llx exec` itself ([docs/ci.md](ci.md#without-the-action)).
+GitLab CI has the same two jobs: [docs/ci.md](ci.md#gitlab).
 
 ## Untrusted input
 
 A diff, an issue or a log is written by whoever opened it, and may carry instructions. llx
 hands it to the model as data, not as yours, but keep the job safe on its own:
 
-- review and triage with `--mode plan` or `decide`, never `-y`;
-- give such a job no secrets it does not need, and only the token's write it posts with;
-- never run `pull_request_target` with the pull request's code checked out.
+- run the model in a job with a read-only token, and post from a second job that has no model key
+  and runs nothing from the pull request;
+- review and triage with `--allow bash --deny edit`, `--mode plan` or `decide`, never `-y`, and name
+  what the agent may run where the input is from strangers (`--allow 'bash(gh pr view *)'`);
+- never run `pull_request_target` with the pull request's code checked out, and let only people
+  with write access start the agent.
+
+The reasons are in [docs/ci.md](ci.md#security).

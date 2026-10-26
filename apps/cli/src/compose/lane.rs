@@ -12,6 +12,7 @@ use crate::live::Live;
 use crate::output::Output;
 
 /// The two models a session thinks with.
+#[derive(Clone, Copy)]
 pub(crate) struct Models<'a> {
     pub chat: &'a dyn Chat,
     /// Behind the browser's hands.

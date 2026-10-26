@@ -208,7 +208,7 @@ impl Output {
             return;
         }
         if self.json {
-            self.event(json::started(start));
+            self.event(&json::started(start));
         }
     }
 
@@ -218,7 +218,7 @@ impl Output {
             return ui.send(Event::Step(step.trace_line()));
         }
         if self.json {
-            self.event(json::step(step, self.millis()));
+            self.event(&json::step(step, self.millis()));
         }
         if self.trace {
             lock(&self.steps).push(step.trace_line());
@@ -280,7 +280,7 @@ impl Output {
             }
         }
         if self.json {
-            self.event(json::completed(summary));
+            self.event(&json::completed(summary));
             return;
         }
         let (stdout, stderr) = human::answer(summary);
@@ -329,7 +329,7 @@ impl Output {
         self.note(&text);
     }
 
-    fn event(&self, event: Value) {
+    fn event(&self, event: &Value) {
         self.print(&format!("{event}\n"));
     }
 

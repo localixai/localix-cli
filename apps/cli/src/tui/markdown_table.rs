@@ -24,14 +24,14 @@ impl Table {
     pub(super) fn render(
         self,
         width: usize,
-        first: Line<'static>,
-        rest: Line<'static>,
+        first: &Line<'static>,
+        rest: &Line<'static>,
     ) -> Vec<Line<'static>> {
         let columns = self.alignments.len();
         if columns == 0 {
             return vec![];
         }
-        let room = width.saturating_sub(line_width(&rest).max(line_width(&first)));
+        let room = width.saturating_sub(line_width(rest).max(line_width(first)));
         let mut out = vec![];
         // On tiny terminals preserve cells vertically rather than clipping their contents.
         if room < columns * 5 + 1 {
@@ -40,8 +40,8 @@ impl Table {
                     out.push(rest.clone());
                 }
                 for cell in row {
-                    let prefix = if out.is_empty() { &first } else { &rest };
-                    out.extend(wrap(&cell, width, prefix, &rest));
+                    let prefix = if out.is_empty() { first } else { rest };
+                    out.extend(wrap(&cell, width, prefix, rest));
                 }
             }
             return out;

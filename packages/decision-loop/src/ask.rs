@@ -87,7 +87,7 @@ pub fn ask(input: &AskInput) -> Ask {
     };
     heads.add(
         "operation",
-        format!(
+        &format!(
             "Goal: {goal}\n\n{}",
             with_conventions(NEXT_ACTION, input.conventions)
         ),
@@ -101,20 +101,20 @@ pub fn ask(input: &AskInput) -> Ask {
         let targets = elements
             .iter()
             .filter(|e| clickable(e) && e.options.is_empty());
-        heads.add("click_target", premise("CLICK"), criteria(targets));
+        heads.add("click_target", &premise("CLICK"), criteria(targets));
     }
     if operations.contains(&Operation::TypeText) {
         let typed = heads.typed(typing, input.values);
         heads.add(
             "type_entry",
-            premise("TYPE_TEXT, which value into which field"),
+            &premise("TYPE_TEXT, which value into which field"),
             typed,
         );
     }
     if operations.contains(&Operation::Wait) {
         heads.add(
             "wait_for",
-            premise("WAIT, for how long: as long as what is coming usually takes"),
+            &premise("WAIT, for how long: as long as what is coming usually takes"),
             waits(),
         );
     }
@@ -122,7 +122,7 @@ pub fn ask(input: &AskInput) -> Ask {
         let options = heads.options(&elements);
         heads.add(
             "select_target",
-            premise("SELECT, which dropdown option"),
+            &premise("SELECT, which dropdown option"),
             options,
         );
     }
@@ -147,7 +147,7 @@ struct Heads {
 }
 
 impl Heads {
-    fn add(&mut self, key: &str, instructions: String, criteria: Map<String, Value>) {
+    fn add(&mut self, key: &str, instructions: &str, criteria: Map<String, Value>) {
         self.questions.insert(
             key.to_string(),
             Question::Choice {

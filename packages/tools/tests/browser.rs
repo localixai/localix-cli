@@ -81,6 +81,10 @@ fn find<'a>(page: &'a Observation, role: &str, name: &str) -> &'a str {
         .as_str()
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "a test helper takes its arguments as the tests write them, by value"
+)]
 fn act(driver: &WebviewDriver, page: &Observation, action: Action) {
     driver
         .act(&page.epoch, &action)

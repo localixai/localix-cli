@@ -217,7 +217,7 @@ impl Shared {
         self.loaded.notify_all();
     }
 
-    pub(super) fn page_load(&self, tab: u32, event: PageLoadEvent, url: &str) {
+    pub(super) fn page_load(&self, tab: u32, event: &PageLoadEvent, url: &str) {
         let next = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
         {
             let mut loads = crate::lock(&self.loads);

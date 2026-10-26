@@ -126,7 +126,7 @@ pub(crate) fn run(rig: &mut Rig, ui: &Ui) {
 
 fn steps(rig: &mut Rig, terminal: &mut dyn Terminal, shown: &dyn Fn(&str)) {
     let sign_in = |provider, method, terminal: &mut dyn Terminal| {
-        signin::sign_in(provider, method, terminal, shown)
+        signin::sign_in(&provider, method, terminal, shown)
     };
     let world = World {
         signed_in: &Provider::signed_in,

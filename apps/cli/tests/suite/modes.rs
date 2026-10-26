@@ -8,6 +8,10 @@ use crate::common::model::{Model, Reply, said};
 use crate::suite::exec::exec;
 
 /// A home whose settings hold `modes`.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "a test helper takes its arguments as the tests write them, by value"
+)]
 fn with_modes(modes: serde_json::Value) -> Home {
     let home = Home::new();
     let dir = home.path().join("config/llx");

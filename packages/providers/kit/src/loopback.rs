@@ -69,7 +69,7 @@ pub fn listen(spec: Listen) -> Result<Callback, String> {
     let stopped = Arc::clone(&stop);
     std::thread::Builder::new()
         .name("llx-sign-in".into())
-        .spawn(move || serve.run(listener, &sender, &stopped))
+        .spawn(move || serve.run(&listener, &sender, &stopped))
         .map_err(|error| format!("cannot wait for the sign-in: {error}"))?;
     Ok(Callback {
         redirect: format!("http://127.0.0.1:{port}{}", spec.path),
@@ -125,7 +125,7 @@ struct Served {
 impl Served {
     fn run(
         self,
-        listener: TcpListener,
+        listener: &TcpListener,
         sender: &SyncSender<Result<String, String>>,
         stop: &AtomicBool,
     ) {

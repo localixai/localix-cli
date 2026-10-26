@@ -16,8 +16,12 @@ fn said(doing: &str, done: &str, subject: &str) -> Label {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "a test helper takes its arguments as the tests write them, by value"
+)]
 fn shown(name: &str, label: Label, state: State, width: usize) -> String {
-    let lines = lines(name, &label, state, width);
+    let lines = lines(name, &label, &state, width);
     lines
         .iter()
         .map(style::plain)
@@ -62,7 +66,7 @@ fn a_failing_command_ends_with_how_it_exited_in_red() {
     let lines = lines(
         "bash",
         &said("Running", "Ran", "cargo build"),
-        State::Done(&outcome),
+        &State::Done(&outcome),
         80,
     );
     insta::assert_snapshot!(lines.iter().map(style::plain).collect::<Vec<_>>().join("\n"), @r"
@@ -79,7 +83,7 @@ fn a_running_call_has_a_dim_bullet_and_a_present_verb() {
     let lines = lines(
         "bash",
         &said("Running", "Ran", "cargo test"),
-        State::Running,
+        &State::Running,
         80,
     );
     assert_eq!(style::plain(&lines[0]), "• Running cargo test");
@@ -116,7 +120,7 @@ fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
     let rendered = lines(
         "edit",
         &said("Editing", "Edited", "a.rs"),
-        State::Done(&outcome),
+        &State::Done(&outcome),
         60,
     );
     let screen = rendered
@@ -144,7 +148,7 @@ fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
     let rendered = lines(
         "edit",
         &said("Editing", "Edited", "x"),
-        State::Done(&done(&long)),
+        &State::Done(&done(&long)),
         30,
     );
     assert!(
@@ -172,7 +176,7 @@ fn a_diff_colours_its_signs_and_code_only_never_a_band_and_dims_its_numbers() {
     let rendered = lines(
         "edit",
         &said("Editing", "Edited", "x"),
-        State::Done(&report),
+        &State::Done(&report),
         24,
     );
     let spans: Vec<_> = rendered.iter().flat_map(|row| row.spans.iter()).collect();

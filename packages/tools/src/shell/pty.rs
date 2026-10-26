@@ -95,7 +95,7 @@ pub(super) fn spawn(
     let stream = Arc::clone(&shared);
     let pid = child.id();
     let reading = thread::Builder::new().name("llx-terminal".into());
-    if let Err(error) = reading.spawn(move || read(reader, &stream, pid)) {
+    if let Err(error) = reading.spawn(move || read(&reader, &stream, pid)) {
         // No one would read it: the session ends before it is ever shown.
         process::kill(&mut child);
         return Err(error);
@@ -253,7 +253,7 @@ fn retry(error: &io::Error) -> bool {
 /// Read the terminal into `shared` until it closes (EOF on macOS, EIO on Linux once nothing holds
 /// the other end) or the session ends, answering the program's queries on the way. While a
 /// window waits for a paint, the reader wakes for it; at the end, the window says so.
-fn read(file: File, shared: &Shared, pid: u32) {
+fn read(mut file: &File, shared: &Shared, pid: u32) {
     let mut buffer = [0; 8192];
     loop {
         let poll = {
@@ -268,7 +268,7 @@ fn read(file: File, shared: &Shared, pid: u32) {
             shared.tell(paint);
             continue;
         }
-        match (&file).read(&mut buffer) {
+        match file.read(&mut buffer) {
             Ok(0) => break,
             Ok(read) => {
                 let (replies, paint) = {
@@ -276,7 +276,7 @@ fn read(file: File, shared: &Shared, pid: u32) {
                     (stream.take_in(&buffer[..read]), stream.paint_due())
                 };
                 shared.wake.notify_all();
-                put(&file, &replies, Instant::now() + WRITE_WAIT);
+                put(file, &replies, Instant::now() + WRITE_WAIT);
                 shared.tell(paint);
             }
             Err(error) if retry(&error) => {}

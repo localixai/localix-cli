@@ -51,6 +51,10 @@ impl Agent {
     }
 
     /// `method` asked with `params` as request `id`, and its answer.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a test helper takes its arguments as the tests write them, by value"
+    )]
     fn ask(&mut self, id: u64, method: &str, params: Value) -> Value {
         let message = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
         let stdin = self.stdin.as_mut().unwrap();
@@ -64,6 +68,10 @@ impl Agent {
     }
 
     /// The text a `window` call with `arguments` came to.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a test helper takes its arguments as the tests write them, by value"
+    )]
     fn window(&mut self, id: u64, arguments: Value) -> String {
         let params = json!({"name": "window", "arguments": arguments});
         let answer = self.ask(id, "tools/call", params);

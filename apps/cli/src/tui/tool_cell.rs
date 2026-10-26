@@ -33,8 +33,8 @@ pub(crate) enum State<'a> {
 }
 
 /// The block for a call of `name` that reads as `label`.
-pub(crate) fn lines(name: &str, label: &Label, state: State, width: usize) -> Vec<Line<'static>> {
-    let mut out = head(name, label, &state, width);
+pub(crate) fn lines(name: &str, label: &Label, state: &State, width: usize) -> Vec<Line<'static>> {
+    let mut out = head(name, label, state, width);
     if let State::Done(outcome) = state {
         out.extend(body(name, outcome, width));
     }

@@ -94,7 +94,7 @@ impl Select {
                 out.push(Line::default());
             }
             let (rows, (row, column)) =
-                composer.render(Span::styled("  ❯ ", style::bold()), "Type here", width);
+                composer.render(&Span::styled("  ❯ ", style::bold()), "Type here", width);
             cursor = Some((out.len() + row, column));
             out.extend(rows);
         }

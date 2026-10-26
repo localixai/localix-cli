@@ -140,7 +140,7 @@ impl BrowserTool<'_> {
                     "Screenshot of {of} ({}x{}).",
                     shot.width, shot.height
                 ));
-                Some(image(shot))
+                Some(image(&shot))
             }
             Err(error) => {
                 report.push(format!("No screenshot of {of}: {error}"));
@@ -194,7 +194,7 @@ impl BrowserTool<'_> {
 }
 
 /// A screenshot as the model reads it.
-fn image(shot: Shot) -> Image {
+fn image(shot: &Shot) -> Image {
     use base64::Engine;
     Image {
         media_type: "image/jpeg".into(),

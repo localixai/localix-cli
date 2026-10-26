@@ -53,7 +53,7 @@ pub(super) fn read(line: &str) -> Message {
     }
 }
 
-pub(super) fn result(id: &Value, result: Value) -> String {
+pub(super) fn result(id: &Value, result: &Value) -> String {
     json!({"jsonrpc": "2.0", "id": id, "result": result}).to_string()
 }
 

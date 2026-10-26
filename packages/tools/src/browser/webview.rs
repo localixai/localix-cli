@@ -90,7 +90,7 @@ impl WebviewDriver {
     }
 
     /// One probe call, answered over IPC or refused while the page has no probe.
-    fn call(&self, name: &'static str, args: Value, timeout: Duration) -> BrowserResult<Value> {
+    fn call(&self, name: &'static str, args: &Value, timeout: Duration) -> BrowserResult<Value> {
         self.open_or_closed()?;
         let call = |id| {
             format!("window.__dloop_call ? window.__dloop_call({id}, {name:?}, {args}) : false")
@@ -112,10 +112,10 @@ impl WebviewDriver {
         clippy::disallowed_methods,
         reason = "a backoff: the page between documents says nothing when its probe is ready"
     )]
-    fn call_ready(&self, name: &'static str, args: Value) -> BrowserResult<Value> {
+    fn call_ready(&self, name: &'static str, args: &Value) -> BrowserResult<Value> {
         let deadline = Instant::now() + PROBE_READY;
         loop {
-            match self.call(name, args.clone(), CALL_TIMEOUT) {
+            match self.call(name, args, CALL_TIMEOUT) {
                 Ok(Value::Null) | Err(BrowserError::Unavailable(_))
                     if Instant::now() < deadline && self.is_open() =>
                 {
@@ -172,7 +172,7 @@ impl WebviewDriver {
             url,
             reply: Some(reply),
         })?;
-        answered(opened)
+        answered(&opened)
     }
 
     /// Wait for the first document of a tab just opened.
@@ -186,7 +186,7 @@ impl WebviewDriver {
         self.open_or_closed()?;
         let (reply, switched) = mpsc::sync_channel(1);
         self.send(Cmd::SwitchTab { id, reply })?;
-        answered(switched)
+        answered(&switched)
     }
 
     /// Close tab `id`; returns whether tabs are left (with none, the window is closed).
@@ -194,7 +194,7 @@ impl WebviewDriver {
         self.open_or_closed()?;
         let (reply, closed) = mpsc::sync_channel(1);
         self.send(Cmd::CloseTab { id, reply })?;
-        answered(closed)
+        answered(&closed)
     }
 
     fn send(&self, command: Cmd) -> BrowserResult<()> {
@@ -211,7 +211,7 @@ pub(super) fn loadable(url: &str) -> BrowserResult<String> {
         .ok_or_else(|| BrowserError::Refused(format!("`{url}` is not an address")))
 }
 
-fn answered<T>(answer: mpsc::Receiver<Result<T, String>>) -> BrowserResult<T> {
+fn answered<T>(answer: &mpsc::Receiver<Result<T, String>>) -> BrowserResult<T> {
     match answer.recv_timeout(CALL_TIMEOUT) {
         Ok(Ok(value)) => Ok(value),
         Ok(Err(why)) => Err(BrowserError::Refused(why)),

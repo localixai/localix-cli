@@ -142,7 +142,7 @@ impl Driver for WebviewDriver {
             if parsed.is_none()
                 && loads.started > 0
                 && let Ok(Value::String(state)) =
-                    self.call("ready", Value::Null, Duration::from_millis(500))
+                    self.call("ready", &Value::Null, Duration::from_millis(500))
                 && state != "loading"
             {
                 parsed = Some(Instant::now());
@@ -163,7 +163,7 @@ impl Driver for WebviewDriver {
     }
 
     fn observe(&self) -> BrowserResult<Observation> {
-        let value = self.call_ready("snapshot", Value::Null)?;
+        let value = self.call_ready("snapshot", &Value::Null)?;
         serde_json::from_value(value)
             .map_err(|error| BrowserError::Unavailable(format!("unreadable snapshot: {error}")))
     }
@@ -172,9 +172,9 @@ impl Driver for WebviewDriver {
         let started = Instant::now();
         let before = self.loads();
         let args = action_args(epoch, action);
-        self.call("act", args.clone(), CALL_TIMEOUT)?;
+        self.call("act", &args, CALL_TIMEOUT)?;
         let acted = started.elapsed();
-        let settled = self.call("settle", args, SETTLE_TIMEOUT);
+        let settled = self.call("settle", &args, SETTLE_TIMEOUT);
         let settle_time = started.elapsed().saturating_sub(acted);
         self.follow_navigation(before, &settled);
         super::super::debug(|| {
@@ -189,15 +189,15 @@ impl Driver for WebviewDriver {
     fn resize(&self, width: f64, height: f64) -> BrowserResult<()> {
         self.send(Cmd::Resize(width, height))?;
         // The page reflows on its own resize event; give it the usual settle.
-        let _ = self.call("settle", json!({}), SETTLE_TIMEOUT);
+        let _ = self.call("settle", &json!({}), SETTLE_TIMEOUT);
         Ok(())
     }
 
     fn press(&self, keys: &[String], delay_ms: u64) -> BrowserResult<()> {
         let before = self.loads();
         let budget = Duration::from_millis(delay_ms * keys.len() as u64) + CALL_TIMEOUT;
-        self.call("keys", json!({"keys": keys, "delay": delay_ms}), budget)?;
-        let settled = self.call("settle", json!({}), SETTLE_TIMEOUT);
+        self.call("keys", &json!({"keys": keys, "delay": delay_ms}), budget)?;
+        let settled = self.call("settle", &json!({}), SETTLE_TIMEOUT);
         self.follow_navigation(before, &settled);
         Ok(())
     }
@@ -220,7 +220,7 @@ impl Driver for WebviewDriver {
             | BrowserError::Refused(_)
             | BrowserError::Unavailable(_)) => other,
         })?;
-        let settled = self.call("settle", json!({}), SETTLE_TIMEOUT);
+        let settled = self.call("settle", &json!({}), SETTLE_TIMEOUT);
         self.follow_navigation(before, &settled);
         Ok(value
             .get("result")
@@ -230,7 +230,7 @@ impl Driver for WebviewDriver {
     }
 
     fn read(&self, offset: usize, limit: usize) -> BrowserResult<PageText> {
-        let value = self.call_ready("read", json!({"offset": offset, "limit": limit}))?;
+        let value = self.call_ready("read", &json!({"offset": offset, "limit": limit}))?;
         serde_json::from_value(value)
             .map_err(|error| BrowserError::Unavailable(format!("unreadable text: {error}")))
     }
@@ -239,7 +239,7 @@ impl Driver for WebviewDriver {
         self.open_or_closed()?;
         let clip = match selector {
             Some(selector) => {
-                let at = self.call_ready("locate", json!({"selector": selector}))?;
+                let at = self.call_ready("locate", &json!({"selector": selector}))?;
                 let side = |key: &str| at.get(key).and_then(Value::as_f64).unwrap_or(0.0);
                 Some(Clip {
                     x: side("x"),

@@ -58,7 +58,7 @@ pub(super) enum Wake {
 
 /// The requests as wakes, on a thread of its own until the interface's connection ends: the
 /// desk waits on one channel for them and for its lanes' ends, and never polls.
-fn forward(requests: Receiver<Request>, wake: Sender<Wake>) {
+fn forward(requests: Receiver<Request>, wake: &Sender<Wake>) {
     let forwarder = std::thread::Builder::new().name("llx-desk-requests".into());
     let told = wake.clone();
     let spawned = forwarder.spawn(move || {
@@ -99,7 +99,7 @@ pub(crate) fn run(
                   taken at once"
     )]
     let (wake, woken) = std::sync::mpsc::channel();
-    forward(requests, wake.clone());
+    forward(requests, &wake);
     // Moved to the background: the interface's end stops nothing.
     let (mut kept, mut gone) = (false, false);
     std::thread::scope(|scope| {

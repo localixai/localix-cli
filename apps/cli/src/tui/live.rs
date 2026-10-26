@@ -91,7 +91,7 @@ pub(crate) fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cur
         )
     });
     let placeholder = viewing.as_deref().unwrap_or(PLACEHOLDER);
-    let (rows, (row, column)) = app.composer.render(prompt, placeholder, width);
+    let (rows, (row, column)) = app.composer.render(&prompt, placeholder, width);
     let cursor = Cursor {
         row: out.len() + row,
         column,
@@ -139,7 +139,7 @@ fn running_rows(
         &[]
     };
     for (at, call) in running.iter().enumerate() {
-        let mut rows = tool_cell::lines(&call.name, &call.label, State::Running, width);
+        let mut rows = tool_cell::lines(&call.name, &call.label, &State::Running, width);
         if let Some(first) = rows.first_mut() {
             first.spans[0] = spinner(call.since);
             first.spans.insert(1, Span::raw(" "));

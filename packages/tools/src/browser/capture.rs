@@ -123,6 +123,10 @@ pub(super) fn capture(
 }
 
 #[cfg(not(target_os = "macos"))]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "one signature on every system: macOS hands the reply to WebKit's completion handler"
+)]
 pub(super) fn capture(
     _webview: &wry::WebView,
     _clip: Option<Clip>,

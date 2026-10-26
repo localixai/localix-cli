@@ -12,7 +12,7 @@ impl Composer {
     /// The text breaks at the width wherever it reaches it, so every character keeps its column.
     pub(crate) fn render(
         &self,
-        prompt: Span<'static>,
+        prompt: &Span<'static>,
         placeholder: &str,
         width: usize,
     ) -> (Vec<Line<'static>>, (usize, usize)) {

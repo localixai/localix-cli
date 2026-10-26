@@ -18,6 +18,7 @@ use crate::live::NO_DECIDER;
 use crate::providers::{self, Provider};
 
 /// One check: passed, failed, or a warning that does not fail the run.
+#[derive(Clone, Copy)]
 enum Mark {
     Pass,
     Fail,

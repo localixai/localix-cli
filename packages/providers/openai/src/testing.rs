@@ -7,6 +7,10 @@ use provider_kit::http::{Http, HttpError, Reply};
 use serde_json::{Value, json};
 
 /// A JWT with `claims` (the signature is not checked by the reader).
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "a test helper takes its arguments as the tests write them, by value"
+)]
 pub(crate) fn jwt(claims: Value) -> String {
     use base64::Engine;
     let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string());

@@ -13,6 +13,10 @@ fn bash(dir: &Scratch, gate: &dyn Gate, arguments: Value) -> Result<String, Tool
     clippy::panic_in_result_fn,
     reason = "a test's helper: a setup that fails, fails the test"
 )]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "a test helper takes its arguments as the tests write them, by value"
+)]
 fn in_session(
     sessions: &Sessions,
     dir: &Scratch,

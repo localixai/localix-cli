@@ -170,7 +170,7 @@ impl Renderer {
             TagEnd::Table => {
                 if let Some(table) = self.table.take() {
                     let (first, rest) = self.prefixes();
-                    self.rows.extend(table.render(self.width, first, rest));
+                    self.rows.extend(table.render(self.width, &first, &rest));
                     self.marker = None;
                     self.gap = true;
                 }

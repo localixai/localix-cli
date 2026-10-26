@@ -21,7 +21,7 @@ const TOKEN_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Sign in to `provider` with `method`; what was saved, in words with no secret in them.
 pub(crate) fn sign_in(
-    provider: Provider,
+    provider: &Provider,
     method: Method,
     terminal: &mut dyn Terminal,
     say: &dyn Fn(&str),

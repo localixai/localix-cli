@@ -5,6 +5,10 @@ fn resolve(options: &ModelOptions, saved: Option<Choice>) -> Result<Choice, Fail
     super::resolve(options, saved, Some(&[]))
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "a test helper takes its arguments as the tests write them, by value"
+)]
 fn options(provider: Provider, model: Option<&str>, reasoning: Option<&str>) -> ModelOptions {
     ModelOptions {
         provider: Some(provider.id().to_string()),

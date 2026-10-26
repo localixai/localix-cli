@@ -125,11 +125,19 @@ impl Agent {
         writeln!(self.stdin.as_mut().unwrap(), "{line}").unwrap();
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a test helper takes its arguments as the tests write them, by value"
+    )]
     fn ask(&mut self, message: Value) {
         self.send(&message.to_string());
     }
 
     /// The answer to request `id`, when it comes.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a test helper takes its arguments as the tests write them, by value"
+    )]
     fn answer(&mut self, id: Value) -> Value {
         if let Some(at) = self.read.iter().position(|answer| answer["id"] == id) {
             return self.read.remove(at);

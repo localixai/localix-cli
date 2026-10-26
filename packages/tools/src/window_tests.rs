@@ -211,6 +211,10 @@ impl Windowed for Shown {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "a test helper takes its arguments as the tests write them, by value"
+)]
 fn call(tool: &WindowTool, arguments: Value) -> Result<ToolOutput, ToolError> {
     tool.call(&arguments)
 }

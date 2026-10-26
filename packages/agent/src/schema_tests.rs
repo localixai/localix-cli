@@ -1,5 +1,9 @@
 use super::*;
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "a test helper takes its arguments as the tests write them, by value"
+)]
 fn problems(schema: Value, value: Value) -> Vec<String> {
     let mut out = vec![];
     violations(&schema, &value, "", &mut out);

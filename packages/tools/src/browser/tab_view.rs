@@ -45,7 +45,7 @@ pub(super) fn builder<'a>(
                 };
                 format!("tab {id} load {kind}: {url}")
             });
-            loads.page_load(id, event, &url);
+            loads.page_load(id, &event, &url);
             let _ = loaded.send_event(Cmd::Strip);
         })
         .with_document_title_changed_handler(move |title| {

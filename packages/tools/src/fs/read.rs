@@ -73,7 +73,7 @@ impl Tool for ReadTool<'_> {
             .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
         let path = self.workspace.readable(&args.path)?;
         let shown = self.workspace.shown(&path);
-        let unreadable = |error: io::Error| failure(&shown, error);
+        let unreadable = |error: io::Error| failure(&shown, &error);
         // Followed through symlinks. Anything but a file or a directory (a FIFO, a device such as
         // /dev/zero or /dev/tty) would block or never end, and no deadline covers a read.
         let meta = path.metadata().map_err(unreadable)?;
@@ -93,7 +93,7 @@ impl Tool for ReadTool<'_> {
     }
 }
 
-fn failure(shown: &str, error: io::Error) -> ToolError {
+fn failure(shown: &str, error: &io::Error) -> ToolError {
     ToolError::Failed(if error.kind() == io::ErrorKind::NotFound {
         format!("{shown} does not exist")
     } else {
@@ -144,7 +144,7 @@ fn lines(
     let mut out: Vec<String> = vec![];
     // Up to four bytes a character: enough of a line to show its first LINE_CHARS characters.
     while let Some(length) =
-        next_line(&mut reader, &mut line, LINE_CHARS * 4).map_err(|e| failure(shown, e))?
+        next_line(&mut reader, &mut line, LINE_CHARS * 4).map_err(|e| failure(shown, &e))?
     {
         if probed < BINARY_PROBE && line.contains(&0) {
             return Err(ToolError::Failed(format!(

@@ -10,6 +10,10 @@ use crate::testing::{Recorder, Scratch};
     clippy::unwrap_in_result,
     reason = "a test's helper: a setup that fails, fails the test"
 )]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "a test helper takes its arguments as the tests write them, by value"
+)]
 fn edit(dir: &Scratch, gate: &dyn Gate, arguments: Value) -> Result<String, ToolError> {
     let workspace = Workspace::new(dir.path()).unwrap();
     let tool = EditTool {

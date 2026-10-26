@@ -28,7 +28,7 @@ impl Observer for Output {
             });
         }
         if self.json {
-            self.event(json::call(call, self.millis()));
+            self.event(&json::call(call, self.millis()));
         }
         if self.trace {
             // Printed whole once the call is done: a terminal's rows cannot be redrawn here.
@@ -53,7 +53,7 @@ impl Observer for Output {
             });
         }
         if self.json {
-            self.event(json::result(call, outcome, self.millis()));
+            self.event(&json::result(call, outcome, self.millis()));
         }
         if self.trace {
             let outcome = wire::outcome(outcome);
@@ -112,7 +112,7 @@ impl Observer for Output {
             ui.send(Event::Spent(usage.input_tokens + usage.output_tokens));
         }
         if self.json {
-            self.event(json::turn(usage, self.millis()));
+            self.event(&json::turn(usage, self.millis()));
         }
         if self.trace && self.verbose {
             self.lines(&cells::note(&human::turn(usage), self.width));

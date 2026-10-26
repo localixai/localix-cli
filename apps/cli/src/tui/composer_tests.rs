@@ -19,7 +19,7 @@ fn typed(composer: &mut Composer, text: &str) {
 }
 
 fn shown(composer: &Composer, width: usize) -> (String, (usize, usize)) {
-    let (lines, cursor) = composer.render(Span::raw("❯ "), "Type a task", width);
+    let (lines, cursor) = composer.render(&Span::raw("❯ "), "Type a task", width);
     let text = lines
         .iter()
         .map(style::plain)

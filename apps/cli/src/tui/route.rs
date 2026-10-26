@@ -24,7 +24,7 @@ impl App {
     pub(crate) fn event(&mut self, event: Event, now: Instant) -> Option<Action> {
         match event {
             Event::LaneStarted { id, name } => {
-                self.views.lane_started(id.clone(), name);
+                self.views.lane_started(id.clone(), &name);
                 if let (Some(said), Some(at)) = (self.closed.take(), self.views.find(&id)) {
                     self.push(at, cells::note(&printable(&said), self.width));
                 }

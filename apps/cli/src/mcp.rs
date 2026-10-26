@@ -164,7 +164,7 @@ fn answered<F: Fn() -> io::Result<Client>>(
         link.lost(seen);
     }
     if open.end(id) {
-        let _ = lines.send(rpc::result(id, rpc::called(done)));
+        let _ = lines.send(rpc::result(id, &rpc::called(done)));
     }
 }
 
@@ -178,11 +178,11 @@ fn answer<F: Fn() -> io::Result<Client>>(
     match method {
         "initialize" => {
             let version = env!("CARGO_PKG_VERSION");
-            rpc::result(id, rpc::initialized(params, version))
+            rpc::result(id, &rpc::initialized(params, version))
         }
-        "ping" => rpc::result(id, Value::Object(Default::default())),
+        "ping" => rpc::result(id, &Value::Object(Default::default())),
         "tools/list" => match link.call(Command::Tools, ASK) {
-            Ok(Done::Tools { tools }) => rpc::result(id, rpc::tools(tools)),
+            Ok(Done::Tools { tools }) => rpc::result(id, &rpc::tools(tools)),
             Ok(_) => rpc::error(id, rpc::INVALID_REQUEST, "the server lists no tools"),
             Err(why) => rpc::error(id, rpc::INVALID_REQUEST, &why.to_string()),
         },

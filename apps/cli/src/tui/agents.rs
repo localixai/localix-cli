@@ -37,7 +37,7 @@ pub(crate) fn result_block(
         }
         (said, _) => {
             *declined = said;
-            tool_cell::lines(name, label, State::Done(outcome), width)
+            tool_cell::lines(name, label, &State::Done(outcome), width)
         }
     }
 }

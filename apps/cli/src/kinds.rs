@@ -63,14 +63,14 @@ impl Browser<'_> {
     }
 
     /// `arguments` carried out in tab `id`, while no other call works in it.
-    fn in_tab(&self, id: u32, arguments: Value) -> Result<ToolOutput, ToolError> {
+    fn in_tab(&self, id: u32, arguments: &Value) -> Result<ToolOutput, ToolError> {
         let _tab = self.locks.tab(id);
         let page = self.page.pinned(id);
         let tool = BrowserTool {
             page: &page,
             gate: self.gate,
         };
-        tool.call(&arguments)
+        tool.call(arguments)
     }
 
     /// What acting in tab `id` left: the page's changes since the model last read it whole, when
@@ -99,13 +99,13 @@ impl Browser<'_> {
     }
 
     /// `arguments` that change the tabs (close one), one such call at a time.
-    fn on_tabs(&self, arguments: Value) -> Result<ToolOutput, ToolError> {
+    fn on_tabs(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
         let _change = crate::output::lock(&self.locks.tabs_change);
         let tool = BrowserTool {
             page: self.page,
             gate: self.gate,
         };
-        tool.call(&arguments)
+        tool.call(arguments)
     }
 }
 
@@ -187,7 +187,7 @@ impl Kind for Browser<'_> {
             (self.page.start(&url)).map_err(|error| ToolError::Failed(error.to_string()))?
         };
         let _ = self.page.pinned(id).driver().map(|tab| tab.wait_new());
-        let read = self.in_tab(id, json!({}))?;
+        let read = self.in_tab(id, &json!({}))?;
         let report = format!("Opened {url}.");
         Ok(Opened {
             id,
@@ -205,24 +205,24 @@ impl Kind for Browser<'_> {
             "offset",
             "size",
         ];
-        let done = self.in_tab(id, Self::picked(args, &fields))?;
+        let done = self.in_tab(id, &Self::picked(args, &fields))?;
         Ok(self.after(id, done))
     }
 
     fn snapshot(&self, id: u32) -> Result<ToolOutput, ToolError> {
-        let done = self.in_tab(id, json!({}))?;
+        let done = self.in_tab(id, &json!({}))?;
         Ok(self.read_whole(id, done))
     }
 
     fn screenshot(&self, id: u32, args: &Value) -> Result<ToolOutput, ToolError> {
         let mut call = Self::picked(args, &["selector"]);
         call["screenshot"] = json!(true);
-        self.in_tab(id, call)
+        self.in_tab(id, &call)
     }
 
     fn close(&self, id: u32) -> Result<String, ToolError> {
         let _tab = self.locks.tab(id);
-        self.on_tabs(json!({"close_tab": id}))
+        self.on_tabs(&json!({"close_tab": id}))
             .map(|done| done.report)
     }
 

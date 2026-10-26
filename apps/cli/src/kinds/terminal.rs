@@ -23,8 +23,8 @@ when the program draws over its output: `screen 120×40, cursor at row R col C:`
 it when done; at most 4 at once. Starting one and typing into it are approved first.";
 
 impl Terminal<'_> {
-    fn call(&self, arguments: Value) -> Result<(ToolOutput, Option<u32>), ToolError> {
-        self.bash.terminal(&arguments)
+    fn call(&self, arguments: &Value) -> Result<(ToolOutput, Option<u32>), ToolError> {
+        self.bash.terminal(arguments)
     }
 }
 
@@ -76,7 +76,7 @@ impl Kind for Terminal<'_> {
                 call[field] = value.clone();
             }
         }
-        match self.call(call)? {
+        match self.call(&call)? {
             (output, Some(id)) => Ok(Opened { id, output }),
             // It ended within the wait: no tab, and what it printed.
             (output, None) => Err(ToolError::Failed(output.report)),
@@ -90,7 +90,7 @@ impl Kind for Terminal<'_> {
                 call[field] = value.clone();
             }
         }
-        self.call(call).map(|(output, _)| output)
+        self.call(&call).map(|(output, _)| output)
     }
 
     fn snapshot(&self, id: u32) -> Result<ToolOutput, ToolError> {
@@ -109,7 +109,7 @@ impl Kind for Terminal<'_> {
     }
 
     fn close(&self, id: u32) -> Result<String, ToolError> {
-        let closed = self.call(json!({"session": id, "close": true}))?;
+        let closed = self.call(&json!({"session": id, "close": true}))?;
         Ok(closed.0.report)
     }
 

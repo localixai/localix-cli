@@ -178,15 +178,15 @@ impl Views {
 
     /// A lane began: the interface's first takes its id (it is shown from the start); another
     /// is kept beside the others.
-    pub(crate) fn lane_started(&mut self, id: String, name: String) {
+    pub(crate) fn lane_started(&mut self, id: String, name: &str) {
         let first = &mut self.sessions[0];
         if first.id.is_empty() {
             first.id.clone_from(&id);
-            first.named_by(&name);
+            first.named_by(name);
             self.shown = id;
         } else if self.find(&id).is_none() {
             let mut lane = SessionView::new(id, None, String::new());
-            lane.named_by(&name);
+            lane.named_by(name);
             self.sessions.push(lane);
         }
     }

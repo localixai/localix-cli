@@ -111,6 +111,10 @@ impl Page {
     pub fn pinned(&self, _id: u32) -> Self {
         Self(())
     }
+
+    pub fn start(&self, _url: &str) -> ViewResult<u32> {
+        unavailable()
+    }
 }
 
 impl View for Page {
@@ -134,10 +138,6 @@ pub struct WebviewDriver(());
 impl WebviewDriver {
     pub fn tabs(&self) -> (Vec<Tab>, u32) {
         (vec![], 0)
-    }
-
-    pub fn add_tab(&self, _url: &str) -> ViewResult<u32> {
-        unavailable()
     }
 
     pub fn wait_new(&self) {}

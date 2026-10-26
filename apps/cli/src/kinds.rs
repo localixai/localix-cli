@@ -98,23 +98,14 @@ impl Browser<'_> {
         done
     }
 
-    /// `arguments` that change the tabs (open one, close one), one such call at a time.
+    /// `arguments` that change the tabs (close one), one such call at a time.
     fn on_tabs(&self, arguments: Value) -> Result<ToolOutput, ToolError> {
         let _change = crate::output::lock(&self.locks.tabs_change);
-        self.on_tabs_locked(arguments)
-    }
-
-    /// The same, with the tabs' lock held already.
-    fn on_tabs_locked(&self, arguments: Value) -> Result<ToolOutput, ToolError> {
         let tool = BrowserTool {
             page: self.page,
             gate: self.gate,
         };
         tool.call(&arguments)
-    }
-
-    fn active(&self) -> Option<u32> {
-        self.page.driver().ok().map(|driver| driver.tabs().1)
     }
 }
 
@@ -175,47 +166,32 @@ impl Kind for Browser<'_> {
             .and_then(Value::as_str)
             .unwrap_or(SEARCH_PAGE);
         let url = tools::browser::address(url)?;
-        let added = {
-            // Only making the tab is one at a time: tabs opened together load together.
+        // Asked before any lock: the person may take their time, and nobody else's tabs wait on
+        // them (ARCHITECTURE.md R6).
+        let effect = format!("open {url} in a new tab");
+        let asked = contracts::gate::Effect {
+            tool: "browser",
+            subject: "",
+            summary: &effect,
+        };
+        if let contracts::gate::Verdict::Deny(why) = self.gate.check(asked) {
+            return Err(ToolError::Failed(why));
+        }
+        let id = {
+            // Making the tab is one at a time, with the look at whether the window is open that
+            // decides how (a tab of it, or the window itself): one step (R7), so two first tabs
+            // never open two windows, nor does one load in the other's tab. The lock is held for
+            // the window's loop to make the tab, not for its page: tabs opened together load
+            // together, each after its lock is let go.
             let _change = crate::output::lock(&self.locks.tabs_change);
-            match self.page.driver().ok().filter(|_| self.page.is_open()) {
-                Some(driver) => {
-                    let effect = format!("open {url} in a new tab");
-                    if let contracts::gate::Verdict::Deny(why) =
-                        self.gate.check(contracts::gate::Effect {
-                            tool: "browser",
-                            subject: "",
-                            summary: &effect,
-                        })
-                    {
-                        return Err(ToolError::Failed(why));
-                    }
-                    let id = driver.add_tab(&url);
-                    Some(id.map_err(|error| ToolError::Failed(error.to_string()))?)
-                }
-                None => None,
-            }
+            (self.page.start(&url)).map_err(|error| ToolError::Failed(error.to_string()))?
         };
-        let (id, output) = match added {
-            Some(id) => {
-                let _ = self.page.pinned(id).driver().map(|tab| tab.wait_new());
-                let read = self.in_tab(id, json!({}))?;
-                let report = format!("Opened {url}.");
-                (id, ToolOutput { report, ..read })
-            }
-            // The window's first tab: opened as the window is.
-            None => {
-                let _change = crate::output::lock(&self.locks.tabs_change);
-                let output = self.on_tabs_locked(json!({"url": url}))?;
-                let id = self
-                    .active()
-                    .ok_or_else(|| ToolError::Failed(output.report.clone()))?;
-                (id, output)
-            }
-        };
+        let _ = self.page.pinned(id).driver().map(|tab| tab.wait_new());
+        let read = self.in_tab(id, json!({}))?;
+        let report = format!("Opened {url}.");
         Ok(Opened {
             id,
-            output: self.read_whole(id, output),
+            output: self.read_whole(id, ToolOutput { report, ..read }),
         })
     }
 

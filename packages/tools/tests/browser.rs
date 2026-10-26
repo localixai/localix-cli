@@ -548,6 +548,21 @@ fn answers_while_loading(browser: &browser::Browser, driver: &WebviewDriver, ori
     }
 }
 
+/// A tab is started at once and loads after, so the app's lock on making tabs is never held
+/// through a load: a page on the open window starts a slow address (3 s) in a tab of its own and
+/// says the tab's id before the document comes; a driver pinned to it waits for it.
+fn starts_at_once(browser: &browser::Browser, driver: &WebviewDriver, origin: &str) {
+    let page = browser::Page::new(browser.clone(), true);
+    let asked = std::time::Instant::now();
+    let id = (page.start(&format!("{origin}/slower/form.html"))).expect("a tab starts");
+    let waited = asked.elapsed();
+    assert!(waited < Duration::from_secs(1), "it waited: {waited:?}");
+    let tab = page.pinned(id).driver().expect("its driver");
+    tab.wait_new();
+    assert_eq!(tab.observe().unwrap().title, "Book");
+    driver.close_tab(id).expect("its tab closes");
+}
+
 /// Visual feedback: the person turns commenting on from the strip; then a press on a button picks
 /// it instead of pressing it (a script's click still presses it), the note typed in its card is
 /// held, and Send hands the batch to the listener with the element's selector.
@@ -853,6 +868,7 @@ fn main() {
                         .expect("it loads");
                     second_page(&browser, &driver, &origin);
                     answers_while_loading(&browser, &driver, &origin);
+                    starts_at_once(&browser, &driver, &origin);
                     feedback(&browser, &driver);
                     scenario(&driver, &origin);
                 });

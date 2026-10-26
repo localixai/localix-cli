@@ -80,6 +80,16 @@ impl Page {
         }
     }
 
+    /// Open `url` in a tab of its own and say the tab's id, its document not waited for (a driver
+    /// pinned to the tab waits: `wait_new`): a new tab of the window open, else the window opened
+    /// on it.
+    pub fn start(&self, url: &str) -> ViewResult<u32> {
+        match self.claim(|_| true) {
+            Claim::Open(open) => open.add_tab(url),
+            Claim::Make(stale) => self.make(url, url, self.headless, stale).map(|made| made.1),
+        }
+    }
+
     /// Once no call is opening the window: the window if it is open as `wanted` says of its
     /// being hidden, else this call's claim to open it. The look and the claim are one step under
     /// the lock (R7), so two calls never open two windows; the opening itself is done with the

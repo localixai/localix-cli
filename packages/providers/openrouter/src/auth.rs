@@ -39,12 +39,17 @@ pub fn remove(app: App) -> std::io::Result<bool> {
 
 /// A sign-in under way: the address to open, and the callback waiting for the browser.
 pub struct Login {
-    pub address: String,
+    address: String,
     callback: Callback,
     verifier: String,
 }
 
 impl Login {
+    /// Where the person signs in.
+    pub fn address(&self) -> &str {
+        &self.address
+    }
+
     pub fn start(app: App) -> Result<Self, String> {
         let (verifier, challenge) = oauth::pkce()?;
         // OpenRouter sends no `state` back; a random route keeps stray requests from completing
@@ -59,7 +64,7 @@ impl Login {
         })?;
         let address = format!(
             "{AUTHORIZE}?callback_url={}&code_challenge={challenge}&code_challenge_method=S256",
-            encode(&callback.redirect)
+            encode(callback.redirect())
         );
         Ok(Self {
             address,

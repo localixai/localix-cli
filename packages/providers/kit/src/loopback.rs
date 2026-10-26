@@ -32,14 +32,18 @@ pub struct Listen<'a> {
 
 /// A server waiting for one redirect.
 pub struct Callback {
-    /// The address the provider is told to redirect to.
-    pub redirect: String,
+    redirect: String,
     codes: Receiver<Result<String, String>>,
     stop: Arc<AtomicBool>,
     port: u16,
 }
 
 impl Callback {
+    /// The address the provider is told to redirect to.
+    pub fn redirect(&self) -> &str {
+        &self.redirect
+    }
+
     /// The code the browser came back with, or why it brought none; `None` while it has not.
     pub fn wait(&self, timeout: Duration) -> Option<Result<String, String>> {
         self.codes.recv_timeout(timeout).ok()

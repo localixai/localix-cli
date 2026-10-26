@@ -9,7 +9,7 @@ use super::super::{
 };
 
 pub(super) struct Table {
-    pub rows: Vec<Vec<Line<'static>>>,
+    pub(super) rows: Vec<Vec<Line<'static>>>,
     alignments: Vec<Alignment>,
 }
 

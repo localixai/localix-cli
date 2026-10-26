@@ -22,7 +22,7 @@ pub(super) type Post = Box<dyn Fn(Cmd) -> bool + Send + Sync>;
 pub(super) struct Slot {
     frame: Mutex<Option<String>>,
     queued: AtomicBool,
-    pub alive: AtomicBool,
+    pub(super) alive: AtomicBool,
 }
 
 impl Slot {

@@ -48,7 +48,7 @@ const TITLE: &str = "Generate a concise, single-line task title";
 
 /// The server; it stops with the test process.
 pub(crate) struct Model {
-    pub base: String,
+    pub(crate) base: String,
     shared: Arc<Mutex<Shared>>,
 }
 

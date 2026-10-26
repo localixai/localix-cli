@@ -111,6 +111,9 @@ stable_sort_primitive = "deny"
 mod_module_files = "deny"
 # What a function only reads it borrows; a value it takes it keeps, or moves on.
 needless_pass_by_value = "deny"
+# A struct is all public, or its fields say how far they reach (P3, L9): another crate reads
+# a private field through a method.
+partial_pub_fields = "deny"
 iter_over_hash_type = "deny"
 fallible_impl_from = "deny"
 mutex_atomic = "deny"

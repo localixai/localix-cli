@@ -13,8 +13,8 @@ use tools::workspace::Workspace;
 /// One task: what it asked, where the conversation stood before it, the files as it found them.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Task {
-    pub goal: String,
-    pub at: usize,
+    pub(crate) goal: String,
+    pub(crate) at: usize,
     files: Vec<(PathBuf, Option<Vec<u8>>)>,
 }
 

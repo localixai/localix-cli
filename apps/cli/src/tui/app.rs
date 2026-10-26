@@ -73,28 +73,28 @@ impl Open {
 }
 
 pub(crate) struct App {
-    pub width: usize,
-    pub height: usize,
+    pub(crate) width: usize,
+    pub(crate) height: usize,
     /// Finished blocks not printed yet.
     pub(super) pending: Vec<Vec<Line<'static>>>,
     /// The main session and its agents, each a transcript, and the one shown.
-    pub views: Views,
-    pub composer: Composer,
+    pub(crate) views: Views,
+    pub(crate) composer: Composer,
     /// The commands `/` offers: each name and what it does.
-    pub commands: Vec<(String, String)>,
+    pub(crate) commands: Vec<(String, String)>,
     /// The command marked among those offered.
-    pub offered: usize,
+    pub(crate) offered: usize,
     /// The workspace's files, for `@`.
-    pub files: Files,
+    pub(crate) files: Files,
     /// Where pictures dropped in are kept.
-    pub pasted: std::path::PathBuf,
+    pub(crate) pasted: std::path::PathBuf,
     /// The question open first, then those waiting their turn.
-    pub questions: VecDeque<Asked>,
+    pub(crate) questions: VecDeque<Asked>,
     /// Until when the question open ignores keys: what was typed ahead for the composer as it
     /// opened must not answer it.
     pub(super) settling: Option<Instant>,
     /// Ctrl-C at an empty prompt: a second one quits, until this moment.
-    pub quitting: Option<Instant>,
+    pub(crate) quitting: Option<Instant>,
     /// That Ctrl-C cleared a draft, which ↑ brings back.
     pub(super) discarded: bool,
     /// Esc at an empty prompt: a second one rewinds, until this moment.
@@ -108,15 +108,15 @@ pub(crate) struct App {
     /// A lane closed to make room, said in the next lane that opens.
     pub(super) closed: Option<String>,
     /// What runs, in every session (asked of the server): quitting stops it.
-    pub work: Box<dyn Fn() -> Vec<protocol::Running> + Send>,
+    pub(crate) work: Box<dyn Fn() -> Vec<protocol::Running> + Send>,
     /// Whether the server keeps work once the interface leaves: quitting may leave it there.
-    pub background: bool,
+    pub(crate) background: bool,
     /// The modes `/mode` offers, each with what it does, as the server says them.
-    pub modes: Vec<(String, String)>,
+    pub(crate) modes: Vec<(String, String)>,
     /// Lanes the server keeps open at most.
-    pub max_lanes: usize,
+    pub(crate) max_lanes: usize,
     /// What the interface sends next: commands and replies, in order.
-    pub outbox: Vec<Out>,
+    pub(crate) outbox: Vec<Out>,
 }
 /// How long a first Ctrl-C at the prompt waits for a second.
 pub(super) const QUIT_WINDOW_MS: u128 = 2000;

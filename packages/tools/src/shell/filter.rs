@@ -33,14 +33,14 @@ pub(super) struct Filter {
     /// A lone carriage return came: the next character starts the line over.
     at_cr: bool,
     /// The program turned on application cursor keys (DECCKM): arrows are sent as SS3.
-    pub application_cursor: bool,
+    pub(super) application_cursor: bool,
     /// Answers to the program's queries, for the terminal's input.
     replies: Vec<u8>,
     /// The program asked where the cursor is: the screen answers.
-    pub position_asked: usize,
+    pub(super) position_asked: usize,
     /// The program drew over what it printed (the cursor up or placed, the screen erased, the
     /// alternate screen): a transcript would hold fragments, so its screen is read instead.
-    pub redrawn: bool,
+    pub(super) redrawn: bool,
 }
 
 impl Filter {

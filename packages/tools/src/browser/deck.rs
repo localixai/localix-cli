@@ -35,13 +35,13 @@ pub(super) enum Shown {
 }
 
 pub(super) struct Deck {
-    pub frame: Frame,
+    pub(super) frame: Frame,
     look: Look,
     /// The strip, in a shown window.
     strip: Option<WebView>,
-    pub web: Option<Tabs>,
+    pub(super) web: Option<Tabs>,
     terms: Vec<Open>,
-    pub shown: Shown,
+    pub(super) shown: Shown,
     /// The history menu is open: it takes the window, the pages stand aside.
     menu: bool,
     /// The strip has its row of projects: the window holds the tabs of more than one.

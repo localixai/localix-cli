@@ -34,10 +34,10 @@ pub(super) fn owner(numbers: Option<&Arc<AtomicU32>>) -> usize {
 }
 
 pub(super) struct Session {
-    pub id: u32,
-    pub command: String,
+    pub(super) id: u32,
+    pub(super) command: String,
     started: Instant,
-    pub pty: Pty,
+    pub(super) pty: Pty,
     /// Where its group is mirrored in [`GROUPS`].
     slot: Option<usize>,
     ended: bool,

@@ -13,8 +13,8 @@ use tools::shell::{Painter, Sessions, Theme, Watch};
 /// The window as a lane's `window` tool reads it: the browser host's tabs, of whatever kind,
 /// and the group (the lane's project) of those it opens.
 pub(crate) struct Tabs {
-    pub browser: Browser,
-    pub group: String,
+    pub(crate) browser: Browser,
+    pub(crate) group: String,
     /// Who hears what the person does to the tabs opened here: the lane's queue, or a tool
     /// client's.
     owner: Option<(

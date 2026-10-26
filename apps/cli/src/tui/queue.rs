@@ -15,10 +15,10 @@ const SETTLE: Duration = Duration::from_millis(300);
 
 /// A question open or waiting its turn, and the lane that asked it.
 pub(crate) struct Asked {
-    pub select: Select,
-    pub open: Open,
+    pub(crate) select: Select,
+    pub(crate) open: Open,
     /// The lane that asked: Ctrl-C stops it, and its `Dismiss` closes the question.
-    pub asker: String,
+    pub(crate) asker: String,
     /// Its second title line names the asker, which was not shown when it asked.
     labelled: bool,
 }

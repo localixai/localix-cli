@@ -31,9 +31,9 @@ const KEY_PAUSE: Duration = Duration::from_millis(30);
 const READ_POLL: Duration = Duration::from_millis(200);
 
 pub(super) struct Pty {
-    pub child: Child,
+    pub(super) child: Child,
     writer: File,
-    pub shared: Arc<Shared>,
+    pub(super) shared: Arc<Shared>,
 }
 
 /// Start `command` in `dir` in a new terminal with `env`, waiting for `needle` from its first

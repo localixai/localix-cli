@@ -51,8 +51,8 @@ pub struct AskInput<'a> {
 
 /// The request, plus what each head offered so the answer can be read back.
 pub struct Ask {
-    pub state: Value,
-    pub questions: BTreeMap<String, Question>,
+    pub(crate) state: Value,
+    pub(crate) questions: BTreeMap<String, Question>,
     offered: BTreeMap<String, Map<String, Value>>,
     /// What a type or select key stands for: (ref, value).
     pairs: BTreeMap<String, (String, String)>,

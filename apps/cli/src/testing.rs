@@ -160,7 +160,7 @@ impl Decider for NoDecider {
 #[derive(Default)]
 pub(crate) struct Typed {
     lines: Mutex<VecDeque<&'static str>>,
-    pub asked: Mutex<Vec<String>>,
+    pub(crate) asked: Mutex<Vec<String>>,
 }
 
 impl Typed {
@@ -304,7 +304,7 @@ pub(crate) fn users(rig: &Rig) -> Vec<String> {
 #[derive(Default)]
 pub(crate) struct Scripted {
     picks: VecDeque<Option<usize>>,
-    pub shown: Vec<(String, Vec<crate::picker::Item>)>,
+    pub(crate) shown: Vec<(String, Vec<crate::picker::Item>)>,
 }
 
 impl Scripted {
@@ -352,7 +352,7 @@ impl crate::picker::Lines for Scripted {
 /// and the conversations it was asked to go on from.
 pub(crate) struct Gated {
     replies: Mutex<std::sync::mpsc::Receiver<Completion>>,
-    pub asked: Mutex<Vec<Vec<Message>>>,
+    pub(crate) asked: Mutex<Vec<Vec<Message>>>,
 }
 
 /// A [`Gated`] model, and where its replies are sent.

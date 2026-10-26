@@ -30,7 +30,7 @@ pub(crate) fn sign_in(
     match (provider.id(), method) {
         ("openai", Method::Browser) => {
             let login = openai::auth::Login::start(APP)?;
-            let code = browser(&login.address, terminal, say, &|t| login.wait(t), &|p| {
+            let code = browser(login.address(), terminal, say, &|t| login.wait(t), &|p| {
                 login.pasted(p)
             })?;
             let tokens = login.finish(&Web::new(APP, TOKEN_TIMEOUT), &code)?;
@@ -43,7 +43,7 @@ pub(crate) fn sign_in(
         }
         ("openrouter", Method::Browser) => {
             let login = openrouter::auth::Login::start(APP)?;
-            let code = browser(&login.address, terminal, say, &|t| login.wait(t), &|p| {
+            let code = browser(login.address(), terminal, say, &|t| login.wait(t), &|p| {
                 login.pasted(p)
             })?;
             let key = login.finish(APP, &code)?;

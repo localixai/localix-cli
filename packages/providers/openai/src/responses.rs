@@ -47,7 +47,7 @@ pub struct ChatModel {
     tokens: Mutex<Tokens>,
     /// One per process: the backend keys its prompt cache on it.
     session: String,
-    pub base: String,
+    base: String,
 }
 
 impl ChatModel {

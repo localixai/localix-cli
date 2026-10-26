@@ -64,7 +64,7 @@ pub(super) struct Search {
     query: String,
     keys: Vec<[String; 2]>,
     /// The rows shown, best first.
-    pub shown: Vec<usize>,
+    pub(super) shown: Vec<usize>,
     /// What the list holds, for "No provider matches": its title's first word.
     noun: String,
 }

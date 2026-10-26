@@ -13,9 +13,9 @@ use crate::observer::Observer;
 pub(crate) struct Scripted {
     replies: Mutex<Vec<Completion>>,
     /// Whether each request let the model call tools.
-    pub may_call: Mutex<Vec<bool>>,
+    pub(crate) may_call: Mutex<Vec<bool>>,
     /// The last user message of each request.
-    pub last_user: Mutex<Vec<String>>,
+    pub(crate) last_user: Mutex<Vec<String>>,
 }
 
 impl Scripted {

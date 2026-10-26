@@ -23,7 +23,7 @@ pub(crate) struct Kept {
 
 #[cfg_attr(not(unix), expect(dead_code, reason = "the daemon is unix only"))]
 pub(crate) struct Host {
-    pub build: String,
+    pub(crate) build: String,
     attached: AtomicUsize,
     kept: Mutex<Vec<Kept>>,
     ended: Mutex<bool>,

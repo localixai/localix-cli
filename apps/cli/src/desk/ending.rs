@@ -27,7 +27,7 @@ pub(super) struct Lanes {
     live: Mutex<Vec<String>>,
     ended: Condvar,
     /// A lane panicked: the others are stopped.
-    pub panicked: AtomicBool,
+    pub(super) panicked: AtomicBool,
 }
 
 impl Lanes {

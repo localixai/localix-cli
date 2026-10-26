@@ -155,7 +155,7 @@ pub(super) fn dress(page: &str, look: Look) -> String {
 
 /// A window as built here, and its glass.
 pub(super) struct Frame {
-    pub native: Window,
+    pub(super) native: Window,
     look: Look,
     /// The page's own ground the glass is coated in, when it has one; else the system's.
     ground: Option<Rgb>,

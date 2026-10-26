@@ -52,7 +52,7 @@ pub struct OpenRouter {
     /// OpenRouter itself, wherever it is reached: it takes fields of its own.
     openrouter: bool,
     /// Who it calls, for errors: `OpenRouter`, `DeepSeek`.
-    pub name: String,
+    pub(crate) name: String,
     /// A request sent and not answered is sent once more (decisions); otherwise never.
     retry_timeout: bool,
 }

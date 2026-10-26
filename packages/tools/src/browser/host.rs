@@ -134,28 +134,28 @@ pub type Dressing = (usize, isize, bool, f64, bool);
 
 /// State the event loop and the worker share.
 pub(super) struct Shared {
-    pub token: String,
+    pub(super) token: String,
     /// Whether the window is open now: the person may close it, and it opens again when needed.
-    pub open: AtomicBool,
-    pub next_id: AtomicU64,
-    pub pending: Mutex<HashMap<u64, SyncSender<Reply>>>,
+    pub(super) open: AtomicBool,
+    pub(super) next_id: AtomicU64,
+    pub(super) pending: Mutex<HashMap<u64, SyncSender<Reply>>>,
     /// Each tab's loads, by tab id.
-    pub loads: Mutex<HashMap<u32, Loads>>,
-    pub loaded: Condvar,
+    pub(super) loads: Mutex<HashMap<u32, Loads>>,
+    pub(super) loaded: Condvar,
     /// The tab acted on.
-    pub active: AtomicU32,
+    pub(super) active: AtomicU32,
     /// Numbers every load event across the tabs, so a load in another tab never reads as this
     /// tab's (a page that opened a tab has started a load: the new tab's).
     seq: AtomicU64,
-    pub tabs: Mutex<Vec<Tab>>,
+    pub(super) tabs: Mutex<Vec<Tab>>,
     /// Who hears what the person does in the window.
     listener: Mutex<Option<Listener>>,
     /// The group (a project) of each tab, by key, as its opener named it.
-    pub groups: Mutex<HashMap<String, String>>,
+    pub(super) groups: Mutex<HashMap<String, String>>,
     /// The web pages the tabs have shown, for the strip's history menu.
-    pub history: History,
+    pub(super) history: History,
     /// The person's comments on the pages, until they send them.
-    pub comments: Comments,
+    pub(super) comments: Comments,
 }
 
 /// Told what the person did to a tab (its key; `window` for the whole window), in words.

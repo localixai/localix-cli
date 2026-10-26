@@ -23,14 +23,18 @@ const SCOPE: &str = "openid profile email offline_access";
 
 /// A sign-in under way: the address to open, and the callback waiting for the browser.
 pub struct Login {
-    /// Where the person signs in.
-    pub address: String,
+    address: String,
     callback: Callback,
     verifier: String,
     state: String,
 }
 
 impl Login {
+    /// Where the person signs in.
+    pub fn address(&self) -> &str {
+        &self.address
+    }
+
     /// Listen for the callback and make the sign-in address.
     pub fn start(app: App) -> Result<Self, String> {
         Self::listen(app, &PORTS)
@@ -46,7 +50,7 @@ impl Login {
             provider: crate::NAME,
             app: app.name,
         })?;
-        let address = authorize(app, &callback.redirect, &challenge, &state);
+        let address = authorize(app, callback.redirect(), &challenge, &state);
         Ok(Self {
             address,
             callback,
@@ -81,7 +85,7 @@ impl Login {
             http,
             code,
             &self.verifier,
-            &self.callback.redirect,
+            self.callback.redirect(),
             crate::tokens::now(),
         )
     }

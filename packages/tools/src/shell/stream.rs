@@ -20,7 +20,7 @@ pub(super) const PAINT_EVERY: Duration = Duration::from_millis(33);
 #[derive(Default)]
 pub(super) struct Shared {
     state: Mutex<Stream>,
-    pub wake: Condvar,
+    pub(super) wake: Condvar,
 }
 
 impl Shared {
@@ -62,15 +62,15 @@ pub(super) struct Stream {
     /// Bytes read since the output was last taken.
     bytes: usize,
     /// Bytes read since the input was typed (or, for a read, not yet taken).
-    pub since_write: usize,
-    pub changed_at: Instant,
+    pub(super) since_write: usize,
+    pub(super) changed_at: Instant,
     /// The terminal closed: nothing holds it any more.
-    pub eof: bool,
+    pub(super) eof: bool,
     needle: Option<Vec<u8>>,
     /// The end of what was seen, as long as the needle less one byte: a match split across two
     /// reads is still found.
     carry: Vec<u8>,
-    pub matched: bool,
+    pub(super) matched: bool,
     /// The session ended: the reader stops.
     closed: bool,
     /// The screen, as a terminal shows it: what a window paints, and what a call reads of a
@@ -84,7 +84,7 @@ pub(super) struct Stream {
     /// Output came since the last paint.
     dirty: bool,
     /// The window was closed by a call: one kept to say the session ended closes too.
-    pub dismissed: bool,
+    pub(super) dismissed: bool,
 }
 
 impl Default for Stream {

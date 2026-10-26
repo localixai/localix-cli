@@ -52,7 +52,7 @@ pub(crate) trait Delegation {
 pub(crate) struct Registry {
     state: Mutex<State>,
     /// The lane's queue: an agent's answer is posted there.
-    pub queue: Arc<Queue>,
+    pub(crate) queue: Arc<Queue>,
     /// An agent ended a task.
     changed: Condvar,
     /// The main agent's waiting line last said in its task: it is not said again until it changes.

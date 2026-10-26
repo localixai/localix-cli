@@ -136,6 +136,11 @@ every new file already goes where its target crate will be.
 - **A6**: a data file (JSON, TOML) lives in the package that owns its meaning.
 - **A7**: a heavy dependency stays in the one adapter that needs it (wry and tao in `tools`'s
   browser, TLS in the kit); std first, and the release binary under 5 MiB.
+- **A8**: the browser engine is a cargo feature, `browser`, on by default in `tools` and `llx`.
+  Without it, `tools::browser` keeps its names with nothing behind them (a handle that cannot be
+  made, `has_display` false), so the app compiles the same code with no `cfg` of its own and
+  links no engine: the headless build, for CI and servers, where `window` has terminal tabs only.
+  The Linux release ships both builds; an installer takes the headless one where no WebKitGTK is.
 
 ## Composition rules (the apps)
 
@@ -267,6 +272,13 @@ every new file already goes where its target crate will be.
   in is a tab of one window, each kind a `tools::window::Kind` the app gives; a `goal` belongs to
   every tab.
 - **Something that reaches a run:** a kind in `arrivals.rs` and a post to the lane's queue (K4).
+- **A CI integration:** the GitHub Action is `action.yml` at the repository's root, composite
+  shell steps only (no Node, no MCP server, no GitHub tool): it installs the release its own tag
+  names, runs `llx exec` once, and hands back the answer, the exit code and the spend. The
+  prompt, the rules and what is posted stay in the person's workflow, where they can read them
+  (C7, K5); the agent reaches GitHub, as anything else, with `gh` and `git` through `bash`. It
+  reads the exit codes and `--json` events (K6), so a schema bump updates it in the same commit.
+  Ready-made workflows live in `examples/`, each run for real before it is published.
 - **A history stage:** a `Stage` in `agent/src/history.rs`, placed by its value in
   `Pipeline::default`, with a test, the long-dialogue simulation still passing.
 - **A protocol method:** its `*Params`/`*Response` in `protocol`, served in the server, called

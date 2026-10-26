@@ -8,7 +8,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
-use protocol::{Event, Outcome, ToClient, Update};
+use protocol::{Event, Label, Outcome, ToClient, Update};
 
 /// A frame as it is kept and posted: shared, so keeping it and replaying it copy nothing.
 pub(super) type Frame = Arc<ToClient>;
@@ -217,29 +217,90 @@ fn whole(session: Option<&str>, event: &Event) -> Option<(String, Kind, Option<S
         Event::Jobs(_) => Kind::Jobs,
         Event::Context(_) => Kind::Context,
         Event::Updated(_) => Kind::Updated,
-        _ => return None,
+        // Each named, so a new event is placed here, not let through unseen (S10).
+        Event::Note(_)
+        | Event::Error(_)
+        | Event::TaskStarted(_)
+        | Event::Call { .. }
+        | Event::Result { .. }
+        | Event::Step(_)
+        | Event::Answer(_)
+        | Event::TaskEnded { .. }
+        | Event::Earlier(_)
+        | Event::LaneEnded
+        | Event::Saved(_)
+        | Event::Show(_)
+        | Event::Spent(_)
+        | Event::AgentsCleared
+        | Event::Prefill(_)
+        | Event::Steered(_)
+        | Event::Copy(_)
+        | Event::Quit => return None,
     };
     session.map(|session| (session.to_string(), kind, None))
 }
 
-/// About how many bytes `event` holds: its text, and a little for the rest.
+/// About how many bytes `event` holds: every text it carries, and a little for the rest. Each
+/// event is named, so a new one is weighed for what it carries, never let through light (R3).
 fn weight(event: &Event) -> usize {
     let texts = |texts: &[String]| texts.iter().map(String::len).sum::<usize>();
+    let label = |label: &Label| label.doing.len() + label.done.len() + label.subject.len();
     let text = match event {
         Event::Note(text)
         | Event::Error(text)
-        | Event::Answer(text)
+        | Event::Mode(text)
         | Event::TaskStarted(text)
-        | Event::Show(text) => text.len(),
+        | Event::Step(text)
+        | Event::Answer(text)
+        | Event::Show(text)
+        | Event::Prefill(text)
+        | Event::Copy(text)
+        | Event::TaskEnded { status: text, .. } => text.len(),
         Event::Header(rows) | Event::Steered(rows) => texts(rows),
-        Event::Result { outcome, .. } => match outcome {
-            Outcome::Done { report } => report.len(),
-            Outcome::Failed { why, .. } | Outcome::Fatal { why } => why.len(),
-        },
+        Event::Call {
+            call,
+            name,
+            label: said,
+        } => call.len() + name.len() + label(said),
+        Event::Result {
+            call,
+            name,
+            label: said,
+            outcome,
+        } => {
+            let outcome = match outcome {
+                Outcome::Done { report } => report.len(),
+                Outcome::Failed { why, .. } | Outcome::Fatal { why } => why.len(),
+            };
+            call.len() + name.len() + label(said) + outcome
+        }
         Event::Earlier(turns) => (turns.iter())
-            .map(|turn| turn.goal.len() + turn.answer.len())
+            .map(|turn| turn.goal.len() + turn.answer.len() + turn.status.len())
             .sum(),
-        _ => 0,
+        Event::Updated(update) => update.title.as_ref().map_or(0, String::len),
+        Event::LaneStarted { id, name } | Event::Started { id, name } => id.len() + name.len(),
+        Event::Saved(saved) => (saved.iter())
+            .map(|saved| saved.id.len() + saved.title.len() + saved.meta.len())
+            .sum(),
+        Event::Jobs(rows) => (rows.iter())
+            .map(|row| {
+                let next = row.next.as_ref().map_or(0, String::len);
+                row.id.len() + row.name.len() + row.detail.len() + next + row.lane.len()
+            })
+            .sum(),
+        Event::Queue {
+            steered,
+            queued,
+            background,
+            ..
+        } => texts(steered) + texts(queued) + texts(background),
+        Event::LaneEnded
+        | Event::Closed
+        | Event::Spent(_)
+        | Event::Total(_)
+        | Event::AgentsCleared
+        | Event::Context(_)
+        | Event::Quit => 0,
     };
     text + 64
 }

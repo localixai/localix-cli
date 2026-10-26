@@ -341,3 +341,45 @@ fn the_ring_keeps_no_more_than_its_bytes_and_says_the_gap() {
         "{kept} reports of 3,000 bytes kept in 10,000"
     );
 }
+
+#[test]
+fn a_call_s_label_counts_toward_the_ring_s_bytes_at_its_start_and_at_its_result() {
+    let hub = Hub::with_bytes(100, 10_000);
+    // A bash call's label is its whole command, said at its start and again with its result.
+    let label = protocol::Label {
+        doing: "Running".into(),
+        done: "Ran".into(),
+        subject: "x".repeat(3_000),
+    };
+    for call in 0..5 {
+        let (call, name) = (call.to_string(), "bash".to_string());
+        let started = Event::Call {
+            call: call.clone(),
+            name: name.clone(),
+            label: label.clone(),
+        };
+        hub.send(said(Some("s1"), started));
+        let ended = Event::Result {
+            call,
+            name,
+            label: label.clone(),
+            outcome: protocol::Outcome::Done {
+                report: "ok".into(),
+            },
+        };
+        hub.send(said(Some("s1"), ended));
+    }
+    let (out, seen) = client();
+    hub.attach(out, None);
+    let seen = events(&seen);
+    assert!(
+        seen[0].is_none(),
+        "a gap first: all {} events kept",
+        seen.len()
+    );
+    let kept = seen.len() - 1;
+    assert!(
+        (1..=3).contains(&kept),
+        "{kept} events of 3,000 bytes kept in 10,000"
+    );
+}

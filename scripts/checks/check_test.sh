@@ -121,6 +121,9 @@ shellcheck" scripts/check
 expect "a shell script" "" "repo
 shellcheck" scripts/dist.sh
 
+expect "a hook, a shell script with no extension" "" "repo
+shellcheck" scripts/hooks/pre-commit
+
 expect "a file gone: its crate, and the links that may name it" "" "fmt
 clippy -p llx -p tools
 clippy-headless -p llx -p tools

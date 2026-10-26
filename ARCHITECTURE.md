@@ -84,9 +84,9 @@ every new file already goes where its target crate will be.
 
 ## Core rules (the agent and the hands)
 
-- **C1**: the core decides, the shell acts. Effects leave the core through a port (`Chat`,
-  `Tool`, `Gate`, `Person`, `View`, `Inbox`, `History`); the core opens no file, socket or
-  process and reads no environment variable.
+- **C1** _checked_ on the sources: the core decides, the shell acts. Effects leave the core
+  through a port (`Chat`, `Tool`, `Gate`, `Person`, `View`, `Inbox`, `History`); the core opens
+  no file, socket or process and reads no environment variable.
 - **C2**: time and limits come in as values (a budget, a deadline, a strategy); a test sets them.
 - **C3**: strategies, not special cases. What may be done another way is a trait with an
   implementation the app chooses: `history::Strategy` and its `Stage`s, the inbox, the gate, the

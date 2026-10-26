@@ -22,6 +22,7 @@ mod desk;
 mod error;
 mod exit;
 mod gate;
+mod hands;
 mod input;
 mod instructions;
 mod interrupt;

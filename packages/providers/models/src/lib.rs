@@ -86,6 +86,7 @@ impl Catalog {
 
     /// This catalog over the built-in files: a provider it lacks is the built-in one. They are
     /// read only when such a provider is asked for, or the list of them.
+    #[must_use]
     pub fn over_built_in(self) -> Self {
         let under = Under::BuiltIn(OnceLock::new());
         Self { under, ..self }

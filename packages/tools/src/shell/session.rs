@@ -102,6 +102,7 @@ impl Sessions {
     }
 
     /// Ids from `numbers`, shared with other registries: no two of them give the same id.
+    #[must_use]
     pub fn numbered(mut self, numbers: Arc<AtomicU32>) -> Self {
         self.numbers = Some(numbers);
         self

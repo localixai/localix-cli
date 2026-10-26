@@ -30,6 +30,7 @@ impl Workspace {
     }
 
     /// The same workspace, with `paths` (and everything under them) off limits to the tools.
+    #[must_use]
     pub fn denying(mut self, paths: impl IntoIterator<Item = PathBuf>) -> Self {
         self.denied
             .extend(paths.into_iter().map(|path| real(&path)));
@@ -37,6 +38,7 @@ impl Workspace {
     }
 
     /// The same workspace, its commands run with `env` instead of this process's environment.
+    #[must_use]
     pub fn with_env(mut self, env: Vec<(String, String)>) -> Self {
         self.env = Some(env.into());
         self

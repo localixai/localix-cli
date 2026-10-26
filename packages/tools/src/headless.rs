@@ -108,6 +108,7 @@ impl Page {
         unavailable()
     }
 
+    #[must_use]
     pub fn pinned(&self, _id: u32) -> Self {
         Self(())
     }

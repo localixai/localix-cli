@@ -175,6 +175,7 @@ impl Page {
 
     /// The same window acting in tab `id`, whatever is shown: a page of its own to work in
     /// beside the others.
+    #[must_use]
     pub fn pinned(&self, id: u32) -> Page {
         let (driver, hidden) = {
             let held = self.held();

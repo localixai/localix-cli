@@ -59,16 +59,19 @@ impl Entry {
         }
     }
 
+    #[must_use]
     pub fn keyed(mut self, key: &str) -> Self {
         self.key = Some(key.into());
         self
     }
 
+    #[must_use]
     pub fn attr(mut self, name: &str, value: &str) -> Self {
         self.attrs.push((name.into(), value.into()));
         self
     }
 
+    #[must_use]
     pub fn preface(mut self, text: &str) -> Self {
         self.preface = Some(text.into());
         self
@@ -130,6 +133,7 @@ impl Queue {
 
     /// Where an entry that opens a task goes (the interface, as a task of its own). With none, it
     /// waits for the next task instead.
+    #[must_use]
     pub fn on_open(mut self, open: impl Fn(Entry) + Send + Sync + 'static) -> Self {
         self.opener = Some(Box::new(open));
         self

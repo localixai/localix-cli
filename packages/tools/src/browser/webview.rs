@@ -39,6 +39,7 @@ impl WebviewDriver {
 
     /// The same window, acting in tab `id` whatever tab is shown or acted on: tabs pinned so
     /// work at the same time.
+    #[must_use]
     pub fn on(&self, id: u32) -> Self {
         Self {
             tab: Some(id),

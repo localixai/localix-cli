@@ -70,25 +70,34 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
             });
             (id, name)
         };
-        self.start(&id, task);
+        self.start(&id, task)?;
         Ok(ToolOutput::from(format!(
             "Started `{name}` (session {id}): it works in the background. Its answer comes to \
              you by itself once it is done; go on with other work, or `wait` when you need it."
         )))
     }
 
-    /// Give the agent with session `id` its next task, on a thread of its own.
-    pub(super) fn start(&self, id: &str, task: &str) {
-        let mut state = self.registry.lock();
-        if let Some(child) = state.children.iter_mut().find(|c| c.session.id == id) {
-            child.working = true;
-            child.stop.store(false, Ordering::SeqCst);
-        }
-        drop(state);
+    /// Give the agent with session `id` its next task, on a thread of its own. When the OS
+    /// refuses one, the agent stays idle, and the model may send it the task again.
+    pub(super) fn start(&self, id: &str, task: &str) -> Result<(), ToolError> {
+        let working = |working: bool| {
+            let mut state = self.registry.lock();
+            if let Some(child) = state.children.iter_mut().find(|c| c.session.id == id) {
+                child.working = working;
+                child.stop.store(false, Ordering::SeqCst);
+            }
+        };
+        working(true);
         let (kit, registry) = (self.kit, self.registry);
-        let (id, task) = (id.to_string(), task.to_string());
-        self.scope
-            .spawn(move || child::work(kit, registry, &id, &task));
+        let (child, task) = (id.to_string(), task.to_string());
+        let thread = std::thread::Builder::new().name("llx-agent".into());
+        let started = thread.spawn_scoped(self.scope, move || {
+            child::work(kit, registry, &child, &task);
+        });
+        started.map(drop).map_err(|why| {
+            working(false);
+            ToolError::Failed(format!("the agent could not start (no thread: {why})"))
+        })
     }
 
     fn send(&self, agent: &str, message: &str) -> Result<ToolOutput, ToolError> {
@@ -110,7 +119,7 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
         }
         let id = child.session.id.clone();
         drop(state);
-        self.start(&id, message);
+        self.start(&id, message)?;
         Ok(ToolOutput::from(format!(
             "`{name}` goes on with it in the background; its answer comes to you once it is done."
         )))

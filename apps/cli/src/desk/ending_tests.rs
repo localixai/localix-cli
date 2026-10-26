@@ -80,7 +80,11 @@ fn a_panicking_lane_ends_the_other_lanes() {
             lane_with(shared, seat, models, work)
         };
         std::thread::scope(|scope| {
-            let desk = scope.spawn(|| run(&shared, &ui, asked, seat, None, &start, &|| {}));
+            let desk = std::thread::Builder::new().name("desk".into());
+            let desk = (desk.spawn_scoped(scope, || {
+                run(&shared, &ui, asked, seat, None, &start, &|| {})
+            }))
+            .unwrap();
             let info = Info {
                 max_lanes: crate::desk::MAX_LANES,
                 shells: Arc::new(Vec::new),
@@ -89,7 +93,10 @@ fn a_panicking_lane_ends_the_other_lanes() {
                 background: false,
                 host: None,
             };
-            scope.spawn(move || serve(&incoming, &peer, &to_desk, &info));
+            let serving = std::thread::Builder::new().name("serving".into());
+            serving
+                .spawn_scoped(scope, move || serve(&incoming, &peer, &to_desk, &info))
+                .unwrap();
             let mut person = Person {
                 app: App::new(80, 24, vec![]),
                 frames,

@@ -90,8 +90,9 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
         };
         self.jobs.show(self.kit);
         let (kit, jobs) = (self.kit, self.jobs);
-        let (command, label) = (command.to_string(), name.clone());
-        self.scope.spawn(move || {
+        let (command, label, ours) = (command.to_string(), name.clone(), id.clone());
+        let thread = std::thread::Builder::new().name("llx-monitor-job".into());
+        let started = thread.spawn_scoped(self.scope, move || {
             let lines = |lines: Vec<String>, dropped: usize| {
                 let mut text = lines.join("\n");
                 if dropped > 0 {
@@ -145,6 +146,13 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
             }
             jobs.show(kit);
         });
+        // The OS refused a thread: the monitor is not listed, and the model is told.
+        if let Err(why) = started {
+            self.jobs.lock().jobs.retain(|job| job.id != ours);
+            self.jobs.show(self.kit);
+            let why = format!("the monitor could not start (no thread: {why})");
+            return Err(ToolError::Failed(why));
+        }
         Ok(ToolOutput::from(format!(
             "Monitor `{name}` started: each line it prints comes to you as a `<monitor>` message. \
              It ends in {} min at the latest.",

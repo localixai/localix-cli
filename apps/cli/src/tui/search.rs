@@ -43,7 +43,8 @@ pub(super) fn ranked(query: &str, rows: &[[String; 2]]) -> Vec<usize> {
         .enumerate()
         .filter_map(|(at, keys)| rank(keys).map(|tier| (tier, at)))
         .collect();
-    found.sort();
+    // No two are equal (`at` is each row's own), so an unstable sort keeps the same order.
+    found.sort_unstable();
     found.into_iter().map(|(_, at)| at).collect()
 }
 

@@ -105,6 +105,8 @@ or_fun_call = "deny"
 return_self_not_must_use = "deny"
 # A clone into a value already there reuses its allocation: `clone_from`.
 assigning_clones = "deny"
+# Primitives sort unstably: equal ones cannot be told apart, and it needs no buffer.
+stable_sort_primitive = "deny"
 iter_over_hash_type = "deny"
 fallible_impl_from = "deny"
 mutex_atomic = "deny"

@@ -41,9 +41,10 @@ pub(crate) fn doctor(models: &ModelOptions) -> Result<i32, Failure> {
             "browser: the system WebView (a window opens on first use)",
         )?;
     } else {
+        let (why, hint) = (tools::browser::NO_WINDOW, tools::browser::NO_WINDOW_HINT);
         line(
             Mark::Warn,
-            "browser: no display, so the browser tool is left out (run under xvfb-run for it)",
+            &format!("browser: {why}, so the browser tool is left out{hint}"),
         )?;
     }
     let choice = choice::resolve(models, choice::saved(), None)?;

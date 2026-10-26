@@ -6,6 +6,8 @@
 mod decide;
 mod doctor;
 pub(crate) mod exec;
+#[cfg(all(unix, not(feature = "browser")))]
+mod headless;
 #[cfg(unix)]
 mod mcp;
 mod modes;

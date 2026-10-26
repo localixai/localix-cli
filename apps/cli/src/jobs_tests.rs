@@ -28,6 +28,9 @@ fn in_exec_a_task_waits_for_its_monitor_and_reads_each_batch() {
         says("Watching."),
         says("Still watching."),
         says("It said hello and world."),
+        // The end is an arrival of its own: it comes with "world" or, on a busy machine, a turn
+        // after it.
+        says("It ended."),
     ];
     composed(crate::modes::built("bypass"), false, replies, |rig| {
         rig.task("watch it");

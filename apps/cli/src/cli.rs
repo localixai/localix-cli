@@ -14,7 +14,7 @@ const ABOUT: &str = "llx: an ultrafast, lightweight agent runtime: a native wind
 
 const LONG_ABOUT: &str = "llx: an ultrafast, lightweight agent runtime. A native window of browser pages and terminals \
 any agent can work in (llx mcp serves it to Claude Code, Codex or Cursor), a decision step for \
-scripts and CI (llx exec), and a minimal agent for the terminal (llx).
+scripts and CI (llx decide), and a minimal agent for the terminal (llx).
 
 It works in a directory (the current one, or -C DIR) with seven tools: read, edit, bash (on \
 unix it can keep a program that asks, such as a REPL, open in a terminal session until the task \
@@ -328,7 +328,8 @@ pub(crate) struct RunOptions {
     pub mode: Option<String>,
     /// Run what RULE names without asking, where the mode would ask or, with no one to ask,
     /// refuse: `bash(cargo test *)` (every part of the command must match), `edit(docs/**)`,
-    /// `browser`. Repeat it. Plan mode stays read-only. The syntax is Claude Code's: docs/ci.md.
+    /// `browser`. Repeat it. Plan mode stays read-only. The syntax is Claude Code's; what a
+    /// pattern covers, and what it never does, is in docs/modes.md#rules.
     #[arg(long, value_name = "RULE", help_heading = "Approvals")]
     pub allow: Vec<String>,
     /// Refuse what RULE names in every mode, -y included: `bash(git push *)`. Repeat it.

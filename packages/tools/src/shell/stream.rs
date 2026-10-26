@@ -3,7 +3,7 @@
 //! it; a call takes from it. Nothing is lost between calls: what comes while no call waits stays
 //! until the next one.
 
-use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use super::filter::Filter;
@@ -11,8 +11,9 @@ use super::output::Output;
 use super::pty::{COLUMNS, ROWS};
 use super::screen::Screen;
 
-/// A window's painter: a frame in, whether the window is still open out.
-pub type Painter = Box<dyn Fn(String) -> bool + Send>;
+/// A window's painter: a frame in, whether the window is still open out. It is the app's code: the
+/// stream calls it, and lets it go, only with its lock let go (ARCHITECTURE.md R6).
+pub type Painter = Box<dyn Fn(String) -> bool + Send + Sync>;
 pub(super) const PAINT_EVERY: Duration = Duration::from_millis(33);
 
 /// The output read so far, and the wake for who waits on it.
@@ -26,6 +27,27 @@ impl Shared {
     pub(super) fn lock(&self) -> MutexGuard<'_, Stream> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
+
+    /// Tell the window what the stream left for it, with no lock held: a frame to paint (a window
+    /// the person closed is let go, unless another took its place meanwhile), or its leaving.
+    pub(super) fn tell(&self, paint: Option<Paint>) {
+        let Some(Paint { painter, frame }) = paint else {
+            return;
+        };
+        if let Some(frame) = frame
+            && !painter(frame)
+        {
+            self.lock().gone(&painter);
+        }
+    }
+}
+
+/// What the window is told once the stream's lock is let go: a frame, or none when the window is
+/// let go (its painter is dropped then, as it closes the window).
+#[must_use]
+pub(super) struct Paint {
+    painter: Arc<Painter>,
+    frame: Option<String>,
 }
 
 #[allow(
@@ -57,7 +79,7 @@ pub(super) struct Stream {
     /// The screen as a call last read it: a read that finds it the same says so.
     last_screen: Option<String>,
     /// The window that shows the screen, while one is open.
-    painter: Option<Painter>,
+    painter: Option<Arc<Painter>>,
     painted_at: Instant,
     /// Output came since the last paint.
     dirty: bool,
@@ -151,7 +173,8 @@ impl Stream {
         }
     }
 
-    /// Take in what the terminal printed; the answers to its queries are returned.
+    /// Take in what the terminal printed; the answers to its queries are returned. A paint it
+    /// makes due is the reader's to take ([`Stream::paint_due`]).
     pub(super) fn take_in(&mut self, chunk: &[u8]) -> Vec<u8> {
         let mut seen = vec![];
         self.filter.feed(chunk, &mut self.fresh, &mut seen);
@@ -168,7 +191,6 @@ impl Stream {
                 replies.extend_from_slice(format!("\x1b[{row};{column}R").as_bytes());
             }
             self.dirty = true;
-            self.paint_due();
         }
         if let (Some(needle), false) = (&self.needle, self.matched) {
             self.carry.extend_from_slice(&seen);
@@ -184,21 +206,43 @@ impl Stream {
         self.filter.application_cursor
     }
 
-    /// Show the screen in the window `painter` paints, from now on. With no screen, or once the
-    /// session ended, the window is let go at once.
-    pub(super) fn attach(&mut self, painter: Painter) {
-        if self.screen.is_none() || self.eof || self.closed {
-            return;
+    /// Show the screen in the window `painter` paints, from now on: its first frame. With no
+    /// screen, once the session ended, or while a window shows it, the window is let go at once.
+    pub(super) fn attach(&mut self, painter: Painter) -> Paint {
+        let painter = Arc::new(painter);
+        let ended = self.screen.is_none() || self.eof || self.closed;
+        if ended || self.painter.is_some() {
+            return Paint {
+                painter,
+                frame: None,
+            };
         }
-        self.painter = Some(painter);
+        self.painter = Some(Arc::clone(&painter));
         self.dismissed = false;
-        self.paint();
+        let frame = self.frame();
+        Paint { painter, frame }
     }
 
     /// Close the window, if one is open.
-    pub(super) fn detach(&mut self) {
-        self.painter = None;
+    pub(super) fn detach(&mut self) -> Option<Paint> {
         self.dismissed = true;
+        self.let_go()
+    }
+
+    /// The window, to be let go once the lock is.
+    fn let_go(&mut self) -> Option<Paint> {
+        let painter = self.painter.take()?;
+        Some(Paint {
+            painter,
+            frame: None,
+        })
+    }
+
+    /// The window `painter` was closed by the person: it is painted no more.
+    fn gone(&mut self, painter: &Arc<Painter>) {
+        if (self.painter.as_ref()).is_some_and(|held| Arc::ptr_eq(held, painter)) {
+            self.painter = None;
+        }
     }
 
     pub(super) fn attached(&self) -> bool {
@@ -213,34 +257,36 @@ impl Stream {
         }
     }
 
-    /// Paint what waits, if its time came.
-    pub(super) fn paint_due(&mut self) {
-        if self.paint_wait() == Some(Duration::ZERO) {
-            self.paint();
+    /// What waits, to paint once the lock is let go, if its time came.
+    pub(super) fn paint_due(&mut self) -> Option<Paint> {
+        if self.paint_wait() != Some(Duration::ZERO) {
+            return None;
         }
+        let painter = Arc::clone(self.painter.as_ref()?);
+        let frame = self.frame();
+        Some(Paint { painter, frame })
     }
 
     /// The terminal closed: its window, if one is open, and the screen it shows, to say so.
-    pub(super) fn finish(&mut self) -> Option<(Painter, Screen)> {
+    pub(super) fn finish(&mut self) -> Option<(Arc<Painter>, Screen)> {
         self.eof = true;
         let painter = self.painter.take()?;
         Some((painter, self.screen.take()?))
     }
 
-    fn paint(&mut self) {
-        let (Some(painter), Some(screen)) = (&self.painter, &self.screen) else {
-            return;
-        };
-        if !painter(screen.frame(None)) {
-            self.painter = None;
-        }
+    /// The screen as a frame, painted as of now. A paint made under the lock is the newest by
+    /// at least [`PAINT_EVERY`], so paints that run once it is let go come in order.
+    fn frame(&mut self) -> Option<String> {
+        let frame = self.screen.as_ref()?.frame(None);
         self.painted_at = Instant::now();
         self.dirty = false;
+        Some(frame)
     }
 
-    pub(super) fn close(&mut self) {
+    /// The session ended: its window, to be let go once the lock is.
+    pub(super) fn close(&mut self) -> Option<Paint> {
         self.closed = true;
-        self.painter = None;
+        self.let_go()
     }
 
     pub(super) fn closed(&self) -> bool {

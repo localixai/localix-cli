@@ -155,14 +155,16 @@ impl Pty {
 
     /// Close the session's window at once, even one kept to say the session ended.
     pub(super) fn dismiss(&self) {
-        self.shared.lock().detach();
+        let window = self.shared.lock().detach();
         self.shared.wake.notify_all();
+        self.shared.tell(window);
     }
 
     /// The session ends: the reader stops at its next look.
     pub(super) fn shut(&self) {
-        self.shared.lock().close();
+        let window = self.shared.lock().close();
         self.shared.wake.notify_all();
+        self.shared.tell(window);
     }
 }
 
@@ -262,15 +264,20 @@ fn read(file: File, shared: &Shared, pid: u32) {
             stream.paint_wait().unwrap_or(READ_POLL)
         };
         if !ready(file.as_raw_fd(), libc::POLLIN, poll) {
-            shared.lock().paint_due();
+            let paint = shared.lock().paint_due();
+            shared.tell(paint);
             continue;
         }
         match (&file).read(&mut buffer) {
             Ok(0) => break,
             Ok(read) => {
-                let replies = shared.lock().take_in(&buffer[..read]);
+                let (replies, paint) = {
+                    let mut stream = shared.lock();
+                    (stream.take_in(&buffer[..read]), stream.paint_due())
+                };
                 shared.wake.notify_all();
                 put(&file, &replies, Instant::now() + WRITE_WAIT);
+                shared.tell(paint);
             }
             Err(error) if retry(&error) => {}
             Err(_) => break,

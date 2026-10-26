@@ -130,11 +130,34 @@ impl Window {
     }
 }
 
+/// `window` shows the stream from now on: its first frame, painted once the lock is let go.
+fn attach(shared: &Shared, window: &Window) {
+    let first = shared.lock().attach(window.painter());
+    shared.tell(Some(first));
+}
+
+/// What the terminal printed, taken in and painted when a paint is due, as the reader does.
+fn print(shared: &Shared, chunk: &[u8]) {
+    let paint = {
+        let mut stream = shared.lock();
+        stream.take_in(chunk);
+        stream.paint_due()
+    };
+    shared.tell(paint);
+}
+
+fn paint_due(shared: &Shared) {
+    let paint = shared.lock().paint_due();
+    shared.tell(paint);
+}
+
 #[test]
 fn a_window_attached_shows_what_was_printed_before() {
-    let (mut stream, window) = (Stream::default(), Window::default());
-    stream.take_in(b"before\r\n");
-    stream.attach(window.painter());
+    let (shared, window) = (Shared::default(), Window::default());
+    print(&shared, b"before\r\n");
+    let first = shared.lock().attach(window.painter());
+    assert_eq!(window.paints(), 0, "not under the lock");
+    shared.tell(Some(first));
     assert_eq!(window.paints(), 1);
     assert!(window.last().contains("before"), "{}", window.last());
 }
@@ -145,24 +168,24 @@ fn a_window_attached_shows_what_was_printed_before() {
 )]
 #[test]
 fn output_in_a_burst_is_painted_once_its_time_comes() {
-    let (mut stream, window) = (Stream::default(), Window::default());
-    stream.attach(window.painter());
-    stream.take_in(b"one ");
-    stream.take_in(b"two");
+    let (shared, window) = (Shared::default(), Window::default());
+    attach(&shared, &window);
+    print(&shared, b"one ");
+    print(&shared, b"two");
     assert_eq!(window.paints(), 1, "within the frame's time: not yet");
-    let wait = stream.paint_wait().expect("a paint is due");
+    let wait = shared.lock().paint_wait().expect("a paint is due");
     assert!(wait <= PAINT_EVERY);
-    stream.paint_due();
+    paint_due(&shared);
     assert_eq!(window.paints(), 1, "still too soon");
     std::thread::sleep(PAINT_EVERY);
-    assert_eq!(stream.paint_wait(), Some(Duration::ZERO));
-    stream.paint_due();
+    assert_eq!(shared.lock().paint_wait(), Some(Duration::ZERO));
+    paint_due(&shared);
     assert_eq!(window.paints(), 2);
     assert!(window.last().contains("one two"), "{}", window.last());
-    assert_eq!(stream.paint_wait(), None, "nothing new");
+    assert_eq!(shared.lock().paint_wait(), None, "nothing new");
     // Once the frame's time passed, the next output is painted at once.
     std::thread::sleep(PAINT_EVERY);
-    stream.take_in(b"!");
+    print(&shared, b"!");
     assert_eq!(window.paints(), 3);
 }
 
@@ -172,54 +195,70 @@ fn output_in_a_burst_is_painted_once_its_time_comes() {
 )]
 #[test]
 fn a_window_the_person_closed_is_painted_no_more() {
-    let (mut stream, window) = (Stream::default(), Window::default());
+    let (shared, window) = (Shared::default(), Window::default());
     window.closed_by_person.store(true, Ordering::SeqCst);
-    stream.attach(window.painter());
+    attach(&shared, &window);
     assert_eq!(window.drops(), 1, "let go at once");
-    assert!(!stream.attached());
+    assert!(!shared.lock().attached());
     std::thread::sleep(PAINT_EVERY);
-    stream.take_in(b"more");
+    print(&shared, b"more");
     assert_eq!(window.paints(), 1);
 }
 
 #[test]
 fn no_window_opens_on_an_ended_session() {
     for end in [true, false] {
-        let (mut stream, window) = (Stream::default(), Window::default());
+        let (shared, window) = (Shared::default(), Window::default());
         match end {
-            true => assert!(stream.finish().is_none(), "no window yet"),
-            false => stream.close(),
+            true => assert!(shared.lock().finish().is_none(), "no window yet"),
+            false => {
+                let gone = shared.lock().close();
+                shared.tell(gone);
+            }
         }
-        stream.attach(window.painter());
+        attach(&shared, &window);
         assert_eq!((window.paints(), window.drops()), (0, 1), "eof: {end}");
     }
 }
 
 #[test]
+fn a_shown_session_keeps_its_window() {
+    let (shared, shown, second) = (Shared::default(), Window::default(), Window::default());
+    attach(&shared, &shown);
+    attach(&shared, &second);
+    assert_eq!((second.paints(), second.drops()), (0, 1));
+    assert_eq!((shown.paints(), shown.drops()), (1, 0));
+}
+
+#[test]
 fn closing_the_session_closes_its_window_once() {
-    let (mut stream, window) = (Stream::default(), Window::default());
-    stream.attach(window.painter());
-    stream.close();
-    stream.close();
+    let (shared, window) = (Shared::default(), Window::default());
+    attach(&shared, &window);
+    for _ in 0..2 {
+        let gone = shared.lock().close();
+        shared.tell(gone);
+    }
     assert_eq!(window.drops(), 1);
 }
 
 #[test]
 fn a_detached_window_closes_and_the_end_keeps_nothing() {
-    let (mut stream, window) = (Stream::default(), Window::default());
-    stream.attach(window.painter());
-    stream.detach();
+    let (shared, window) = (Shared::default(), Window::default());
+    attach(&shared, &window);
+    let gone = shared.lock().detach();
+    assert_eq!(window.drops(), 0, "not under the lock");
+    shared.tell(gone);
     assert_eq!(window.drops(), 1);
-    assert!(stream.finish().is_none());
+    assert!(shared.lock().finish().is_none());
 }
 
 #[test]
 fn the_end_hands_over_the_window_and_its_screen() {
-    let (mut stream, window) = (Stream::default(), Window::default());
-    stream.attach(window.painter());
-    stream.take_in(b"bye");
-    let (painter, screen) = stream.finish().expect("the window, to say it ended");
-    assert!(stream.eof);
+    let (shared, window) = (Shared::default(), Window::default());
+    attach(&shared, &window);
+    print(&shared, b"bye");
+    let (painter, screen) = (shared.lock().finish()).expect("the window, to say it ended");
+    assert!(shared.lock().eof);
     assert!(painter(screen.frame(Some(" · exited 0"))));
     assert!(window.last().contains("bye") && window.last().contains("exited 0"));
     drop(painter);

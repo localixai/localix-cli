@@ -12,8 +12,9 @@ use super::frame::{self, Look, Rgb};
 use super::host::Cmd;
 use super::tab_view::build;
 
-/// What a sender does with a command: false once the loop is gone.
-pub(super) type Post = Box<dyn Fn(Cmd) -> bool + Send>;
+/// What a sender does with a command: false once the loop is gone. Shared, as a painter is
+/// (the loop's proxy is).
+pub(super) type Post = Box<dyn Fn(Cmd) -> bool + Send + Sync>;
 
 /// What a panel and the loop share: the newest frame, whether a paint is queued, and whether the
 /// window is still open.

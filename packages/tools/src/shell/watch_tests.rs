@@ -1,7 +1,7 @@
 //! Sessions shown in windows, through a watch that records what it opens.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock, Weak, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -142,6 +142,50 @@ fn a_kept_session_opens_one_window_that_follows_it() {
         1,
         "an open window is not opened twice"
     );
+}
+
+/// The painter is the app's: it is called with the session's lock let go (ARCHITECTURE.md R6),
+/// so while it paints, the session's screen is read at once on another thread.
+#[test]
+fn a_window_is_painted_with_the_session_free() {
+    let reach: Arc<OnceLock<Weak<Sessions>>> = Arc::default();
+    let (blocked, painted) = (
+        Arc::new(AtomicBool::new(false)),
+        Arc::new(AtomicUsize::new(0)),
+    );
+    let (seen, counted) = (Arc::clone(&blocked), Arc::clone(&painted));
+    let sessions_of = Arc::clone(&reach);
+    let watch: Watch = Arc::new(move |_id: u32, _title: &str| {
+        let (reach, blocked, painted) = (
+            Arc::clone(&sessions_of),
+            Arc::clone(&seen),
+            Arc::clone(&counted),
+        );
+        Some(Box::new(move |_frame: String| {
+            if let Some(sessions) = reach.get().and_then(Weak::upgrade) {
+                let (read, done) = mpsc::sync_channel(1);
+                let reader = thread::Builder::new().name("reads".into());
+                let _ = reader.spawn(move || {
+                    for (id, _) in sessions.listed() {
+                        let _ = sessions.screen(id);
+                    }
+                    let _ = read.send(());
+                });
+                if done.recv_timeout(Duration::from_secs(2)).is_err() {
+                    blocked.store(true, Ordering::SeqCst);
+                }
+            }
+            painted.fetch_add(1, Ordering::SeqCst);
+            true
+        }) as Painter)
+    });
+    let sessions = Arc::new(Sessions::new(watch, true));
+    reach.set(Arc::downgrade(&sessions)).unwrap();
+    start(&sessions, "sleep 0.3; printf one; sleep 30", None);
+    let painted_twice = || painted.load(Ordering::SeqCst) >= 2;
+    assert!(eventually(Duration::from_secs(10), painted_twice));
+    assert!(!blocked.load(Ordering::SeqCst), "a paint held the lock");
+    sessions.close_all();
 }
 
 #[test]

@@ -25,7 +25,7 @@ pub(super) fn title(id: u32, command: &str) -> String {
 
 /// The terminal closed: the window says how the program ended (`status`), then closes after
 /// [`LINGER`], or at once when a call closes it.
-pub(super) fn linger(shared: &Shared, status: Option<i32>, painter: Painter, screen: &Screen) {
+pub(super) fn linger(shared: &Shared, status: Option<i32>, painter: Arc<Painter>, screen: &Screen) {
     let end = match status {
         Some(code) => format!(" · exited {code}"),
         None => " · exited".to_string(),

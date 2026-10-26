@@ -190,7 +190,7 @@ impl Sessions {
         let session = self.take(id)?;
         match show {
             Some(true) => self.show(&session),
-            Some(false) => session.pty.shared.lock().detach(),
+            Some(false) => session.pty.dismiss(),
             None => {}
         }
         let typing = !input.is_empty() || !keys.is_empty();
@@ -258,7 +258,8 @@ impl Sessions {
             return;
         };
         if let Some(painter) = watch(session.id, &watch::title(session.id, &session.command)) {
-            session.pty.shared.lock().attach(painter);
+            let first = session.pty.shared.lock().attach(painter);
+            session.pty.shared.tell(Some(first));
         }
     }
 

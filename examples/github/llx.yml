@@ -5,7 +5,8 @@
 #   work  (read only, model) the agent reads the thread with gh, answers, or edits the checkout and
 #                            runs the tests; it cannot commit or push, it has no token that could;
 #   post  (write, no model)  posts the reply where it was asked; applies the change: on a pull
-#                            request to its branch, on an issue as a draft pull request.
+#                            request to its branch, on an issue as a draft pull request (its open
+#                            draft, when an earlier request made one, goes on where it is).
 #
 # Needs: the secret OPENROUTER_API_KEY; for an issue's draft pull request, "Allow GitHub Actions
 # to create and approve pull requests" (Settings > Actions > General); the label `llx` to use it.
@@ -73,7 +74,14 @@ jobs:
           esac
           gh api --method POST "repos/$GH_REPO/$target/reactions" -f content=eyes > /dev/null
           if [ -z "$ON_PR" ]; then
-            echo "pr=false" >> "$GITHUB_OUTPUT"
+            # An issue's open draft from an earlier request is worked on where it is, with every
+            # commit pushed to it since, a person's too.
+            draft=$(gh pr list --head "llx/issue-$NUMBER" --state open --json number,isCrossRepository \
+              --jq 'map(select(.isCrossRepository | not)) | .[0].number // empty')
+            {
+              echo "pr=false"
+              if [ -n "$draft" ]; then echo "branch=llx/issue-$NUMBER"; fi
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # A pull request from a fork is not worked on: its code would run next to the key.
@@ -104,8 +112,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # A pull request's head; an issue's checkout is the default branch.
-          ref: ${{ needs.ack.outputs.pr == 'true' && format('refs/pull/{0}/head', github.event.issue.number || github.event.pull_request.number) || '' }}
+          # A pull request's head; for an issue its open draft's branch, else the default branch.
+          ref: ${{ needs.ack.outputs.pr == 'true' && format('refs/pull/{0}/head', github.event.issue.number || github.event.pull_request.number) || needs.ack.outputs.branch }}
           fetch-depth: 0
           persist-credentials: false
       - id: llx
@@ -132,7 +140,8 @@ jobs:
             bash(git commit *)
           prompt: |
             $ASKER asked you for something on $KIND #$NUMBER of $GH_REPO. The working tree is that
-            $KIND's code (a pull request's head, else the default branch). gh is signed in, read only.
+            $KIND's code (a pull request's head; for an issue, the branch of the draft an earlier
+            request opened if it is still open, else the default branch). gh is signed in, read only.
 
             Read what they asked and its context. The event is $EVENT:
               issue_comment: gh api repos/$GH_REPO/issues/comments/$COMMENT
@@ -192,8 +201,9 @@ jobs:
       - if: needs.work.outputs.answered == 'true'
         uses: actions/checkout@v7
         with:
-          # The pull request's branch to push to, else the default branch to branch from.
-          ref: ${{ needs.ack.outputs.pr == 'true' && needs.ack.outputs.branch || github.event.repository.default_branch }}
+          # The branch to push to (a pull request's, an issue's open draft's), else the default
+          # branch to branch from.
+          ref: ${{ needs.ack.outputs.branch || github.event.repository.default_branch }}
       - if: needs.work.outputs.answered == 'true'
         uses: actions/download-artifact@v8
         with:
@@ -208,7 +218,6 @@ jobs:
           COMMENT: ${{ github.event.comment.id }}
           ASKER: ${{ github.event.comment.user.login || github.event.sender.login }}
           ASKER_ID: ${{ github.event.comment.user.id || github.event.sender.id }}
-          IS_PR: ${{ needs.ack.outputs.pr }}
           BRANCH: ${{ needs.ack.outputs.branch }}
           BASE: ${{ github.event.repository.default_branch }}
           NOTE: ${{ needs.ack.outputs.note }}
@@ -253,21 +262,19 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -q -m "${title:-llx: change asked by $ASKER}" \
             -m "Co-authored-by: $ASKER <$ASKER_ID+$ASKER@users.noreply.github.com>"
-          if [ "$IS_PR" = true ]; then
+          if [ -n "$BRANCH" ]; then
+            # A pull request's branch, or an issue's open draft: on top, so every commit stays.
             if ! git push -q origin "HEAD:refs/heads/$BRANCH"; then
               say "$reply"$'\n\n'"llx could not push to \`$BRANCH\`. The patch is in the [run]($RUN)'s artifact."$'\n\n'"$footer"
               exit 0
             fi
             say "$reply"$'\n\n'"Pushed $(git rev-parse --short HEAD) to \`$BRANCH\`."$'\n\n'"$footer"
           else
+            # No open draft: a branch a closed one left is replaced (its pull request keeps the
+            # commits), from the default branch.
             branch="llx/issue-$NUMBER"
             git push -q --force origin "HEAD:refs/heads/$branch"
-            url=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // empty')
-            if [ -n "$url" ]; then
-              say "Updated the draft pull request: $url"$'\n\n'"$footer"
-            else
-              url=$(gh pr create --draft --base "$BASE" --head "$branch" --title "${title:-llx: #$NUMBER}" \
-                --body "$reply"$'\n\n'"Closes #$NUMBER"$'\n\n'"$footer")
-              say "Opened a draft pull request: $url"$'\n\n'"$footer"
-            fi
+            url=$(gh pr create --draft --base "$BASE" --head "$branch" --title "${title:-llx: #$NUMBER}" \
+              --body "$reply"$'\n\n'"Closes #$NUMBER"$'\n\n'"$footer")
+            say "Opened a draft pull request: $url"$'\n\n'"$footer"
           fi

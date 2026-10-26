@@ -2251,7 +2251,6 @@ dependencies = [
  "contracts",
  "provider-kit",
  "serde_json",
- "ureq",
 ]
 
 [[package]]

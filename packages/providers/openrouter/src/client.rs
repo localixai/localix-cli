@@ -1,14 +1,20 @@
 //! The HTTP client to OpenRouter, and to any endpoint that speaks OpenAI's chat completions at
-//! another address (DeepSeek, xAI, Groq, Mistral…: the catalog gives the address). One agent
-//! keeps the connection alive across steps, so a decision costs a request, not a handshake.
+//! another address (DeepSeek, xAI, Groq, Mistral…: the catalog gives the address), over the
+//! kit's [`Http`]. Its one agent keeps the connection alive across steps, so a decision costs a
+//! request, not a handshake.
 
 use std::time::{Duration, Instant};
 
+use provider_kit::http::{Http, HttpError, Web};
 use serde_json::Value;
 
 pub const BASE_URL: &str = "https://openrouter.ai/api/v1";
 const RETRY_STATUSES: [u16; 5] = [408, 429, 502, 503, 529];
 const ATTEMPTS: u32 = 3;
+/// A long reply with high reasoning is slow, and it is not streamed.
+const TIMEOUT: Duration = Duration::from_secs(600);
+/// A decision is short and cheap: one that hangs is given up on sooner, and asked once more.
+const DECIDING: Duration = Duration::from_secs(90);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ApiError {
@@ -38,10 +44,8 @@ impl std::fmt::Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
-/// Cheap to clone: the clones share one agent and its connections.
-#[derive(Clone)]
 pub struct OpenRouter {
-    agent: ureq::Agent,
+    http: Box<dyn Http>,
     key: String,
     base: String,
     app: crate::App,
@@ -49,7 +53,7 @@ pub struct OpenRouter {
     openrouter: bool,
     /// Who it calls, for errors: `OpenRouter`, `DeepSeek`.
     pub name: String,
-    /// A request that timed out is sent once more (decisions); otherwise never.
+    /// A request sent and not answered is sent once more (decisions); otherwise never.
     retry_timeout: bool,
 }
 
@@ -78,7 +82,7 @@ impl OpenRouter {
     /// is given up on sooner and asked once more.
     pub fn deciding(key: String, app: crate::App) -> Self {
         Self {
-            agent: provider_kit::http::agent(app, Duration::from_secs(90)),
+            http: Box::new(Web::new(app, DECIDING)),
             retry_timeout: true,
             ..Self::new(key, app)
         }
@@ -87,8 +91,7 @@ impl OpenRouter {
     /// A client of the chat completions at `base`, called `name`.
     pub fn at(base: &str, key: String, app: crate::App, name: &str) -> Self {
         Self {
-            // A long reply with high reasoning is slow, and it is not streamed.
-            agent: provider_kit::http::agent(app, Duration::from_secs(600)),
+            http: Box::new(Web::new(app, TIMEOUT)),
             key,
             base: base.trim_end_matches('/').to_string(),
             app,
@@ -110,40 +113,36 @@ impl OpenRouter {
     pub fn post(&self, path: &str, body: &Value) -> Result<(Value, Timing), ApiError> {
         let started = Instant::now();
         let url = format!("{}{path}", self.base);
+        let bearer = format!("Bearer {}", self.key);
+        let headers = [
+            ("Authorization", bearer.as_str()),
+            ("X-Title", self.app.name),
+            ("Content-Type", "application/json"),
+        ];
+        let body = body.to_string();
         let mut last = ApiError::Network("no attempt".into());
         let mut timed_out = false;
         for attempt in 0..ATTEMPTS {
             if attempt > 0 {
                 std::thread::sleep(Duration::from_millis(400 << attempt));
             }
-            let sent = self
-                .agent
-                .post(&url)
-                .header("Authorization", &format!("Bearer {}", self.key))
-                .header("X-Title", self.app.name)
-                .send_json(body);
-            let mut response = match sent {
-                Ok(response) => response,
+            let (status, text) = match self.http.post(&url, &headers, &body) {
+                Ok(reply) => (reply.status, reply.body),
                 // A reply being written is billed: asking again would pay for it twice (a decision
-                // is asked once more). One that never reached the host (no connection) is asked
-                // again.
-                Err(ureq::Error::Timeout(why))
-                    if !matches!(why, ureq::Timeout::Connect | ureq::Timeout::Resolve) =>
-                {
-                    last = ApiError::Network(ureq::Error::Timeout(why).to_string());
+                // is asked once more). One that never got through is asked again.
+                Err(HttpError::Unanswered(why)) => {
+                    last = ApiError::Network(why);
                     if !self.retry_timeout || timed_out {
                         return Err(last);
                     }
                     timed_out = true;
                     continue;
                 }
-                Err(error) => {
-                    last = ApiError::Network(error.to_string());
+                Err(HttpError::Unsent(why)) => {
+                    last = ApiError::Network(why);
                     continue;
                 }
             };
-            let status = response.status().as_u16();
-            let text = response.body_mut().read_to_string().unwrap_or_default();
             let parsed: Option<Value> = serde_json::from_str(&text).ok();
             if status == 200 {
                 // OpenRouter reports some upstream failures inside a 200 body.

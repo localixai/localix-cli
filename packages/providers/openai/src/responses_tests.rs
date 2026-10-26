@@ -59,7 +59,7 @@ impl Http for Shared {
         a: &str,
         h: &[(&str, &str)],
         b: &str,
-    ) -> Result<provider_kit::http::Reply, String> {
+    ) -> Result<provider_kit::http::Reply, provider_kit::http::HttpError> {
         self.0.post(a, h, b)
     }
 }

@@ -13,9 +13,31 @@ pub struct Reply {
 }
 
 pub trait Http: Send + Sync {
-    /// POST `body` to `address` with `headers`; `Err` when no answer came (offline, DNS, timeout).
-    fn post(&self, address: &str, headers: &[(&str, &str)], body: &str) -> Result<Reply, String>;
+    /// POST `body` to `address` with `headers`; `Err` when no whole answer came.
+    fn post(&self, address: &str, headers: &[(&str, &str)], body: &str)
+    -> Result<Reply, HttpError>;
 }
+
+/// Why no answer came, as a caller acts on it: whether the request may be sent again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HttpError {
+    /// It did not get through (offline, no such host, refused, a broken connection): sending it
+    /// again is safe.
+    Unsent(String),
+    /// It went out and no whole answer came back (the time ran out, the answer was cut short or
+    /// too long): the server may have acted on it, and billed it.
+    Unanswered(String),
+}
+
+impl std::fmt::Display for HttpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unsent(why) | Self::Unanswered(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for HttpError {}
 
 /// The longest body read: a long streamed reply is a few megabytes at most.
 const BODY_LIMIT: u64 = 64 << 20;
@@ -39,13 +61,14 @@ pub fn agent(app: App, timeout: Duration) -> ureq::Agent {
     ureq::Agent::new_with_config(config)
 }
 
-/// [`Http`] over the network.
+/// [`Http`] over the network: one agent, its connections kept alive across requests.
 #[derive(Clone)]
 pub struct Web {
     agent: ureq::Agent,
 }
 
 impl Web {
+    /// Each request given `timeout` whole, from its connection to the end of its answer.
     pub fn new(app: App, timeout: Duration) -> Self {
         Self {
             agent: agent(app, timeout),
@@ -54,19 +77,29 @@ impl Web {
 }
 
 impl Http for Web {
-    fn post(&self, address: &str, headers: &[(&str, &str)], body: &str) -> Result<Reply, String> {
+    fn post(
+        &self,
+        address: &str,
+        headers: &[(&str, &str)],
+        body: &str,
+    ) -> Result<Reply, HttpError> {
         let mut request = self.agent.post(address);
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
-        let mut response = request.send(body).map_err(|error| error.to_string())?;
+        let mut response = request.send(body).map_err(|error| match error {
+            // Past the connection, the time ran out with the request sent.
+            ureq::Error::Timeout(when)
+                if !matches!(when, ureq::Timeout::Connect | ureq::Timeout::Resolve) =>
+            {
+                HttpError::Unanswered(ureq::Error::Timeout(when).to_string())
+            }
+            error => HttpError::Unsent(error.to_string()),
+        })?;
         let status = response.status().as_u16();
-        let body = response
-            .body_mut()
-            .with_config()
-            .limit(BODY_LIMIT)
+        let body = (response.body_mut().with_config().limit(BODY_LIMIT))
             .read_to_string()
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| HttpError::Unanswered(format!("the answer was not read: {error}")))?;
         Ok(Reply { status, body })
     }
 }

@@ -1,4 +1,33 @@
+use std::net::TcpListener;
+
 use super::*;
+
+const APP: App = App {
+    name: "llx",
+    slug: "llx",
+    version: "0",
+};
+
+#[test]
+fn a_request_refused_was_not_sent_and_one_left_unanswered_was() {
+    // Nothing listens at a port just let go: the request does not get through.
+    let closed = TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
+    let web = Web::new(APP, Duration::from_millis(300));
+    let refused = web.post(&format!("http://{closed}/x"), &[], "{}");
+    assert!(matches!(refused, Err(HttpError::Unsent(_))), "{refused:?}");
+    // A server that takes the request and says nothing until the time runs out.
+    let silent = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = silent.local_addr().unwrap();
+    let unanswered = web.post(&format!("http://{address}/x"), &[], "{}");
+    assert!(
+        matches!(unanswered, Err(HttpError::Unanswered(_))),
+        "{unanswered:?}"
+    );
+    drop(silent);
+}
 
 #[test]
 fn a_form_encodes_everything_but_unreserved_characters() {

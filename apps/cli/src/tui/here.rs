@@ -23,7 +23,7 @@ pub(crate) fn shown(mut label: Label, root: Option<&Path>) -> Label {
     label.subject = ["cd . && ", "cd .; ", "cd . ; "]
         .iter()
         .find_map(|cd| subject.strip_prefix(cd))
-        .map_or(subject.clone(), str::to_string);
+        .map_or_else(|| subject.clone(), str::to_string);
     label
 }
 

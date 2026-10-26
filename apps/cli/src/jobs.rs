@@ -242,7 +242,7 @@ fn line(job: &Job) -> String {
             job.name,
             job.id,
             cron.as_ref()
-                .map_or("once".into(), |cron| cron.text().to_string()),
+                .map_or_else(|| "once".into(), |cron| cron.text().to_string()),
             cron::clock(*next)
         ),
     }

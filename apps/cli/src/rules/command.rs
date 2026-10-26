@@ -26,7 +26,7 @@ pub(super) fn every(line: &str) -> Vec<String> {
 pub(super) fn matches(pattern: &str, text: &str) -> bool {
     let pattern = pattern
         .strip_suffix(":*")
-        .map_or(pattern.to_string(), |head| format!("{head} *"));
+        .map_or_else(|| pattern.to_string(), |head| format!("{head} *"));
     if let Some(head) = pattern.strip_suffix(" *")
         && !head.contains('*')
         && text == head

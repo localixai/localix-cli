@@ -133,7 +133,7 @@ impl BrowserTool<'_> {
         selector: Option<&str>,
         report: &mut Vec<String>,
     ) -> Option<Image> {
-        let of = selector.map_or("the page".to_string(), |s| format!("`{s}`"));
+        let of = selector.map_or_else(|| "the page".to_string(), |s| format!("`{s}`"));
         match driver.screenshot(selector) {
             Ok(shot) => {
                 report.push(format!(

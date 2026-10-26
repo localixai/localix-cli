@@ -242,7 +242,10 @@ fn default(reasoning: &Reasoning, efforts: &[Effort]) -> Effort {
         .iter()
         .rev()
         .find(|e| **e <= Effort::Medium && **e != Effort::Off);
-    below.or(efforts.first()).copied().unwrap_or(Effort::Off)
+    below
+        .or_else(|| efforts.first())
+        .copied()
+        .unwrap_or(Effort::Off)
 }
 
 #[cfg(test)]

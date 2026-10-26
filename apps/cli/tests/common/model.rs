@@ -191,7 +191,7 @@ fn respond(mut stream: TcpStream, status: u16, body: &Value) {
 /// The chat completion for `reply` (the `n`th request).
 fn completion(reply: Option<Reply>, n: usize, request: &Value) -> Value {
     let model = request["model"].as_str().unwrap_or("test/model");
-    let message = match reply.unwrap_or(Reply::Text("Done.\nRESULT: achieved".into())) {
+    let message = match reply.unwrap_or_else(|| Reply::Text("Done.\nRESULT: achieved".into())) {
         Reply::Text(text) => json!({"role": "assistant", "content": text}),
         Reply::Refused(_) | Reply::After(..) | Reply::Decided(..) => {
             unreachable!("answered before")

@@ -119,7 +119,7 @@ impl Calls {
     fn start(&self, id: &Value, params: &Value) -> Option<Command> {
         let name = params.get("name").and_then(Value::as_str)?;
         let arguments =
-            (params.get("arguments").cloned()).unwrap_or(Value::Object(Default::default()));
+            (params.get("arguments").cloned()).unwrap_or_else(|| Value::Object(Default::default()));
         let number = self.next.fetch_add(1, Ordering::Relaxed);
         let call = format!("mcp-{}-{number}", std::process::id());
         lock(&self.by_request).insert(id.to_string(), call.clone());

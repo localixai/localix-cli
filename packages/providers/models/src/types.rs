@@ -152,7 +152,7 @@ impl Model {
                 });
             let price = |key: &str| {
                 band.and_then(|b| b.pointer(key))
-                    .or(base.pointer(key))?
+                    .or_else(|| base.pointer(key))?
                     .as_f64()
             };
             Some((price("/price")?, price("/cache/read")))

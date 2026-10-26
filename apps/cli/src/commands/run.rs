@@ -46,7 +46,7 @@ pub(crate) use super::ended::{Ended, since};
 /// The workspace `options` name (`-C`, else the current directory), with what is llx's own off
 /// limits to the tools (`place::at`).
 pub(crate) fn root(options: &RunOptions) -> Result<Workspace, Failure> {
-    let root = options.cd.as_deref().unwrap_or(Path::new("."));
+    let root = options.cd.as_deref().unwrap_or_else(|| Path::new("."));
     place::at(root).map_err(|why| Failure::Usage(format!("-C {}: {why}", root.display())))
 }
 

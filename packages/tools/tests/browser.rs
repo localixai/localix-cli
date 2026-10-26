@@ -185,7 +185,10 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     // Picking the chosen option again fires no change: the page's handler (as on
     // the-internet.herokuapp.com/dropdown) would otherwise reset the selection.
     driver
-        .navigate(&std::env::var("BROWSER_DROPDOWN").unwrap_or(format!("{origin}/dropdown.html")))
+        .navigate(
+            &std::env::var("BROWSER_DROPDOWN")
+                .unwrap_or_else(|_| format!("{origin}/dropdown.html")),
+        )
         .unwrap();
     for _ in 0..3 {
         let page = driver.observe().unwrap();

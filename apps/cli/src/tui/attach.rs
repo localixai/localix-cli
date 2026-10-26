@@ -28,7 +28,7 @@ pub(crate) fn resolve(token: &str) -> Option<Dropped> {
     };
     let path = path
         .strip_prefix("file://")
-        .map_or(path.clone(), |p| p.replace("%20", " "));
+        .map_or_else(|| path.clone(), |p| p.replace("%20", " "));
     let path = match path.strip_prefix("~/") {
         Some(rest) => PathBuf::from(std::env::var_os("HOME")?).join(rest),
         None => PathBuf::from(&path),

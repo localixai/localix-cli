@@ -330,7 +330,7 @@ fn the_built_in_files_match_models_dev_s_own_resolution() {
                             p.clone(),
                             m.address(p)
                                 .map(str::to_string)
-                                .or(Some(a.base_url.clone())),
+                                .or_else(|| Some(a.base_url.clone())),
                         )
                     })
                     .collect();

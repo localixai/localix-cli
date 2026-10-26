@@ -25,7 +25,7 @@ pub(super) fn session_row<'a>(
 ) -> Row<'a> {
     let (glyph, detail) = match (&view.parent, &view.state) {
         (None, _) if view.busy.is_some() => (
-            view.busy.map_or(Span::raw("●"), spinner),
+            view.busy.map_or_else(|| Span::raw("●"), spinner),
             doing(&view.running).unwrap_or_else(|| "working".into()),
         ),
         (None, AgentState::Ended(status)) => {
@@ -36,7 +36,7 @@ pub(super) fn session_row<'a>(
         (None, _) => (Span::styled("●", style::code()), "idle".into()),
         (_, AgentState::Idle) => (Span::styled("○", style::dim()), "starting".to_string()),
         (_, AgentState::Working) => (
-            view.busy.map_or(Span::raw("○"), spinner),
+            view.busy.map_or_else(|| Span::raw("○"), spinner),
             doing(&view.running).unwrap_or_else(|| "thinking".into()),
         ),
         (_, AgentState::Ended(status)) => ended(status),

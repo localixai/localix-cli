@@ -26,13 +26,15 @@
 - `uses: rsaryev/llx@v0` is a GitHub Action: it installs llx, runs `llx exec` once, and returns the answer, the exit code and the cost.
 - The agent works through the shell (`gh`, `git`, `jq` and the project's own tools): no MCP server, no GitHub tool, no built-in prompt. The workflow owns the prompt and the posting.
 - The job that runs the model holds a read-only token; a second job, with write access and no model key, posts what it answered.
-- Guide: https://github.com/rsaryev/llx/blob/main/docs/ci.md. Ready-made workflows: https://github.com/rsaryev/llx/tree/main/examples.
+- Guide: https://llx.sh/docs/ci. Recipes: https://llx.sh/docs/recipes. Ready-made workflows: https://llx.sh/docs/examples.
 
 ## From another agent
 
 - `llx mcp` serves llx's `window` (browser pages and terminal sessions as tabs, with a `goal` carried out by llx's decision model) to any agent that speaks MCP over stdio.
 - Any MCP client: a server whose command is `llx` with the argument `mcp` (or `npx -y @localixai/llx mcp`).
+- Guide: https://llx.sh/docs/mcp.
 
 ## Links
 
-- Source and docs: https://github.com/rsaryev/llx
+- Docs: https://llx.sh/docs (each page is listed below; all of them in one file: https://llx.sh/llms-full.txt)
+- Source: https://github.com/rsaryev/llx

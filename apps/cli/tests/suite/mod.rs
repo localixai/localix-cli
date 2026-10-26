@@ -6,6 +6,8 @@
 mod decide;
 mod doctor;
 pub(crate) mod exec;
+#[cfg(target_os = "linux")]
+mod hardening;
 #[cfg(all(unix, not(feature = "browser")))]
 mod headless;
 #[cfg(unix)]

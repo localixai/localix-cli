@@ -28,6 +28,6 @@ Wrappers for particular agents live outside this repository; `llx mcp` is the in
 - The other agent approves each call (its own permission prompt): llx asks nothing more for them.
 - A cancelled call is stopped. When the agent closes the server, its terminals end and the browser tabs it left open close.
 - Comments the person sends from its tabs come back with the agent's next `window` call, after that call's report, under `### What the person sent from the window`. A wrapper can ask for them with a quiet `list` to have them arrive without the agent calling.
-- Unix only.
+- Unix only. The headless Linux build has no browser, so its `window` has terminal tabs only.
 
 The rules behind it are W9 and K7 in [ARCHITECTURE.md](../ARCHITECTURE.md).

@@ -91,3 +91,45 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: xvfb-run -a -s "-screen 0 1920x1080x24" cargo test --workspace --locked
       - run: shellcheck scripts/*.sh
+
+  # The GitHub Action and its example workflows, with no model and no network but actionlint's
+  # download, checked against its hash. action/test.sh runs the action's script on a stub llx.
+  # actionlint reads the examples as they are, then again on this checkout's action.yml
+  # (`uses: ./`), which checks each input and output they name against it. Their schemas must
+  # parse, every job has a time limit, every llx step names its model, and each action is used at
+  # one version in all of them.
+  action:
+    name: action
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: shellcheck action/*.sh
+      - run: bash action/test.sh
+      - name: actionlint
+        run: |
+          version=1.7.12
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v$version/actionlint_${version}_linux_amd64.tar.gz"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check --quiet
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" examples/github/*.yml
+          for f in examples/github/*.yml; do
+            sed 's#uses: rsaryev/llx@v0#uses: ./#' "$f" > ".github/workflows/example-$(basename "$f")"
+          done
+          "$RUNNER_TEMP/actionlint" .github/workflows/example-*.yml
+      - name: The examples' schemas, limits, models and versions
+        run: |
+          set -euo pipefail
+          for f in examples/github/*.yml; do
+            yq -o=json '[.jobs[].steps[] | select(.with.schema != null) | .with.schema]' "$f" |
+              jq -e 'all(.[]; fromjson | type == "object")' > /dev/null || { echo "$f: a schema is not a JSON object"; exit 1; }
+            yq -e '[.jobs[] | select(has("timeout-minutes") | not)] | length == 0' "$f" > /dev/null ||
+              { echo "$f: a job has no timeout-minutes"; exit 1; }
+            yq -e '[.jobs[].steps[] | select(.uses == "rsaryev/llx@v0" and .with.install-only == null and .with.model == null)]
+              | length == 0' "$f" > /dev/null || { echo "$f: an llx step names no model"; exit 1; }
+          done
+          twice=$(grep -ho 'uses: [^ ]*@[^ ]*' examples/github/*.yml | sort -u | sed 's/@.*//' | uniq -d)
+          [ -z "$twice" ] || { echo "used at more than one version: $twice"; exit 1; }

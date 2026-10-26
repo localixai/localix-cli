@@ -54,22 +54,32 @@ fn plain(part: &str) -> Option<String> {
 }
 
 /// Whether a part hands text to something that runs it, or writes a file through `tee`, or
-/// `find` runs or deletes: what the rule names is not what runs.
+/// `find` runs or deletes, or `git` is told a program to run: what the rule names is not what runs.
 fn runs_another(part: &str) -> bool {
     let words: Vec<&str> = part.split_whitespace().collect();
     let has = |flag: &str| words.iter().skip(1).any(|word| *word == flag);
-    match words.first().copied().unwrap_or_default() {
-        "eval" | "exec" | "source" | "." => true,
-        "sh" | "bash" | "zsh" | "dash" | "fish" => has("-c"),
+    let first = words.first().copied().unwrap_or_default();
+    if matches!(first, "eval" | "exec" | "source" | ".") {
+        return true;
+    }
+    // By its name, wherever it is: `/bin/sh -c` is `sh -c`.
+    match first.rsplit('/').next().unwrap_or_default() {
+        // `-c` alone or among other short options (`-lc`, `-ec`), not a long one (`--norc`).
+        "sh" | "bash" | "zsh" | "dash" | "fish" | "ksh" | "ash" | "csh" | "tcsh" => {
+            (words.iter().skip(1))
+                .any(|word| word.starts_with('-') && !word.starts_with("--") && word.contains('c'))
+        }
         "tee" => words
             .iter()
             .skip(1)
             .any(|word| !word.starts_with('-') && *word != "/dev/null"),
         "find" => [
-            "-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls",
+            "-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf",
+            "-fls",
         ]
         .iter()
         .any(|flag| has(flag)),
+        "git" => super::git::runs_another(part),
         _ => false,
     }
 }

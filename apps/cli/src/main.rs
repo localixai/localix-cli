@@ -22,6 +22,7 @@ mod desk;
 mod error;
 mod exit;
 mod gate;
+mod hardening;
 mod input;
 mod instructions;
 mod interrupt;
@@ -53,6 +54,7 @@ use clap::Parser;
     reason = "the one place the process ends, with the exit-code contract (exit.rs)"
 )]
 fn main() {
+    hardening::private();
     std::process::exit(run());
 }
 

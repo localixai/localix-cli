@@ -11,7 +11,7 @@ models, and how sessions are kept. For the short version see the [README](../REA
 
 ## Command line
 
-`llx` opens a session at the terminal, and `llx exec` (or `-p`) runs one task and exits.
+`llx` opens a session at the terminal, and `llx exec` (or `-p`) runs one task and exits. `llx decide` asks one question about stdin and prints the option the decision model picked.
 
 ```bash
 llx                                                        # a session at the terminal
@@ -28,6 +28,7 @@ llx exec --json -y "update the changelog" | jq -c 'select(.type == "tool.call")'
 llx exec --schema '{"type":"object","properties":{"version":{"type":"string"}},"required":["version"]}' \
     "which version is this crate?"                        # the data alone on stdout
 llx exec resume --last now update the README               # one more task in the newest session
+git diff | llx decide "Does this break the public API?"    # yes or no, in about a second
 ```
 
 With `exec`, given a PROMPT, stdin that is not a terminal is read to its end and added to the
@@ -40,7 +41,7 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 | --- | --- |
 | `-C, --cd DIR` | The workspace: paths resolve in it and files change only inside it. Default: the current directory. |
 | `--mode MODE` | A named set of rules: `default`, `plan`, `bypass`, or your own from `settings.json` (see [Modes and approvals](modes.md)). Also `--permission-mode`. Default: `default`. |
-| `--allow RULE`, `--deny RULE` | Add a rule to the mode's for this run: `bash(cargo test *)`, `edit(docs/**)`, `browser`. Repeat them. A deny refuses in every mode, `-y` included. |
+| `--allow RULE`, `--deny RULE` | Add a rule to the mode's for this run: `bash(cargo test *)`, `edit(docs/**)`, `browser` ([the syntax](modes.md#rules)). Repeat them. A deny refuses in every mode, `-y` included. |
 | `-y, --yes` | `--mode bypass`: allow commands, file changes and browser actions without asking. Also `--yolo` and `--dangerously-skip-permissions`. Giving it with `--mode` is a usage error. |
 | `-p, --print` | Run the prompt as one task and exit, as `exec` does. |
 | `-c, --continue` | Go on with the newest session of this directory, as `resume --last` does. |
@@ -62,7 +63,8 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 
 - `logout`: forget every saved sign-in: the ChatGPT tokens and the OpenRouter key. (Signing in is `/login` in a session.)
 - `sessions`: list the saved sessions, newest first, with the directory each ran in.
-- `exec [PROMPT | -]` (alias `e`): run one task without a session and exit, with the answer alone on stdout. `exec resume [ID | --last] [PROMPT]` runs one more task in a saved session.
+- `exec [PROMPT | -]` (alias `e`): run one task without a session and exit, with the answer alone on stdout. `exec resume [ID | --last] [PROMPT]` runs one more task in a saved session. In CI, the [GitHub Action](ci.md#the-github-action) runs it.
+- `decide QUESTION`: ask the decision model one question about stdin (`--choices a,b,…` instead of yes or no, `--expect CHOICE` to exit 1 on any other, `--json` for the probabilities and the cost) and print the option it picked. No agent, no tools; it needs an OpenRouter key. The [reference](reference.md#llx-decide) has its options and exit codes.
 - `resume [ID | --last] [PROMPT]`: go on with a session at the terminal. `--last` is the newest session that ran in this workspace (else the newest of all, with a note).
 - `doctor`: check that everything a run needs is in place.
 - `mcp`: serve `window` to another agent over MCP on stdio (unix; see [From another agent](mcp.md)).

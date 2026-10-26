@@ -5,6 +5,7 @@
 //! a rule read from the repository would let a pull request allow itself.
 
 mod command;
+mod git;
 mod path;
 
 /// The tools a rule can name, and whether a pattern can narrow it: a command's text for `bash`,

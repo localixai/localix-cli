@@ -24,6 +24,50 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
+  # The headless build (ARCHITECTURE.md A8) on a runner as GitHub gives it, with no WebKitGTK: it
+  # compiles only if nothing of the browser is in it. Its lints and tests, then its binary: ldd
+  # must show no WebView library and nothing missing, and it must start and say it has no browser.
+  headless:
+    name: headless
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # (GTK itself may be there: the image's Chrome brings it. The binary must not link it.)
+      - name: The runner has no WebKitGTK
+        run: |
+          libraries=$(ldconfig -p)
+          case "$libraries" in *libwebkit2gtk*)
+            echo "::error::this runner has WebKitGTK: the job no longer shows the build runs without it"
+            exit 1 ;;
+          esac
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # the stable branch, 2026-10-01
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: cargo clippy --workspace --all-targets --locked --no-default-features -- -D warnings
+      - run: cargo test --workspace --locked --no-default-features
+      # The binary the tests ran (target/debug/llx links what a release build links).
+      - name: The binary links no WebView and runs
+        run: |
+          links=$(ldd target/debug/llx)
+          echo "$links"
+          case "$links" in *webkit* | *gtk* | *soup* | *javascriptcore* | *"not found"*)
+            echo "::error::the headless build links the WebView, or a library this runner lacks"
+            exit 1 ;;
+          esac
+          target/debug/llx --version
+          # Not signed in, doctor ends with 3: only what it says of the browser counts here.
+          said=$(LLX_MODELS_REFRESH=0 target/debug/llx doctor) || true
+          echo "$said"
+          case "$said" in *"browser: this build has no browser"*) ;; *)
+            echo "::error::doctor does not say the build has no browser"
+            exit 1 ;;
+          esac
+
   # One job, so the dependencies compile once: format, lint, then the tests on a virtual display
   # (packages/tools/tests/browser.rs opens a real WebView window). Linux only: a macOS runner
   # costs ten times as much, and the release workflow tests both. Coverage, the MSRV and the

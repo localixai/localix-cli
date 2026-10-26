@@ -54,7 +54,7 @@ fn plain(part: &str) -> Option<String> {
 }
 
 /// Whether a part hands text to something that runs it, or writes a file through `tee`, or
-/// `find` runs or deletes: what the rule names is not what runs.
+/// `find` runs or deletes, or `git` is told a program to run: what the rule names is not what runs.
 fn runs_another(part: &str) -> bool {
     let words: Vec<&str> = part.split_whitespace().collect();
     let has = |flag: &str| words.iter().skip(1).any(|word| *word == flag);
@@ -70,6 +70,7 @@ fn runs_another(part: &str) -> bool {
         ]
         .iter()
         .any(|flag| has(flag)),
+        program if program.rsplit('/').next() == Some("git") => super::git::runs_another(part),
         _ => false,
     }
 }

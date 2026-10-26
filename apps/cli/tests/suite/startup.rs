@@ -139,10 +139,11 @@ fn exec_decodes_only_the_provider_it_thinks_with() {
         (code, stdout, stderr, peak)
     };
     let (base, extra) = cost(run);
-    // The file read and indexed is about twice its size; decoding every model of it, as a
-    // catalog read whole does, is about fifteen times.
+    // The file read and indexed is about twice its size (9 MB on macOS); decoding every model of
+    // it, as a catalog read whole does, is about twelve times (48 MB). The bound sits between,
+    // with room for another allocator.
     assert!(
-        extra < 12 * MB,
+        extra < 16 * MB,
         "exec took {} MB more than its {base} MB with a 4 MB catalog",
         extra / MB
     );

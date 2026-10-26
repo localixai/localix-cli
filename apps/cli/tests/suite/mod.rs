@@ -6,6 +6,8 @@
 mod decide;
 mod doctor;
 pub(crate) mod exec;
+#[cfg(target_os = "linux")]
+mod hardening;
 #[cfg(unix)]
 mod mcp;
 mod modes;

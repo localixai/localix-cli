@@ -111,7 +111,9 @@ every new file already goes where its target crate will be.
   (`ToolError { Failed, Fatal }`: tell the model, or end the run). No adapter's error type
   (`io`, HTTP, serde) crosses a port; the adapter translates it.
 - **P3**: a value with an invariant keeps its fields private and checks them in its constructor
-  (`Selection`); a value any field combination of which is valid has public fields.
+  (`Selection`); a value any field combination of which is valid has public fields. A struct
+  never mixes a bare `pub` field with private ones (_checked_): another crate reads a private
+  field through a method, and inside a crate a field says how far it reaches.
 - **P4**: an option is an enum, not a `bool` or an `Option` argument, where a call site would
   otherwise read `f(true, None)`; a struct of several flags is a state enum (_checked_ for
   parameters and structs).
@@ -208,7 +210,7 @@ every new file already goes where its target crate will be.
 - **R3**: every queue and channel that a peer fills is bounded, or says what it dropped.
 - **R4** _checked_ (S4): a panic is a bug, and one request's panic must not end the server
   (W8). Working code handles what can fail; where a value exists by construction, the smallest
-  item allows it with the `reason` it cannot fail.
+  item expects the lint with the `reason` it cannot fail.
 - **R5**: the app's edge has one error type (`Failure`); libraries return their port's enums.
 - **R6**: a `MutexGuard` is never held across a send, a receive, a join, a sleep, I/O or a
   callback: copy out what is needed, drop the guard, then act (_checked_ where clippy sees it).
@@ -234,32 +236,43 @@ every new file already goes where its target crate will be.
 - **S3** _checked_: unit tests live beside the code: `x.rs` ends with
   `#[cfg(test)] #[path = "x_tests.rs"] mod tests;`. The ports are faked, never a network.
 - **S4** _checked_: every crate takes the workspace's lints (`[lints] workspace = true`), and
-  they are hard: denied, never turned off in `Cargo.toml`. An exception is an `allow` on the
-  smallest item, with its `reason`. In working code they forbid:
+  they are hard: denied, never turned off in `Cargo.toml`. An exception is an `expect` on the
+  smallest item, with its `reason`, never an `allow`: an exception that no longer applies fails
+  the build. In working code they forbid:
   - a panic: `unwrap`, `expect`, `panic!`, `unreachable!`, `todo!`, `unimplemented!`, a string
     sliced inside a character, a number cut by `as` (R4);
   - output and exits outside their place: `print!`/`eprint!`, `dbg!`, `process::exit` (K6);
   - shared state that is not `Send + Sync`: `Rc`, `Cell`, `RefCell`; setting the environment (R2);
   - functions past 100 lines or past a bounded complexity (S1's rule for functions);
   - a `pub` no other crate reaches (L9), qualifications not needed, wildcard imports, an
-    implicit `Arc` clone.
+    implicit `Arc` clone;
+  - a `_` arm over our own enums (S10); a struct whose fields mix a bare `pub` with private
+    ones (P3);
+  - work done for nothing: text formatted apart to be appended (`write!` into it), a default
+    built when it is not needed, a clone assigned over a value (`clone_from`), a stable sort of
+    primitives, a value taken that is only read; a method returning a changed copy that is not
+    `#[must_use]`.
+
+  Libraries and binaries leave no dependency unused, in either build (the clippy checks).
 
   Tests may unwrap, panic and print (`clippy.toml`); an integration-test crate says so once, at
-  its root. The `allow`s in working code are counted, and the count only falls: a new one raises
+  its root. The `expect`s in working code are counted, and the count only falls: a new one raises
   it in `code.rs` in the same commit, where a review sees it (_checked_).
 - **S5** _checked_: `unsafe` lives only where the OS is called: `tools` and the apps. The
   vocabulary, the core, the stores and the providers have none.
 - **S6**: one idea per file, named for it; a file's `//!` says what it is (_checked_: every
   working file opens with one). A directory module (`shell/`, `browser/`) groups the files of
-  one tool or one subsystem.
+  one tool or one subsystem, its root `x.rs` beside the directory `x/`, never `x/mod.rs`
+  (_checked_; the integration tests' `tests/common/mod.rs` and `tests/suite/mod.rs` stay, as
+  cargo needs).
 - **S7**: comments say why; rustfmt defaults; English only (_checked_).
 - **S8**: TDD: a bug's test fails first at the layer a person meets it; a feature's tests are
   written from what a person does and sees. A test that cannot fail is deleted.
 
 - **S9**: a clone has a reason: an `Arc` crossing threads, a value kept while the original goes
   on. A clone that only quiets the borrow checker means the data's owner is wrong.
-- **S10**: your own enums are matched exhaustively; a `_` arm is for foreign or
-  `#[non_exhaustive]` enums.
+- **S10** _checked_: your own enums are matched exhaustively; a `_` arm is for foreign or
+  `#[non_exhaustive]` enums, and says so in its `expect`.
 - **S11**: an `unsafe` block says why it is sound (`// SAFETY:`), one unsafe operation each
   (_checked_).
 

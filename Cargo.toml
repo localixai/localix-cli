@@ -134,7 +134,8 @@ openrouter = { path = "packages/providers/openrouter" }
 queue = { path = "packages/queue" }
 provider-kit = { path = "packages/providers/kit" }
 session = { path = "packages/session" }
-tools = { path = "packages/tools" }
+# Without default features: the app chooses the browser through its own `browser` feature (A8).
+tools = { path = "packages/tools", default-features = false }
 base64 = "0.23.1"
 clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 getrandom = "0.3"
@@ -173,4 +174,5 @@ lto = "fat"
 opt-level = "z"
 # A panic unwinds: the daemon serves many terminals, and one command's panic must end only that
 # command (ARCHITECTURE.md W8), not every session in the process.
+panic = "unwind"
 strip = true

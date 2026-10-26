@@ -81,23 +81,6 @@
   display: block;
   white-space: pre;
 }
-.tk-prompt,
-.tk-comment {
-  color: var(--muted);
-}
-.tk-cmd {
-  color: var(--white);
-  font-weight: 600;
-}
-.tk-flag {
-  color: #7aa2ff;
-}
-.tk-str {
-  color: #9ece6a;
-}
-.tk-op {
-  color: #e0af68;
-}
 .pipeline-codes,
 .small-facts {
   display: grid;

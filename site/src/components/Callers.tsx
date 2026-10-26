@@ -1,3 +1,4 @@
+import { CI_DOCS, RECIPES_DOCS } from '../links';
 import { Recipes } from './Recipes';
 import './Sections.css';
 
@@ -5,8 +6,8 @@ const CALLERS: [string, string, string][] = [
   ['You', 'llx', 'A minimal agent at your terminal, with seven tools: read, edit, bash, window, ask, agents, jobs.'],
   [
     'Your scripts and CI',
-    'llx decide · llx exec',
-    'A choice in under a second, or one task read-only with JSON in your shape. Exit codes a pipeline branches on.',
+    'rsaryev/llx · llx decide · llx exec',
+    'A GitHub Action, a choice in under a second, or one task with JSON in your shape. Exit codes a pipeline branches on.',
   ],
   [
     'Your other agents',
@@ -38,18 +39,20 @@ const CODES: [string, string][] = [
   ['1', 'not achieved, or not the --expect option'],
   ['2', 'out of turns or time'],
   ['3', 'not ready: no key, a bad argument'],
+  ['130', 'interrupted'],
 ];
 
-/** llx as a step of a pipeline: a read-only decision with a schema, and the exit codes. */
+/** llx as a step of a pipeline: the action, a decision with a schema, and the exit codes. */
 export function Pipeline() {
   return (
     <section id="ci" className="pipeline wrap" aria-labelledby="ci-title">
       <h2 id="ci-title">A step in any pipeline.</h2>
       <p className="section-lede">
-        <code>llx decide</code> asks a decision model one question about stdin and prints the option it picked, in
-        under a second for a fraction of a cent. When the step must read the code, <code>llx exec</code> runs the
-        agent read-only and answers in the JSON shape you give it. No review bot to install: <code>gh</code>,{' '}
-        <code>glab</code> and <code>git</code> read the input and post the answer.
+        In CI llx is the agent you use at your terminal, working through the shell: <code>gh</code>,{' '}
+        <code>git</code>, <code>jq</code> and your project&apos;s own tools. No MCP server, no GitHub tool, no built-in
+        prompt: your workflow owns the prompt and the posting. The job that runs the model holds a read-only token and
+        answers in the JSON shape you give it; a second job posts it, so the write token is never near the model.{' '}
+        <code>llx decide</code> is the quick version: one question about stdin, one option back, in under a second.
       </p>
       <Recipes />
       <dl className="pipeline-codes">
@@ -61,7 +64,8 @@ export function Pipeline() {
         ))}
       </dl>
       <p className="section-more">
-        <a href="https://github.com/rsaryev/llx/blob/main/docs/recipes.md">Every recipe, with GitHub Actions and GitLab CI →</a>
+        <a href={CI_DOCS}>The action, rules, security and GitLab →</a> ·{' '}
+        <a href={RECIPES_DOCS}>Shell recipes with gh and glab →</a>
       </p>
     </section>
   );
@@ -88,8 +92,8 @@ export function Small() {
         ))}
       </dl>
       <p className="section-lede">
-        Reading never asks; every command, file change and page action does, by mode: default, plan, bypass or
-        autonomous. A ChatGPT sign-in, OpenRouter, or a key for any provider of the models.dev catalog.
+        Reading never asks; every command, file change and page action does, by mode: default, plan, bypass or one
+        of your own. A ChatGPT sign-in, OpenRouter, or a key for any provider of the models.dev catalog.
       </p>
     </section>
   );

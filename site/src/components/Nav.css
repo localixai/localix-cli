@@ -8,8 +8,22 @@
   font: 800 1.5rem/1 var(--display);
   letter-spacing: -0.05em;
 }
-.gh {
+.nav-links {
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+.nav-link {
+  color: var(--soft);
+  font: 500 0.875rem/1 var(--text);
+  transition: color 160ms ease;
+}
+.nav-link:hover,
+.nav-link[aria-current] {
+  color: var(--white);
+}
+.gh {
   display: inline-grid;
   place-items: center;
   width: 2.25rem;

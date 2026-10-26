@@ -28,7 +28,7 @@ A file's lines, numbered, up to 2000 lines and about 20 KB at a time (`offset`, 
 - `sh -c` in the workspace or a `workdir`, with stdin closed. On Unix it runs in its own session, with no terminal, so a program that prompts fails at once; git and pagers are told not to prompt or page.
 - A timeout (120 s by default, at most 600 s) or Ctrl-C kills it with everything it started.
 - Each stream keeps its first and last 5,000 bytes. A non-zero exit is a normal result. It asks the gate.
-- The key variables of the provider in use (as the catalog names them, such as `DEEPSEEK_API_KEY`) and `OPENROUTER_API_KEY` are left out of a command's environment; other providers' variables stay, so a project's own tests can use them; a provider chosen later with `/login` has its variables left out too, from the next command on. That is no barrier, since a command can still read llx's own environment (`ps -E`, `/proc/$PPID/environ`) and the saved key file.
+- The key variables of the provider in use (as the catalog names them, such as `DEEPSEEK_API_KEY`) and `OPENROUTER_API_KEY` are left out of a command's environment; other providers' variables stay, so a project's own tests can use them; a provider chosen later with `/login` has its variables left out too, from the next command on. That is no barrier, since a command can still read llx's own environment (`ps -E` on macOS; on Linux llx marks itself non-dumpable, so only root can read `/proc/<llx pid>/environ`, and a hosted CI runner gives passwordless `sudo`) and the saved key file. Where `bash` runs on input from strangers, see [CI security](ci.md#security).
 - A program that must ask (a REPL, an installer, another agent's interface) runs in a terminal tab of `window`.
 
 ## window
@@ -47,7 +47,7 @@ A goal, an address, keys, a script, starting a program and typing into it are ap
 
 ### Browser tabs
 
-A native WebView.
+A native WebView. The headless Linux build (the installer takes it where WebKitGTK is missing) has no browser: `window` has terminal tabs only, and `llx doctor` says so.
 
 - The agent opens an http(s) address (one with no scheme opens over http on this machine, `localhost`, `127.*`, `0.0.0.0` or `[::1]`, and over https elsewhere), or hands a short task with the exact values to type to the decision model, which clicks, types, selects and scrolls one step at a time.
 - It can also press keys, run a script in the page, read the whole text, change the page size, take a screenshot, or close the window (the next call opens a fresh one).

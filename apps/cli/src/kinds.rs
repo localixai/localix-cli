@@ -2,10 +2,12 @@
 //! a browser tab over the browser (`BrowserTool`, its page and its tabs), a terminal tab over a
 //! terminal session (`bash`'s sessions). The window tool knows neither, and neither knows it.
 
+mod missing;
 #[cfg(unix)]
 mod terminal;
 mod tool;
 
+pub(crate) use missing::Missing;
 #[cfg(unix)]
 pub(crate) use terminal::Terminal;
 pub(crate) use tool::{Parts, window};

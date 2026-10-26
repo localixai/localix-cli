@@ -1,5 +1,5 @@
 import { Film } from '../demo/Film';
-import { GITHUB, INSTALL } from '../links';
+import { DOCS, INSTALL } from '../links';
 import { InstallCommand } from './InstallCommand';
 import './Hero.css';
 
@@ -17,7 +17,7 @@ export function Hero() {
         <InstallCommand tabs={INSTALL} />
         <p className="under">
           macOS · Linux · starts in 5&nbsp;ms · <a href="#ci">In CI</a> ·{' '}
-          <a href={`${GITHUB}/blob/main/docs/usage.md`}>Read the docs</a>
+          <a href={DOCS}>Read the docs</a>
         </p>
       </div>
       <div id="demo" className="hero-demo">

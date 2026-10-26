@@ -54,9 +54,9 @@ pub(crate) fn resumed(fresh: &str, session: &Session, root: &Path) -> String {
 /// The shell is not said here: the `bash` tool's own description names it.
 fn describe(environment: &Environment) -> String {
     let browser = if environment.browser {
-        "available (a window opens on its first use)"
+        "available (a window opens on its first use)".to_string()
     } else {
-        "not available here (no display)"
+        format!("not available here ({})", tools::browser::NO_WINDOW)
     };
     format!(
         "<environment>\nWorking directory: {} (the workspace root: files change only inside it)\n\

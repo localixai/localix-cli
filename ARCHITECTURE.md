@@ -84,9 +84,9 @@ every new file already goes where its target crate will be.
 
 ## Core rules (the agent and the hands)
 
-- **C1**: the core decides, the shell acts. Effects leave the core through a port (`Chat`,
-  `Tool`, `Gate`, `Person`, `View`, `Inbox`, `History`); the core opens no file, socket or
-  process and reads no environment variable.
+- **C1** _checked_ on the sources: the core decides, the shell acts. Effects leave the core
+  through a port (`Chat`, `Tool`, `Gate`, `Person`, `View`, `Inbox`, `History`); the core opens
+  no file, socket or process and reads no environment variable.
 - **C2**: time and limits come in as values (a budget, a deadline, a strategy); a test sets them.
 - **C3**: strategies, not special cases. What may be done another way is a trait with an
   implementation the app chooses: `history::Strategy` and its `Stage`s, the inbox, the gate, the
@@ -136,6 +136,11 @@ every new file already goes where its target crate will be.
 - **A6**: a data file (JSON, TOML) lives in the package that owns its meaning.
 - **A7**: a heavy dependency stays in the one adapter that needs it (wry and tao in `tools`'s
   browser, TLS in the kit); std first, and the release binary under 5 MiB.
+- **A8**: the browser engine is a cargo feature, `browser`, on by default in `tools` and `llx`.
+  Without it, `tools::browser` keeps its names with nothing behind them (a handle that cannot be
+  made, `has_display` false), so the app compiles the same code with no `cfg` of its own and
+  links no engine: the headless build, for CI and servers, where `window` has terminal tabs only.
+  The Linux release ships both builds; an installer takes the headless one where no WebKitGTK is.
 
 ## Composition rules (the apps)
 
@@ -210,8 +215,8 @@ every new file already goes where its target crate will be.
 - **R7**: a check and the act that depends on it are one critical section or one atomic
   operation; two locks are always taken in one order, and a mutex is never locked twice on a
   thread.
-- **R8**: every thread is named and started with `thread::Builder` (its failure an error, not a
-  panic: _checked_), and is joined, or owned by what stops it.
+- **R8**: every thread is named (_checked_) and started with `thread::Builder` (its failure an
+  error, not a panic: _checked_), and is joined, or owned by what stops it.
 - **R9**: wait on events, not on time: a `Condvar`, `recv_timeout`, a deadline. A `sleep` is a
   backoff, and says so where it is (_checked_).
 - **R10** _checked_: a child process always has a deadline and a way to be stopped. (Debt: the
@@ -240,11 +245,13 @@ every new file already goes where its target crate will be.
     implicit `Arc` clone.
 
   Tests may unwrap, panic and print (`clippy.toml`); an integration-test crate says so once, at
-  its root.
+  its root. The `allow`s in working code are counted, and the count only falls: a new one raises
+  it in `code.rs` in the same commit, where a review sees it (_checked_).
 - **S5** _checked_: `unsafe` lives only where the OS is called: `tools` and the apps. The
   vocabulary, the core, the stores and the providers have none.
-- **S6**: one idea per file, named for it; a file's `//!` says what it is. A directory module
-  (`shell/`, `browser/`) groups the files of one tool or one subsystem.
+- **S6**: one idea per file, named for it; a file's `//!` says what it is (_checked_: every
+  working file opens with one). A directory module (`shell/`, `browser/`) groups the files of
+  one tool or one subsystem.
 - **S7**: comments say why; rustfmt defaults; English only (_checked_).
 - **S8**: TDD: a bug's test fails first at the layer a person meets it; a feature's tests are
   written from what a person does and sees. A test that cannot fail is deleted.
@@ -267,6 +274,13 @@ every new file already goes where its target crate will be.
   in is a tab of one window, each kind a `tools::window::Kind` the app gives; a `goal` belongs to
   every tab.
 - **Something that reaches a run:** a kind in `arrivals.rs` and a post to the lane's queue (K4).
+- **A CI integration:** the GitHub Action is `action.yml` at the repository's root, composite
+  shell steps only (no Node, no MCP server, no GitHub tool): it installs the release its own tag
+  names, runs `llx exec` once, and hands back the answer, the exit code and the spend. The
+  prompt, the rules and what is posted stay in the person's workflow, where they can read them
+  (C7, K5); the agent reaches GitHub, as anything else, with `gh` and `git` through `bash`. It
+  reads the exit codes and `--json` events (K6), so a schema bump updates it in the same commit.
+  Ready-made workflows live in `examples/`, each run for real before it is published.
 - **A history stage:** a `Stage` in `agent/src/history.rs`, placed by its value in
   `Pipeline::default`, with a test, the long-dialogue simulation still passing.
 - **A protocol method:** its `*Params`/`*Response` in `protocol`, served in the server, called
@@ -288,6 +302,7 @@ every new file already goes where its target crate will be.
 ## Budgets
 
 - 50,000 lines of working code (S2), 300 per file (S1).
-- The release binary under 5 MiB (CI; raised from 3 MiB by the owner for the daemon and a release
-  that unwinds a panic, W8); a bundled data file counts.
+- The release binary under 5 MiB (CI: `scripts/check --only size`, which warns past 4 MB; raised
+  from 3 MiB by the owner for the daemon and a release that unwinds a panic, W8); a bundled data
+  file counts.
 - Line coverage at least 85% (`scripts/coverage.sh`), raised with coverage, never lowered.

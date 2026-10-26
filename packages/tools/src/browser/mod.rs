@@ -19,6 +19,7 @@ mod script;
 mod strip;
 mod tab_view;
 mod tabs;
+mod told;
 mod tool;
 mod toolbar;
 mod viewport;
@@ -40,6 +41,12 @@ pub use tabs::MAX_TABS;
 pub use tool::BrowserTool;
 pub use viewport::Viewport;
 pub use webview::WebviewDriver;
+
+/// Why there is no window where `has_display` is false, as the person and the model read it.
+pub const NO_WINDOW: &str = "no display";
+
+/// What would give it one.
+pub const NO_WINDOW_HINT: &str = " (run under xvfb-run for it)";
 
 /// Whether a window can be shown here: on Linux, WebKitGTK needs an X or Wayland server.
 pub fn has_display() -> bool {

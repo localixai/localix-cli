@@ -35,16 +35,16 @@ fn a_new_size_or_scale_lays_the_pages_out_again() {
 
 #[test]
 fn glass_is_for_a_shown_window_on_macos() {
-    assert_eq!(look(true, true), Look::Hidden);
-    assert_eq!(look(true, false), Look::Hidden);
+    assert_eq!(look(true, Transparency::Allowed), Look::Hidden);
+    assert_eq!(look(true, Transparency::Reduced), Look::Hidden);
     let shown = if cfg!(target_os = "macos") {
         Look::Glass
     } else {
         Look::Opaque
     };
-    assert_eq!(look(false, true), shown);
+    assert_eq!(look(false, Transparency::Allowed), shown);
     // Reduced transparency: an ordinary window.
-    assert_eq!(look(false, false), Look::Opaque);
+    assert_eq!(look(false, Transparency::Reduced), Look::Opaque);
 }
 
 #[test]

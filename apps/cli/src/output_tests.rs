@@ -178,7 +178,8 @@ fn a_task_keeps_what_it_did_each_call_and_turn_with_its_time() {
 #[test]
 fn on_a_github_runner_the_trace_cannot_issue_workflow_commands() {
     // A file or a model's answer can hold `::add-mask::` or `##[add-matcher]`: the runner reads
-    // such a line on either stream as a command (openai/codex-action#187).
+    // such a line on either stream as a command (openai/codex-action#187). The trace on stderr
+    // is what is guarded here; stdout is pinned below to stay as it is.
     let err = Captured::default();
     let mut output = Output::with(
         false,
@@ -202,4 +203,19 @@ fn on_a_github_runner_the_trace_cannot_issue_workflow_commands() {
         text,
         "what the person reads stays"
     );
+}
+
+#[test]
+fn on_a_github_runner_the_answer_on_stdout_stays_byte_exact() {
+    // Stdout is the answer and the data, which a pipe reads as they are: only the trace is guarded.
+    let (out, err) = (Captured::default(), Captured::default());
+    let mut output = Output::with(false, false, Box::new(out.clone()), Box::new(err));
+    output.runner = Runner::GitHub;
+    let (agent, decision) = (AgentSpend::default(), Spend::default());
+    let answer = "::set-output name=x::1\n##[add-matcher]m.json";
+    output.completed(&Summary {
+        answer,
+        ..summary(&agent, &decision)
+    });
+    assert_eq!(out.text(), format!("{answer}\n"));
 }

@@ -75,7 +75,10 @@ impl Conversation {
             .iter()
             .flat_map(|message| match message {
                 Message::Assistant { calls, .. } => calls.iter().map(|call| call.id.clone()).collect(),
-                _ => vec![],
+                Message::System(_)
+                | Message::User(_)
+                | Message::ToolResult { .. }
+                | Message::Image { .. } => vec![],
             })
             .filter(|id| {
                 !self.messages.iter().any(

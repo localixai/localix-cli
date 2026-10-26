@@ -48,14 +48,21 @@ pub(crate) fn together(
     // One send per call: room for all, so no call waits on the reader.
     let (done, ended) = mpsc::sync_channel(calls.len());
     std::thread::scope(|scope| {
+        let mut unstarted = vec![];
         for (at, call) in calls.iter().enumerate() {
             let done = done.clone();
-            scope.spawn(move || {
+            let thread = std::thread::Builder::new().name("llx-call".into());
+            let started = thread.spawn_scoped(scope, move || {
                 let _ = done.send((at, invoke(tools, specs, call)));
             });
+            // The OS refused a thread: the call fails, and the model may try it again.
+            if let Err(why) = started {
+                let why = format!("the call could not start (no thread: {why})");
+                unstarted.push((at, Err(ToolError::Failed(why))));
+            }
         }
         drop(done);
-        for (at, outcome) in ended {
+        for (at, outcome) in ended.into_iter().chain(unstarted) {
             observer.result(&calls[at], &outcome);
             outcomes[at] = Some(outcome);
         }

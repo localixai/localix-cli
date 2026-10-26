@@ -188,3 +188,26 @@ fn a_tool_client_opens_no_session() {
     client.call(3, refused);
     assert!(matches!(client.done(3), Done::Failed { .. }));
 }
+
+/// A daemon with no window to give (no display, or the headless build, ARCHITECTURE.md A8): a page
+/// cannot open, and the client reads why; its terminal tabs go on working.
+#[test]
+fn where_there_is_no_window_a_page_fails_with_the_reason_and_a_terminal_still_opens() {
+    let scratch = Scratch::new();
+    let client = connected(&scratch);
+    let page = json!({"action": "open", "kind": "browser", "url": "https://example.com"});
+    client.window(2, "c1", page);
+    let refused = told(client.done(2));
+    assert!(
+        refused.contains("not opened") && refused.contains(tools::browser::NO_WINDOW),
+        "{refused}"
+    );
+    let terminal = json!({"action": "open", "kind": "terminal", "command": "echo still here; cat"});
+    client.window(3, "c2", terminal);
+    let opened = told(client.done(3));
+    assert!(
+        opened.contains("t1") && opened.contains("still here"),
+        "{opened}"
+    );
+    client.end();
+}

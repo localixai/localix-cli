@@ -16,8 +16,7 @@ use super::platform::keep_tab_rendering;
 use super::strip::Key;
 use super::tab_view::{SHARED, build, builder, share};
 
-/// Tabs open at once: each is a WebView with its own web process.
-pub const MAX_TABS: usize = 8;
+pub use super::told::MAX_TABS;
 pub(super) const BLANK: &str = "about:blank";
 
 /// One WebView: a tab while `open`, else blank and waiting to be reused. Its id is its place + 1.

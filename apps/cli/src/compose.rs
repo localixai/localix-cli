@@ -69,14 +69,16 @@ pub(crate) fn assemble(
         inner: models.decider,
         interrupt,
     };
+    let traced = crate::hands::Traced::new(&braked);
     let decider = MeteredDecider {
-        inner: &braked,
+        inner: &traced,
         meter: &meter,
     };
     let on_step = |step: &GoalStep| output.step(step);
     let hands = DecisionLoop {
         decider: &decider,
         on_step: &on_step,
+        pause: &crate::hands::pause,
         max_actions: shared.options.max_steps,
     };
     let mode = ModeCell::new(seat.mode.clone());

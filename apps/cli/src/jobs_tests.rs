@@ -28,6 +28,9 @@ fn in_exec_a_task_waits_for_its_monitor_and_reads_each_batch() {
         says("Watching."),
         says("Still watching."),
         says("It said hello and world."),
+        // The end is an arrival of its own: it comes with "world" or, on a busy machine, a turn
+        // after it.
+        says("It ended."),
     ];
     composed(crate::modes::built("bypass"), false, replies, |rig| {
         rig.task("watch it");
@@ -207,7 +210,10 @@ fn a_schedule_stopped_from_its_row_leaves_the_list() {
             _known: None,
         });
         std::thread::scope(|scope| {
-            scope.spawn(|| jobs.tick(kit));
+            std::thread::Builder::new()
+                .name("scheduler".into())
+                .spawn_scoped(scope, || jobs.tick(kit))
+                .unwrap();
             #[allow(
                 clippy::disallowed_methods,
                 reason = "the scheduler's clock passes: its tick is what is tested"
@@ -260,7 +266,10 @@ fn closing_the_session_ends_its_scheduler_at_once() {
     in_session(|jobs, kit, _| {
         let closed = std::thread::scope(|scope| {
             let _closing = Closing(jobs);
-            scope.spawn(|| jobs.tick(kit));
+            std::thread::Builder::new()
+                .name("scheduler".into())
+                .spawn_scoped(scope, || jobs.tick(kit))
+                .unwrap();
             pause(100);
             Instant::now()
         });
@@ -276,7 +285,10 @@ fn a_schedule_stopped_by_its_key_leaves_the_list_at_once() {
         schedule(&owner, "bye", Arc::new(AtomicBool::new(false)));
         std::thread::scope(|scope| {
             let _closing = Closing(&owner);
-            scope.spawn(|| owner.tick(kit));
+            std::thread::Builder::new()
+                .name("scheduler".into())
+                .spawn_scoped(scope, || owner.tick(kit))
+                .unwrap();
             pause(100);
             let at = Instant::now();
             crate::interrupt::stop(&crate::interrupt::job_key("jobs-key-lane", "job-1"));

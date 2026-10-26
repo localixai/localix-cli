@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 mod architecture;
 mod budget;
 mod code;
+mod core;
 
 /// The workspace's root.
 fn root() -> PathBuf {

@@ -113,7 +113,12 @@ pub(super) fn drive(
         agents.adopt(&session.id);
         let jobs_tool = JobsTool::new(lane.jobs_kit, lane.jobs, scope);
         if shared.asks {
-            scope.spawn(|| lane.jobs.tick(lane.jobs_kit));
+            let thread = std::thread::Builder::new().name("llx-scheduler".into());
+            if let Err(why) = thread.spawn_scoped(scope, || lane.jobs.tick(lane.jobs_kit)) {
+                let said =
+                    format!("llx: schedules will not run in this session (no thread: {why})");
+                base.output.note(&said);
+            }
         }
         lane.tools.with(|own| {
             let mut tools: Vec<&dyn Tool> = own.to_vec();

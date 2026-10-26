@@ -8,6 +8,15 @@ use contracts::hands::{Hands, Outcome, Task};
 use contracts::model::{Answer, DecideError, Decision, Question};
 use contracts::view::{Action, Element, Observation, View, ViewResult};
 
+/// The app's pause, as the binary gives it: a test's view has no change event either.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a poll, as the app's: a view has no change event"
+)]
+fn pause(time: Duration) {
+    std::thread::sleep(time);
+}
+
 /// A quiz of `questions` views behind a Next button; with `stuck`, Next does nothing.
 struct Quiz {
     question: Mutex<usize>,
@@ -96,6 +105,7 @@ fn run(stuck: bool) -> GoalOutcome {
     DecisionLoop {
         decider: &Taker,
         on_step: &|_| {},
+        pause: &pause,
         max_actions: 100,
     }
     .run(&quiz, "Answer all 25 questions", &[])
@@ -133,6 +143,7 @@ fn the_hands_report_each_step_and_how_the_task_ended() {
     let hands = DecisionLoop {
         decider: &Taker,
         on_step: &|_| {},
+        pause: &pause,
         max_actions: 10,
     };
     let report = hands.carry_out(
@@ -187,6 +198,7 @@ fn going_round_in_circles_ends_the_task_however_much_the_view_changes() {
     let hands = DecisionLoop {
         decider: &Taker,
         on_step: &|_| {},
+        pause: &pause,
         max_actions: 40,
     };
     let outcome = hands.run(&toggle, "Close the dialog", &[]);

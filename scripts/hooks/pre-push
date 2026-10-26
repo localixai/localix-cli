@@ -1,0 +1,42 @@
+#!/bin/sh
+# Git's pre-push hook (scripts/setup installs it): `scripts/check`, the checks the branch's change
+# needs (its crates and their dependents, tested in both builds), or `scripts/check --all` when
+# main is pushed, as CI then runs everything. `git push --no-verify` skips it.
+#
+# The checks read the working tree, so it must be what is pushed: a ref whose commit is not the
+# one checked out is not checked here (CI checks it), and uncommitted changes to tracked files
+# are refused. Git gives the refs on stdin: `<local ref> <local sha> <remote ref> <remote sha>`.
+set -eu
+
+root=$(git rev-parse --show-toplevel)
+head=$(git rev-parse HEAD)
+mode=
+while read -r local_ref local_sha remote_ref remote_sha; do
+  : "$remote_sha"
+  case $local_sha in
+    *[!0]*) ;;
+    *) continue ;; # a deletion pushes nothing
+  esac
+  if [ "$local_sha" != "$head" ]; then
+    echo "pre-push: $local_ref is not the commit checked out; not checked here" >&2
+    continue
+  fi
+  case $remote_ref in
+    refs/heads/main) mode=all ;;
+    *) [ -n "$mode" ] || mode=changed ;;
+  esac
+done
+[ -n "$mode" ] || exit 0
+
+dirty=$(git status --porcelain --untracked-files=no)
+if [ -n "$dirty" ]; then
+  echo "pre-push: the checks read the working tree, and it differs from what is pushed;" >&2
+  echo "commit or stash these first (or push with --no-verify):" >&2
+  printf '%s\n' "$dirty" >&2
+  exit 1
+fi
+
+if [ "$mode" = all ]; then
+  exec "$root/scripts/check" --all
+fi
+exec "$root/scripts/check"

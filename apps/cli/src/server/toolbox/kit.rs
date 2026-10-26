@@ -162,10 +162,12 @@ impl Kit {
             inner: &self.decider,
             interrupt,
         };
+        let decider = crate::hands::Traced::new(&decider);
         let on_step = |_: &GoalStep| {};
         let hands = DecisionLoop {
             decider: &decider,
             on_step: &on_step,
+            pause: &crate::hands::pause,
             max_actions: MAX_STEPS,
         };
         let parts = kinds::Parts {

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use crate::ask::{AskInput, GoalStep, Operation, Pick, ask};
 pub use crate::step::Stop;
-use crate::step::{action_of, actions_of, changed, cycling, fingerprint, pause};
+use crate::step::{action_of, actions_of, changed, cycling, fingerprint};
 use contracts::model::{DecideError, Decider};
 use contracts::view::{Observation, View, ViewError};
 
@@ -52,6 +52,9 @@ pub struct GoalRun<'a> {
     pub decider: &'a dyn Decider,
     /// Each executed step as it happens (the live trace).
     pub on_step: &'a (dyn Fn(&GoalStep) + Sync),
+    /// Waits before the view is looked at again: a view has no change event, and the wait is
+    /// the caller's, as time is (ARCHITECTURE.md C1, C2).
+    pub pause: &'a (dyn Fn(Duration) + Sync),
     /// Actions this run may take (not counting the steps it resumes from).
     pub max_actions: usize,
 }
@@ -63,7 +66,7 @@ impl GoalRun<'_> {
         let most = most.unwrap_or(if view.busy { WAIT_BUSY } else { WAIT_IDLE });
         let deadline = std::time::Instant::now() + most;
         loop {
-            pause(WAIT_POLL);
+            (self.pause)(WAIT_POLL);
             let now = self.view.observe().ok();
             let done = now.as_ref().is_some_and(|now| changed(view, now));
             if done || std::time::Instant::now() >= deadline {
@@ -79,7 +82,7 @@ impl GoalRun<'_> {
         let deadline = std::time::Instant::now() + SETTLE_MAX;
         let mut previous = last.map(Ok).unwrap_or_else(|| self.view.observe()).ok()?;
         loop {
-            pause(WAIT_POLL);
+            (self.pause)(WAIT_POLL);
             let Ok(now) = self.view.observe() else {
                 return Some(previous);
             };
@@ -176,7 +179,6 @@ impl GoalRun<'_> {
             values,
             history: &walk.outcome.steps,
         });
-        debug("decision state", &request.state);
         walk.outcome.decisions += 1;
         let decision = self
             .decider
@@ -185,7 +187,6 @@ impl GoalRun<'_> {
                 DecideError::Unavailable(message) => Stop::Unreachable(message),
                 DecideError::Invalid(message) => Stop::NoDecision(message),
             })?;
-        debug("decision answers", &format_args!("{:?}", decision.answers));
         walk.outcome.cost += decision.cost;
         walk.outcome.decision_millis += decision.millis;
         request.read(&decision.answers).map_err(Stop::NoDecision)
@@ -333,17 +334,6 @@ impl Walk {
 enum Flow {
     Next,
     End,
-}
-
-/// `DECISION_LOOP_DEBUG=1` prints each decision's state and answers (AGENTS.md).
-#[allow(
-    clippy::print_stderr,
-    reason = "a developer's trace, asked for by the environment, beside the interface"
-)]
-fn debug(what: &str, value: &dyn std::fmt::Display) {
-    if std::env::var_os("DECISION_LOOP_DEBUG").is_some() {
-        eprintln!("{what}: {value}");
-    }
 }
 
 #[cfg(test)]

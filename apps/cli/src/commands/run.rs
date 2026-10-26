@@ -247,7 +247,9 @@ pub(crate) fn run(
     if !browser {
         return Ok(work(None));
     }
-    tools::browser::host(interrupt::window_closed, move |b| work(Some(b)))
+    Ok(tools::browser::host(interrupt::window_closed, move |b| {
+        work(Some(b))
+    }))
 }
 
 /// Said when the daemon cannot serve this session.

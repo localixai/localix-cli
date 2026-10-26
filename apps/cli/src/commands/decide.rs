@@ -2,7 +2,7 @@
 //! stdout, so a script or a pipeline can branch on it without a chat model or a loop.
 
 use std::collections::BTreeMap;
-use std::io::{IsTerminal, Read};
+use std::io::IsTerminal;
 
 use contracts::model::{Answer, DecideError, Question};
 use serde_json::{Map, Value, json};
@@ -10,6 +10,7 @@ use serde_json::{Map, Value, json};
 use crate::cli::DecideArgs;
 use crate::error::{self, Failure};
 use crate::exit;
+use crate::input;
 use crate::providers;
 
 /// Ask, print the choice (or the whole answer with `--json`), and exit 1 when `--expect` differs.
@@ -89,15 +90,10 @@ fn choices(given: &[String]) -> Result<Map<String, Value>, Failure> {
     Ok(criteria)
 }
 
-/// What comes on stdin, or nothing when it is a terminal.
+/// What comes on stdin, up to the limit `exec` reads, or nothing when it is a terminal.
 fn stdin() -> Result<String, Failure> {
-    let mut text = String::new();
-    let input = std::io::stdin();
-    if !input.is_terminal() {
-        input
-            .lock()
-            .read_to_string(&mut text)
-            .map_err(|error| Failure::Environment(format!("could not read stdin: {error}")))?;
+    if std::io::stdin().is_terminal() {
+        return Ok(String::new());
     }
-    Ok(text)
+    input::read_stdin()
 }

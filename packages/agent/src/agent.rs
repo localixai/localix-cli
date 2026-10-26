@@ -84,13 +84,21 @@ pub struct Run {
 struct Tally {
     /// Turns whose calls all failed, in a row.
     failures: usize,
-    /// Whether a call of this turn failed, and whether one succeeded.
-    failed: bool,
-    succeeded: bool,
+    /// How this turn's calls went.
+    turn: Went,
     /// `result` calls sent back to be fixed.
     fixes: usize,
     /// Whether the model was told to answer now: it is told once.
     reminded: bool,
+}
+
+/// How a turn's calls went: one that succeeded outweighs any that failed.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Went {
+    #[default]
+    Nothing,
+    Failed,
+    Succeeded,
 }
 
 impl Agent<'_> {

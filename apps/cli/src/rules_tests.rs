@@ -206,6 +206,35 @@ fn an_ordinary_git_command_is_still_allowed() {
 }
 
 #[test]
+fn a_shell_told_to_run_a_command_or_find_told_to_write_is_never_allowed() {
+    for (rule, command) in [
+        ("bash(bash *)", "bash -lc 'rm -rf x'"),
+        ("bash(bash *)", "bash -c 'rm -rf x'"),
+        ("bash(sh *)", "sh -ec 'rm -rf x'"),
+        ("bash(zsh *)", "zsh -ic 'rm -rf x'"),
+        ("bash(ksh *)", "ksh -c 'rm -rf x'"),
+        ("bash(/bin/sh *)", "/bin/sh -c 'rm -rf x'"),
+        ("bash(/usr/bin/tee *)", "/usr/bin/tee out.txt"),
+        ("bash(find *)", "find . -fprint0 out.txt"),
+        ("bash(/usr/bin/find *)", "/usr/bin/find . -delete"),
+    ] {
+        assert_eq!(
+            rules(&[rule], &[]).judge("bash", command),
+            Ruling::Unsettled,
+            "{command}"
+        );
+    }
+    for (rule, command) in [
+        ("bash(bash *)", "bash script.sh"),
+        ("bash(bash *)", "bash -e script.sh"),
+        ("bash(bash *)", "bash --version"),
+        ("bash(find *)", "find . -name '*.rs' -print0"),
+    ] {
+        assert!(allowed(rule, command), "{command}");
+    }
+}
+
+#[test]
 fn wrappers_are_looked_through_but_an_assignment_stops_an_allow() {
     assert!(allowed("bash(npm test *)", "timeout 30 npm test"));
     assert!(allowed("bash(npm test *)", "nice -n 5 npm test"));

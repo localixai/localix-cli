@@ -95,7 +95,7 @@ impl Deck {
         headless: bool,
         proxy: &EventLoopProxy<Cmd>,
     ) -> Result<Self, String> {
-        let look = frame::look(headless, frame::glass_allowed());
+        let look = frame::look(headless, frame::transparency());
         let top = if headless { 0.0 } else { HEIGHT };
         // A shown window fits the person's screen; a hidden one keeps the page's own size.
         let screen = (target.primary_monitor()).map(|monitor| {

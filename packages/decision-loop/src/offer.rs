@@ -33,7 +33,7 @@ pub fn in_scope(elements: &[Element]) -> Vec<&Element> {
 /// The operations available in this view, now.
 pub(crate) fn operations_now(
     elements: &[&Element],
-    typable: bool,
+    typing: &[(String, String, String)],
     history: &[GoalStep],
     busy: bool,
 ) -> Vec<Operation> {
@@ -42,7 +42,7 @@ pub(crate) fn operations_now(
         .into_iter()
         .filter(|operation| match operation {
             Operation::Click => elements.iter().any(|e| clickable(e)),
-            Operation::TypeText => typable,
+            Operation::TypeText => !typing.is_empty(),
             Operation::Select => elements.iter().any(|e| dropdown(e)),
             Operation::PressEnter => last.is_some_and(|step| step.operation == Operation::TypeText),
             // Waiting helps while the view says it is working, or right after an action that has
@@ -63,7 +63,7 @@ pub(crate) fn operations_now(
                     recent.len() == 3 && recent.iter().all(|step| step.operation.scroll());
                 !(repeated || scrolling)
             }
-            _ => true,
+            Operation::Done | Operation::Blocked => true,
         })
         .collect()
 }

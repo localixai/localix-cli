@@ -40,22 +40,31 @@ pub(super) enum Look {
     Hidden,
 }
 
-/// How a window looks: hidden when headless, else glass where there is a material for it and
-/// the person has not reduced transparency (`glass`).
-pub(super) fn look(headless: bool, glass: bool) -> Look {
-    match (headless, glass && cfg!(target_os = "macos")) {
+/// Whether a window may be clear: the system has a material for it and the person has not
+/// asked for less transparency.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Transparency {
+    Allowed,
+    Reduced,
+}
+
+/// How a window looks: hidden when headless, else glass where `transparency` allows it.
+pub(super) fn look(headless: bool, transparency: Transparency) -> Look {
+    let glass = transparency == Transparency::Allowed && cfg!(target_os = "macos");
+    match (headless, glass) {
         (true, _) => Look::Hidden,
         (false, true) => Look::Glass,
         (false, false) => Look::Opaque,
     }
 }
 
-/// Whether the person has not asked for less transparency.
-pub(super) fn glass_allowed() -> bool {
+/// Whether the person has not asked for less transparency, on a system with glass.
+pub(super) fn transparency() -> Transparency {
     #[cfg(target_os = "macos")]
-    return !native::reduced();
-    #[cfg(not(target_os = "macos"))]
-    false
+    if !native::reduced() {
+        return Transparency::Allowed;
+    }
+    Transparency::Reduced
 }
 
 /// A page's bounds: `size`, `x` points from the window's left edge and `top` from its top.

@@ -78,12 +78,7 @@ pub fn ask(input: &AskInput) -> Ask {
         false => uncovered,
     };
     let typing = entries(&elements, input.values);
-    let operations = operations_now(
-        &elements,
-        !typing.is_empty(),
-        input.history,
-        input.view.busy,
-    );
+    let operations = operations_now(&elements, &typing, input.history, input.view.busy);
     let mut heads = Heads::default();
     let goal = input.goal;
     let target_rules = with_conventions(TARGET, input.conventions);

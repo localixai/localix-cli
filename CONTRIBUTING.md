@@ -27,18 +27,30 @@ sudo apt-get install libwebkit2gtk-4.1-dev xvfb   # Debian, Ubuntu
 
 ## Checks
 
-Run these before you push; CI runs the same on macOS and Linux (Windows is not supported for now):
+One command runs the checks, the same ones CI runs (each CI step is `scripts/check --only NAME`):
 
 ```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace          # on a Linux server: xvfb-run -a cargo test --workspace
+scripts/setup          # once per clone: the git hooks below
+scripts/check          # what your change needs: chosen from the files changed since main
+scripts/check --fast   # the cheap part: format, lint of the crates changed, the repository's rules
+scripts/check --all    # everything CI runs, in its order (add --coverage before a release)
+scripts/check --list   # each check and the command it runs
 ```
 
-CI runs one job on Linux (format, lint, tests). Run these yourself before a release: the minimum
-Rust version (`cargo +1.88 check --workspace --all-targets --locked`), the line coverage
-(`scripts/coverage.sh`), and the binary's size, which stays under 5 MiB
-(`cargo build --release && ls -la target/release/llx`).
+It prints its plan first (which checks, and why), stops at the first failure with its output, and
+ends with one line. After `scripts/setup`, a commit runs `scripts/check --fast` on what it stages
+and a push runs `scripts/check` (everything when pushing main); `--no-verify` skips them. Agents
+in Claude Code run `scripts/check --fast` when they end a turn (`.claude/settings.json`).
+
+Under it are the usual commands, which you can still run alone: `cargo fmt --all --check`,
+`cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (on a Linux
+server with no display, `scripts/check` runs the tests under `xvfb-run`), the same two without
+default features (the headless build), the release binary's size (under 5 MiB, warned above
+4 MB), the site's build, the action's tests, and the linters: shellcheck, actionlint, the example
+workflows' conventions and the Markdown's relative links, at pinned versions it downloads once.
+Run these yourself before a release: the minimum Rust version
+(`cargo +1.88 check --workspace --all-targets --locked`) and the line coverage
+(`scripts/check --only coverage`, or `scripts/coverage.sh`).
 The code stays under 50,000 lines of working code and 300 per file (ARCHITECTURE.md S1, S2).
 
 For changes to the loop, the page probe or the instructions, run the live evals too

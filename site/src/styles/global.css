@@ -104,7 +104,7 @@ pre,
   font-feature-settings: 'calt' 0, 'liga' 0;
 }
 .wrap {
-  width: min(76rem, 100% - 2 * var(--gutter));
+  width: min(84rem, 100% - 2 * var(--gutter));
   margin-inline: auto;
 }
 

@@ -24,6 +24,10 @@ fn each_config_has_its_own_socket_in_the_persons_own_directory() {
 }
 
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a backoff while a child of another test holds the lock between fork and exec"
+)]
 fn a_second_daemon_is_refused_the_lock_until_the_first_lets_go() {
     let scratch = Scratch::new();
     let config = scratch.path().join("config");
@@ -34,7 +38,23 @@ fn a_second_daemon_is_refused_the_lock_until_the_first_lets_go() {
         "two daemons for one config"
     );
     drop(first);
-    assert!(lock(&config).unwrap().is_some());
+    // A command another test runs at the same time starts by fork, then exec (`pre_exec` rules out
+    // posix_spawn): between the two the child holds every descriptor of this process, the lock's
+    // among them, so the lock can stay taken for an instant after `first` lets go.
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let again = loop {
+        match lock(&config).unwrap() {
+            Some(held) => break Some(held),
+            None if std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            None => break None,
+        }
+    };
+    assert!(
+        again.is_some(),
+        "the lock stayed taken after its holder let go"
+    );
 }
 
 #[test]

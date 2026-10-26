@@ -96,6 +96,9 @@ fn spawn(config: &Path) -> Result<(), String> {
     };
     // SAFETY: between fork and exec the closure calls only setsid (above).
     unsafe { std::os::unix::process::CommandExt::pre_exec(&mut command, lead) };
+    // The daemon outlives this client: a descriptor of the client's it inherited (one its host
+    // gave it, one another thread was making) would stay open as long.
+    tools::shell::streams_only(&mut command);
     let mut child = command.spawn().map_err(why)?;
     let out = child.stdout.take().ok_or("the daemon has no stdout")?;
     let (said, line) = sync_channel(1);

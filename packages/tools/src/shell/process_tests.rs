@@ -222,3 +222,66 @@ fn much_output_on_both_streams_never_stalls() {
     assert!(finished.stdout.contains("characters cut"));
     assert!(finished.stderr.contains("characters cut"));
 }
+
+/// A descriptor this process has open without close-on-exec when a command starts never reaches
+/// it: the command gets its standard streams, and nothing else.
+#[cfg(unix)]
+#[test]
+fn a_command_inherits_only_its_standard_streams() {
+    let dir = Scratch::new();
+    let (_stray, probe) = crate::testing::stray();
+    let finished = run(&job(&probe, dir.path(), LONG)).unwrap();
+    assert_eq!(finished.stdout, "closed");
+}
+
+/// Commands started at once from several threads, as a turn's calls are, some leaving a process in
+/// the background with its own output closed. On macOS std makes a pipe, then marks it
+/// close-on-exec a moment later, so a command another thread forks in that moment gets it, and
+/// its background process keeps it: the output of the command whose pipe it was stays open (told
+/// as held by a background process it never started), and the pipe a start reads to learn whether
+/// exec succeeded keeps that start waiting until the background process ends. No command gets a
+/// descriptor it was not given.
+#[cfg(unix)]
+#[test]
+fn commands_started_at_once_never_hold_each_other_s_pipes() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    // A quarter of the threads leave a process behind each time: enough forks landing in another
+    // thread's moment to fail every run without the fix, and processes far below the system's
+    // limit (240, for 3 s).
+    const THREADS: usize = 24;
+    const EACH: usize = 40;
+    let dir = Scratch::new();
+    let (slow, held) = (AtomicUsize::new(0), AtomicUsize::new(0));
+    let start = |command: &str| {
+        for _ in 0..EACH {
+            let started = Instant::now();
+            let finished = run(&job(command, dir.path(), LONG)).unwrap();
+            assert_eq!(finished.ending, Ending::Exit(0));
+            // A start that waited on a background process waits as long as it lives.
+            if started.elapsed() > Duration::from_secs(2) {
+                slow.fetch_add(1, Ordering::Relaxed);
+            }
+            if finished.open {
+                held.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    };
+    let start = &start;
+    thread::scope(|scope| {
+        for each in 0..THREADS {
+            let command = match each % 4 {
+                0 => "sleep 3 </dev/null >/dev/null 2>&1 &",
+                _ => ":",
+            };
+            let named = thread::Builder::new().name("llx-test-start".into());
+            named.spawn_scoped(scope, move || start(command)).unwrap();
+        }
+    });
+    let (slow, held) = (slow.into_inner(), held.into_inner());
+    assert_eq!(
+        (slow, held),
+        (0, 0),
+        "of {} commands, {slow} took over 2 s to start and {held} had their output held open",
+        THREADS * EACH
+    );
+}

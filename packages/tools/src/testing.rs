@@ -47,6 +47,21 @@ impl Drop for Scratch {
     }
 }
 
+/// A descriptor of this process open without close-on-exec, as one is in the moment between its
+/// making and its marking (std makes a pipe on macOS, then marks it close-on-exec), at 200 or
+/// above, past the descriptors a test process starts with; closed when dropped. With the shell
+/// command that says whether it reached the command: `inherited`, else `closed`.
+#[cfg(unix)]
+pub(crate) fn stray() -> (std::os::fd::OwnedFd, String) {
+    use std::os::fd::FromRawFd;
+    // SAFETY: F_DUPFD makes a new descriptor for stderr, without close-on-exec.
+    let fd = unsafe { libc::fcntl(2, libc::F_DUPFD, 200) };
+    assert!(fd >= 200, "{}", std::io::Error::last_os_error());
+    let probe = format!("[ -e /dev/fd/{fd} ] && echo inherited || echo closed");
+    // SAFETY: fcntl just made it, and nothing else owns it.
+    (unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) }, probe)
+}
+
 /// A gate that records each effect as `tool: summary`, and denies with `deny` when it is set.
 #[derive(Default)]
 pub(crate) struct Recorder {

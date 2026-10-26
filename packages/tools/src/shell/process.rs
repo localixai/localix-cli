@@ -194,6 +194,7 @@ pub(super) fn shell(command: &str) -> Command {
     // SAFETY: setsid is async-signal-safe, and nothing else runs between fork and exec. The new
     // session's process group has the shell's pid, which `kill` signals.
     unsafe { shell.pre_exec(lead) };
+    super::inherit::streams_only(&mut shell);
     shell
 }
 

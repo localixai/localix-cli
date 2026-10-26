@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "reply": { "type": "string", "description": "The answer posted in the thread, in Markdown" },
+    "agrees": { "type": "boolean", "description": "Whether the comment it answers is right" }
+  },
+  "required": ["reply", "agrees"],
+  "additionalProperties": false
+}

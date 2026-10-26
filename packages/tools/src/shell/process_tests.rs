@@ -150,6 +150,40 @@ fn a_stop_kills_the_command_and_what_it_started() {
     assert!(!alive(), "the background sleep outlived the stop");
 }
 
+/// A command's end is noticed when its output closes, not at the next look of a poll: let end
+/// right after the runner looked at it (as a poll would then sleep its longest), it is told at
+/// once.
+#[cfg(unix)]
+#[test]
+fn a_command_s_end_is_noticed_at_once() {
+    let dir = Scratch::new();
+    let fifo = dir.path().join("go");
+    let made = Command::new("mkfifo").arg(&fifo).spawn().unwrap().wait();
+    assert!(made.unwrap().success());
+    let started = Instant::now();
+    let ended: Mutex<Option<Instant>> = Mutex::new(None);
+    let look = || {
+        let mut ended = ended.lock().unwrap();
+        if ended.is_none() && started.elapsed() > Duration::from_millis(300) {
+            // Its reader is waiting on it already: opening it for writing does not wait.
+            std::fs::write(&fifo, "x\n").unwrap();
+            *ended = Some(Instant::now());
+        }
+        false
+    };
+    let finished = run(&Job {
+        stop: &look,
+        ..job("read x < go", dir.path(), LONG)
+    })
+    .unwrap();
+    let noticed = ended.lock().unwrap().unwrap().elapsed();
+    assert_eq!(finished.ending, Ending::Exit(0));
+    assert!(
+        noticed < Duration::from_millis(25),
+        "noticed {noticed:?} after it ended"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn a_signal_is_told_apart_from_an_exit() {

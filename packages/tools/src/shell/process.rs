@@ -8,7 +8,7 @@
 use std::io::{self, Read};
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::mpsc::{self, Receiver, SyncSender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -20,9 +20,11 @@ use super::output::Output;
 const DRAIN_GRACE: Duration = Duration::from_millis(500);
 /// How long a killed process is given to be reaped.
 const KILL_WAIT: Duration = Duration::from_secs(2);
-/// The longest pause between looks at the command: the first ones are short, so a quick command
-/// returns at once, and a stop is noticed within this.
+/// The longest wait between looks at the command: a stop, and an exit that leaves the output open
+/// to a background process, are noticed within it.
 const POLL: Duration = Duration::from_millis(50);
+/// The pipes read: stdout and stderr.
+const PIPES: usize = 2;
 
 /// The shell commands run with, as a person would type it.
 #[cfg(unix)]
@@ -81,11 +83,11 @@ pub(super) fn run(job: &Job) -> io::Result<Finished> {
         .spawn()?;
     let started = Instant::now();
     // Two readers, one send each: room for both, so neither waits.
-    let (closed, readers) = mpsc::sync_channel(2);
+    let (closed, readers) = mpsc::sync_channel(PIPES);
     let stdout = drain(child.stdout.take(), closed.clone());
     let stderr = drain(child.stderr.take(), closed);
-    let (ending, elapsed) = watch(&mut child, job, started)?;
-    let open = !drained(&readers, 2);
+    let (ending, elapsed, ended) = watch(&mut child, job, started, &readers)?;
+    let open = !drained(&readers, PIPES - ended);
     Ok(Finished {
         ending,
         elapsed,
@@ -127,17 +129,27 @@ pub(super) fn quiet_env(shell: &mut Command, env: Env) {
         .env("PAGER", "cat");
 }
 
-/// Wait for `child` to exit, killing it at its deadline or when the person stops the task.
+/// Wait for `child` to exit, killing it at its deadline or when the person stops the task; how it
+/// ended, when, and how many of its pipes closed meanwhile. A command's exit closes its output, so
+/// the wait is on its pipes' readers (`readers`, a message as each pipe closes): the exit is seen
+/// at once (R9). The stop is looked at, and an exit that leaves the output to a background
+/// process seen, within [`POLL`].
 #[allow(
     clippy::disallowed_methods,
-    reason = "a child's exit has no event in std: a backoff up to POLL, bounded by the deadline and the stop"
+    reason = "a backoff of a few ms, bounded by the deadline: the pipes closed and the exit, which \
+              std gives no event for, is a moment away"
 )]
-fn watch(child: &mut Child, job: &Job, started: Instant) -> io::Result<(Ending, Duration)> {
+fn watch(
+    child: &mut Child,
+    job: &Job,
+    started: Instant,
+    readers: &Receiver<()>,
+) -> io::Result<(Ending, Duration, usize)> {
     let deadline = started + job.timeout;
-    let mut pause = Duration::from_millis(1);
+    let (mut ended, mut pause) = (0, Duration::from_millis(1));
     loop {
         match child.try_wait() {
-            Ok(Some(status)) => return Ok((ending(status), started.elapsed())),
+            Ok(Some(status)) => return Ok((ending(status), started.elapsed(), ended)),
             Ok(None) => {}
             Err(error) => {
                 kill(child);
@@ -152,10 +164,20 @@ fn watch(child: &mut Child, job: &Job, started: Instant) -> io::Result<(Ending, 
                 true => Ending::TimedOut { killed },
                 false => Ending::Stopped { killed },
             };
-            return Ok((ending, elapsed));
+            return Ok((ending, elapsed, ended));
         }
-        thread::sleep(pause.min(deadline.saturating_duration_since(Instant::now())));
-        pause = (pause * 2).min(POLL);
+        let left = deadline.saturating_duration_since(Instant::now());
+        if ended < PIPES {
+            match readers.recv_timeout(POLL.min(left)) {
+                Ok(()) => ended += 1,
+                Err(RecvTimeoutError::Timeout) => {}
+                // A reader gone without a word: no pipe will say more.
+                Err(RecvTimeoutError::Disconnected) => ended = PIPES,
+            }
+        } else {
+            thread::sleep(pause.min(left));
+            pause = (pause * 2).min(POLL);
+        }
     }
 }
 

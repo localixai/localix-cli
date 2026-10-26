@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Tests action/run.sh without GitHub: a stub `llx` on PATH writes events and an answer and exits
-# with a chosen code, and GITHUB_OUTPUT and GITHUB_STEP_SUMMARY are files. CI runs it (ci.yml, lint).
+# Tests action/run.sh without GitHub: its three steps run as action.yml runs them (prepare; the
+# run, sourced by a shell of its own; finish), a stub `llx` on PATH writes events and an answer
+# and exits with a chosen code, and GITHUB_OUTPUT and GITHUB_STEP_SUMMARY are files. CI runs it.
 #   action/test.sh
 # shellcheck disable=SC2016 # single quotes keep a prompt's $NAME and backticks as text
 set -uo pipefail
@@ -28,12 +29,14 @@ cat >"$tmp/bin/llx" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >"$STUB_DIR/args"
 echo "$0" >"$STUB_DIR/which"
+echo "$$" >"$STUB_DIR/pid"
 cat >"$STUB_DIR/prompt"
 { pwd; echo "$LLX_PROVIDER|$LLX_MODEL|$LLX_REASONING|$LLX_NO_DAEMON|$LLX_MODELS_REFRESH"; } >"$STUB_DIR/env"
 while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done
 [ -n "${STUB_ANSWER_FILE:-}" ] && cp "$STUB_ANSWER_FILE" "$out"
 [ -z "${STUB_ANSWER_FILE:-}" ] && printf '%s' "${STUB_ANSWER-the answer}" >"$out"
 echo 'trace: a line on stderr' >&2
+[ -z "${STUB_NO_EVENTS:-}" ] || exit "${STUB_CODE:-0}"
 echo '{"type":"run.started","model":"m"}'
 printf '{"type":"run.completed","status":"x","exit_code":%s,"answer":"event answer","error":%s,"usage":{"agent":{"model":"acme/model","calls":4},"cost_usd":0.0123},"duration_ms":14500}\n' \
   "${STUB_CODE:-0}" "${STUB_ERROR:-null}"
@@ -41,17 +44,28 @@ exit "${STUB_CODE:-0}"
 STUB
 chmod +x "$tmp/bin/llx"
 
-# run_action [VAR=value ...]: one run of the script in a fresh directory; $rc is its exit code.
+# run_action [VAR=value ...]: one run of the action's steps in a fresh directory, as action.yml
+# runs them: prepare; when it says ready, the run in a shell of its own that sources the script
+# (that shell's pid is kept, to see llx take its place); finish, told how both went. $rc is the
+# action's exit code, finish's.
 run_action() {
   rm -rf "$tmp/run" && mkdir -p "$tmp/run/work" "$tmp/run/rt" "$tmp/run/act"
-  : >"$tmp/run/out" && : >"$tmp/run/summary"
+  : >"$tmp/run/out" && : >"$tmp/run/summary" && : >"$tmp/run/prepared"
   (
     cd "$tmp/run/work" || exit 99
     env -i PATH="$tmp/bin:$PATH" HOME="$tmp" STUB_DIR="$tmp/run" RUNNER_TEMP="$tmp/run/rt" \
-      GITHUB_OUTPUT="$tmp/run/out" GITHUB_STEP_SUMMARY="$tmp/run/summary" GITHUB_PATH="$tmp/run/path" \
+      GITHUB_STEP_SUMMARY="$tmp/run/summary" GITHUB_PATH="$tmp/run/path" \
       GITHUB_ACTION_PATH="$tmp/run/act" INPUT_PROMPT=go INPUT_PROMPT_FILE= INPUT_SCHEMA= INPUT_ALLOW= INPUT_DENY= \
       INPUT_MODE= INPUT_PROVIDER= INPUT_MODEL= INPUT_REASONING= INPUT_MAX_TURNS=50 INPUT_TIMEOUT=900 \
-      INPUT_WORKING_DIRECTORY= INPUT_VERSION=system INPUT_ARGS= INPUT_INSTALL_ONLY= "$@" bash "$here/run.sh" >"$tmp/run/stdout" 2>"$tmp/run/stderr"
+      INPUT_WORKING_DIRECTORY= INPUT_VERSION=system INPUT_ARGS= INPUT_INSTALL_ONLY= "$@" bash -c '
+        script=$1 out=$2 prepared=$3
+        if GITHUB_OUTPUT=$prepared bash "$script" prepare; then outcome=success; else outcome=failure; fi
+        dir=$(sed -n "s/^dir=//p" "$prepared") ran=skipped
+        if grep -qx "ready=true" "$prepared"; then
+          if LLX_RUN=$dir bash -c "echo \$\$ >\"\$STUB_DIR/shell\"; . \"\$0\" exec" "$script"; then ran=success; else ran=failure; fi
+        fi
+        GITHUB_OUTPUT=$out LLX_RUN=$dir PREPARED=$outcome RAN=$ran bash "$script" finish' \
+      _ "$here/run.sh" "$tmp/run/out" "$tmp/run/prepared" >"$tmp/run/stdout" 2>"$tmp/run/stderr"
   )
   rc=$?
 }
@@ -91,6 +105,15 @@ has "the trace reaches stderr" "$(cat "$tmp/run/stderr")" "trace: a line on stde
 eq "defaults" "$(printf '%s\001' exec --json -v -o "$tmp/run/rt/$(basename "$(dirname "$(output result-file)")")/result.txt" --max-turns 50 --timeout 900 -)" "$(args)"
 eq "the prompt is stdin" "go" "$(cat "$tmp/run/prompt")"
 eq "a run is one process" "|||1|0" "$(sed -n 2p "$tmp/run/env")"
+shell=$(cat "$tmp/run/shell")
+if [[ $shell =~ ^[0-9]+$ ]]; then pass "the shell's pid was kept"; else fail "the shell's pid was not kept: [$shell]"; fi
+eq "llx takes the place of the step's shell (exec)" "$shell" "$(cat "$tmp/run/pid")"
+
+# With no run.completed event, llx stopped before the task: not ready, unless it ended well.
+run_action STUB_NO_EVENTS=1 STUB_CODE=3 STUB_ANSWER=
+eq "no event, a failure: not ready" "3 not-ready" "$rc $(output status)"
+run_action STUB_NO_EVENTS=1 STUB_CODE=0
+eq "no event, a success: achieved" "0 achieved" "$rc $(output status)"
 
 # An error from the run is in the summary; the result is only what llx wrote with -o.
 run_action STUB_CODE=3 STUB_ANSWER= STUB_ERROR='"no key"'

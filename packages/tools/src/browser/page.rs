@@ -207,7 +207,11 @@ impl Page {
                 driver.evaluate("location.reload()").map(|_| ())
             }
             Action::Select { value, .. } => self.resize(value),
-            _ => Err(ViewError::Refused(
+            Action::Click { .. }
+            | Action::Type { .. }
+            | Action::PressEnter { .. }
+            | Action::ScrollDown
+            | Action::ScrollUp => Err(ViewError::Refused(
                 "a toolbar control is clicked, or the page size selected".into(),
             )),
         }
@@ -277,7 +281,7 @@ impl View for Page {
             Action::Click { reference }
             | Action::Type { reference, .. }
             | Action::Select { reference, .. } => Some(reference.as_str()),
-            _ => None,
+            Action::PressEnter { .. } | Action::ScrollDown | Action::ScrollUp => None,
         };
         match reference {
             Some(reference) if toolbar::owns(reference) => self.toolbar(action),

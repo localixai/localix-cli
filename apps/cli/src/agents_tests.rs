@@ -65,6 +65,10 @@ impl Router {
         }
     }
 
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "a test picks out the variant it checks"
+    )]
     fn key(request: &Request) -> String {
         request
             .conversation
@@ -100,6 +104,10 @@ impl Router {
     #[expect(
         clippy::disallowed_methods,
         reason = "a test's fake waits, bounded, for the agent to begin: there is no event to wait on"
+    )]
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "a test picks out the variant it checks"
     )]
     fn main_turn(&self, request: &Request) {
         let results = request

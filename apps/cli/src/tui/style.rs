@@ -84,19 +84,22 @@ fn sgr(style: Style) -> String {
             codes.push(code);
         }
     }
-    let fg = style.fg.and_then(|colour| match colour {
-        Color::Black => Some("30"),
-        Color::Red => Some("31"),
-        Color::Green => Some("32"),
-        Color::Yellow => Some("33"),
-        Color::Blue => Some("34"),
-        Color::Magenta => Some("35"),
-        Color::Cyan => Some("36"),
-        Color::Gray => Some("37"),
-        Color::DarkGray => Some("90"),
-        _ => None,
-    });
-    codes.extend(fg);
+    // The colours with a code here; any other is the terminal's own.
+    let named = [
+        (Color::Black, "30"),
+        (Color::Red, "31"),
+        (Color::Green, "32"),
+        (Color::Yellow, "33"),
+        (Color::Blue, "34"),
+        (Color::Magenta, "35"),
+        (Color::Cyan, "36"),
+        (Color::Gray, "37"),
+        (Color::DarkGray, "90"),
+    ];
+    let fg = style
+        .fg
+        .and_then(|colour| named.iter().find(|(named, _)| *named == colour));
+    codes.extend(fg.map(|(_, code)| *code));
     codes.join(";")
 }
 

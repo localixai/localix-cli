@@ -70,7 +70,11 @@ impl App {
         match picked {
             Picked::Option(0) => Some(Action::QuitNow),
             Picked::Option(1) if self.background => Some(Action::Background),
-            _ => None,
+            Picked::Option(_)
+            | Picked::Adjusted(..)
+            | Picked::Many(_)
+            | Picked::Typed(..)
+            | Picked::Cancelled => None,
         }
     }
 }

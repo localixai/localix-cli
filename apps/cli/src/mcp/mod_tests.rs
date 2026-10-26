@@ -22,6 +22,10 @@ fn server() -> (Client, Arc<Mutex<Vec<Command>>>) {
     (client, sent)
 }
 
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn toolbox(
     incoming: &Receiver<ToServer>,
     out: &std::sync::mpsc::Sender<ToClient>,
@@ -196,6 +200,10 @@ fn another_agent_lists_the_window_and_calls_it() {
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn a_cancelled_call_is_halted_by_its_id_and_never_answered() {
     let (client, sent) = server();
     let mut agent = Agent::start(client);

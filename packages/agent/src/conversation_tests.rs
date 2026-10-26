@@ -39,6 +39,10 @@ fn older_states_go_once_the_budget_is_passed_and_their_reports_stay() {
     );
 }
 
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn results(conversation: &Conversation) -> Vec<String> {
     conversation
         .messages()
@@ -90,6 +94,10 @@ fn a_whole_tool_window_comes_through_unshortened() {
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn calls_left_unanswered_are_closed_before_the_conversation_goes_on() {
     let mut conversation = Conversation::new("rules");
     let call = |id: &str| ToolCall {
@@ -129,6 +137,10 @@ fn shot(n: u32) -> ToolOutput {
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn past_three_pictures_the_older_ones_go_at_once_and_the_prefix_then_stays() {
     let mut conversation = Conversation::new("rules");
     let kept = |conversation: &Conversation| -> Vec<String> {
@@ -174,6 +186,10 @@ fn past_three_pictures_the_older_ones_go_at_once_and_the_prefix_then_stays() {
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn a_picture_the_person_attached_follows_their_message_and_is_never_dropped() {
     let mut conversation = Conversation::new("rules");
     let goal = Message::User("Goal: make it look like this".into());

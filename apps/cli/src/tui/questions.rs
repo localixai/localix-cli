@@ -100,11 +100,15 @@ pub(crate) fn answer(open: &Open, picked: Picked) -> (Option<(u64, Reply)>, Opti
                 Picked::Option(0) => Approval::Yes,
                 Picked::Option(1) => Approval::Always,
                 Picked::Typed(_, why) if !why.is_empty() => Approval::No(Some(why)),
-                _ => Approval::No(None),
+                Picked::Option(_)
+                | Picked::Adjusted(..)
+                | Picked::Many(_)
+                | Picked::Typed(..)
+                | Picked::Cancelled => Approval::No(None),
             };
             let said = match &approval {
                 Approval::No(why) => Some(why.clone().unwrap_or_default()),
-                _ => None,
+                Approval::Yes | Approval::Always => None,
             };
             return (Some((id, Reply::Approval(approval))), said);
         }
@@ -113,21 +117,25 @@ pub(crate) fn answer(open: &Open, picked: Picked) -> (Option<(u64, Reply)>, Opti
             id,
             Reply::Line(match picked {
                 Picked::Typed(_, text) => Some(text),
-                _ => None,
+                Picked::Option(_) | Picked::Adjusted(..) | Picked::Many(_) | Picked::Cancelled => {
+                    None
+                }
             }),
         ),
         Open::Adjustable(id) => (
             id,
             Reply::Adjusted(match picked {
                 Picked::Adjusted(at, value) => Some((at, value)),
-                _ => None,
+                Picked::Option(_) | Picked::Many(_) | Picked::Typed(..) | Picked::Cancelled => None,
             }),
         ),
         Open::Choice(id) => (
             id,
             Reply::Choice(match picked {
                 Picked::Option(at) => Some(at),
-                _ => None,
+                Picked::Adjusted(..) | Picked::Many(_) | Picked::Typed(..) | Picked::Cancelled => {
+                    None
+                }
             }),
         ),
     };

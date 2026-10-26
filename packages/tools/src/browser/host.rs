@@ -29,6 +29,8 @@ mod events;
 mod handle;
 #[path = "host_web.rs"]
 mod web;
+#[path = "host_window.rs"]
+mod window;
 pub use events::host;
 
 /// One script from seven files: snapshot, same-origin frames, the outline, actions, keys, the

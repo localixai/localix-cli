@@ -33,6 +33,10 @@ impl Chat for Scripted {
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "a test picks out the variant it checks"
+    )]
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         self.may_call.lock().unwrap().push(request.may_call);
         let user = request

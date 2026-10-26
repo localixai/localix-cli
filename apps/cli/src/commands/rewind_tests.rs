@@ -116,6 +116,10 @@ impl Chat for Delegates {
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn rewinding_the_conversation_lets_its_agents_go() {
     composed_with(crate::modes::built("bypass"), true, &Delegates, |rig| {
         rig.task("write it with an agent");

@@ -66,6 +66,10 @@ impl Connected {
     }
 
     /// What command `id` came to: the answers come as their calls end, in any order.
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "a test picks out the variant it checks"
+    )]
     fn done(&self, id: u64) -> Done {
         loop {
             match self.out.recv_timeout(WAIT).unwrap() {
@@ -96,6 +100,10 @@ impl Connected {
 }
 
 /// What a tool's call reported, its state after.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn told(done: Done) -> String {
     match done {
         Done::Tool { report, state, .. } => format!("{report}\n\n{}", state.unwrap_or_default()),

@@ -97,6 +97,10 @@ fn asked(frames: &Receiver<ToClient>) -> u64 {
     }
 }
 
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn resolved(frames: &Receiver<ToClient>, id: u64) {
     loop {
         match frames.recv_timeout(WAIT).unwrap() {

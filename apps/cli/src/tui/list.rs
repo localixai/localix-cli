@@ -40,6 +40,10 @@ impl App {
         let plain = key.modifiers.is_empty();
         let order = self.views.order();
         let session = order.get(row).map(|&at| &self.views.sessions[at]);
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "crossterm's keys, a foreign enum: any other leaves the list"
+        )]
         match key.code {
             KeyCode::Up if row == 0 => self.views.focus = None,
             KeyCode::Up => self.views.focus = Some(row - 1),

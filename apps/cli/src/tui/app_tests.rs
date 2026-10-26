@@ -5,6 +5,7 @@ use crossterm::event::KeyCode;
 use protocol::{Approval, Command, Reply, ToClient};
 
 use super::*;
+use crate::tui::event::Event;
 use crate::tui::style;
 use crate::tui::test_support::{
     approve as approve_asked, call, commands, ctrl, done, failed, history, in_session as from, key,

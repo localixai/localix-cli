@@ -265,6 +265,10 @@ pub(crate) fn says(text: &str) -> Completion {
 
 /// What the main conversation's calls came back with, in order: whether each failed, and its
 /// report.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 pub(crate) fn results(rig: &Rig) -> Vec<(bool, String)> {
     let conversation = rig.conversation.as_ref().unwrap();
     conversation
@@ -280,6 +284,10 @@ pub(crate) fn results(rig: &Rig) -> Vec<(bool, String)> {
 }
 
 /// The user messages of the rig's conversation: the goals and the notes before them.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 pub(crate) fn users(rig: &Rig) -> Vec<String> {
     let conversation = rig.conversation.as_ref().unwrap();
     conversation
@@ -443,6 +451,10 @@ pub(crate) fn answering(
 }
 
 /// The events sent so far, each with the session it is in; questions and the rest are left out.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 pub(crate) fn events(
     frames: &std::sync::mpsc::Receiver<protocol::ToClient>,
 ) -> Vec<(Option<String>, protocol::Event)> {

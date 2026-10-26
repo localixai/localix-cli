@@ -8,9 +8,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use serde_json::Value;
 use std::sync::mpsc::SyncSender;
 
-use tao::event::{Event, WindowEvent};
+use tao::event::Event;
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
-use tao::window::WindowId;
 
 use super::super::comments::Comments;
 use super::super::deck::{After, Deck};
@@ -21,6 +20,7 @@ use super::super::panel::Opening;
 use super::super::platform;
 use super::super::strip::{Click, Key, click};
 use super::web::on_browser;
+use super::window::on_window;
 use super::{Browser, Cmd, Heard, Shared, WINDOW_CLOSED, Window};
 
 /// Take the main thread for the browser's event loop and run `work` on a worker thread with a
@@ -84,6 +84,10 @@ where
     let mut docked = false;
     event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "tao's events: foreign, non-exhaustive"
+        )]
         match event {
             #[expect(
                 clippy::exit,
@@ -113,37 +117,6 @@ where
             platform::dock(target, shown);
         }
     })
-}
-
-/// The person did something to the window itself.
-fn on_window(
-    deck: &mut Option<Deck>,
-    window_id: WindowId,
-    event: &WindowEvent<'_>,
-    shared: &Shared,
-    on_close: fn(),
-) {
-    let Some(open) = deck.as_mut().filter(|d| d.frame.native.id() == window_id) else {
-        return;
-    };
-    match event {
-        // The person closed the window: the browser's calls fail and the task is told, and the
-        // terminals' callers let their screens go.
-        WindowEvent::CloseRequested => {
-            open.let_go();
-            let browser = open.web.is_some();
-            *deck = None;
-            shared.heard("window", Heard::Did(CLOSED_WINDOW));
-            if browser {
-                shared.closed();
-                on_close();
-            }
-        }
-        event if frame::relayout(event) => open.layout(),
-        // The system's appearance changed: a glass that follows it is tinted again.
-        WindowEvent::ThemeChanged(_) => open.frame.retint(),
-        _ => {}
-    }
 }
 
 /// What a command is carried out with, on the event loop.
@@ -227,7 +200,15 @@ impl On<'_> {
                     }
                 }
             }
-            command => on_browser(command, self.deck, shared, proxy),
+            command @ (Cmd::Eval { .. }
+            | Cmd::Navigate(..)
+            | Cmd::NewTab { .. }
+            | Cmd::SwitchTab { .. }
+            | Cmd::CloseTab { .. }
+            | Cmd::Resize(..)
+            | Cmd::Capture { .. }
+            | Cmd::Noted(_)
+            | Cmd::Exit(_)) => on_browser(command, self.deck, shared, proxy),
         }
     }
 
@@ -317,13 +298,11 @@ fn act(
     }
     match after {
         After::Empty | After::BrowserGone { empty: true } => *deck = None,
-        _ => open.refresh(shared),
+        After::Kept | After::BrowserGone { .. } => open.refresh(shared),
     }
     Ok(())
 }
 
 /// What the person's closing says, to whoever listens.
-const CLOSED_WINDOW: &str = "The person closed the window: its tabs are gone (terminal programs \
-run on, out of sight).";
 const CLOSED_PAGE: &str = "The person closed this browser tab.";
 const CLOSED_TERMINAL: &str = "The person closed this tab: its program runs on, out of sight.";

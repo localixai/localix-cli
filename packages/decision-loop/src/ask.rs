@@ -282,7 +282,11 @@ impl Ask {
                 pick.reference = Some(reference.clone());
                 pick.value = Some(value.clone());
             }
-            _ => {}
+            Operation::PressEnter
+            | Operation::ScrollDown
+            | Operation::ScrollUp
+            | Operation::Done
+            | Operation::Blocked => {}
         }
         Ok(pick)
     }

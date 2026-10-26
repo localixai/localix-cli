@@ -77,6 +77,9 @@ cognitive_complexity = "deny"
 clone_on_ref_ptr = "deny"
 redundant_clone = "deny"
 match_wildcard_for_single_variants = "deny"
+# Our own enums are matched exhaustively (S10): a variant added is placed in every match, never
+# swallowed by a `_`. A foreign enum's `_` arm is an `expect` that names it.
+wildcard_enum_match_arm = "deny"
 wildcard_imports = "deny"
 unused_self = "deny"
 # Rust's anti-patterns (ARCHITECTURE.md R6-R10, P4-P6, S11): a lost error cause, a guard held

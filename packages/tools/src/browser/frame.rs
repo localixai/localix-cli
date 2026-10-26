@@ -149,7 +149,7 @@ pub(super) fn dress(page: &str, look: Look) -> String {
     let page = page.replacen("<head>", &format!("<head><style>{CSS}</style>"), 1);
     match look {
         Look::Glass => page.replacen("<html", "<html data-glass", 1),
-        _ => page,
+        Look::Opaque | Look::Hidden => page,
     }
 }
 

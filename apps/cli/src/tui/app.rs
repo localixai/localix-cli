@@ -12,7 +12,7 @@ use ratatui::text::Line;
 use super::agents::{LaneState, Views};
 use super::attach;
 use super::composer::Composer;
-use super::event::{Event, Input, JobRow, Out, Typed};
+use super::event::{Input, Out, Typed};
 use super::mention::Files;
 use super::questions;
 use super::queue::Asked;
@@ -243,35 +243,6 @@ impl App {
         }
     }
 
-    /// What happened in session `id` (a lane or an agent); one no longer shown is let go.
-    pub(crate) fn event_in(&mut self, id: &str, event: Event, now: Instant) -> Option<Action> {
-        let at = self.views.find(id)?;
-        self.on(at, event, now)
-    }
-
-    /// What happened in the server as a whole; anything else is the lane shown's.
-    pub(crate) fn event(&mut self, event: Event, now: Instant) -> Option<Action> {
-        match event {
-            Event::LaneStarted { id, name } => {
-                self.views.lane_started(id.clone(), name);
-                if let (Some(said), Some(at)) = (self.closed.take(), self.views.find(&id)) {
-                    self.push(at, super::cells::note(&printable(&said), self.width));
-                }
-                None
-            }
-            Event::Show(id) => {
-                self.show(&id);
-                None
-            }
-            Event::Saved(rows) => {
-                self.saved(rows.into_iter().map(|s| (s.id, s.title, s.meta)).collect());
-                None
-            }
-            Event::Quit => Some(Action::Quit),
-            event => self.on(self.views.home(), event, now),
-        }
-    }
-
     /// The server asks the person, for `session`'s task: an approval and the model's questions
     /// wait their turn; a choice of the lane's own waits until it is shown.
     pub(crate) fn asked(&mut self, id: u64, session: &str, asked: protocol::Asked, now: Instant) {
@@ -309,35 +280,6 @@ impl App {
                 self.ask_own(lane, select, Open::Line(id), now);
             }
         }
-    }
-
-    /// What is the interface's as a whole: the jobs, the composer's words.
-    /// `at` is the session the event came from.
-    pub(super) fn global(&mut self, at: usize, event: Event) -> Option<Action> {
-        let lane = self.lane_at(at);
-        match event {
-            // Each session's jobs, in the order of the sessions.
-            Event::Jobs(rows) => {
-                let id = self.views.sessions[lane].id.clone();
-                self.views.jobs.retain(|row| row.lane != id);
-                self.views.jobs.extend(rows.into_iter().map(|row| JobRow {
-                    lane: id.clone(),
-                    ..row
-                }));
-                let mut jobs = std::mem::take(&mut self.views.jobs);
-                jobs.sort_by_key(|row| self.views.find(&row.lane));
-                self.views.jobs = jobs;
-                // A row that went takes the list's keys to the last one left.
-                let last = self.last_row();
-                self.views.focus = self.views.focus.map(|row| row.min(last));
-            }
-            Event::Prefill(text) => self.composer.set(&text),
-            Event::Copy(text) => return Some(Action::Copy(text)),
-            Event::Quit => return Some(Action::Quit),
-            // A session's own events reach it through [`App::on`].
-            _ => {}
-        }
-        None
     }
 
     /// What the terminal pasted: into the question open, else the composer. A dropped file

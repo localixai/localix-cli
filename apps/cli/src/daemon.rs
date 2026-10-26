@@ -155,9 +155,10 @@ pub(crate) fn lock(config: &Path) -> std::io::Result<Option<Lock>> {
         return Ok(Some(Lock { held }));
     }
     let error = std::io::Error::last_os_error();
-    match error.kind() {
-        std::io::ErrorKind::WouldBlock => Ok(None),
-        _ => Err(error),
+    if error.kind() == std::io::ErrorKind::WouldBlock {
+        Ok(None)
+    } else {
+        Err(error)
     }
 }
 

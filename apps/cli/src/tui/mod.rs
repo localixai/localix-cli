@@ -26,6 +26,7 @@ pub(crate) mod printable;
 pub(crate) mod questions;
 pub(crate) mod queue;
 mod quitting;
+mod route;
 pub(crate) mod screen;
 mod search;
 pub(crate) mod select;

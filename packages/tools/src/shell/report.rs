@@ -84,7 +84,7 @@ fn ended(ending: Ending) -> String {
     match ending {
         Ending::Exit(code) => format!("exit {code}"),
         Ending::Signal(signal) => format!("killed by signal {signal}"),
-        _ => "ended".into(),
+        Ending::TimedOut { .. } | Ending::Stopped { .. } | Ending::Unknown => "ended".into(),
     }
 }
 

@@ -93,9 +93,10 @@ impl Tool for ReadTool<'_> {
 }
 
 fn failure(shown: &str, error: io::Error) -> ToolError {
-    ToolError::Failed(match error.kind() {
-        io::ErrorKind::NotFound => format!("{shown} does not exist"),
-        _ => format!("{shown} could not be read: {error}"),
+    ToolError::Failed(if error.kind() == io::ErrorKind::NotFound {
+        format!("{shown} does not exist")
+    } else {
+        format!("{shown} could not be read: {error}")
     })
 }
 

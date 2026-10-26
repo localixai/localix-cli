@@ -23,6 +23,10 @@ fn sent(text: &str) -> Input {
 }
 
 /// The lane's queue as last shown: ready, steered, queued, background.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn last_queue(told: &Mutex<Vec<(String, Event)>>) -> (bool, Vec<String>, Vec<String>, Vec<String>) {
     let told = told.lock().unwrap();
     let queue = told.iter().rev().find_map(|(_, event)| match event {

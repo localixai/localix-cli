@@ -129,6 +129,10 @@ fn what_the_model_says_beside_its_calls_is_in_the_trace_and_not_in_the_events() 
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn a_turn_tells_the_interface_its_tokens() {
     let (ui, frames) = crate::testing::fake_ui();
     let output = Output::new(false, false).in_ui(Some(ui.for_lane("lane")));

@@ -79,7 +79,7 @@ impl Table {
                     let left = match self.alignments[at] {
                         Alignment::Right => padding,
                         Alignment::Center => padding / 2,
-                        _ => 0,
+                        Alignment::None | Alignment::Left => 0,
                     };
                     rendered.spans.push(Span::raw(" ".repeat(left + 1)));
                     rendered

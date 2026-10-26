@@ -192,10 +192,8 @@ fn items(message: &Message) -> Vec<Value> {
             .iter()
             .map(|said| text("assistant", "output_text", said))
             .chain(calls.iter().map(|call| {
-                let arguments = match &call.arguments {
-                    Value::String(raw) => raw.clone(),
-                    other => other.to_string(),
-                };
+                let arguments = (call.arguments.as_str())
+                    .map_or_else(|| call.arguments.to_string(), str::to_string);
                 json!({"type": "function_call", "call_id": call.id, "name": call.name,
                     "arguments": arguments})
             }))

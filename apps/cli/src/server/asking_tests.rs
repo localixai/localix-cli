@@ -15,6 +15,10 @@ fn question(id: &str) -> Question {
 }
 
 /// An interface whose person answers each question with its place, `at of`; what it was asked.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn answering_places() -> (Ui, std::thread::JoinHandle<Vec<String>>) {
     let (ui, person) = answering(|asked| match asked {
         protocol::Asked::Question { at, of, .. } => {
@@ -40,6 +44,10 @@ fn answering_places() -> (Ui, std::thread::JoinHandle<Vec<String>>) {
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn each_question_is_asked_in_turn_and_the_time_taken_is_told() {
     let (ui, person) = answering_places();
     let told = AtomicUsize::new(0);

@@ -208,7 +208,9 @@ impl State {
                 self.asked.retain(|(of, _)| *of != id);
                 Arc::new(frame)
             }
-            frame => Arc::new(frame),
+            frame @ (ToClient::Event { .. } | ToClient::Gap | ToClient::Done { .. }) => {
+                Arc::new(frame)
+            }
         }
     }
 

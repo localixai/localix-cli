@@ -42,7 +42,9 @@ impl Decider for SystemOne {
                 .post("/systemone", &body)
                 .map_err(|error| match error {
                     ApiError::Invalid(message) => DecideError::Invalid(message),
-                    other => DecideError::Unavailable(format!("OpenRouter {other}")),
+                    other @ (ApiError::Auth(_) | ApiError::Http(..) | ApiError::Network(_)) => {
+                        DecideError::Unavailable(format!("OpenRouter {other}"))
+                    }
                 })?;
         let mut decision = Decision {
             model: value

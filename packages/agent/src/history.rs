@@ -167,7 +167,10 @@ impl Stage for Outputs {
                 Message::ToolResult { id, content, .. } => {
                     worth(content) && (!self.superseded || later.contains(id))
                 }
-                _ => false,
+                Message::System(_)
+                | Message::User(_)
+                | Message::Assistant { .. }
+                | Message::Image { .. } => false,
             })
             .map(|(at, _)| at)
             .collect();

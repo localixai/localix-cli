@@ -50,9 +50,11 @@ impl Gate for Stoppable<'_> {
         }
         // Stopped while the question was open: a late yes does not count, and a question that
         // Ctrl-C ended reads as the stop it was, not as a silent terminal.
-        match self.inner.check(effect) {
-            _ if (self.stopped)() => Verdict::Deny(STOPPED.into()),
-            verdict => verdict,
+        let verdict = self.inner.check(effect);
+        if (self.stopped)() {
+            Verdict::Deny(STOPPED.into())
+        } else {
+            verdict
         }
     }
 }

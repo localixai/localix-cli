@@ -66,9 +66,10 @@ impl History for Sessions {
         };
         let text =
             std::fs::read_to_string(self.dir.join(format!("{id}.json"))).map_err(|error| {
-                match error.kind() {
-                    std::io::ErrorKind::NotFound => format!("no session {id}"),
-                    _ => format!("session {id} cannot be read: {error}"),
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    format!("no session {id}")
+                } else {
+                    format!("session {id} cannot be read: {error}")
                 }
             })?;
         serde_json::from_str(&text).map_err(|error| format!("session {id} is unreadable: {error}"))

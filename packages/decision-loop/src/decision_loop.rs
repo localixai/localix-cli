@@ -92,7 +92,10 @@ impl Hands for DecisionLoop<'_> {
             Stop::Blocked => Outcome::Blocked,
             Stop::Limit => Outcome::Exhausted,
             Stop::Unreachable(error) => Outcome::Unreachable(error.clone()),
-            other => Outcome::Stopped(other.to_string()),
+            other @ (Stop::Repeated
+            | Stop::Cycling
+            | Stop::ActionFailed(_)
+            | Stop::NoDecision(_)) => Outcome::Stopped(other.to_string()),
         };
         Report {
             steps: run.steps.iter().map(GoalStep::trace_line).collect(),

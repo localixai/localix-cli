@@ -61,6 +61,10 @@ impl Served {
     }
 
     /// What came of command `id`, past the events before it.
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "a test picks out the variant it checks"
+    )]
     fn done(&self, id: u64) -> Done {
         loop {
             match self.out.recv_timeout(WAIT).unwrap() {
@@ -236,6 +240,10 @@ fn another(served: &Served) -> (Sender<ToServer>, Receiver<ToClient>) {
 }
 
 /// What came of command `id` on a connection, and the frames before it.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn until_done(frames: &Receiver<ToClient>, id: u64) -> (Vec<ToClient>, Done) {
     let mut before = vec![];
     loop {

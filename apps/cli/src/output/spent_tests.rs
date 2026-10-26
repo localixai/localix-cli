@@ -16,6 +16,10 @@ fn spent(input_tokens: u64, cached_tokens: u64, output_tokens: u64, cost: f64) -
 }
 
 /// The totals the interface was told, in order.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn totals(frames: &std::sync::mpsc::Receiver<protocol::ToClient>) -> Vec<Total> {
     let told = events(frames).into_iter();
     told.filter_map(|(_, event)| match event {

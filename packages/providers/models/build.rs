@@ -286,8 +286,8 @@ fn read(path: &Path) -> Map<String, Value> {
     let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     let table: toml::Table =
         toml::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-    match serde_json::to_value(table).unwrap() {
-        Value::Object(map) => map,
-        _ => unreachable!("a TOML document is a table"),
-    }
+    let Value::Object(map) = serde_json::to_value(table).unwrap() else {
+        unreachable!("a TOML document is a table")
+    };
+    map
 }

@@ -5,6 +5,10 @@ use super::*;
 use crate::browser::host::Cmd;
 
 /// A panel whose commands are recorded, not sent: what reached the loop, as text.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn recorded(accepted: bool) -> (Panel, Arc<Mutex<Vec<String>>>) {
     let sent = Arc::new(Mutex::new(vec![]));
     let log = Arc::clone(&sent);

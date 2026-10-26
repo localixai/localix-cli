@@ -106,7 +106,19 @@ pub(super) fn on_browser(
                 }
             }
         }
-        _ => return,
+        Cmd::Open { .. }
+        | Cmd::Close
+        | Cmd::Panel(_)
+        | Cmd::Paint(_)
+        | Cmd::Unpanel(_)
+        | Cmd::Titled(..)
+        | Cmd::Clicked(_)
+        | Cmd::Strip
+        | Cmd::Dressed(_)
+        | Cmd::Listing(_)
+        | Cmd::Sized(..)
+        | Cmd::Act(..)
+        | Cmd::Exit(_) => return,
     }
     open.refresh(shared);
 }

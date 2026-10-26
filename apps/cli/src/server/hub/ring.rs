@@ -187,7 +187,11 @@ impl Ring {
                 session: Some(session),
                 ..
             } => gone.contains(session),
-            _ => false,
+            ToClient::Event { .. }
+            | ToClient::Gap
+            | ToClient::Ask { .. }
+            | ToClient::Resolved { .. }
+            | ToClient::Done { .. } => false,
         };
         let mut held = self.held;
         self.frames.retain(|(_, frame, weight)| {

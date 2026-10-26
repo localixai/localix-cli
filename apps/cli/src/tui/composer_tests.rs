@@ -60,6 +60,10 @@ fn new_lines_come_from_shift_enter_ctrl_j_a_backslash_and_a_paste() {
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn clipboard_text_uses_marks_and_restores_only_marks_still_present() {
     let mut composer = Composer::default();
     composer.paste_marked("\u{0000}");
@@ -83,6 +87,10 @@ fn clipboard_text_uses_marks_and_restores_only_marks_still_present() {
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn pasted_mark_text_is_not_expanded_again() {
     let mut composer = Composer::default();
     composer.paste_marked("literal [Paste #2]");

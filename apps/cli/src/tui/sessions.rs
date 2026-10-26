@@ -120,6 +120,10 @@ impl App {
     pub(super) fn sessions_key(&mut self, key: KeyEvent, now: Instant) -> Option<Action> {
         let list = self.listing.as_mut()?;
         let last = list.rows.len().saturating_sub(1);
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "crossterm's keys, a foreign enum: the others do nothing here"
+        )]
         match key.code {
             KeyCode::Up => list.at = list.at.saturating_sub(1),
             KeyCode::Down => list.at = (list.at + 1).min(last),

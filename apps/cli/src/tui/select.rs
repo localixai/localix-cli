@@ -166,6 +166,10 @@ impl Select {
     }
 
     /// What a key did: `None` while the choice is still open.
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "crossterm's keys, a foreign enum: the others are typed, or do nothing here"
+    )]
     pub(crate) fn key(&mut self, key: KeyEvent) -> Option<Picked> {
         if let Some(composer) = &mut self.typing {
             return match key.code {
@@ -176,7 +180,7 @@ impl Select {
                 }
                 _ => match composer.key(key) {
                     Edit::Sent(text) => Some(Picked::Typed(self.at, text.trim().to_string())),
-                    _ => None,
+                    Edit::Changed | Edit::Ignored => None,
                 },
             };
         }
@@ -200,9 +204,10 @@ impl Select {
                 .as_mut()
                 .and_then(|rows| rows.get_mut(self.at))
         {
-            adjustment.at = match key.code {
-                KeyCode::Left => adjustment.at.saturating_sub(1),
-                _ => (adjustment.at + 1).min(adjustment.values.len().saturating_sub(1)),
+            adjustment.at = if key.code == KeyCode::Left {
+                adjustment.at.saturating_sub(1)
+            } else {
+                (adjustment.at + 1).min(adjustment.values.len().saturating_sub(1))
             };
             return None;
         }

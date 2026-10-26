@@ -75,11 +75,15 @@ impl Renderer {
             Event::TaskListMarker(done) => {
                 self.push(if done { "[x] " } else { "[ ] " }, style::dim())
             }
-            _ => {}
+            Event::InlineMath(_) | Event::DisplayMath(_) | Event::FootnoteReference(_) => {}
         }
     }
 
     fn start(&mut self, tag: Tag) {
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "pulldown-cmark's tags, a foreign enum: the others draw as text"
+        )]
         match tag {
             Tag::Table(alignments) => {
                 self.block();
@@ -95,7 +99,11 @@ impl Renderer {
                 self.block();
                 let heading = match level {
                     HeadingLevel::H1 => style::bold().add_modifier(Modifier::UNDERLINED),
-                    _ => style::bold(),
+                    HeadingLevel::H2
+                    | HeadingLevel::H3
+                    | HeadingLevel::H4
+                    | HeadingLevel::H5
+                    | HeadingLevel::H6 => style::bold(),
                 };
                 self.styles.push(heading);
             }
@@ -147,6 +155,10 @@ impl Renderer {
     }
 
     fn end(&mut self, tag: TagEnd) {
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "pulldown-cmark's tags, a foreign enum: the others close nothing"
+        )]
         match tag {
             TagEnd::TableCell => {
                 if let Some(table) = &mut self.table

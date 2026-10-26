@@ -216,7 +216,9 @@ impl Driver for WebviewDriver {
             BrowserError::Unavailable(e) if e.starts_with("script_not_started") => {
                 BrowserError::Refused("the script does not parse, or the page has no probe".into())
             }
-            other => other,
+            other @ (BrowserError::Stale(_)
+            | BrowserError::Refused(_)
+            | BrowserError::Unavailable(_)) => other,
         })?;
         let settled = self.call("settle", json!({}), SETTLE_TIMEOUT);
         self.follow_navigation(before, &settled);

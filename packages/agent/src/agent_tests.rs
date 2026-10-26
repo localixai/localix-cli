@@ -25,6 +25,10 @@ fn agent<'a>(
     }
 }
 
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn results(run: &Run) -> Vec<(String, bool)> {
     run.conversation
         .messages()
@@ -38,6 +42,10 @@ fn results(run: &Run) -> Vec<(String, bool)> {
         .collect()
 }
 
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn users(run: &Run) -> Vec<String> {
     run.conversation
         .messages()
@@ -309,6 +317,10 @@ fn turn_of(names: &[&str]) -> Completion {
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn a_picture_a_call_took_follows_every_result_of_its_turn() {
     let chat = Scripted::new(vec![turn_of(&["echo", "echo"]), says("Seen.")]);
     let picture = Image {

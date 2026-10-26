@@ -26,6 +26,10 @@ impl App {
         if !(ctrl && key.code == KeyCode::Char('c')) {
             self.quitting = None;
         }
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "crossterm's keys, a foreign enum: the others go on to `other_key`"
+        )]
         match key.code {
             KeyCode::Char('c') if ctrl => return self.ctrl_c(now),
             // Ctrl-D at an empty prompt quits, asked first while work runs.
@@ -75,9 +79,10 @@ impl App {
             KeyCode::BackTab => self.send(SHIFT_TAB.into()),
             // The level up or down without a menu; it waits for a task running.
             KeyCode::Up | KeyCode::Down if key.modifiers == KeyModifiers::SHIFT => {
-                let step = match key.code {
-                    KeyCode::Up => protocol::MORE_REASONING,
-                    _ => protocol::LESS_REASONING,
+                let step = if key.code == KeyCode::Up {
+                    protocol::MORE_REASONING
+                } else {
+                    protocol::LESS_REASONING
                 };
                 self.send(step.into());
             }
@@ -88,9 +93,10 @@ impl App {
             }
             KeyCode::Up | KeyCode::Down if !self.offers().is_empty() => {
                 let last = self.offers().len() - 1;
-                self.offered = match key.code {
-                    KeyCode::Up => self.offered.saturating_sub(1),
-                    _ => (self.offered + 1).min(last),
+                self.offered = if key.code == KeyCode::Up {
+                    self.offered.saturating_sub(1)
+                } else {
+                    (self.offered + 1).min(last)
                 };
             }
             KeyCode::Enter if !self.offers().is_empty() && key.modifiers.is_empty() => {

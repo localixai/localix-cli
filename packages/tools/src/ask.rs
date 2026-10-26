@@ -132,7 +132,9 @@ fn question(item: &Value, number: usize) -> Result<Question, String> {
             fields,
             fields.get("question").and_then(Value::as_str).unwrap_or(""),
         ),
-        _ => return Err(format!("question {number} is not an object")),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Array(_) => {
+            return Err(format!("question {number} is not an object"));
+        }
     };
     let text = text.trim();
     if text.is_empty() {
@@ -174,9 +176,9 @@ fn question(item: &Value, number: usize) -> Result<Question, String> {
 /// One option: `{label, description}`, or a plain string as its label.
 fn choice(option: &Value, number: usize) -> Result<Choice, String> {
     let text = |key: &str| option.get(key).and_then(Value::as_str).unwrap_or("").trim();
-    let (label, description) = match option {
-        Value::String(label) => (label.trim(), ""),
-        _ => (text("label"), text("description")),
+    let (label, description) = match option.as_str() {
+        Some(label) => (label.trim(), ""),
+        None => (text("label"), text("description")),
     };
     if label.is_empty() {
         return Err(format!("an option of question {number} has an empty label"));

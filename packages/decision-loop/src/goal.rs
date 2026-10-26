@@ -249,7 +249,12 @@ impl GoalRun<'_> {
                 walk.latest = after;
                 Flow::Next
             }
-            _ => self.act(walk, pick, step, view),
+            Operation::Click
+            | Operation::TypeText
+            | Operation::Select
+            | Operation::PressEnter
+            | Operation::ScrollDown
+            | Operation::ScrollUp => self.act(walk, pick, step, view),
         }
     }
 

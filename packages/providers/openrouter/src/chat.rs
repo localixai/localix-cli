@@ -23,7 +23,9 @@ impl Chat for ChatModel {
             .post("/chat/completions", &body)
             .map_err(|error| match error {
                 ApiError::Invalid(message) => ChatError::Invalid(message),
-                other => ChatError::Unavailable(format!("{} {other}", self.client.name)),
+                other @ (ApiError::Auth(_) | ApiError::Http(..) | ApiError::Network(_)) => {
+                    ChatError::Unavailable(format!("{} {other}", self.client.name))
+                }
             })?;
         let message = value
             .pointer("/choices/0/message")
@@ -100,7 +102,13 @@ fn body(openrouter: bool, selection: &Selection, request: &Request) -> Value {
 pub fn reasoning(effort: Effort) -> Value {
     match effort {
         Effort::Off => json!({"enabled": false}),
-        effort => json!({"effort": effort.name()}),
+        effort @ (Effort::Minimal
+        | Effort::Low
+        | Effort::Medium
+        | Effort::High
+        | Effort::XHigh
+        | Effort::Max
+        | Effort::Ultra) => json!({"effort": effort.name()}),
     }
 }
 

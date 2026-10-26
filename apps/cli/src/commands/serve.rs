@@ -214,7 +214,7 @@ fn placed(first: &ToServer) -> Option<(&Place, &str)> {
                 },
             ..
         } => Some((place, build)),
-        _ => None,
+        ToServer::Call { .. } | ToServer::Reply { .. } => None,
     }
 }
 

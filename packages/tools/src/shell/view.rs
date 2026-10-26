@@ -88,7 +88,9 @@ impl View for TerminalView<'_> {
             },
             Action::ScrollUp => ("", vec!["PageUp".into()]),
             Action::ScrollDown => ("", vec!["PageDown".into()]),
-            other => return Err(ViewError::Refused(format!("a terminal cannot {other:?}"))),
+            other @ (Action::Type { .. } | Action::Select { .. }) => {
+                return Err(ViewError::Refused(format!("a terminal cannot {other:?}")));
+            }
         };
         let wait = Wait {
             needle: None,

@@ -70,9 +70,12 @@ impl Checkpoints {
             for (path, before) in task.files.into_iter().rev() {
                 let done = match before {
                     Some(bytes) => std::fs::write(&path, bytes),
-                    None => std::fs::remove_file(&path).or_else(|e| match e.kind() {
-                        std::io::ErrorKind::NotFound => Ok(()),
-                        _ => Err(e),
+                    None => std::fs::remove_file(&path).or_else(|e| {
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            Ok(())
+                        } else {
+                            Err(e)
+                        }
                     }),
                 };
                 match done {

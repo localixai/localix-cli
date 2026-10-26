@@ -111,6 +111,10 @@ impl Search {
         let plain = !key
             .modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "crossterm's keys, a foreign enum: the others leave the query"
+        )]
         match key.code {
             KeyCode::Char(c) if plain => self.query.push(c),
             KeyCode::Backspace if self.query.pop().is_some() => {}
@@ -156,6 +160,10 @@ impl Search {
 pub(super) fn moved(rows: &[usize], at: usize, code: KeyCode, page: usize) -> Option<usize> {
     let last = rows.len().checked_sub(1)?;
     let now = rows.iter().position(|row| *row == at).unwrap_or(0);
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "crossterm's keys, a foreign enum: the others do not move"
+    )]
     let to = match code {
         KeyCode::Up => now.saturating_sub(1),
         KeyCode::Down => (now + 1).min(last),

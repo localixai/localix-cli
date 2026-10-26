@@ -273,6 +273,10 @@ pub(crate) fn connected(
 }
 
 /// The text of the last call's result in a conversation.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 pub(crate) fn last_result(conversation: &[Message]) -> String {
     let mut results = conversation
         .iter()

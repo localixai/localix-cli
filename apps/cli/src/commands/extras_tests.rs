@@ -105,6 +105,10 @@ fn usage_says_what_the_whole_session_spent_its_earlier_tasks_too() {
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn copy_sends_the_last_answer_to_the_client_whose_clipboard_it_is() {
     use protocol::Event;
     let replies = vec![crate::testing::says("forty-two")];

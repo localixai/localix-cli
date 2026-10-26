@@ -34,6 +34,10 @@ fn reading(reads: usize, chars: usize, same: bool) -> Conversation {
     conversation
 }
 
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn contents(conversation: &Conversation) -> Vec<String> {
     conversation
         .messages()
@@ -302,6 +306,10 @@ mod dialogue {
         }
     }
 
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "a test picks out the variant it checks"
+    )]
     fn id_of(message: &Message) -> Option<(&str, bool)> {
         match message {
             Message::ToolResult { id, content, .. } => Some((id, content.contains(MARKER))),

@@ -33,15 +33,18 @@ impl Failure {
     pub(crate) fn message(&self) -> Option<String> {
         match self {
             Self::Closed => None,
-            other => Some(format!("llx: {other}")),
+            other @ (Self::Usage(_) | Self::Environment(_) | Self::SignedOut(_)) => {
+                Some(format!("llx: {other}"))
+            }
         }
     }
 
     /// A failed write to stdout: a closed pipe ends quietly, anything else is the environment.
     pub(crate) fn from_write(error: &io::Error) -> Self {
-        match error.kind() {
-            io::ErrorKind::BrokenPipe => Self::Closed,
-            _ => Self::Environment(format!("could not write the output: {error}")),
+        if error.kind() == io::ErrorKind::BrokenPipe {
+            Self::Closed
+        } else {
+            Self::Environment(format!("could not write the output: {error}"))
         }
     }
 }

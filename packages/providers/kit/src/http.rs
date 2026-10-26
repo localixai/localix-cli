@@ -87,14 +87,15 @@ impl Http for Web {
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
-        let mut response = request.send(body).map_err(|error| match error {
+        let mut response = request.send(body).map_err(|error| {
             // Past the connection, the time ran out with the request sent.
-            ureq::Error::Timeout(when)
-                if !matches!(when, ureq::Timeout::Connect | ureq::Timeout::Resolve) =>
+            if let ureq::Error::Timeout(when) = error
+                && !matches!(when, ureq::Timeout::Connect | ureq::Timeout::Resolve)
             {
-                HttpError::Unanswered(ureq::Error::Timeout(when).to_string())
+                HttpError::Unanswered(error.to_string())
+            } else {
+                HttpError::Unsent(error.to_string())
             }
-            error => HttpError::Unsent(error.to_string()),
         })?;
         let status = response.status().as_u16();
         let body = (response.body_mut().with_config().limit(BODY_LIMIT))

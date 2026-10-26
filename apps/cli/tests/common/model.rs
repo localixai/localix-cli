@@ -163,6 +163,10 @@ fn answer(stream: TcpStream, shared: &Mutex<Shared>) {
 }
 
 /// A message's text: a string, or the text of its parts (a cache mark makes it parts).
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn content(message: &Value) -> String {
     match &message["content"] {
         Value::String(text) => text.clone(),

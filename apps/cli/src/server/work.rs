@@ -45,7 +45,30 @@ impl Work {
                 }
             }
             Event::Jobs(rows) => state.jobs.clone_from(rows),
-            _ => {}
+            Event::Header(_)
+            | Event::Note(_)
+            | Event::Error(_)
+            | Event::Mode(_)
+            | Event::Call { .. }
+            | Event::Result { .. }
+            | Event::Step(_)
+            | Event::Answer(_)
+            | Event::Earlier(_)
+            | Event::LaneStarted { .. }
+            | Event::LaneEnded
+            | Event::Saved(_)
+            | Event::Show(_)
+            | Event::Started { .. }
+            | Event::Closed
+            | Event::Spent(_)
+            | Event::Total(_)
+            | Event::AgentsCleared
+            | Event::Prefill(_)
+            | Event::Context(_)
+            | Event::Queue { .. }
+            | Event::Steered(_)
+            | Event::Copy(_)
+            | Event::Quit => {}
         }
     }
 

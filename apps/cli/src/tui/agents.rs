@@ -21,9 +21,6 @@ mod ends;
 /// A call that took this long says so in its row.
 const TOOK: std::time::Duration = std::time::Duration::from_millis(500);
 
-/// Rows of the hands' latest actions shown under their call.
-const STEPS: usize = 3;
-
 /// A finished call as a block: the person's refusal when the call failed on it (the gate's
 /// words), which uses up what they said; otherwise its outcome, and what they said waits for the
 /// call they refused (calls of several sessions finish in any order).
@@ -134,18 +131,23 @@ impl App {
                 return None;
             }
             Event::AgentsCleared => {
-                let lane = view.id.clone();
-                // Out of one of its agents' views; another lane shown stays shown.
-                if self.views.home() == at {
-                    self.show(&lane);
-                }
-                self.views.focus = None;
-                let theirs = |session: &SessionView| session.parent.as_ref() == Some(&lane);
-                self.views.sessions.retain(|session| !theirs(session));
+                self.agents_cleared(at);
                 return None;
             }
             Event::LaneEnded => return self.lane_ended(at),
-            event => return self.lane_event(at, event),
+            event @ (Event::Mode(_)
+            | Event::Step(_)
+            | Event::LaneStarted { .. }
+            | Event::Saved(_)
+            | Event::Show(_)
+            | Event::Total(_)
+            | Event::Prefill(_)
+            | Event::Context(_)
+            | Event::Jobs(_)
+            | Event::Queue { .. }
+            | Event::Steered(_)
+            | Event::Copy(_)
+            | Event::Quit) => return self.lane_event(at, event),
         };
         self.push(at, block);
         None
@@ -160,41 +162,16 @@ impl App {
         view.blocks.push(block);
     }
 
-    /// What only a lane has; anything else is the interface's.
-    fn lane_event(&mut self, at: usize, event: Event) -> Option<Action> {
-        let Some(lane) = self.views.sessions[at].lane.as_deref_mut() else {
-            return self.global(at, event);
-        };
-        match event {
-            Event::Mode(mode) => lane.mode = mode,
-            Event::Step(step) => {
-                lane.steps.push(step);
-                let over = lane.steps.len().saturating_sub(STEPS);
-                lane.steps.drain(..over);
-            }
-            Event::Context(left) => lane.context = Some(left),
-            Event::Total(total) => lane.total = Some(total),
-            Event::Queue {
-                ready,
-                steered,
-                queued,
-                background,
-            } => {
-                lane.ready = ready;
-                lane.steered = steered;
-                lane.queued = queued;
-                lane.background = background;
-            }
-            // The task read what the person said to it: theirs now, in the transcript.
-            Event::Steered(texts) => {
-                for text in texts {
-                    let block = cells::user(&text, self.width);
-                    self.push(at, block);
-                }
-            }
-            event => return self.global(at, event),
+    /// The lane at `at` let its agents go: their views go too.
+    fn agents_cleared(&mut self, at: usize) {
+        let lane = self.views.sessions[at].id.clone();
+        // Out of one of its agents' views; another lane shown stays shown.
+        if self.views.home() == at {
+            self.show(&lane);
         }
-        None
+        self.views.focus = None;
+        let theirs = |session: &SessionView| session.parent.as_ref() == Some(&lane);
+        self.views.sessions.retain(|session| !theirs(session));
     }
 
     /// Show the session `id`: its whole transcript, from the top.

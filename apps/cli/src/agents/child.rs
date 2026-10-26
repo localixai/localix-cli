@@ -191,7 +191,9 @@ fn keep(
              it, or leave it."
                 .to_string()
         }
-        _ => run.answer.trim().to_string(),
+        Status::Achieved | Status::NotAchieved | Status::Unstated | Status::Error(_) => {
+            run.answer.trim().to_string()
+        }
     };
     if !unread.is_empty() {
         answer.push_str(&format!(

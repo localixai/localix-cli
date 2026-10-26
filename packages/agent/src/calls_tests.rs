@@ -114,6 +114,10 @@ fn turn(calls: Vec<ToolCall>) -> Completion {
     }
 }
 
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn results(messages: &[Message]) -> Vec<(String, String)> {
     messages
         .iter()
@@ -252,6 +256,10 @@ impl Inbox for Mail {
     }
 }
 
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn users(messages: &[Message]) -> Vec<String> {
     messages
         .iter()

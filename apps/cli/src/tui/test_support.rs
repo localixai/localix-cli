@@ -87,6 +87,10 @@ pub(crate) fn typed(app: &mut App, text: &str, now: Instant) {
 }
 
 /// What the person sent the server so far, taken: each entry as `Command::Input` carries it.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 pub(crate) fn sent(app: &mut App) -> Vec<Sent> {
     let mut sent = vec![];
     app.outbox.retain(|out| match out {

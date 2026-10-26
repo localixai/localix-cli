@@ -236,7 +236,7 @@ impl Sessions {
             // A stop ends the wait, not the program: a REPL or a program the person watches goes
             // on, until it is closed.
             Until::Exited(_) | Until::Closed { .. } => drop(session),
-            _ => {
+            Until::Matched | Until::Settled | Until::Deadline | Until::Stopped => {
                 if open {
                     self.show(&session);
                 }

@@ -175,12 +175,11 @@ impl Ui {
 
     /// Report `event`, in the session's name; a lane's queue learns when its task runs.
     pub(crate) fn send(&self, event: Event) {
-        if let Some(lane) = self.lane.as_deref() {
-            match &event {
-                Event::TaskStarted(_) => self.peer.inputs.working(lane, true),
-                Event::TaskEnded { .. } => self.peer.inputs.working(lane, false),
-                _ => {}
-            }
+        if let (Some(lane), Event::TaskStarted(_) | Event::TaskEnded { .. }) =
+            (self.lane.as_deref(), &event)
+        {
+            let started = matches!(event, Event::TaskStarted(_));
+            self.peer.inputs.working(lane, started);
         }
         self.peer.work.saw(self.lane.as_deref(), &event);
         let session = self.lane.as_deref().map(str::to_string);

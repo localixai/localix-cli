@@ -7,26 +7,11 @@ use std::path::Path;
 use protocol::{Event, Label};
 
 /// `event` with its call's label as it reads at `root`.
-pub(crate) fn event(event: Event, root: Option<&Path>) -> Event {
-    match event {
-        Event::Call { call, name, label } => Event::Call {
-            call,
-            name,
-            label: shown(label, root),
-        },
-        Event::Result {
-            call,
-            name,
-            label,
-            outcome,
-        } => Event::Result {
-            call,
-            name,
-            label: shown(label, root),
-            outcome,
-        },
-        event => event,
+pub(crate) fn event(mut event: Event, root: Option<&Path>) -> Event {
+    if let Event::Call { label, .. } | Event::Result { label, .. } = &mut event {
+        *label = shown(std::mem::take(label), root);
     }
+    event
 }
 
 /// `label` as it reads at `root`.

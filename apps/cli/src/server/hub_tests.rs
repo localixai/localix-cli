@@ -32,6 +32,10 @@ fn ask(id: u64) -> ToClient {
 }
 
 /// The notes a client was sent, with their numbers; a gap as `"gap"`.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn notes(frames: &Receiver<ToClient>) -> Vec<(String, Option<u64>)> {
     (frames.try_iter())
         .filter_map(|frame| match frame {
@@ -232,6 +236,10 @@ fn queue(queued: &[&str]) -> Event {
 }
 
 /// The events a client was sent, without their numbers; a gap as `None`.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn events(frames: &Receiver<ToClient>) -> Vec<Option<(Option<String>, Event)>> {
     (frames.try_iter())
         .filter_map(|frame| match frame {
@@ -296,6 +304,10 @@ fn of_a_whole_state_only_the_latest_is_kept() {
 }
 
 #[test]
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
 fn a_lane_that_ended_is_not_given_again_nor_its_agents() {
     let hub = Hub::new(100);
     a_lane_then(&hub, 2);

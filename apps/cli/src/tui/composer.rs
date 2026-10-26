@@ -106,6 +106,10 @@ impl Composer {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let alt = key.modifiers.contains(KeyModifiers::ALT);
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "crossterm's keys, a foreign enum: the others edit nothing"
+        )]
         match key.code {
             KeyCode::Enter if shift || alt => self.insert('\n'),
             KeyCode::Char('j') if ctrl => self.insert('\n'),

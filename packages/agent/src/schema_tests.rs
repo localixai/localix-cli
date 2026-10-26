@@ -47,3 +47,29 @@ fn a_result_call_is_checked_against_its_schema() {
         Err("data.price must be number".into())
     );
 }
+
+#[test]
+fn fields_put_beside_achieved_instead_of_inside_data_are_the_data() {
+    // The schema has a `summary` of its own, as a pull request's description does: the model
+    // wrote its fields at the top of the call, next to `achieved`, with no `data`.
+    let schema = json!({"type": "object", "required": ["summary", "risk"], "properties": {
+        "summary": {"type": "string"}, "risk": {"enum": ["low", "medium", "high"]}
+    }});
+    let flat = json!({"summary": "Adds a cache.", "risk": "low", "achieved": true});
+    assert_eq!(
+        take(&flat, &schema),
+        Ok(Finished {
+            data: json!({"summary": "Adds a cache.", "risk": "low"}),
+            summary: String::new(),
+            achieved: true
+        })
+    );
+}
+
+#[test]
+fn a_call_with_no_data_says_where_the_fields_go() {
+    let schema = json!({"type": "object", "required": ["price"], "properties": {"price": {"type": "number"}}});
+    let call = json!({"summary": "€93", "achieved": true});
+    let error = take(&call, &schema).unwrap_err();
+    assert!(error.contains("inside `data`"), "{error}");
+}

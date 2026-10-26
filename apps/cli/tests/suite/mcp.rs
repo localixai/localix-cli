@@ -197,3 +197,34 @@ fn the_daemon_keeps_no_descriptor_of_the_client_that_started_it() {
         "the daemon holds the descriptor llx mcp was given"
     );
 }
+
+/// The daemon `llx mcp` started in a test's home ends with the home: none outlives its test.
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the daemon is not this process's child: there is no exit to wait on, it is looked at every 20 ms, bounded"
+)]
+fn the_daemon_started_in_a_test_home_ends_with_it() {
+    let home = Home::new();
+    let mut agent = Agent::start(&home, home.path());
+    let init = agent.ask(
+        1,
+        "initialize",
+        json!({"protocolVersion": "2025-06-18",
+        "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}}),
+    );
+    assert_eq!(init["result"]["serverInfo"]["name"], "llx", "{init}");
+    assert_eq!(agent.close(), Some(0));
+    let lock = home.path().join("config").join("llx").join("daemon.lock");
+    let lock = std::fs::read_to_string(lock).unwrap();
+    let pid: i32 = lock.lines().next().unwrap().parse().unwrap();
+    // SAFETY: kill with no signal only asks whether the process is there.
+    let alive = || unsafe { libc::kill(pid, 0) } == 0;
+    assert!(alive(), "no daemon to end");
+    drop(home);
+    let end = Instant::now() + Duration::from_secs(10);
+    while alive() && Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!alive(), "the daemon {pid} outlived its home");
+}

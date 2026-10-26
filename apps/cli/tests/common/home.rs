@@ -104,7 +104,8 @@ impl Drop for Home {
 
 /// The daemon a test started in `home`, if any is left: asked to stop as a person asks
 /// (`llx serve stop`, so an instrumented binary writes its coverage), then killed by the pid its
-/// lock file still names. A daemon that ended cleanly emptied that file.
+/// lock file still names on its first line (the second is its socket). A daemon that ended
+/// cleanly emptied that file.
 #[expect(
     clippy::disallowed_methods,
     reason = "`llx serve stop` waits a bounded time for the daemon, and ends"
@@ -114,7 +115,7 @@ pub(crate) fn stop_daemon(home: &Path) {
     let lock = home.join("config").join("llx").join("daemon.lock");
     let pid = || {
         let text = std::fs::read_to_string(&lock).ok()?;
-        text.trim().parse::<i32>().ok()
+        text.lines().next()?.trim().parse::<i32>().ok()
     };
     if pid().is_none() {
         return;

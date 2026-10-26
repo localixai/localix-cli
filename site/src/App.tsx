@@ -1,7 +1,7 @@
 import { Footer } from './components/Footer';
 import { Hero } from './components/Hero';
 import { Nav } from './components/Nav';
-import { Callers, Pipeline, Small } from './components/Callers';
+import { Blocks, Own, Pipeline } from './components/Sections';
 import { Window } from './components/Window';
 
 export function App() {
@@ -10,10 +10,10 @@ export function App() {
       <Nav />
       <main id="top">
         <Hero />
-        <Callers />
+        <Blocks />
         <Window />
         <Pipeline />
-        <Small />
+        <Own />
       </main>
       <Footer />
     </>

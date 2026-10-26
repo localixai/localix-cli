@@ -1,17 +1,21 @@
-/* The sections after the hero share one measure: a display headline, a soft lede, a grid. */
-.callers,
+/* The sections after the hero share one measure: a display headline, a soft lede, then the
+   section's own content. Rows, not cards: a command and what it does read as a definition list. */
+.blocks,
 .pipeline,
-.small {
+.own {
   display: grid;
   gap: 1.25rem;
-  padding-block: clamp(2rem, 6vw, 4rem);
+  grid-template-columns: minmax(0, 1fr);
+  padding-block: clamp(2.5rem, 7vw, 5rem);
 }
-.callers h2,
+.blocks h2,
 .pipeline h2,
-.small h2 {
+.own h2 {
+  max-width: 30ch;
   margin: 0;
   font: 700 clamp(1.75rem, 3.4vw, 2.75rem) / 1.05 var(--display);
   letter-spacing: -0.04em;
+  text-wrap: balance;
 }
 .section-lede {
   max-width: 42rem;
@@ -19,46 +23,61 @@
   color: var(--soft);
 }
 .section-lede code,
-.callers code {
+.blocks-list code {
   color: var(--white);
   font: 0.9em var(--mono);
 }
-.section-more {
-  margin: 0;
-  font-size: 0.9375rem;
-}
-
-.callers-grid {
-  display: grid;
-  gap: 1rem;
-}
-@media (min-width: 48rem) {
-  .callers-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+/* A command quoted in a sentence stays whole where the line has room for it. */
+@media (min-width: 40rem) {
+  .section-lede code {
+    white-space: nowrap;
   }
 }
-.callers article {
-  display: grid;
-  align-content: start;
-  gap: 0.6rem;
-  padding: 1.1rem 1.2rem;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  background: var(--card);
-}
-.callers h3 {
+.section-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.75rem;
   margin: 0;
-  font: 600 1rem/1.3 var(--text);
+  font-size: 0.9375rem;
 }
-.callers article code {
-  width: fit-content;
-  max-width: 100%;
-  overflow-wrap: anywhere;
+.more {
+  color: var(--white);
+  text-decoration: underline;
+  text-decoration-color: var(--faint);
+  text-underline-offset: 4px;
+  transition: text-decoration-color 160ms ease;
 }
-.callers p {
+.more:hover {
+  text-decoration-color: currentColor;
+}
+
+.blocks-list {
+  display: grid;
+  margin: 0.5rem 0;
+  border-top: 1px solid var(--line-strong);
+}
+.blocks-list div {
+  display: grid;
+  gap: 0.35rem 2rem;
+  padding-block: 1.1rem;
+  border-bottom: 1px solid var(--line-strong);
+}
+@media (min-width: 48rem) {
+  .blocks-list div {
+    grid-template-columns: 12rem minmax(0, 46rem);
+  }
+}
+.blocks-list dt code {
+  font-size: 1rem;
+  font-weight: 600;
+}
+.blocks-list dd {
   margin: 0;
   color: var(--soft);
-  font-size: 0.9375rem;
+}
+.blocks-list b {
+  color: var(--white);
+  font-weight: 500;
 }
 
 .term {
@@ -82,7 +101,7 @@
   white-space: pre;
 }
 .pipeline-codes,
-.small-facts {
+.own-facts {
   display: grid;
   gap: 0.75rem;
   margin: 0;
@@ -100,16 +119,17 @@
   font: 600 0.875rem var(--mono);
 }
 .pipeline-codes dd,
-.small-facts dd {
+.own-facts dd {
   margin: 0;
   color: var(--muted);
   font-size: 0.875rem;
 }
 
-.small-facts {
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+.own-facts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0.75rem;
 }
-.small-facts dt {
+.own-facts dt {
   color: var(--white);
   font: 600 clamp(1.25rem, 2.4vw, 1.75rem) / 1.2 var(--mono);
   letter-spacing: -0.02em;
@@ -121,4 +141,30 @@
 }
 .recipes .install-tabs {
   flex-wrap: wrap;
+}
+
+/* The agent of its own: the words and facts beside its recorded session on wide screens. */
+.own-copy {
+  display: grid;
+  gap: 1.25rem;
+  align-content: start;
+}
+.own-film {
+  margin: 0;
+}
+.own-film figcaption {
+  margin-top: 0.75rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+.own-film code {
+  color: var(--soft);
+  font: 0.9em var(--mono);
+}
+@media (min-width: 60rem) {
+  .own {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    column-gap: clamp(3rem, 5vw, 5rem);
+    align-items: center;
+  }
 }

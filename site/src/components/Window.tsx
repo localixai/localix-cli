@@ -4,7 +4,7 @@ import './Window.css';
 const USE: [string, string][] = [
   ['Open', 'The agent opens pages and terminals as tabs, each project’s together.'],
   ['Say the goal', '“Book the cheapest flight on Friday”: a small, fast model does the clicking.'],
-  ['Watch', 'Every tab stays live. The window never takes your keyboard.'],
+  ['Watch', 'Every tab stays live while you go on typing elsewhere.'],
   ['Point', 'Click what is wrong, write a note, Send. The agent that opened the page fixes it.'],
 ];
 
@@ -19,10 +19,10 @@ const GETS = [
 export function Window() {
   return (
     <section className="window wrap" aria-labelledby="window-title">
-      <h2 id="window-title">Real pages. Real shells. One window you can watch.</h2>
+      <h2 id="window-title">One window you can watch.</h2>
       <p className="window-lede">
-        Browser pages run in the system’s own WebView and terminals in a real PTY, as tabs of one native window
-        grouped by project. llx works there, and so does any MCP client through <code>llx mcp</code>.
+        Pages in the system’s own WebView and terminals in a real PTY, as tabs of one native window, each
+        project’s together. It never takes your keyboard.
       </p>
 
       <Mock />

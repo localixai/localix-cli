@@ -202,7 +202,7 @@ fn every_build_unwinds_a_panic() {
 /// `allow` is a rule set aside in one place for a reason; one more raises this number in the
 /// commit that adds it, where a review sees it, and one fewer lowers it, so the room a fix made
 /// is not taken again unseen.
-const ALLOWED: usize = 49;
+const ALLOWED: usize = 47;
 
 /// S4: the exceptions only fall. (Lines that are comments do not count; tests may allow freely.)
 #[test]

@@ -13,6 +13,7 @@ default = ["browser"]
 # Off, `tools::browser` keeps its names with nothing behind them and none of these is linked: the
 # headless build, for CI and servers (ARCHITECTURE.md A8).
 browser = [
+    "dep:base64",
     "dep:tao",
     "dep:wry",
     "dep:url",
@@ -34,9 +35,8 @@ required-features = ["browser"]
 # The tool protocol only (rule L3): a tool knows nothing of the loop or the model.
 [dependencies]
 # Already in the tree through openrouter: a screenshot goes to the model as base64.
-base64.workspace = true
+base64 = { workspace = true, optional = true }
 contracts.workspace = true
-getrandom.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tao = { workspace = true, optional = true }
@@ -63,7 +63,9 @@ objc2-web-kit = { workspace = true, optional = true }
 gtk = { workspace = true, optional = true }
 
 [dev-dependencies]
-# The terminal page's own script is allowed by its hash: a test checks the one written down.
+# The terminal page's own script is allowed by its hash: a test checks the one written down
+# (SHA-384, in base64), in the headless build too.
+base64.workspace = true
 sha2.workspace = true
 
 [lints]

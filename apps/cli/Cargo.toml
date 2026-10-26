@@ -43,7 +43,6 @@ sha2.workspace = true
 crossterm.workspace = true
 pulldown-cmark.workspace = true
 ratatui.workspace = true
-textwrap.workspace = true
 unicode-width.workspace = true
 
 [dev-dependencies]

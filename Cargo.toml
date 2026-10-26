@@ -138,14 +138,14 @@ session = { path = "packages/session" }
 tools = { path = "packages/tools", default-features = false }
 base64 = "0.23.1"
 clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
-getrandom = "0.3"
+# The one native-tls (through ureq) builds: one copy in the tree.
+getrandom = "0.4"
 # Already in the tree through tao and wry: the few unix calls std has no wrapper for.
 libc = "0.2"
 # The terminal UI: crossterm and ratatui, with only the features it uses.
 crossterm = { version = "0.29", default-features = false, features = ["bracketed-paste", "events"] }
 pulldown-cmark = { version = "0.13", default-features = false }
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm", "scrolling-regions", "unstable-backend-writer"] }
-textwrap = "0.16.2"
 unicode-width = "0.2"
 # Tests of what the terminal shows (dev only): snapshots. A terminal emulator: what the tests draw
 # into, and a terminal session's screen in its window.

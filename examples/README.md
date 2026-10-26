@@ -51,9 +51,9 @@ workflow, where you can read it, and so is what gets posted.
 
 ## Notes
 
-- A push or a pull request made with the workflow's token (`llx.yml`) starts no other workflow,
-  so your tests do not run on llx's change until someone pushes to it, or the posting job uses a
-  GitHub App's token.
+- The workflows that a push or a pull request made with the workflow's token (`llx.yml`) starts
+  wait for a person to approve them: your tests run on llx's change once someone does, or at
+  once when the posting job uses a GitHub App's token.
 - A workflow started by a review comment runs the version of the file on the pull request's
   merge ref: a fix on `main` reaches an open pull request once `main` is merged into it.
 - `gh pr view --comments` needs `checks: read`; the prompts use

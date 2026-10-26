@@ -44,6 +44,13 @@ struct Shared {
     naming: AtomicBool,
 }
 
+// The lock is held across the session file's load and save, against R6's letter and by design:
+// the file is written by two threads, the lane (its tasks) and the title's (`post`), each a whole
+// read, change and write. R7 wants each of them one critical section: were the lock let go
+// between `post`'s load and its save, a task the lane saved meanwhile would be written over by
+// the older session `post` loaded. The wait it costs is one small local file, and only the lane
+// and the title's thread ever take this lock: nothing an interface or another lane waits on is
+// behind it.
 impl Pending {
     /// Save `session` with what is pending applied.
     pub(crate) fn save(&self, history: &dyn History, session: &mut Session) -> Result<(), String> {

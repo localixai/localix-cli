@@ -100,7 +100,7 @@ $ llx exec --allow bash --deny edit --schema @review.schema.json "Review pull re
 
 `llx decide` asks a small decision model one question about stdin, in under a second for a fraction of a cent, and prints the option it picked; `--expect no` exits 1 on any other. `llx exec` runs the agent: in a CI container, `--allow bash --deny edit` lets it explore the checkout and run the tests while changing nothing, and `--schema` makes it answer in your JSON. The job that runs the model gets a read-only token; a separate job posts what it found.
 
-Ready-made GitHub workflows, each run for real on a self-hosted runner: [pull request review](examples/github/review.yml) with inline comments, [issue triage](examples/github/triage.yml), [explaining a failed run](examples/github/ci-failure.yml), [describing a pull request](examples/github/describe.yml), [an issue to a draft pull request](examples/github/fix-issue.yml) and [a draft release](examples/github/release.yml): [examples/](examples/). More recipes, GitLab included: [docs/recipes.md](docs/recipes.md); modes and exit codes: [docs/ci.md](docs/ci.md).
+Ready-made GitHub workflows, each run for real on a self-hosted runner: [pull request review](examples/github/review.yml) with inline comments, [issue triage](examples/github/triage.yml), [explaining a failed run](examples/github/ci-failure.yml), [describing a pull request](examples/github/describe.yml), [an issue to a draft pull request](examples/github/fix-issue.yml), [answering @llx in a review thread](examples/github/reply.yml) and [a draft release](examples/github/release.yml): [examples/](examples/). More recipes, GitLab included: [docs/recipes.md](docs/recipes.md); modes and exit codes: [docs/ci.md](docs/ci.md).
 
 ## Documentation
 

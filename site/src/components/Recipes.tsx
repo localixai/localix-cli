@@ -37,6 +37,16 @@ $ llx exec --allow bash --deny edit --schema @failure.schema.json \\
 # posted as one sticky comment; rerun only when the failure is flaky`,
   ],
   [
+    'Reply',
+    `# .github/workflows/reply.yml: someone writes @llx in a review thread
+> @llx why raise here instead of skipping the line with a warning?
+$ llx exec --allow bash --deny edit --schema @reply.schema.json \\
+    "PULL REQUEST: #6. Answer the thread on src/config.py:16; check a claim by running it."
+{"agrees":false,"reply":"Raising is intentional: AGENTS.md says load names the bad line
+ and never skips it. A skipped typo would silently drop a setting. The tests pass."}
+# a separate job posts it as a reply in the thread`,
+  ],
+  [
     'Describe PR',
     `# .github/workflows/describe.yml: the author's text stays, llx's part is replaced
 $ llx exec --allow bash --deny edit --schema @describe.schema.json \\

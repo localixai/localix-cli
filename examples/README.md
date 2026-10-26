@@ -11,6 +11,7 @@ GitHub workflows that use llx, each run for real in a test repository. Copy a wo
 | [ci-failure.yml](github/ci-failure.yml) | the tests fail on a pull request | finds the cause in the code, comments, reruns only a flaky failure |
 | [describe.yml](github/describe.yml) | a pull request opens | writes a summary, the risk and the testing below the author's text |
 | [fix-issue.yml](github/fix-issue.yml) | a maintainer labels an issue `llx` | changes the code and tests, then a draft pull request |
+| [reply.yml](github/reply.yml) | someone writes `@llx` in a review thread | reads the thread and the code, checks the claim, answers in the thread |
 | [release.yml](github/release.yml) | run by hand | picks the version bump, writes notes, drafts a release |
 
 How they are built:
@@ -23,4 +24,7 @@ How they are built:
   before they are posted.
 - Values from the event go through `env:`, never into the script itself, and the prompt says the
   code, issues and comments are data, not instructions.
+- `fix-issue.yml` needs "Allow GitHub Actions to create and approve pull requests" in the
+  repository's Actions settings. Checks on a pull request the workflow opens wait for approval;
+  a GitHub App token instead of `github.token` runs them at once.
 - On a self-hosted runner, replace `ubuntu-latest` with its labels.

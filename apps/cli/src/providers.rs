@@ -179,28 +179,13 @@ impl Provider {
     /// The key and where it comes from: its variable (as the catalog names them) in `vars`, else
     /// the one saved for llx.
     pub(crate) fn key_in(&self, vars: Vars) -> Option<(String, String)> {
-        if let Some((name, key)) = self.variables().into_iter().find_map(|name| {
-            let key = var(vars, &name).filter(|k| !k.trim().is_empty())?;
-            Some((name, key.trim().to_string()))
-        }) {
-            return Some((key, name));
-        }
-        let path = self.key_path()?;
-        let key = provider_kit::store::read(&path)?;
-        Some((key, format!("the key in {}", path.display())))
+        key_from(&self.variables(), vars, self.key_path())
     }
 
     /// What a run that is not signed in says: a session's /login, or the variable its key is
     /// read from.
     pub(crate) fn how_to_sign_in(&self) -> String {
-        let login = format!(
-            "not signed in to {}: open a session (`llx`) and type /login",
-            self.name()
-        );
-        match self.variables().first() {
-            Some(variable) => format!("{login}, or set {variable}"),
-            None => login,
-        }
+        sign_in_words(&self.name(), self.variables().first().map(String::as_str))
     }
 
     /// Whether the key comes from the environment, which no saved one replaces.
@@ -334,14 +319,45 @@ pub(crate) fn decider(model: &str) -> Option<Box<dyn Decider>> {
     decider_in(model, None)
 }
 
-/// [`decider`], OpenRouter's key read in `vars`.
+/// [`decider`], OpenRouter's key read in `vars`: its variable as its package names it, not as
+/// the catalog does, so that `llx decide` reads no catalog (A4: the fact is the package's).
 pub(crate) fn decider_in(model: &str, vars: Vars) -> Option<Box<dyn Decider>> {
-    let (key, _) = Provider::openrouter().key_in(vars)?;
+    let names = [openrouter::auth::KEY_VARIABLE.to_string()];
+    let (key, _) = key_from(&names, vars, Provider::openrouter().key_path())?;
     let client = openrouter::client::OpenRouter::deciding(key, APP);
     Some(Box::new(openrouter::system_one::SystemOne {
         client,
         model: model.to_string(),
     }))
+}
+
+/// What `llx decide` says with no key for the decision model, read off no catalog.
+pub(crate) fn how_to_decide() -> String {
+    sign_in_words(openrouter::NAME, Some(openrouter::auth::KEY_VARIABLE))
+}
+
+/// The first of `names` set in `vars`, trimmed, and its name; else the key saved at `saved`, and
+/// where it is.
+fn key_from(names: &[String], vars: Vars, saved: Option<PathBuf>) -> Option<(String, String)> {
+    let set = names.iter().find_map(|name| {
+        let key = var(vars, name).filter(|k| !k.trim().is_empty())?;
+        Some((key.trim().to_string(), name.clone()))
+    });
+    if set.is_some() {
+        return set;
+    }
+    let path = saved?;
+    let key = provider_kit::store::read(&path)?;
+    Some((key, format!("the key in {}", path.display())))
+}
+
+/// Not signed in to `name`: a session's /login, or the `variable` its key is read from.
+fn sign_in_words(name: &str, variable: Option<&str>) -> String {
+    let login = format!("not signed in to {name}: open a session (`llx`) and type /login");
+    match variable {
+        Some(variable) => format!("{login}, or set {variable}"),
+        None => login,
+    }
 }
 
 /// Ask models.dev for a newer catalog, at most once a day, on a thread of its own: the next

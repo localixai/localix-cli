@@ -316,6 +316,15 @@ impl Term {
         self.workspace.join(name)
     }
 
+    /// The process of this terminal's `llx`.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "read in /proc, on Linux")
+    )]
+    pub(crate) fn pid(&self) -> u32 {
+        self.child.id()
+    }
+
     /// Send llx `signal`, as a closed window (SIGHUP) or `kill` (SIGTERM) does.
     pub(crate) fn signal(&self, signal: libc::c_int) {
         let pid = libc::pid_t::try_from(self.child.id()).unwrap();

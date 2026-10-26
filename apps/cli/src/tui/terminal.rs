@@ -3,6 +3,7 @@
 
 use std::io::{self, Write};
 use std::sync::mpsc::Sender;
+use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use crossterm::event::{Event as Terminal, KeyEventKind};
@@ -89,29 +90,75 @@ pub(super) fn on_signals(quit: fn() -> !) {
     }
 }
 
-/// The editor has the terminal: the keys are its, not the interface's.
-static PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Who reads the terminal's keys: the reader thread, or for a while the person's editor.
+static KEYS: Keys = Keys::new();
 
-#[allow(
-    clippy::disallowed_methods,
-    reason = "a poll: while the editor holds the terminal no event says it gave it back"
-)]
+/// How long the editor waits for the reader to give way: it does at once, unless it reads no more.
+const GIVE_WAY: Duration = Duration::from_secs(1);
+
+/// The keys' turn, and the wake for whoever waits for it to change.
+struct Keys {
+    turn: Mutex<Turn>,
+    changed: Condvar,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Turn {
+    /// The reader's: it waits on the terminal.
+    Reader,
+    /// The editor wants the terminal: the reader gives way once out of its read.
+    Asked,
+    /// The editor's: the reader waits until it is given back.
+    Editor,
+}
+
+impl Keys {
+    const fn new() -> Self {
+        Self {
+            turn: Mutex::new(Turn::Reader),
+            changed: Condvar::new(),
+        }
+    }
+
+    fn turn(&self) -> MutexGuard<'_, Turn> {
+        self.turn.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// The reader's, between two reads: while the editor wants the terminal or has it, nothing
+    /// is read until it is given back.
+    fn between(&self) {
+        let mut turn = self.turn();
+        if *turn == Turn::Asked {
+            *turn = Turn::Editor;
+            self.changed.notify_all();
+        }
+        let given = self.changed.wait_while(turn, |turn| *turn != Turn::Reader);
+        drop(given.unwrap_or_else(PoisonError::into_inner));
+    }
+
+    /// The editor's: the terminal, once the reader gave way; `wake` gets it out of its read.
+    fn take(&self, wake: impl FnOnce()) {
+        *self.turn() = Turn::Asked;
+        wake();
+        let asked = self.turn();
+        let given = (self.changed).wait_timeout_while(asked, GIVE_WAY, |t| *t == Turn::Asked);
+        drop(given.unwrap_or_else(PoisonError::into_inner));
+    }
+
+    fn give_back(&self) {
+        *self.turn() = Turn::Reader;
+        self.changed.notify_all();
+    }
+}
+
+/// The terminal's keys, pastes and sizes, read as they come, to `events`.
 pub(super) fn read_keys(events: &Sender<Input>) {
-    use std::sync::atomic::Ordering;
     loop {
-        if PAUSED.load(Ordering::SeqCst) {
-            std::thread::sleep(Duration::from_millis(50));
-            continue;
-        }
-        match crossterm::event::poll(Duration::from_millis(50)) {
-            Ok(true) if !PAUSED.load(Ordering::SeqCst) => {}
-            Ok(_) => continue,
-            Err(_) => return,
-        }
-        let event = match crossterm::event::read() {
-            Ok(Terminal::Key(key)) if key.kind != KeyEventKind::Release => Input::Key(key),
-            Ok(Terminal::Paste(text)) => Input::Paste(text),
-            Ok(Terminal::Resize(width, height)) => Input::Resize(width, height),
+        KEYS.between();
+        let event = match next() {
+            Ok(Some(Terminal::Key(key))) if key.kind != KeyEventKind::Release => Input::Key(key),
+            Ok(Some(Terminal::Paste(text))) => Input::Paste(text),
+            Ok(Some(Terminal::Resize(width, height))) => Input::Resize(width, height),
             Ok(_) => continue,
             Err(_) => return,
         };
@@ -121,21 +168,52 @@ pub(super) fn read_keys(events: &Sender<Input>) {
     }
 }
 
+/// The terminal's next event: the reader sleeps in the read until one comes (R9). The editor's
+/// turn wakes it with a resize (`wake_reader`).
+#[cfg(unix)]
+fn next() -> io::Result<Option<Terminal>> {
+    crossterm::event::read().map(Some)
+}
+
+/// Gets the reader out of its read: crossterm's reader also wakes on SIGWINCH, and reads it as a
+/// resize, of the size the terminal has (which changes nothing).
+#[cfg(unix)]
+fn wake_reader() {
+    // SAFETY: raise only sends this thread a signal; SIGWINCH is crossterm's to handle, and
+    // ignored where nothing handles it.
+    unsafe { libc::raise(libc::SIGWINCH) };
+}
+
+/// Elsewhere nothing wakes a read: the reader looks for keys every 50 ms, and between two looks
+/// for the editor's turn (`None`).
+#[cfg(not(unix))]
+fn next() -> io::Result<Option<Terminal>> {
+    loop {
+        if *KEYS.turn() == Turn::Asked {
+            return Ok(None);
+        }
+        if crossterm::event::poll(Duration::from_millis(50))? {
+            return crossterm::event::read().map(Some);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn wake_reader() {}
+
 /// The composer's `text` written in `$VISUAL` or `$EDITOR` (else `vi`), the terminal handed over
 /// meanwhile; the text as saved, or as it was when the editor could not run.
 #[allow(
     clippy::disallowed_methods,
-    reason = "the person's own editor, with no deadline by design: it ends when they leave it; \
-              and the reader's pause has no event to wait on"
+    reason = "the person's own editor, with no deadline by design: it ends when they leave it"
 )]
 pub(super) fn editor(text: &str) -> String {
     let path = std::env::temp_dir().join(format!("llx-prompt-{}.md", std::process::id()));
     if std::fs::write(&path, text).is_err() {
         return text.to_string();
     }
-    PAUSED.store(true, std::sync::atomic::Ordering::SeqCst);
-    // The reader may be between a poll and its read: give it the time to see the pause.
-    std::thread::sleep(Duration::from_millis(60));
+    // The keys are the editor's until it ends: the reader reads none meanwhile.
+    KEYS.take(wake_reader);
     restore();
     let command = std::env::var("VISUAL")
         .or_else(|_| std::env::var("EDITOR"))
@@ -148,7 +226,7 @@ pub(super) fn editor(text: &str) -> String {
     let _ = crossterm::terminal::enable_raw_mode();
     let mut out = io::stdout();
     let _ = out.write_all(ENTER.as_bytes()).and_then(|()| out.flush());
-    PAUSED.store(false, std::sync::atomic::Ordering::SeqCst);
+    KEYS.give_back();
     let edited = ran
         .ok()
         .filter(|status| status.success())

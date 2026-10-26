@@ -24,7 +24,9 @@ fn the_reader_gives_the_keys_to_the_editor_and_takes_them_back() {
         key.send(()).unwrap();
         passes.recv().unwrap();
         keys.take(|| key.send(()).unwrap());
-        passes.recv().unwrap();
+        // The wake was read if the reader was in its read, and left for later if it gave way
+        // before it read again: either way its pass, if any, came before the turn was given.
+        let _ = passes.try_recv();
         key.send(()).unwrap();
         let read = passes.recv_timeout(Duration::from_millis(200));
         assert!(read.is_err(), "a key read while the editor has them");

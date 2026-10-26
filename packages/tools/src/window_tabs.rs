@@ -7,7 +7,7 @@ use super::{Kind, Opened, WindowTab, WindowTool, failed};
 
 impl WindowTool<'_> {
     /// Open each tab asked for; one that fails says why, and the others still open.
-    #[allow(
+    #[expect(
         clippy::needless_collect,
         reason = "every tab's thread starts before the first is joined: a lazy iterator would open them one by one"
     )]

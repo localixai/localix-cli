@@ -115,7 +115,7 @@ pub(super) fn keep_rendering(_webview: &wry::WebView, _headless: bool) {}
 /// The installed Safari's user agent. A plain WKWebView omits the `Version/… Safari/…` tokens,
 /// and sites such as Google then serve a legacy page.
 #[cfg(target_os = "macos")]
-#[allow(
+#[expect(
     clippy::unnecessary_wraps,
     reason = "one signature on every system: elsewhere there is none"
 )]

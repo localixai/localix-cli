@@ -201,10 +201,6 @@ impl Shared {
     pub(super) fn closed(&self) {
         self.open.store(false, Ordering::SeqCst);
         let waiting = std::mem::take(&mut *crate::lock(&self.pending));
-        #[allow(
-            clippy::iter_over_hash_type,
-            reason = "each waiting call is told on its own channel: the order is no one's"
-        )]
         for sender in waiting.into_values() {
             let _ = sender.send(Err(WINDOW_CLOSED.into()));
         }

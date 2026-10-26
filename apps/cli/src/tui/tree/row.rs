@@ -77,7 +77,7 @@ fn spent(agent: &SessionView, now: Instant) -> String {
     }
 }
 
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "a row's marks, each drawn on its own: any of them may hold with the others"
 )]

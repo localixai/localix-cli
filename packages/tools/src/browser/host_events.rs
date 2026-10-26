@@ -36,7 +36,7 @@ where
     // Changed on macOS only.
     #[cfg_attr(
         not(target_os = "macos"),
-        allow(unused_mut, reason = "only macOS changes the loop before it runs")
+        expect(unused_mut, reason = "only macOS changes the loop before it runs")
     )]
     let mut event_loop = EventLoopBuilder::<Cmd>::with_user_event().build();
     // The window never takes the keyboard: the person keeps typing where they were, and their keys

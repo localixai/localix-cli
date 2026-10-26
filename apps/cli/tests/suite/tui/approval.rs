@@ -7,7 +7,7 @@ use crate::common::model::{Model, Reply, said};
 use crate::common::term::{Term, key};
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the test waits for what must not happen: no event says it did not"
 )]

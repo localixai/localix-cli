@@ -42,7 +42,7 @@ pub(super) fn linger(shared: &Shared, status: Option<i32>, painter: Arc<Painter>
 }
 
 /// How `pid` ended: its exit code, or 128 and the signal that killed it. It is not reaped.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "an exit status has no event to wait on: it is looked at every 5 ms, for at most STATUS_WAIT"
 )]

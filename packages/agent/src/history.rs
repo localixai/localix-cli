@@ -250,7 +250,7 @@ fn large(arguments: &Value) -> bool {
 }
 
 /// An estimate in whole tokens.
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "`as` saturates and drops the fraction: whole tokens are meant, and none below zero"

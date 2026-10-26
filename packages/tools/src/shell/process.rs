@@ -47,7 +47,7 @@ pub(super) struct Job<'a> {
 pub enum Ending {
     Exit(i32),
     /// Ended by a signal it did not handle; only unix has them.
-    #[cfg_attr(not(unix), allow(dead_code, reason = "used only on unix"))]
+    #[cfg_attr(not(unix), expect(dead_code, reason = "used only on unix"))]
     Signal(i32),
     /// Past its deadline; `killed` once it and everything it started are known to be gone.
     TimedOut {
@@ -134,7 +134,7 @@ pub(super) fn quiet_env(shell: &mut Command, env: Env) {
 /// the wait is on its pipes' readers (`readers`, a message as each pipe closes): the exit is seen
 /// at once (R9). The stop is looked at, and an exit that leaves the output to a background
 /// process seen, within [`POLL`].
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a backoff of a few ms, bounded by the deadline: the pipes closed and the exit, which \
               std gives no event for, is a moment away"
@@ -227,7 +227,7 @@ pub(super) fn kill(child: &mut Child) -> bool {
 
 /// Kill the command and everything it started (the process tree); whether all of it is known to
 /// be gone.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "taskkill signals the tree and returns: it has no wait of its own"
 )]
@@ -247,7 +247,7 @@ fn kill(child: &mut Child) -> bool {
 }
 
 /// Whether `child` exited within [`KILL_WAIT`] of being killed.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a child's exit has no event in std: it is looked at every 10 ms, for at most KILL_WAIT"
 )]

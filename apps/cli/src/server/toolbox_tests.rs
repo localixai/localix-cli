@@ -17,7 +17,7 @@ struct Connected {
     served: Option<std::thread::JoinHandle<()>>,
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the in-process transport's channels, as the socket's connection makes them"
 )]

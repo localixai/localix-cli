@@ -2,7 +2,7 @@
 //! because the table it empties is shared by every session in the process, and the unit tests'
 //! sessions run in parallel.
 #![cfg(unix)]
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "a test looks again until a process is gone, which has no event"
 )]

@@ -3,7 +3,7 @@ use serde_json::json;
 use super::*;
 use crate::testing::Scratch;
 
-#[allow(
+#[expect(
     clippy::unwrap_in_result,
     clippy::panic_in_result_fn,
     reason = "a test's helper: a setup that fails, fails the test"
@@ -36,7 +36,7 @@ fn a_file_comes_back_numbered_with_a_header() {
     );
 }
 
-#[allow(clippy::format_collect, reason = "a test's fixture, built once")]
+#[expect(clippy::format_collect, reason = "a test's fixture, built once")]
 #[test]
 fn offset_and_limit_pick_a_window_and_say_how_to_go_on() {
     let dir = Scratch::new();
@@ -67,7 +67,7 @@ fn the_default_window_is_two_thousand_lines() {
     assert!(report.ends_with("read again with offset 2001 to continue)"));
 }
 
-#[allow(clippy::format_collect, reason = "a test's fixture, built once")]
+#[expect(clippy::format_collect, reason = "a test's fixture, built once")]
 #[test]
 fn a_window_stays_within_its_byte_budget() {
     let dir = Scratch::new();
@@ -174,7 +174,7 @@ fn next_line_keeps_only_the_start_of_a_line() {
     assert_eq!(next_line(&mut reader, &mut line, 3).unwrap(), None);
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test's fixture: the command ends by itself"
 )]

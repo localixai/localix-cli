@@ -203,7 +203,7 @@ fn wake_reader() {}
 
 /// The composer's `text` written in `$VISUAL` or `$EDITOR` (else `vi`), the terminal handed over
 /// meanwhile; the text as saved, or as it was when the editor could not run.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the person's own editor, with no deadline by design: it ends when they leave it"
 )]

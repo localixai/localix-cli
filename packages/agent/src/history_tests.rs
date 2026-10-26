@@ -226,7 +226,7 @@ mod dialogue {
     }
 
     impl Chat for Model {
-        #[allow(
+        #[expect(
             clippy::unwrap_in_result,
             reason = "a test's fake: a poisoned lock fails the test"
         )]

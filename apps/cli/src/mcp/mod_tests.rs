@@ -8,7 +8,7 @@ use super::*;
 
 /// A server that answers as a toolbox does: a call of `slow` waits for its `Halt`, any other
 /// says what it was given. What it was sent is kept.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the in-process transport's channels, as the binary makes them"
 )]
@@ -77,15 +77,11 @@ struct Agent {
 }
 
 impl Agent {
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "what the agent reads, as a process's stdout would carry it"
-    )]
     fn start(client: Client) -> Self {
         Self::reaching(move || Ok(client.clone()))
     }
 
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "what the agent reads, as a process's stdout would carry it"
     )]
@@ -155,7 +151,7 @@ impl Agent {
 const WAIT: Duration = Duration::from_secs(5);
 
 /// Whether the server was sent a command `matching`, within a wait.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "what the fake server saw has no event: it is looked at every 10 ms, bounded"
 )]
@@ -267,7 +263,7 @@ fn a_line_that_is_not_a_message_is_a_parse_error() {
 }
 
 /// A daemon that takes the handshake and then goes away, as one stopped under the agent does.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the in-process transport's channels, as the binary makes them"
 )]

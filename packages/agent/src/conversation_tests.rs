@@ -65,7 +65,7 @@ fn a_result_too_long_keeps_its_head_and_tail() {
     assert_eq!(shortened("short"), "short");
 }
 
-#[allow(clippy::format_collect, reason = "a test's fixture, built once")]
+#[expect(clippy::format_collect, reason = "a test's fixture, built once")]
 #[test]
 fn a_whole_tool_window_comes_through_unshortened() {
     // About what a file window or a command's two streams take at most: 20 KB and a header.

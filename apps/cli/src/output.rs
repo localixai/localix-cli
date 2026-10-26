@@ -71,7 +71,7 @@ pub(crate) struct Summary<'a> {
     pub session: &'a str,
 }
 
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "independent facts of the run: its options and where stdout and stderr go"
 )]

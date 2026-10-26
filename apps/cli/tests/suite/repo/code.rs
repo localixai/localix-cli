@@ -104,7 +104,7 @@ fn unsafe_lives_only_where_the_os_is_called() {
 }
 
 /// The lints that hold the rules (S4): removing one, or loosening it, fails here first.
-const HELD: [&str; 12] = [
+const HELD: [&str; 13] = [
     "unwrap_used",
     "expect_used",
     "panic",
@@ -116,6 +116,7 @@ const HELD: [&str; 12] = [
     "disallowed_types",
     "too_many_lines",
     "allow_attributes_without_reason",
+    "allow_attributes",
     "unreachable_pub",
 ];
 
@@ -199,10 +200,10 @@ fn every_build_unwinds_a_panic() {
 }
 
 /// The lints allowed in working code (S4's exceptions), at most, and at least: a ratchet. Each
-/// `allow` is a rule set aside in one place for a reason; one more raises this number in the
+/// `expect` is a rule set aside in one place for a reason; one more raises this number in the
 /// commit that adds it, where a review sees it, and one fewer lowers it, so the room a fix made
 /// is not taken again unseen.
-const ALLOWED: usize = 47;
+const ALLOWED: usize = 43;
 
 /// S4: the exceptions only fall. (Lines that are comments do not count; tests may allow freely.)
 #[test]

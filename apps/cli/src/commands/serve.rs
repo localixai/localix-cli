@@ -119,7 +119,7 @@ fn locked(config: &Path) -> Result<Option<daemon::Lock>, Failure> {
     }
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a backoff: neither a lock let go nor a task's end has an event to wait on here"
 )]

@@ -37,7 +37,7 @@ fn choose(title: &str, options: Vec<(String, String)>) -> App {
 }
 
 /// The pick replied, if one was.
-#[allow(
+#[expect(
     clippy::option_option,
     reason = "no reply yet, or the reply: a pick or a cancel"
 )]
@@ -50,7 +50,7 @@ fn picked(app: &mut App) -> Option<Option<usize>> {
 }
 
 /// The row and value replied, if they were.
-#[allow(
+#[expect(
     clippy::option_option,
     reason = "no reply yet, or the reply: a pick or a cancel"
 )]

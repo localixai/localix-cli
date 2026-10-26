@@ -83,7 +83,7 @@ pub(crate) fn doctor(models: &ModelOptions) -> Result<i32, Failure> {
 }
 
 /// The shell `bash` runs commands with, as the tool names it.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "R10 debt: `echo ok` ends at once, with no deadline or stop yet"
 )]

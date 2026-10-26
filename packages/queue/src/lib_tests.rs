@@ -121,7 +121,7 @@ fn an_entry_reads_as_tagged_data_its_body_cannot_close() {
     );
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the poster comes late on purpose: the queue's wait is what is tested"
 )]

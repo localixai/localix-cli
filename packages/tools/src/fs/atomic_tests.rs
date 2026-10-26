@@ -46,7 +46,7 @@ impl Drop for ReadOnly<'_> {
     fn drop(&mut self) {
         if let Ok(meta) = fs::metadata(self.0) {
             let mut permissions = meta.permissions();
-            #[allow(
+            #[expect(
                 clippy::permissions_set_readonly_false,
                 reason = "the test makes the file writable again to clean up"
             )]

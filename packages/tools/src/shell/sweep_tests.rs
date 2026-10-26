@@ -10,7 +10,7 @@ use crate::shell::{Sessions, Until, Wait};
 use crate::testing::Scratch;
 
 /// Whether `pid` is gone within two seconds (a killed orphan is reaped by init).
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test looks again until it is so, for a bounded time: there is no event to wait on"
 )]
@@ -90,7 +90,7 @@ fn a_job_in_a_group_of_its_own_dies_with_its_command() {
 
 /// The finding this module fixes: an interactive bash in a session, a job started in the
 /// background, then the session closed.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test's fixture: the command ends by itself"
 )]

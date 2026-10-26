@@ -6,7 +6,7 @@ use crate::common::model::Model;
 use crate::common::term::Term;
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test looks at the screen again until it is so, for a bounded time, then gives a \
               late row the time to be drawn: there is no event to wait on"

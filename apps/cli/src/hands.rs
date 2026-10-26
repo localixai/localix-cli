@@ -12,7 +12,7 @@ use serde_json::Value;
 const DEBUG: &str = "DECISION_LOOP_DEBUG";
 
 /// Wait `time` before a view is looked at again.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a poll: a view has no change event"
 )]
@@ -49,7 +49,7 @@ impl Decider for Traced<'_> {
     }
 }
 
-#[allow(
+#[expect(
     clippy::print_stderr,
     reason = "a developer's trace, asked for by the environment, beside the interface"
 )]

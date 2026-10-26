@@ -108,7 +108,7 @@ pub(crate) fn start(start: Start) -> io::Result<Running> {
 
 /// The key reader, the client and the interface's thread, once the terminal is the interface's.
 fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "the interface must never make the server or the keys wait: it takes \
                   everything that came before each frame it draws"

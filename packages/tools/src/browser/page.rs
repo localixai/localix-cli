@@ -235,7 +235,7 @@ impl Drop for Claimed<'_> {
 }
 
 /// Close `open` and wait, briefly, until it is.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the event loop closes the window on its own thread: its flag is looked at every 10 ms, for at most 2 s"
 )]

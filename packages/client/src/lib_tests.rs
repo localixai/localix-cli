@@ -7,7 +7,7 @@ use super::*;
 const WAIT: Duration = Duration::from_secs(5);
 
 /// A client and the server's ends of its channels, with what reaches the interface.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the in-process transport's own channels, as the binary makes them"
 )]

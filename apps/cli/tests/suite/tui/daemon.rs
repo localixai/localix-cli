@@ -18,7 +18,7 @@ pub(super) fn status(term: &Term) -> String {
 
 /// What it says once it says `words`: a client is counted as its desk starts, just after the
 /// prompt shows.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a status has no event to wait on: it is asked again every 50 ms, for a bounded time"
 )]

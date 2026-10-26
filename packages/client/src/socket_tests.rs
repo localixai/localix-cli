@@ -19,7 +19,7 @@ fn place(name: &str) -> PathBuf {
 }
 
 /// A client connected to a bare listener, the server's end of it, and what reaches the interface.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "what the test's interface is shown, as many frames as the test sends"
 )]

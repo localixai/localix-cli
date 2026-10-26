@@ -28,7 +28,7 @@ fn the_key_reader_sleeps_while_nobody_types() {
         line.unwrap().trim().parse::<u64>().unwrap()
     };
     let before = woken();
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "the idle time whose wakes are counted"
     )]

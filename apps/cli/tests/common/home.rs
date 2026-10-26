@@ -46,7 +46,7 @@ impl Home {
     }
 
     /// `llx args…` run to its end.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a test runs the binary to its end, against a scripted model"
     )]
@@ -55,7 +55,7 @@ impl Home {
     }
 
     /// `llx args…` run to its end with [`FAKE_KEY`] in the environment.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a test runs the binary to its end, against a scripted model"
     )]
@@ -105,7 +105,7 @@ impl Drop for Home {
 /// The daemon a test started in `home`, if any is left: asked to stop as a person asks
 /// (`llx serve stop`, so an instrumented binary writes its coverage), then killed by the pid its
 /// lock file still names. A daemon that ended cleanly emptied that file.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "`llx serve stop` waits a bounded time for the daemon, and ends"
 )]

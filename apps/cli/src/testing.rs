@@ -94,7 +94,7 @@ impl Captured {
 }
 
 impl Write for Captured {
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -131,7 +131,7 @@ impl ScriptedChat {
 }
 
 impl Chat for ScriptedChat {
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -349,7 +349,7 @@ pub(crate) struct Gated {
 
 /// A [`Gated`] model, and where its replies are sent.
 pub(crate) fn gated() -> (std::sync::mpsc::Sender<Completion>, Gated) {
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a test's script: it sends the turns it means the model to take, then ends"
     )]
@@ -369,7 +369,7 @@ impl Gated {
 }
 
 impl Chat for Gated {
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -400,7 +400,7 @@ pub(crate) fn fake_peer() -> (
     Arc<crate::server::Peer>,
     std::sync::mpsc::Receiver<protocol::ToClient>,
 ) {
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "the in-process transport's channel, as the binary makes it"
     )]

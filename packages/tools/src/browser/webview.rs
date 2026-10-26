@@ -107,7 +107,7 @@ impl WebviewDriver {
     }
 
     /// Retry `name` while the page is between documents (no probe yet, or no body).
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a backoff: the page between documents says nothing when its probe is ready"
     )]

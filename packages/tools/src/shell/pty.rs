@@ -110,7 +110,7 @@ pub(super) fn spawn(
 impl Pty {
     /// Type `input`, then press `keys` one at a time; the bytes sent, of all of them. A program
     /// that stops reading its input stops the typing.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a pause between keys, as a person's: text followed at once by Enter is taken for a paste"
     )]

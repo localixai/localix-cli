@@ -1,7 +1,7 @@
 use super::*;
 use crate::testing::Scratch;
 
-#[allow(
+#[expect(
     clippy::unnecessary_wraps,
     reason = "it stands for what reading the prompt returns"
 )]

@@ -71,7 +71,7 @@ impl Catalog {
     }
 
     /// models.dev's files built in, inflated.
-    #[allow(
+    #[expect(
         clippy::expect_used,
         reason = "build.rs wrote this document in this shape, and the tests parse it"
     )]

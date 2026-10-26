@@ -20,7 +20,7 @@ CI configuration, a few representative files. Keep it short and concrete, every 
 an agent will act on. If an AGENTS.md or CLAUDE.md exists, improve it instead of replacing it.";
 
 /// `/diff`: what changed since the last commit, and the files git does not track yet.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "R10 debt: a local git query, with no deadline or stop yet"
 )]

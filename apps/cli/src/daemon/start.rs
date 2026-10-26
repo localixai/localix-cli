@@ -69,10 +69,6 @@ struct Closed(#[expect(dead_code, reason = "held only to be dropped")] SyncSende
 
 /// `llx serve` in a session of its own, with no terminal: neither this terminal's signals nor
 /// its closing reach it. Its stdin is nothing, its errors go to `daemon.log` beside the lock.
-#[allow(
-    clippy::zombie_processes,
-    reason = "the daemon outlives this process, which never waits for it; init reaps it"
-)]
 fn spawn(config: &Path) -> Result<(), String> {
     let why = |error: std::io::Error| format!("the daemon could not start: {error}");
     std::fs::create_dir_all(config).map_err(why)?;

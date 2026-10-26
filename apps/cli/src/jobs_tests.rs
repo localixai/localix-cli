@@ -214,7 +214,7 @@ fn a_schedule_stopped_from_its_row_leaves_the_list() {
                 .name("scheduler".into())
                 .spawn_scoped(scope, || jobs.tick(kit))
                 .unwrap();
-            #[allow(
+            #[expect(
                 clippy::disallowed_methods,
                 reason = "the scheduler's clock passes: its tick is what is tested"
             )]

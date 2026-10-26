@@ -50,7 +50,7 @@ pub(super) struct Paint {
     frame: Option<String>,
 }
 
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "each says something of its own, set by its own side: the terminal's end, the \
               needle, the session's end, a paint due, the window closed by a call"

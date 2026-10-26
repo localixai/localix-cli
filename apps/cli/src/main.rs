@@ -49,8 +49,7 @@ mod xterm;
 
 use clap::Parser;
 
-#[allow(
-    clippy::exit,
+#[expect(
     clippy::disallowed_methods,
     reason = "the one place the process ends, with the exit-code contract (exit.rs)"
 )]

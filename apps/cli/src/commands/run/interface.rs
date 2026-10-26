@@ -44,7 +44,7 @@ pub(super) fn attach(
     theme: Option<protocol::Theme>,
 ) -> Result<(Attached, Place), Failure> {
     let why = |error| Failure::Usage(format!("{NO_INTERFACE} ({error}): {RUN_EXEC}"));
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "the in-process transport: the server never waits on the interface (W6), the \
                   interface never on the desk; one frame per thing done or key pressed"
@@ -97,7 +97,7 @@ pub(crate) fn serving(
     terminals: Arc<AtomicU32>,
     ended: Left,
 ) -> std::io::Result<(Arc<Peer>, Receiver<desk::Request>)> {
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "the desk's requests: one per thing the person asks of it, never waited on"
     )]

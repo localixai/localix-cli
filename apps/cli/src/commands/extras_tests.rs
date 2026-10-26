@@ -3,7 +3,7 @@ use std::process::Command;
 use super::*;
 use crate::testing::Scratch;
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test's fixture: the command ends by itself"
 )]

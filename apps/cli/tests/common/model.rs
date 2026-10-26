@@ -93,7 +93,7 @@ impl Model {
     }
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test's server waits, bounded, for the file the test makes: there is no event to wait on"
 )]

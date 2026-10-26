@@ -97,7 +97,7 @@ impl Term {
     }
 
     /// `llx args…` in this session's home, run to its end: what it printed, and its exit code.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a test runs `llx serve status` or `stop` to its end; both answer in seconds"
     )]
@@ -210,7 +210,7 @@ impl Term {
     }
 
     /// Wait until the cursor's row reads `row`; the screen, or a panic that prints it.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a test looks at the screen again until it is so, for a bounded time: there is no event to wait on"
     )]
@@ -230,7 +230,7 @@ impl Term {
 
     /// Press keys, or type text, as a terminal sends them, then wait 60 ms: keys sent back to
     /// back can arrive in one read and parse as one key (two Escs as Alt+Esc).
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a pause after the keys: sent back to back they arrive as one"
     )]
@@ -242,7 +242,7 @@ impl Term {
     }
 
     /// Type `text` a character at a time, as a person does.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a pause between keys, as a person's: text followed at once by Enter is taken for a paste"
     )]
@@ -262,7 +262,7 @@ impl Term {
 
     /// Wait until the screen shows one of `needles`; the first one shown and the screen, or a
     /// panic that prints it.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a test looks at the screen again until it is so, for a bounded time: there is no event to wait on"
     )]
@@ -285,7 +285,7 @@ impl Term {
     }
 
     /// Wait up to `timeout` for llx to exit; its exit code, `None` if it did not.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "an exit status has no event to wait on: it is looked at every 20 ms, for a bounded time"
     )]
@@ -319,7 +319,7 @@ impl Term {
     /// The process of this terminal's `llx`.
     #[cfg_attr(
         not(target_os = "linux"),
-        allow(dead_code, reason = "read in /proc, on Linux")
+        expect(dead_code, reason = "read in /proc, on Linux")
     )]
     pub(crate) fn pid(&self) -> u32 {
         self.child.id()
@@ -365,7 +365,7 @@ fn place() -> (PathBuf, PathBuf) {
 impl Drop for Term {
     /// The session is ended as a person ends it, so that it exits on its own (an instrumented
     /// binary writes its coverage then); one that does not within 3 s is killed.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "an exit status has no event to wait on: it is looked at every 100 ms, for at most 3 s"
     )]

@@ -61,7 +61,7 @@ impl Scripted {
 }
 
 impl Http for Scripted {
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]

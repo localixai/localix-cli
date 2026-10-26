@@ -106,7 +106,7 @@ impl OpenRouter {
     }
 
     /// POST `body` to `path`, retrying overload answers with backoff.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a backoff between attempts, which no event ends sooner"
     )]

@@ -98,7 +98,7 @@ impl ChatModel {
 }
 
 impl Chat for ChatModel {
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a backoff between attempts, which no event ends sooner"
     )]

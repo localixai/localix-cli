@@ -7,7 +7,7 @@
 //! else the provider's default API, the protocol from the SDK package and the address from the
 //! table, the provider, or the SDK's default.
 
-#![allow(
+#![expect(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

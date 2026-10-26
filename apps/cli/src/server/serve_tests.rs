@@ -16,25 +16,17 @@ struct Served {
     peer: Arc<Peer>,
 }
 
-#[allow(
-    clippy::disallowed_methods,
-    reason = "the in-process transport's channels, as the binary makes them"
-)]
 fn served() -> Served {
     served_by(None)
 }
 
 /// [`served`], as the daemon `host` when there is one.
-#[allow(
-    clippy::disallowed_methods,
-    reason = "the in-process transport's channels, as the binary makes them"
-)]
 fn served_by(host: Option<Arc<Host>>) -> Served {
     served_with(host, || vec!["cargo build".into()])
 }
 
 /// [`served_by`], its terminal sessions listed by `shells`.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the in-process transport's channels, as the binary makes them"
 )]
@@ -220,7 +212,7 @@ fn the_place_an_interface_attaches_from_goes_to_the_desk() {
 }
 
 /// Another connection to the same sessions: where its frames go in, what comes out to it.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the in-process transport's channels, as the binary makes them"
 )]

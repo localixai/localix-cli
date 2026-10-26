@@ -38,7 +38,7 @@ fn send(sessions: &Sessions, id: u32, input: &str, keys: &[&str], wait: Wait) ->
         .unwrap()
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test's fixture: the command ends by itself"
 )]
@@ -62,7 +62,7 @@ fn pid(sessions: &Sessions, id: u32) -> i32 {
 }
 
 /// Whether `pid` (or with a minus, a process group) is gone, within two seconds.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test looks again until it is so, for a bounded time: there is no event to wait on"
 )]
@@ -229,7 +229,7 @@ fn a_stop_ends_the_wait_and_leaves_the_program_running() {
 }
 
 /// Session 1 waited on for `millis` on another thread while `then` runs.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the other thread's wait is under way before `then` runs"
 )]

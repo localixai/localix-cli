@@ -202,7 +202,7 @@ pub(crate) fn at_desk_with(
 
 /// A session at the desk as [`at_desk_with`] makes it, `person` given the connection to end it
 /// as they choose, and the server's side of it; the desk must end within 30 s after.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the desk's end is looked at again for a bounded time: with the person gone, no \
               frame says it"
@@ -215,7 +215,7 @@ pub(crate) fn connected(
 ) -> Scratch {
     let scratch = Scratch::new();
     let (shared, seat) = setup(&scratch, crate::modes::built("bypass"), true).split(None);
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "the in-process transport and the desk's requests, as the binary makes them"
     )]

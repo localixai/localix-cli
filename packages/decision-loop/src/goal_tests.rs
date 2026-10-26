@@ -1,7 +1,7 @@
 use super::*;
 
 /// The app's pause, as the binary gives it: a test's view has no change event either.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a poll, as the app's: a view has no change event"
 )]
@@ -59,7 +59,7 @@ mod covered {
     }
 
     impl View for Banner {
-        #[allow(
+        #[expect(
             clippy::unwrap_in_result,
             reason = "a test's fake: a poisoned lock fails the test"
         )]
@@ -68,7 +68,7 @@ mod covered {
             let acts = *self.acts.lock().unwrap();
             Ok(view(if acts >= 2 { 2 } else { 1 }))
         }
-        #[allow(
+        #[expect(
             clippy::unwrap_in_result,
             reason = "a test's fake: a poisoned lock fails the test"
         )]
@@ -98,7 +98,7 @@ mod covered {
     }
 
     impl Decider for Model {
-        #[allow(
+        #[expect(
             clippy::unwrap_in_result,
             reason = "a test's fake: a poisoned lock fails the test"
         )]
@@ -165,7 +165,7 @@ mod covered {
     }
 
     impl Decider for Unsure {
-        #[allow(
+        #[expect(
             clippy::unwrap_in_result,
             reason = "a test's fake: a poisoned lock fails the test"
         )]

@@ -53,7 +53,7 @@ fn a_panicking_lane_ends_the_other_lanes() {
     let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let scratch = Scratch::new();
         let (shared, seat) = setup(&scratch, crate::modes::built("bypass"), true).split(None);
-        #[allow(
+        #[expect(
             clippy::disallowed_methods,
             reason = "the in-process transport and the desk's requests, as the binary makes them"
         )]
@@ -165,7 +165,7 @@ fn quit_with_lanes_that_stop_ends_without_the_hard_exit() {
 /// The command outlasts the stop, however late it lands: it is killed, and no turn comes after.
 #[cfg(unix)]
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "nothing tells a lane that it was not asked: time passing does, bounded"
 )]
@@ -193,7 +193,7 @@ fn a_connection_that_ends_without_background_stops_the_work() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "nothing tells a lane that it was not asked: time passing does, bounded"
 )]

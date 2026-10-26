@@ -9,7 +9,7 @@ use contracts::model::{Answer, DecideError, Decision, Question};
 use contracts::view::{Action, Element, Observation, View, ViewResult};
 
 /// The app's pause, as the binary gives it: a test's view has no change event either.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a poll, as the app's: a view has no change event"
 )]
@@ -24,7 +24,7 @@ struct Quiz {
 }
 
 impl View for Quiz {
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -51,7 +51,7 @@ impl View for Quiz {
             busy: false,
         })
     }
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -162,7 +162,7 @@ fn the_hands_report_each_step_and_how_the_task_ended() {
 struct Toggle(Mutex<bool>);
 
 impl View for Toggle {
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -181,7 +181,7 @@ impl View for Toggle {
         .into();
         Ok(view)
     }
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]

@@ -79,7 +79,7 @@ pub fn listen(spec: Listen) -> Result<Callback, String> {
     })
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a backoff: the sign-in asked to give the port up has no event to wait on"
 )]

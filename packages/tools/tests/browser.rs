@@ -1,12 +1,11 @@
 //! The native driver against fixture pages on a local server, in a real headless window.
 //! The event loop must own the main thread, so this test has its own `main` (`harness = false`).
-#![allow(
+#![expect(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
     clippy::print_stdout,
     clippy::print_stderr,
-    clippy::exit,
     clippy::disallowed_methods,
     clippy::too_many_lines,
     clippy::cognitive_complexity,

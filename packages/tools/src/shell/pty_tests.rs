@@ -74,7 +74,7 @@ fn input_a_program_reads_does_not_stall() {
     assert_eq!(typed.stalled, None, "{typed:?}");
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test's copy of itself runs one test, which ends by itself"
 )]

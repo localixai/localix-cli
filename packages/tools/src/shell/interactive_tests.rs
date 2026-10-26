@@ -14,7 +14,7 @@ fn bash(dir: &Scratch, gate: &dyn Gate, arguments: Value) -> Result<String, Tool
 }
 
 /// A call with the sessions of earlier calls.
-#[allow(
+#[expect(
     clippy::unwrap_in_result,
     clippy::panic_in_result_fn,
     reason = "a test's helper: a setup that fails, fails the test"
@@ -201,7 +201,7 @@ fn a_fifth_session_is_refused_before_the_gate() {
 
 /// What was typed is looked for where it outlives the call: in the file `cat` copies it to, not in
 /// the output, which a call that typed before asking would have taken and dropped.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test looks again until it is so, for a bounded time: there is no event to wait on"
 )]
@@ -299,7 +299,7 @@ fn watched(frames: &std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> Sessions {
 
 /// A session driven through the tool, with `show` on every call or on none: what the gate was
 /// asked, what the model read (each report's wait time cut), and the frames painted.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test looks again until it is so, for a bounded time: there is no event to wait on"
 )]

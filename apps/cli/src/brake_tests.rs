@@ -105,7 +105,7 @@ fn a_stopped_task_halts_at_its_next_turn_and_says_so_after_its_last() {
 fn a_stopped_task_asks_the_decision_model_nothing_more() {
     struct Never;
     impl Decider for Never {
-        #[allow(
+        #[expect(
             clippy::panic_in_result_fn,
             reason = "a test's fake: a call it should not get fails the test"
         )]

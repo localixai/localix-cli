@@ -80,7 +80,7 @@ fn a_session_whose_interface_cannot_start_points_to_exec() {
 /// only the home it is given, so no test depends on the machine or calls a real model.
 #[cfg(unix)]
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test's fixture: `env` ends by itself"
 )]
@@ -115,7 +115,7 @@ fn the_binary_sees_nothing_of_the_shell_that_runs_the_tests() {
 /// usage error leaves the terminal as it found it, not in raw mode.
 #[cfg(unix)]
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test runs the binary to its end, against a scripted model"
 )]
@@ -162,7 +162,7 @@ fn an_interface_that_cannot_draw_gives_the_terminal_back() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test runs the binary to its end, against a scripted model"
 )]

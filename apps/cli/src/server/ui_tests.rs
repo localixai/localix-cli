@@ -51,7 +51,7 @@ const WAIT: Duration = Duration::from_secs(5);
 
 /// A server for `peer` on a thread of its own, as the binary serves the first interface: the
 /// frames it is sent go in through the sender, and it ends when the sender is dropped.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the in-process transport's channels, as the binary makes them"
 )]

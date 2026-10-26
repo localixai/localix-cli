@@ -24,7 +24,7 @@ fn each_config_has_its_own_socket_in_the_persons_own_directory() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a backoff while a child of another test holds the lock between fork and exec"
 )]
@@ -68,7 +68,7 @@ fn the_probe_answers_only_for_a_daemon_that_answers() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the desk's requests, as the binary makes its channel"
 )]
@@ -128,7 +128,7 @@ fn a_daemon_is_idle_only_when_nothing_needs_it() {
 }
 
 /// A daemon that answers `shutdown` only after `late`, then ends: one under load.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the test's own slow daemon: it waits on purpose before it answers"
 )]

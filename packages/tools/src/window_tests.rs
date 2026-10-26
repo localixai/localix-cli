@@ -31,7 +31,7 @@ impl Fake {
         self.done.lock().unwrap().push(what);
     }
 
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -57,7 +57,7 @@ impl Kind for Fake {
     fn fields(&self) -> Vec<(&'static str, Value)> {
         vec![("thing", json!({"type": "string"}))]
     }
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -97,7 +97,7 @@ impl Kind for Fake {
         self.did(format!("screenshot {id}"));
         Ok("a picture".to_string().into())
     }
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -190,7 +190,7 @@ impl Windowed for Shown {
     fn said(&self) -> Option<String> {
         self.sent.lock().unwrap().take()
     }
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -198,7 +198,7 @@ impl Windowed for Shown {
         self.asked.lock().unwrap().push(format!("{act:?} {tab}"));
         Ok(())
     }
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -562,7 +562,7 @@ impl Kind for Together {
     fn fields(&self) -> Vec<(&'static str, Value)> {
         vec![]
     }
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a test's fake waits, bounded, for the other tab to open beside it"
     )]
@@ -581,28 +581,28 @@ impl Kind for Together {
             false => Err(ToolError::Failed("opened alone".into())),
         }
     }
-    #[allow(
+    #[expect(
         clippy::panic_in_result_fn,
         reason = "a test's fake: a call it should not get fails the test"
     )]
     fn interact(&self, _: u32, _: &Value) -> Result<ToolOutput, ToolError> {
         panic!("not called here")
     }
-    #[allow(
+    #[expect(
         clippy::panic_in_result_fn,
         reason = "a test's fake: a call it should not get fails the test"
     )]
     fn snapshot(&self, _: u32) -> Result<ToolOutput, ToolError> {
         panic!("not called here")
     }
-    #[allow(
+    #[expect(
         clippy::panic_in_result_fn,
         reason = "a test's fake: a call it should not get fails the test"
     )]
     fn screenshot(&self, _: u32, _: &Value) -> Result<ToolOutput, ToolError> {
         panic!("not called here")
     }
-    #[allow(
+    #[expect(
         clippy::panic_in_result_fn,
         reason = "a test's fake: a call it should not get fails the test"
     )]
@@ -612,7 +612,7 @@ impl Kind for Together {
     fn tabs(&self) -> Vec<(u32, String, String)> {
         vec![]
     }
-    #[allow(
+    #[expect(
         clippy::panic_in_result_fn,
         reason = "a test's fake: a call it should not get fails the test"
     )]

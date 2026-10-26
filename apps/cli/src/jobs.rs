@@ -48,10 +48,6 @@ pub(crate) struct Jobs {
 /// A count rung with a notification, so a ring between a look and the wait is not missed.
 #[derive(Default)]
 struct Bell {
-    #[allow(
-        clippy::mutex_integer,
-        reason = "the count is what `rang` waits on: a Condvar needs the Mutex"
-    )]
     rung: Mutex<u64>,
     rang: Condvar,
 }

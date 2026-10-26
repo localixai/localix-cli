@@ -27,7 +27,7 @@ impl Client {
         let stream = UnixStream::connect(path)?;
         stream.set_write_timeout(Some(WRITE_WAIT))?;
         let reading = stream.try_clone()?;
-        #[allow(
+        #[expect(
             clippy::disallowed_methods,
             reason = "the caller never blocks on the socket: what the person sends waits here, \
                       and a server that stops reading ends the writer within WRITE_WAIT"

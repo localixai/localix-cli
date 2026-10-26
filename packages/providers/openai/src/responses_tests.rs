@@ -90,7 +90,7 @@ fn model(replies: Vec<(u16, String)>, held: Tokens) -> (ChatModel, Arc<Scripted>
     (model, http, memory)
 }
 
-#[allow(clippy::format_collect, reason = "a test's fixture, built once")]
+#[expect(clippy::format_collect, reason = "a test's fixture, built once")]
 fn streamed(events: &[Value]) -> String {
     events
         .iter()

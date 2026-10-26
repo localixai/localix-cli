@@ -88,7 +88,7 @@ pub(crate) fn pasted_dir() -> PathBuf {
 
 /// The clipboard's picture, saved as a PNG under `dir`; why not when there is none.
 #[cfg(target_os = "macos")]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "R10 debt: osascript writes one file and ends, with no deadline or stop yet"
 )]

@@ -28,7 +28,7 @@ const STOP_FALLBACK: Duration = Duration::from_secs(1);
 const DONE_POLL: Duration = Duration::from_millis(100);
 
 /// Rung, with [`BELL`], whenever a waiting question may be over: a reply, a withdrawal, a stop.
-#[allow(
+#[expect(
     clippy::mutex_integer,
     reason = "the count is what the bell's Condvar waits on: it needs the Mutex"
 )]

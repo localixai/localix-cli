@@ -38,9 +38,9 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT"
 
-# The workspace's lints, taken by every crate (ARCHITECTURE.md S4). Hard: a lint is allowed only
-# in place, with its `reason`, never turned off here. Tests may unwrap, panic and print
-# (clippy.toml); working code may not.
+# The workspace's lints, taken by every crate (ARCHITECTURE.md S4). Hard: a lint is set aside only
+# in place, by an `expect` with its `reason`, never turned off here. Tests may unwrap, panic and
+# print (clippy.toml); working code may not.
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
 # The tightest visibility that compiles (L9): `pub` only for what another crate uses.
@@ -119,8 +119,10 @@ filetype_is_file = "deny"
 # Every unsafe block says why it is sound, one operation each (S11).
 undocumented_unsafe_blocks = "deny"
 multiple_unsafe_ops_per_block = "deny"
-# A lint allowed says why.
+# A lint set aside says why, and is an `expect`: an exemption that no longer applies fails the
+# build, so none outlives its reason.
 allow_attributes_without_reason = "deny"
+allow_attributes = "deny"
 
 [workspace.dependencies]
 agent = { path = "packages/agent" }

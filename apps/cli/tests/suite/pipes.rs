@@ -5,7 +5,7 @@ use std::process::{Command, Output, Stdio};
 use crate::common::home::{FAKE_KEY, Home, text};
 
 /// `command` writing into a pipe whose reader is already gone.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test runs the binary to its end, against a scripted model"
 )]

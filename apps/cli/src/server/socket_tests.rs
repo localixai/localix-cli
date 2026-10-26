@@ -29,7 +29,7 @@ pub(crate) struct Daemon {
     pub(crate) ended: Receiver<()>,
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the desk's requests, as the binary makes its channel"
 )]
@@ -70,7 +70,7 @@ fn the_socket_is_the_persons_alone_and_a_stale_one_is_replaced() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "what the test's interface is shown, as many frames as the test sends"
 )]
@@ -177,7 +177,7 @@ fn a_client_that_never_reads_is_cut_off_and_never_waited_for() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the first client's channel, read by no one; the test's late reader's pause"
 )]

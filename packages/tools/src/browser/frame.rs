@@ -21,13 +21,19 @@ pub(super) type Rgb = [u8; 3];
 pub(super) const CSS: &str = include_str!("frame.css");
 /// The system's grounds, when a page has none of its own.
 #[cfg_attr(
-    not(target_os = "macos"),
-    allow(dead_code, reason = "the glass under a window is macOS's only")
+    not(any(target_os = "macos", test)),
+    expect(
+        dead_code,
+        reason = "the glass under a window is macOS's only; its tests use it everywhere"
+    )
 )]
 pub(super) const DARK: Rgb = [0x07, 0x07, 0x07];
 #[cfg_attr(
-    not(target_os = "macos"),
-    allow(dead_code, reason = "the glass under a window is macOS's only")
+    not(any(target_os = "macos", test)),
+    expect(
+        dead_code,
+        reason = "the glass under a window is macOS's only; its tests use it everywhere"
+    )
 )]
 pub(super) const LIGHT: Rgb = [0xf7, 0xf7, 0xf7];
 
@@ -69,8 +75,11 @@ pub(super) fn transparency() -> Transparency {
 
 /// A page's bounds: `size`, `x` points from the window's left edge and `top` from its top.
 #[cfg_attr(
-    target_os = "linux",
-    allow(dead_code, reason = "a page in a GTK box takes its place from the box")
+    all(target_os = "linux", not(test)),
+    expect(
+        dead_code,
+        reason = "a page in a GTK box takes its place from the box; its tests use it everywhere"
+    )
 )]
 pub(super) fn fill(size: LogicalSize<f64>, x: f64, top: f64) -> wry::Rect {
     use wry::dpi::{LogicalPosition as At, LogicalSize as Size};
@@ -106,8 +115,11 @@ pub(super) fn dark([red, green, blue]: Rgb) -> bool {
 /// The material for an appearance (NSVisualEffectMaterial): HUD, which is dark, under a dark
 /// ground; under-window background, which reads light, under a light one.
 #[cfg_attr(
-    not(target_os = "macos"),
-    allow(dead_code, reason = "the glass under a window is macOS's only")
+    not(any(target_os = "macos", test)),
+    expect(
+        dead_code,
+        reason = "the glass under a window is macOS's only; its tests use it everywhere"
+    )
 )]
 pub(super) fn material(dark: bool) -> isize {
     if dark { 13 } else { 21 }
@@ -118,8 +130,11 @@ pub(super) fn material(dark: bool) -> isize {
 /// grey-blue ground over the material read as grey; the page's ground, else the system's, only
 /// says which appearance.
 #[cfg_attr(
-    not(target_os = "macos"),
-    allow(dead_code, reason = "the glass under a window is macOS's only")
+    not(any(target_os = "macos", test)),
+    expect(
+        dead_code,
+        reason = "the glass under a window is macOS's only; its tests use it everywhere"
+    )
 )]
 pub(super) fn coat(ground: Option<Rgb>, system_dark: bool) -> (Rgb, f64) {
     match ground.map_or(system_dark, dark) {
@@ -202,7 +217,7 @@ impl Frame {
     /// Tint the glass for the system's appearance now, unless its ground is the page's own.
     #[cfg_attr(
         not(target_os = "macos"),
-        allow(
+        expect(
             clippy::unused_self,
             reason = "the glass under a window is macOS's only"
         )

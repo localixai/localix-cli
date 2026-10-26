@@ -29,7 +29,7 @@ impl Scripted {
 }
 
 impl Chat for Scripted {
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
@@ -123,7 +123,7 @@ impl Tool for Echo {
             parameters: json!({"type": "object"}),
         }
     }
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: an unexpected call fails the test"
     )]
@@ -132,7 +132,7 @@ impl Tool for Echo {
     }
 }
 
-#[allow(
+#[expect(
     clippy::unnecessary_wraps,
     reason = "a scripted tool reply, which is a call's result"
 )]

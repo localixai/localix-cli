@@ -58,7 +58,7 @@ impl Tool for Meet<'_> {
         }
     }
 
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         clippy::disallowed_methods,
         reason = "a test's fake tool: a poisoned lock fails the test, and a call alone works 20 ms so that calls could overlap"
@@ -309,7 +309,7 @@ struct Interrupted<'a> {
 }
 
 impl contracts::chat::Chat for Interrupted<'_> {
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]

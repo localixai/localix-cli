@@ -16,7 +16,7 @@ fn until_file(name: &str) -> String {
 }
 
 /// Wait until the screen no longer shows `needle`: another session is shown.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test looks at the screen again until it is so, for a bounded time: there is no event to wait on"
 )]
@@ -76,7 +76,7 @@ fn switch_away_while_a_task_runs() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a pause before the yes: keys typed as the question comes up must answer nothing"
 )]
@@ -176,7 +176,7 @@ fn quit_with_work_running_asks() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test looks at the screen again until it is so, for a bounded time: there is no event to wait on"
 )]

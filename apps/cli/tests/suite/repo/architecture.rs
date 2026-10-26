@@ -291,7 +291,7 @@ fn sources() -> Vec<PathBuf> {
 /// The files of the repository: those git tracks (files a run left in the tree are not the
 /// repository's until they are added), else, with no git or no checkout (a source archive),
 /// every file but the build's and git's own.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test's fixture: `git ls-files` ends by itself"
 )]

@@ -6,7 +6,7 @@ use serde_json::json;
 use super::*;
 use crate::testing::{Recorder, Scratch};
 
-#[allow(
+#[expect(
     clippy::unwrap_in_result,
     reason = "a test's helper: a setup that fails, fails the test"
 )]
@@ -293,7 +293,7 @@ fn a_file_changed_while_waiting_for_approval_is_not_overwritten() {
     assert_eq!(fs::read_to_string(&created).unwrap(), "written meanwhile\n");
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test's fixture: the command ends by itself"
 )]

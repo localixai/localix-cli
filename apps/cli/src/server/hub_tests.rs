@@ -4,7 +4,7 @@ use protocol::{Asked, Event};
 
 use super::*;
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a client's channel, as the in-process transport makes it"
 )]

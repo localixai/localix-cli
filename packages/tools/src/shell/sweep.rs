@@ -51,7 +51,7 @@ pub(super) fn kill_members(sid: libc::pid_t) -> Pass {
 
 /// Kill every process of session `sid` but its leader, again until none is left (a process may
 /// fork while it is killed), for at most `wait`; whether none is left.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a backoff between kill passes: a process killed has no event to wait on, and this runs in a signal handler too"
 )]
@@ -133,10 +133,10 @@ fn each_pid(_: impl FnMut(libc::pid_t)) {}
 
 /// The pid a `/proc` entry's NUL-terminated name spells, or `None` for any other entry.
 #[cfg_attr(
-    not(any(target_os = "linux", target_os = "android")),
-    allow(
+    not(any(target_os = "linux", target_os = "android", test)),
+    expect(
         dead_code,
-        reason = "used only where /proc lists a session's processes"
+        reason = "used only where /proc lists a session's processes, and by its tests"
     )
 )]
 fn number(name: &[u8]) -> Option<libc::pid_t> {

@@ -16,7 +16,7 @@ fn sessions_and_resume_with_none_saved() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test runs the binary to its end, against a scripted model"
 )]
@@ -46,7 +46,7 @@ fn a_saved_session_is_listed_and_resumed() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test runs the binary to its end, against a scripted model"
 )]

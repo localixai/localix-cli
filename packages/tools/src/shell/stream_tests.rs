@@ -162,7 +162,7 @@ fn a_window_attached_shows_what_was_printed_before() {
     assert!(window.last().contains("before"), "{}", window.last());
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the frame's time passes: the paint's clock is what is tested"
 )]
@@ -189,7 +189,7 @@ fn output_in_a_burst_is_painted_once_its_time_comes() {
     assert_eq!(window.paints(), 3);
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the frame's time passes: the paint's clock is what is tested"
 )]

@@ -100,7 +100,7 @@ pub(super) fn watch(
                 });
             }
             // Nothing says when a child exits: looked at as often as the stop is below.
-            #[allow(
+            #[expect(
                 clippy::disallowed_methods,
                 reason = "a poll's backoff, as recv_timeout's"
             )]

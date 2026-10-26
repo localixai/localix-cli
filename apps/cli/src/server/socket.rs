@@ -103,7 +103,7 @@ fn accepting<S>(
     }
 }
 
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a backoff: the accept failed, and nothing to wait on says when it will not"
 )]
@@ -115,7 +115,7 @@ fn pause(wait: Duration) {
 /// the writer a pump that never blocks, so a slow client fills only its own bounded queue.
 pub(crate) fn connection(stream: UnixStream) -> std::io::Result<Connection> {
     let (to_server, incoming) = sync_channel(INCOMING);
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "the pump empties it as fast as the server fills it, into a bounded queue"
     )]

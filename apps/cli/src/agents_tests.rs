@@ -97,7 +97,7 @@ impl Router {
 
 impl Router {
     /// What the person and the agents do around the main agent's turn.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a test's fake waits, bounded, for the agent to begin: there is no event to wait on"
     )]
@@ -129,7 +129,7 @@ impl Router {
 }
 
 impl Chat for Router {
-    #[allow(
+    #[expect(
         clippy::unwrap_in_result,
         clippy::disallowed_methods,
         reason = "a test's fake: a poisoned lock fails the test, and a slow agent is slow on purpose"

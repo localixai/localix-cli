@@ -279,7 +279,7 @@ pub(crate) struct ModelOptions {
 /// How a task runs: shared by a session, `exec` and `resume`. The output options answer one task,
 /// so they need `exec` or -p.
 #[derive(Args, Debug, Clone)]
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "the command line's switches, each an option of its own"
 )]

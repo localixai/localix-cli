@@ -16,7 +16,7 @@ fn doctor_without_a_key_checks_the_rest_then_exits_three() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test runs the binary to its end, against a scripted model"
 )]

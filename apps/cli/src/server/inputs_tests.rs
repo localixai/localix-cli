@@ -38,7 +38,7 @@ fn last_queue(told: &Mutex<Vec<(String, Event)>>) -> (bool, Vec<String>, Vec<Str
 }
 
 /// Lane `lane` at its prompt: `next` waits on a thread of its own until an entry comes.
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "a test's poll: the lane says it waits only through its queue"
 )]

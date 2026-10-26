@@ -93,7 +93,7 @@ pub(crate) fn run(
     quit: &(dyn Fn() + Sync),
 ) -> i32 {
     let lanes = Lanes::default();
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "the desk's wakes: one per request the person makes and per lane's end, each \
                   taken at once"

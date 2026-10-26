@@ -75,7 +75,7 @@ impl Agent {
     }
 
     /// The agent closes its stdin: how the process ended, within `LONG`.
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "an exit has no event to wait on here: it is looked at every 20 ms, bounded"
     )]

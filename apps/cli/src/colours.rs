@@ -110,6 +110,13 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .position(|window| window == needle)
 }
 
+/// `n` as a C type whose width differs by system: fallible where it is narrower (suseconds_t is
+/// an i32 on macOS), infallible where it is not (an i64 on Linux), which a lint on `try_from`
+/// sees only on the second. `fallback` when it does not fit.
+fn narrowed<T: TryFrom<u32>>(n: u32, fallback: T) -> T {
+    T::try_from(n).unwrap_or(fallback)
+}
+
 /// The terminal llx runs in.
 struct Tty(File);
 
@@ -125,13 +132,8 @@ impl Terminal for Tty {
         // select, not poll: macOS's poll does not wait on a terminal device, and says it is
         // ready at once, so the read would block until the person typed.
         let fd = self.0.as_raw_fd();
-        // Below a million: it fits every suseconds_t (an i32 on macOS, where the conversion can
-        // fail in the type's eyes, an i64 on Linux, where it cannot).
-        #[allow(
-            clippy::unnecessary_fallible_conversions,
-            reason = "suseconds_t is i32 on macOS and i64 on Linux"
-        )]
-        let micros = libc::suseconds_t::try_from(wait.subsec_micros()).unwrap_or(0);
+        // Below a million: it fits every suseconds_t.
+        let micros = narrowed(wait.subsec_micros(), 0);
         let mut timeout = libc::timeval {
             tv_sec: libc::time_t::try_from(wait.as_secs()).unwrap_or(libc::time_t::MAX),
             tv_usec: micros,

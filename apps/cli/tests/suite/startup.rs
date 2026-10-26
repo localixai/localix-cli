@@ -56,7 +56,7 @@ fn refreshed(catalog: &str) -> Home {
 
 /// `command` run to its end with no terminal (a session of its own), `stdin` piped in: its exit
 /// code, its stdout and stderr, and the most memory it held, in bytes.
-#[allow(
+#[expect(
     clippy::zombie_processes,
     reason = "wait4 reaps the child, for the usage `Child::wait` does not give"
 )]

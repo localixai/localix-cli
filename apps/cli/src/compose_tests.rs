@@ -280,7 +280,7 @@ fn the_main_tools_learn_a_subtrees_instructions_once_and_keep_edits() {
 /// A provider chosen with `/login` after the session began has its key kept from commands too:
 /// the variables are read at each command, not fixed when the session starts.
 #[test]
-#[allow(
+#[expect(
     clippy::disallowed_methods,
     reason = "the key must be in the process's environment, where the commands inherit it"
 )]

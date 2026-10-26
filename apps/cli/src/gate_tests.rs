@@ -193,7 +193,7 @@ mod terminal {
     const CHILD: &str = "LLX_TEST_TERMINAL_CHILD";
     const NAME: &str = "gate::tests::terminal::a_stop_ends_a_wait_on_the_controlling_terminal";
 
-    #[allow(
+    #[expect(
         clippy::disallowed_methods,
         reason = "a test's copy of itself runs one test, which ends by itself"
     )]

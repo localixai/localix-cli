@@ -161,7 +161,7 @@ impl App {
     }
 
     /// The lane of the session shown: what the person types goes there.
-    #[allow(
+    #[expect(
         clippy::expect_used,
         reason = "`home` is a lane: an agent's view is its parent's, and the first view is a lane"
     )]
@@ -170,7 +170,7 @@ impl App {
         lane.expect("a lane")
     }
 
-    #[allow(
+    #[expect(
         clippy::expect_used,
         reason = "`home` is a lane: an agent's view is its parent's, and the first view is a lane"
     )]

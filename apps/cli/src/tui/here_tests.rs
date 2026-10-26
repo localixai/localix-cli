@@ -32,7 +32,7 @@ fn paths_in_the_project_read_from_it_and_its_cd_is_dropped() {
 fn the_transcript_shows_a_finished_edit_by_its_path_in_the_project() {
     let now = Instant::now();
     let mut app = App::new(60, 20, vec![]);
-    app.files = Files::new(Some("/work/stats".into()));
+    app.files = Files::new("/work/stats".into(), Box::new(drop));
     app.event(Event::TaskStarted("fix it".into()), now);
     let edited = label("Editing", "Edited", "/work/stats/stats.py");
     app.event(call("1", "edit", &edited), now);

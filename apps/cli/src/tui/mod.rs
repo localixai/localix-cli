@@ -137,7 +137,11 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
         return Err(io::Error::other("the server did not attach the interface"));
     };
     let mut app = App::new(usize::from(width), usize::from(height), commands);
-    app.files = mention::Files::new(Some(start.root.to_path_buf()));
+    let files = inbox.clone();
+    let arrive = move |list| {
+        let _ = files.send(Input::Files(list));
+    };
+    app.files = mention::Files::new(start.root.to_path_buf(), Box::new(arrive));
     let asking = client.clone();
     // Asked only when the quit question needs it.
     app.work = Box::new(move || match asking.call(Command::Work, drawing::ANSWER) {

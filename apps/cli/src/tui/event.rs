@@ -25,13 +25,15 @@ impl From<&str> for Typed {
     }
 }
 
-/// What the interface's thread takes: a frame from the server, or the terminal's.
+/// What the interface's thread takes: a frame from the server, the terminal's, or the
+/// workspace's files for `@`, read on a thread of their own.
 #[derive(Debug)]
 pub(crate) enum Input {
     Frame(ToClient),
     Key(KeyEvent),
     Paste(String),
     Resize(u16, u16),
+    Files(Vec<String>),
 }
 
 /// What the interface sends the server.

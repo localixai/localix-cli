@@ -131,7 +131,7 @@ impl App {
             composer: Composer::default(),
             commands,
             offered: 0,
-            files: Files::new(None),
+            files: Files::default(),
             pasted: attach::pasted_dir(),
             questions: VecDeque::new(),
             settling: None,
@@ -200,13 +200,13 @@ impl App {
         match input {
             Input::Frame(frame) => self.frame(frame, now),
             Input::Key(key) => self.key(key, now),
-            Input::Paste(text) => {
-                self.paste(&text);
+            Input::Paste(text) => self.paste(&text),
+            Input::Resize(width, height) => {
+                (self.width, self.height) = (usize::from(width), usize::from(height));
                 None
             }
-            Input::Resize(width, height) => {
-                self.width = width as usize;
-                self.height = height as usize;
+            Input::Files(list) => {
+                self.files.loaded(list);
                 None
             }
         }
@@ -275,10 +275,7 @@ impl App {
     /// The server asks the person, for `session`'s task: an approval and the model's questions
     /// wait their turn; a choice of the lane's own waits until it is shown.
     pub(crate) fn asked(&mut self, id: u64, session: &str, asked: protocol::Asked, now: Instant) {
-        let at = self
-            .views
-            .find(session)
-            .unwrap_or_else(|| self.views.home());
+        let at = (self.views.find(session)).unwrap_or_else(|| self.views.home());
         let lane = self.lane_at(at);
         let label = self.label(lane);
         match asked {
@@ -345,16 +342,16 @@ impl App {
 
     /// What the terminal pasted: into the question open, else the composer. A dropped file
     /// arrives as a path; other clipboard text is shown as [Paste].
-    fn paste(&mut self, text: &str) {
+    fn paste(&mut self, text: &str) -> Option<Action> {
         if let Some(asked) = self.questions.front_mut() {
-            return asked.select.paste(text);
-        }
-        if Composer::is_path_list(text, &attach::resolve) {
+            asked.select.paste(text);
+        } else if Composer::is_path_list(text, &attach::resolve) {
             self.composer.paste(text);
             self.adopt_paths();
         } else {
             self.composer.paste_marked(text);
         }
+        None
     }
 
     /// An entry for the lane shown: the server gives it to the lane at its prompt, to the task

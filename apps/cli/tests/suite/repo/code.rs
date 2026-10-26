@@ -203,24 +203,33 @@ fn every_build_unwinds_a_panic() {
 /// `expect` is a rule set aside in one place for a reason; one more raises this number in the
 /// commit that adds it, where a review sees it, and one fewer lowers it, so the room a fix made
 /// is not taken again unseen.
-const ALLOWED: usize = 55;
+const ALLOWED: usize = 73;
+
+/// The lints `line` sets aside: an `allow` or `expect` attribute, or one inside a `cfg_attr`
+/// (after its condition, or on a line of its own), but not a method or a function of that name.
+fn set_aside(line: &str) -> usize {
+    (["allow(", "expect("].iter())
+        .map(|lint| {
+            (line.match_indices(lint))
+                .filter(|(at, _)| {
+                    let before = line[..*at].trim_end();
+                    before.is_empty() || before.ends_with(['[', ','])
+                })
+                .count()
+        })
+        .sum()
+}
 
 /// S4: the exceptions only fall. (Lines that are comments do not count; tests may allow freely.)
 #[test]
 fn the_lints_allowed_in_working_code_only_fall() {
-    let attributes = ["#[allow(", "#![allow(", "#[expect(", "#![expect("];
     let mut found = 0;
     let mut by_file = vec![];
     for path in working_sources() {
         let text = std::fs::read_to_string(&path).unwrap();
         let here: usize = (text.lines().map(str::trim_start))
             .filter(|line| !line.starts_with("//"))
-            .map(|line| {
-                attributes
-                    .iter()
-                    .map(|a| line.matches(a).count())
-                    .sum::<usize>()
-            })
+            .map(set_aside)
             .sum();
         if here > 0 {
             by_file.push(format!("  {here:>3}  {}", shown(&path)));

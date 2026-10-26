@@ -13,6 +13,24 @@ use super::event::Input;
 pub(super) const ENTER: &str = "\x1b[?2004h\x1b[>1u";
 const LEAVE: &str = "\x1b[<1u\x1b[?2004l\x1b[?25h";
 
+/// Where frames are written: the terminal through a descriptor of its own, not std's stdout,
+/// which is line-buffered: it writes a frame up to its last line break and keeps the rest (the
+/// last row, the cursor's place, the update's end) for a second write at the flush. A frame is
+/// one buffer (`Screen`), so it goes out in one write.
+pub(super) fn out() -> Box<dyn Write> {
+    #[cfg(unix)]
+    if let Ok(own) = unbuffered(io::stdout()) {
+        return Box::new(own);
+    }
+    Box::new(io::stdout())
+}
+
+/// A writer to `fd` that keeps nothing back.
+#[cfg(unix)]
+fn unbuffered(fd: impl std::os::fd::AsFd) -> io::Result<std::fs::File> {
+    Ok(fd.as_fd().try_clone_to_owned()?.into())
+}
+
 /// The terminal as it was: cooked, the cursor shown, nothing more reported.
 pub(crate) fn restore() {
     let _ = crossterm::terminal::disable_raw_mode();
@@ -138,3 +156,7 @@ pub(super) fn editor(text: &str) -> String {
     let _ = std::fs::remove_file(&path);
     edited.unwrap_or_else(|| text.to_string())
 }
+
+#[cfg(test)]
+#[path = "terminal_tests.rs"]
+mod tests;

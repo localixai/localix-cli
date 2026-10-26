@@ -25,8 +25,11 @@ pub(super) struct Seat {
     pub quit_now: fn() -> !,
 }
 
+/// The terminal as frames are drawn on it.
+type Terminal = Screen<Box<dyn io::Write>>;
+
 pub(super) fn draw(mut app: App, inbox: &Receiver<Input>, seat: &Seat) {
-    let mut screen = Screen::new(io::stdout(), style::colour_stdout());
+    let mut screen = Screen::new(terminal::out(), style::colour_stdout());
     let mut over = false;
     let mut shown = None;
     while !over {
@@ -87,7 +90,7 @@ fn act(
     action: Option<Action>,
     ended: bool,
     app: &mut App,
-    screen: &mut Screen<io::Stdout>,
+    screen: &mut Terminal,
     shown: &mut Option<(
         Vec<ratatui::text::Line<'static>>,
         Option<super::screen::Cursor>,
@@ -142,7 +145,7 @@ fn flush(app: &mut App, client: &Client) {
 }
 
 /// Stop the task; asked a second time, quit at once, as Ctrl-C twice does outside the interface.
-fn stop(screen: &mut Screen<io::Stdout>, app: &mut App, seat: &Seat, session: String) {
+fn stop(screen: &mut Terminal, app: &mut App, seat: &Seat, session: String) {
     let asked = seat.client.call(Command::Interrupt { session }, ANSWER);
     if matches!(asked, Ok(Done::Interrupted { again: true })) {
         let history = app.take_history();

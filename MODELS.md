@@ -2,7 +2,7 @@
 
 How llx knows models: a Rust port of [models.dev](https://github.com/anomalyco/models.dev)
 (branch `dev`), studied from a clone of the repository (commit `b2ac700`, 2026-10). This is the
-reference for `packages/providers/models`; ARCHITECTURE.md rule 1 makes it the one source of
+reference for `packages/providers/models`; ARCHITECTURE.md A4 makes it the one source of
 model facts.
 
 ## models.dev, as it is built

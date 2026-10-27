@@ -29,6 +29,11 @@ injection), so the gate is the line of defence for anything that changes your ma
 and click targets come from the goal and the page's own controls; model output never becomes a
 selector, coordinates or code for the browser's hands.
 
+On Unix a session runs in a daemon (`llx serve`), reached over a socket in a directory only you
+may enter (`$TMPDIR/llx-<uid>/`, mode 0700, the socket 0600), with no token: it serves the user
+who runs it. Another agent can call llx's `window` through it (`llx window`); that agent approves
+each call itself, as it would any command, and llx asks nothing more for them.
+
 ## Keys
 
 The OpenRouter key comes from `OPENROUTER_API_KEY` or from `/login` in a session, which saves it
@@ -36,10 +41,10 @@ in `~/.config/llx/credentials`. A ChatGPT sign-in (`/login`, OpenAI) saves its a
 and ID tokens in `~/.config/llx/openai.json`. Both files are readable only by you (mode 0600 on
 Unix), keys and tokens are never printed or logged, and the tools cannot read anything under
 `~/.config/llx/`. `llx logout` deletes both. Goals, page text and command output are sent to the
-provider and the models you choose (OpenRouter, or OpenAI's ChatGPT backend); do not point llx
+provider and the models you choose (OpenRouter, OpenAI's ChatGPT backend, or any other provider of the catalog, with the key you gave it); do not point llx
 at secrets you would not send there.
 
 ## Releases
 
 Release archives are built by GitHub Actions from the tagged commit and published with a
-`SHA256SUMS` file; `install.sh` and `install.ps1` refuse an archive whose checksum does not match.
+`SHA256SUMS` file; `install.sh` refuses an archive whose checksum does not match.

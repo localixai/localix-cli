@@ -32,7 +32,7 @@ pub(crate) fn approval(tool: &str, summary: &str, label: Option<&str>) -> Select
             Choice::new(&format!("Yes, and don't ask again for {tool}")),
             Choice::new("No, and tell llx what to do differently").types(),
         ],
-        "esc to say no",
+        "esc no · ctrl-c stop",
     )
 }
 
@@ -51,7 +51,7 @@ pub(crate) fn question(question: &Question, at: usize, of: usize, label: Option<
         .collect();
     let own = choices.len();
     choices.push(Choice::new("Something else: type it").types());
-    let select = Select::new(title, choices, "esc to skip").multiple(question.multiple && own > 1);
+    let select = Select::new(title, choices, "esc skip").multiple(question.multiple && own > 1);
     if own == 0 { select.typing(0) } else { select }
 }
 
@@ -61,14 +61,14 @@ pub(crate) fn choice(title: &str, options: &[(String, String)], marked: Option<u
         .iter()
         .map(|(label, detail)| Choice::new(label).detail(detail))
         .collect();
-    Select::new(title, choices, "esc to cancel").at(marked.unwrap_or(0))
+    Select::new(title, choices, "esc cancel").at(marked.unwrap_or(0))
 }
 
 /// A line to type, its characters hidden for a secret.
 pub(crate) fn line(prompt: &str, hidden: bool) -> Select {
     let prompt = printable(prompt.trim().trim_end_matches(['>', ':']).trim());
     let title = vec![heading(&prompt, "")];
-    let select = Select::new(title, vec![Choice::new("Type it").types()], "esc to cancel");
+    let select = Select::new(title, vec![Choice::new("Type it").types()], "esc cancel");
     select.hidden(hidden).typing(0)
 }
 

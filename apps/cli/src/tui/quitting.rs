@@ -48,7 +48,7 @@ impl App {
             choices.push(Choice::new("Move to background and exit"));
         }
         choices.push(Choice::new("Stay"));
-        let select = Select::new(title, choices, "esc to stay");
+        let select = Select::new(title, choices, "esc stay");
         self.questions.push_back(Asked::new(select, Open::Quit));
         if self.questions.len() == 1 {
             self.settling = None;

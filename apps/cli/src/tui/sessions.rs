@@ -16,7 +16,7 @@
 //!   Earlier
 //!     make the release binary   2 h ago · 4 tasks
 //!
-//!   ↑↓ choose · enter open · x stop · esc back
+//!   enter open · x stop · esc back
 //! ```
 
 use std::time::Instant;
@@ -225,7 +225,7 @@ impl App {
             out.push(Line::from(spans));
         }
         out.push(Line::default());
-        let hint = "  ↑↓ choose · enter open · x stop · esc back";
+        let hint = "  enter open · x stop · esc back";
         out.push(Line::from(Span::styled(hint, style::dim())));
         out
     }

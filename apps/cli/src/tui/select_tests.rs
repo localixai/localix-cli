@@ -19,7 +19,7 @@ fn approval() -> Select {
             Choice::new("Yes, and don't ask again for bash"),
             Choice::new("No, and tell llx what to do differently").types(),
         ],
-        "esc to say no",
+        "esc no",
     )
 }
 
@@ -35,7 +35,7 @@ fn shown(select: &Select, width: usize) -> String {
 
 #[test]
 fn an_approval_reads_as_a_short_list() {
-    insta::assert_snapshot!(shown(&approval(), 60), @r"
+    insta::assert_snapshot!(shown(&approval(), 60), @"
     Run this command?
       cargo test --workspace
 
@@ -43,7 +43,7 @@ fn an_approval_reads_as_a_short_list() {
       2. Yes, and don't ask again for bash
       3. No, and tell llx what to do differently
 
-      ↑↓ to choose · enter to confirm · esc to say no
+      enter select · esc no
     ");
 }
 
@@ -86,13 +86,13 @@ fn a_long_option_wraps_under_its_label() {
     let select = Select::new(
         vec![],
         vec![Choice::new("A choice whose label is long").detail("and its detail too")],
-        "esc to skip",
+        "esc skip",
     );
-    insta::assert_snapshot!(shown(&select, 30), @r"
+    insta::assert_snapshot!(shown(&select, 30), @"
     ❯ 1. A choice whose label is
          long and its detail too
 
-      ↑↓ to choose · enter to confirm · esc to skip
+      enter select · esc skip
     ");
 }
 
@@ -101,19 +101,19 @@ fn a_line_alone_shows_no_list_and_esc_cancels() {
     let mut select = Select::new(
         vec![Line::from("Paste the key")],
         vec![Choice::new("Type it").types()],
-        "esc to cancel",
+        "esc cancel",
     )
     .hidden(true)
     .typing(0);
     for c in "sk-1".chars() {
         select.key(key(KeyCode::Char(c)));
     }
-    insta::assert_snapshot!(shown(&select, 40), @r"
+    insta::assert_snapshot!(shown(&select, 40), @"
     Paste the key
 
       ❯ ••••
 
-      enter to send · esc to cancel
+      enter send · esc cancel
     ");
     assert_eq!(select.key(key(KeyCode::Esc)), Some(Picked::Cancelled));
 }
@@ -126,18 +126,18 @@ fn several_options_are_checked_with_space_and_sent_with_enter() {
         Choice::new("Lint"),
         Choice::new("Other").types(),
     ];
-    let mut select = Select::new(vec![], choices, "esc to skip").multiple(true);
+    let mut select = Select::new(vec![], choices, "esc skip").multiple(true);
     select.key(key(KeyCode::Char(' ')));
     select.key(key(KeyCode::Down));
     select.key(key(KeyCode::Down));
     select.key(key(KeyCode::Char(' ')));
-    insta::assert_snapshot!(shown(&select, 60), @r"
+    insta::assert_snapshot!(shown(&select, 60), @"
       1. [x] Tests
       2. [ ] Docs
     ❯ 3. [x] Lint
       4. Other
 
-      ↑↓ to choose · space to check · enter to confirm · esc to skip
+      space check · enter send · esc skip
     ");
     assert_eq!(
         select.key(key(KeyCode::Enter)),

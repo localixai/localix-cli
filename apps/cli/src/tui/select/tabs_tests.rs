@@ -76,7 +76,7 @@ fn a_grouped_list_opens_on_the_marked_rows_tab_with_its_rows_alone() {
         !shown.contains("Claude Opus"),
         "another tab's rows: {shown}"
     );
-    assert!(shown.contains("tab to switch"), "{shown}");
+    assert!(shown.contains("tab provider · ←→ reasoning"), "{shown}");
 }
 
 #[test]
@@ -151,5 +151,5 @@ fn one_providers_list_is_named_by_its_tab_with_nothing_to_switch() {
     app.asked(1, "", asked, Instant::now());
     let shown = screen(&mut app);
     assert!(shown.contains("[OpenAI 1]"), "{shown}");
-    assert!(!shown.contains("tab to switch"), "{shown}");
+    assert!(!shown.contains("tab provider"), "{shown}");
 }

@@ -4,10 +4,11 @@
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use protocol::Command;
 
 use super::app::{Action, App, QUIT_WINDOW_MS, SHIFT_TAB};
 use super::composer::Edit;
-use super::event::Typed;
+use super::event::{Out, Typed};
 
 impl App {
     pub(super) fn key(&mut self, key: KeyEvent, now: Instant) -> Option<Action> {
@@ -107,8 +108,20 @@ impl App {
         None
     }
 
-    /// Ctrl-C: a task running stops, a draft goes, and a second one quits.
+    /// Ctrl-C, one step back: in an agent's view that agent stops (then the view closes), else
+    /// a task running stops, a draft goes, and a second one quits.
     fn ctrl_c(&mut self, now: Instant) -> Option<Action> {
+        let shown = self.shown();
+        if shown.parent.is_some() {
+            if shown.busy.is_some() {
+                let id = shown.id.clone();
+                self.outbox.push(Out::Call(Command::Halt { id }));
+            } else {
+                let lane = self.lane_id().to_string();
+                self.show(&lane);
+            }
+            return None;
+        }
         // Stopped already, a stop quits: asked first while another session works.
         if self.busy().is_some() && self.lane().stopping && self.others_work() {
             return self.quit();

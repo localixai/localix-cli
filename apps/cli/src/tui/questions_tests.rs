@@ -51,7 +51,7 @@ fn a_question_with_several_answers_is_checked_then_sent() {
     ❯ 2. [x] Lint
       3. Something else: type it
 
-      ↑↓ to choose · space to check · enter to confirm · esc to skip
+      space check · enter send · esc skip
     ");
     press(&mut app, &[KeyCode::Enter], now);
     let sent = answered(&mut app);
@@ -95,7 +95,7 @@ fn the_plan_handoff_starts_on_the_option_marked() {
       1. Yes, in default mode
     ❯ 2. No, stay in plan mode
 
-      ↑↓ to choose · enter to confirm · esc to cancel
+      enter select · esc cancel
     ");
     press(&mut app, &[KeyCode::Enter], now);
     assert_eq!(replies(&mut app), [(1, Reply::Choice(Some(1)))]);

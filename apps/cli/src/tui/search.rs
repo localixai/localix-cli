@@ -90,6 +90,8 @@ impl Search {
                     .collect()
             })
             .unwrap_or_default();
+        // A list in steps (`Login › Provider`) holds what its last step names.
+        let heading = heading.rsplit('›').next().unwrap_or_default();
         let heading = heading.trim_start_matches(['•', ' ']);
         let noun = heading.split([' ', '(']).next().unwrap_or_default();
         Self {
@@ -107,8 +109,10 @@ impl Search {
         self.query.is_empty()
     }
 
-    /// Letters (digits and signs too) add to the query, Backspace takes one off, Esc clears it.
+    /// Letters (digits and signs too) add to the query, Backspace takes one off, Esc and Ctrl-C
+    /// clear it (on an empty one, Esc cancels and Ctrl-C is the list's), Ctrl-U clears it.
     pub(super) fn key(&mut self, key: KeyEvent) -> Searched {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let plain = !key
             .modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
@@ -117,6 +121,7 @@ impl Search {
             reason = "crossterm's keys, a foreign enum: the others leave the query"
         )]
         match key.code {
+            KeyCode::Char('c' | 'u') if ctrl && !self.query.is_empty() => self.query.clear(),
             KeyCode::Char(c) if plain => self.query.push(c),
             KeyCode::Backspace if self.query.pop().is_some() => {}
             KeyCode::Esc if self.query.is_empty() => return Searched::Cancel,

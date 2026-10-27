@@ -176,7 +176,7 @@ fn a_long_command_in_an_approval_wraps_under_its_indent() {
       2. Yes, and don't ask again for bash
       3. No, and tell llx what to do differently
 
-      ↑↓ to choose · enter to confirm · esc to say no
+      enter select · esc no · ctrl-c stop
     ");
 }
 

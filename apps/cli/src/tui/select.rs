@@ -74,7 +74,8 @@ pub(crate) struct Select {
     choices: Vec<Choice>,
     at: usize,
     typing: Option<Composer>,
-    /// What Esc does, as the hint says it: `esc to cancel`, `esc to say no`.
+    /// What Esc does (and Ctrl-C, where it does more), as the hint says it: `esc cancel`,
+    /// `esc no · ctrl-c stop`.
     escape: String,
     /// What is typed is a secret: shown as dots.
     hidden: bool,
@@ -210,9 +211,13 @@ impl Select {
     )]
     pub(crate) fn key(&mut self, key: KeyEvent) -> Option<Picked> {
         if let Some(composer) = &mut self.typing {
+            // Ctrl-C is a step back as Esc is: the options again, or a cancel with none.
+            let back = key.code == KeyCode::Esc
+                || (key.code == KeyCode::Char('c')
+                    && key.modifiers.contains(KeyModifiers::CONTROL));
             return match key.code {
-                KeyCode::Esc if self.direct => Some(Picked::Cancelled),
-                KeyCode::Esc => {
+                _ if back && self.direct => Some(Picked::Cancelled),
+                _ if back => {
                     self.typing = None;
                     None
                 }

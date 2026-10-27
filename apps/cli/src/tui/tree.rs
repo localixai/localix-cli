@@ -8,7 +8,7 @@
 //!   ⠹ fix the parser  Messaging agent tests · run the suite · 2m 03s · 81.2k tokens
 //! ❯   ├ ⠹ scout  Reading src/lib.rs · 1m 12s · 54.1k tokens
 //!     └ ✓ tests  done · 48s · 20.3k tokens
-//!   ↑↓ select · →/enter open · x stop · esc input
+//!   enter open · x stop · esc back
 //! ```
 //!
 //! With no agents and no jobs, only the line for the other lanes, if there are any:
@@ -123,9 +123,9 @@ pub(crate) fn render(
     let on_agent = app.shown().parent.is_some();
     let others = others.unwrap_or_else(|| "← sessions".into());
     let hint = match (focus, on_agent) {
-        (Some(_), _) => "↑↓ select · →/enter open · x stop · esc input".to_string(),
-        (None, true) => format!("↓ to manage · esc back to {}", app.home_title()),
-        (None, false) => format!("↓ to manage · {others}"),
+        (Some(_), _) => "enter open · x stop · esc back".to_string(),
+        (None, true) => format!("↓ manage · esc back to {}", app.home_title()),
+        (None, false) => format!("↓ manage · {others}"),
     };
     out.push(self::hint(&hint, width));
     out

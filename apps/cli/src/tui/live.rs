@@ -256,6 +256,13 @@ fn footer(app: &App, now: Instant) -> String {
         // In place of the mode's line while it lasts: a short window to read it in.
         return format!("{back}ctrl-c again to quit");
     }
+    // A second Ctrl-C while the task stops ends llx at once, or asks while another session works.
+    if app.busy().is_some() && app.lane().stopping {
+        return match app.others_work() {
+            true => "stopping · ctrl-c again to quit".into(),
+            false => "stopping · ctrl-c again to quit now".into(),
+        };
+    }
     if app.escaped.is_some_and(window) && app.composer.is_empty() && app.busy().is_none() {
         return "esc again to rewind".into();
     }

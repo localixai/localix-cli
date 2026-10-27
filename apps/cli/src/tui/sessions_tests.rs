@@ -94,7 +94,7 @@ fn saved_rows_open_the_list_live_first() {
       Earlier
         make the binary smaller  1 d ago · 1 task
 
-      ↑↓ choose · enter open · x stop · esc back
+      enter open · x stop · esc back
     ");
 }
 
@@ -218,7 +218,7 @@ fn opening_a_tree_row_returns_the_keys_to_input() {
         let screen = term.draw(&mut app, now);
         assert!(screen.contains("scout's own transcript"), "{screen}");
         assert!(
-            !screen.contains("↑↓ select"),
+            !screen.contains("x stop"),
             "focus stayed in the tree:\n{screen}"
         );
         // Left now opens the project list, rather than silently leaving tree focus.

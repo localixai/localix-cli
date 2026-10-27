@@ -94,6 +94,12 @@ interface cannot start) it is a usage error pointing to `llx exec`, which prints
 - Clipboard text shows as `[Paste]` (numbered for several) and is expanded when sent.
 - Shift+Tab goes round the modes (default → plan → bypass → your own → default) without Enter; while a task runs, the switch waits until it ends.
 
+### Stepping back: Esc and Ctrl-C
+
+Esc and Ctrl-C each undo the innermost thing open, one step at a time; Ctrl-C also stops work. In order: a line typed in a question goes back to its options; a search's query is cleared (Ctrl-U clears it too); a list or a question closes (an approval: Esc answers no, Ctrl-C answers no and stops the task); a step of `/login` goes back to the one before; in an agent's view Ctrl-C stops that agent alone, then goes back to the main view; a task running stops (while it stops, a second Ctrl-C quits at once, as the footer says); a draft is cleared (↑ brings it back); and on an empty prompt the first Ctrl-C says `ctrl-c again to quit`, the second quits (asked first while work runs). Ctrl-D on an empty prompt quits too.
+
+Each list's last line names only the keys that do something there, each with what it does: `tab provider · ←→ reasoning · enter select · esc cancel`.
+
 ### Attaching files
 
 - Drag a file into the terminal or paste its path: a picture (PNG, JPEG, GIF, WebP, up to 8 MB) becomes `[image: shot.png]`, sent to the model as one from a copy kept in `~/.llx/pasted`; anything else becomes `[file: notes.md]`, sent as its path for the agent to read. Several at once work.

@@ -25,7 +25,8 @@ const CAN_JOIN_ALL_SPACES: usize = 1 << 0;
 const STATIONARY: usize = 1 << 4;
 const IGNORES_CYCLE: usize = 1 << 6;
 const FULL_SCREEN_AUXILIARY: usize = 1 << 8;
-/// NSWindowLevel: floating, above the ordinary windows.
+/// NSWindowLevel: the ordinary windows', and floating, above them.
+const NORMAL: isize = 0;
 const FLOATING: isize = 3;
 
 /// Which window it is.
@@ -33,6 +34,17 @@ const FLOATING: isize = 3;
 pub(super) enum Role {
     Deck,
     Mini,
+}
+
+impl Role {
+    /// The mini floats over every app; the expanded deck is an ordinary window among the
+    /// person's, which another app's window may cover.
+    const fn level(self) -> isize {
+        match self {
+            Self::Deck => NORMAL,
+            Self::Mini => FLOATING,
+        }
+    }
 }
 
 extern "C" fn yes(_this: &AnyObject, _sel: Sel) -> Bool {
@@ -70,7 +82,7 @@ fn takes(object: &AnyObject, selector: Sel) -> bool {
     yes.as_bool()
 }
 
-/// Make `window` a floating, non-activating panel on every Space, of `role`. Where the class
+/// Make `window` a non-activating panel on every Space, of `role`. Where the class
 /// cannot be swapped (the new one needs more room than tao's own window class has) it stays an
 /// ordinary window with the same level and spaces: it still never takes the keyboard on its own.
 pub(super) fn adopt(window: &Window, role: Role) {
@@ -92,7 +104,7 @@ pub(super) fn adopt(window: &Window, role: Role) {
             let _: () = unsafe { msg_send![object, _setPreventsActivation: Bool::YES] };
         }
         // SAFETY: an NSPanel takes a BOOL.
-        let _: () = unsafe { msg_send![object, setFloatingPanel: Bool::YES] };
+        let _: () = unsafe { msg_send![object, setFloatingPanel: Bool::new(role == Role::Mini)] };
         // SAFETY: as above: a click that needs no keyboard (a button) never makes it key.
         let _: () = unsafe { msg_send![object, setBecomesKeyOnlyIfNeeded: Bool::YES] };
     }
@@ -105,12 +117,12 @@ pub(super) fn adopt(window: &Window, role: Role) {
     // SAFETY: an NSWindow takes an NSWindowCollectionBehavior (an NSUInteger).
     let _: () = unsafe { msg_send![object, setCollectionBehavior: behavior] };
     // SAFETY: an NSWindow takes an NSWindowLevel (an NSInteger).
-    let _: () = unsafe { msg_send![object, setLevel: FLOATING] };
+    let _: () = unsafe { msg_send![object, setLevel: role.level()] };
 }
 
 /// On screen, as it looks: opaque to the eye and the mouse. Under `LLX_WINDOWS=unseen` it stays
 /// invisible and click-through, as every window of a test run does.
-pub(super) fn reveal(window: &Window, rendering: Rendering) {
+pub(super) fn reveal(window: &Window, role: Role, rendering: Rendering) {
     if unseen() {
         return conceal(window, rendering);
     }
@@ -122,7 +134,7 @@ pub(super) fn reveal(window: &Window, rendering: Rendering) {
     // SAFETY: as above.
     let _: () = unsafe { msg_send![object, setHasShadow: Bool::YES] };
     // SAFETY: an NSWindow takes an NSWindowLevel (an NSInteger).
-    let _: () = unsafe { msg_send![object, setLevel: FLOATING] };
+    let _: () = unsafe { msg_send![object, setLevel: role.level()] };
     front(object);
 }
 
@@ -151,7 +163,7 @@ pub(super) fn conceal_object(object: &AnyObject, rendering: Rendering) {
     // SAFETY: as above.
     let _: () = unsafe { msg_send![object, setHasShadow: Bool::NO] };
     let level: isize = if rendering == Rendering::Switched {
-        0
+        NORMAL
     } else {
         FLOATING
     };

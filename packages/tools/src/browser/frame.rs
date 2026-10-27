@@ -239,7 +239,7 @@ impl Frame {
         #[cfg(not(target_os = "macos"))]
         let _ = &self.native;
         #[cfg(target_os = "macos")]
-        super::nspanel::reveal(&self.native, self.rendering);
+        super::nspanel::reveal(&self.native, super::nspanel::Role::Deck, self.rendering);
     }
 
     /// The window out of sight, at the size it has, clear and click-through, still drawing.

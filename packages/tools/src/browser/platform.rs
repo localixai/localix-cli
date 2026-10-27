@@ -67,7 +67,11 @@ pub(super) fn grip_mini(
 
 #[cfg(target_os = "macos")]
 pub(super) fn show_mini(window: &tao::window::Window) {
-    super::nspanel::reveal(window, super::nspanel::Rendering::Switched);
+    super::nspanel::reveal(
+        window,
+        super::nspanel::Role::Mini,
+        super::nspanel::Rendering::Switched,
+    );
 }
 
 #[cfg(target_os = "macos")]

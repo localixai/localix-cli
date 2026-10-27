@@ -102,7 +102,7 @@ fn selection(efforts: Vec<Effort>, effort: Effort) -> Selection {
     Selection::new(model).with_effort(effort).unwrap()
 }
 
-fn request_body(openrouter: bool, selection: &Selection, may_call: bool) -> Value {
+fn request_body(wire: Wire, selection: &Selection, may_call: bool) -> Value {
     let conversation = [
         Message::System("rules".into()),
         Message::User("context".into()),
@@ -118,13 +118,17 @@ fn request_body(openrouter: bool, selection: &Selection, may_call: bool) -> Valu
         tools: &tools,
         may_call,
     };
-    body(openrouter, selection, &request)
+    body(wire, selection, &request)
 }
 
 #[test]
 fn openrouter_is_sent_its_reasoning_object_the_usage_report_and_cache_marks() {
     let levels = vec![Effort::Off, Effort::Low, Effort::High];
-    let sent = request_body(true, &selection(levels.clone(), Effort::High), true);
+    let sent = request_body(
+        Wire::OpenRouter,
+        &selection(levels.clone(), Effort::High),
+        true,
+    );
     assert_eq!(sent["reasoning"], json!({"effort": "high"}));
     assert_eq!(sent["usage"], json!({"include": true}));
     assert_eq!(
@@ -134,26 +138,52 @@ fn openrouter_is_sent_its_reasoning_object_the_usage_report_and_cache_marks() {
     assert!(sent.get("reasoning_effort").is_none());
     assert_eq!(sent["tool_choice"], "auto");
     assert_eq!(sent["parallel_tool_calls"], true);
-    let off = request_body(true, &selection(levels, Effort::Off), false);
+    let off = request_body(Wire::OpenRouter, &selection(levels, Effort::Off), false);
     assert_eq!(off["reasoning"], json!({"enabled": false}));
     assert_eq!(off["tool_choice"], "none", "the wrap-up turn calls nothing");
 }
 
 #[test]
 fn a_model_with_no_levels_is_sent_no_reasoning_field_on_openrouter_either() {
-    let sent = request_body(true, &selection(vec![], Effort::Off), true);
+    let sent = request_body(Wire::OpenRouter, &selection(vec![], Effort::Off), true);
     assert!(sent.get("reasoning").is_none(), "{sent}");
-    let generic = request_body(false, &selection(vec![], Effort::Off), true);
+    let generic = request_body(Wire::Plain, &selection(vec![], Effort::Off), true);
     assert!(generic.get("reasoning_effort").is_none());
 }
 
 #[test]
 fn another_host_is_sent_reasoning_effort_by_name_and_no_openrouter_fields() {
     let levels = vec![Effort::Off, Effort::Low, Effort::High];
-    let sent = request_body(false, &selection(levels.clone(), Effort::Low), true);
+    let sent = request_body(Wire::Plain, &selection(levels.clone(), Effort::Low), true);
     assert_eq!(sent["reasoning_effort"], "low");
     assert!(sent.get("reasoning").is_none() && sent.get("usage").is_none());
     assert_eq!(sent["messages"][0]["content"], "rules", "no cache marks");
-    let off = request_body(false, &selection(levels, Effort::Off), true);
+    let off = request_body(Wire::Plain, &selection(levels, Effort::Off), true);
     assert_eq!(off["reasoning_effort"], "none");
+}
+
+#[test]
+fn openai_itself_is_sent_one_cache_key_for_every_session_with_the_same_start_and_others_none() {
+    let tools = [ToolSpec {
+        name: "read".into(),
+        description: "Read.".into(),
+        parameters: json!({"type": "object"}),
+    }];
+    let key = |wire: Wire, tools: &[ToolSpec], goal: &str| {
+        let conversation = [Message::System("rules".into()), Message::User(goal.into())];
+        let request = Request {
+            conversation: &conversation,
+            tools,
+            may_call: true,
+        };
+        body(wire, &selection(vec![], Effort::Off), &request)["prompt_cache_key"].clone()
+    };
+    // Two sessions, each its own goal: one key, so OpenAI sends both to where the start is cached.
+    let first = key(Wire::OpenAi, &tools, "one goal");
+    assert!(first.is_string(), "{first}");
+    assert_eq!(first, key(Wire::OpenAi, &tools, "another goal"));
+    assert_ne!(first, key(Wire::OpenAi, &[], "one goal"));
+    // A host that may refuse a field it does not know is sent none; OpenRouter has its marks.
+    assert_eq!(key(Wire::Plain, &tools, "one goal"), Value::Null);
+    assert_eq!(key(Wire::OpenRouter, &tools, "one goal"), Value::Null);
 }

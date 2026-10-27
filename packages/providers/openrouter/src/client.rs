@@ -10,6 +10,19 @@ use provider_kit::retry::{Attempt, PAUSE, TRANSIENT, retried};
 use serde_json::Value;
 
 pub const BASE_URL: &str = "https://openrouter.ai/api/v1";
+/// OpenAI's own API: it takes a prompt cache key.
+const OPENAI_HOST: &str = "api.openai.com";
+
+/// Which fields a host's chat completions take beside the common ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wire {
+    /// OpenRouter: its `reasoning` object, its usage report, cache marks on the messages.
+    OpenRouter,
+    /// OpenAI itself: `reasoning_effort`, and the prompt cache's key.
+    OpenAi,
+    /// Any other host: `reasoning_effort` only; a field it does not know may be refused.
+    Plain,
+}
 /// A long reply with high reasoning is slow, and it is not streamed.
 const TIMEOUT: Duration = Duration::from_secs(600);
 /// A decision is short and cheap: one that hangs is given up on sooner, and asked once more.
@@ -99,8 +112,15 @@ impl OpenRouter {
         }
     }
 
-    pub fn is_openrouter(&self) -> bool {
-        self.openrouter
+    /// Which fields its requests take: OpenRouter's, OpenAI's own, or the plain ones any host
+    /// that speaks the wire takes.
+    pub fn wire(&self) -> Wire {
+        let host = (self.base.split("://").nth(1)).and_then(|rest| rest.split('/').next());
+        match (self.openrouter, host) {
+            (true, _) => Wire::OpenRouter,
+            (false, Some(OPENAI_HOST)) => Wire::OpenAi,
+            (false, _) => Wire::Plain,
+        }
     }
 
     /// POST `body` to `path`, asked again on an answer a moment's wait may mend.

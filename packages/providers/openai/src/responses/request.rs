@@ -40,22 +40,25 @@ pub(crate) fn body(selection: &Selection, request: Request) -> Value {
 /// of every session with them shares. The backend sends requests with one key to where that start
 /// is cached, so a new session (an agent's too) reads it from the cache instead of afresh.
 fn cache_key(selection: &Selection, request: &Request) -> String {
-    use std::hash::{DefaultHasher, Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    selection.model().id.hash(&mut hasher);
-    for spec in request.tools {
-        (&spec.name, &spec.description, spec.parameters.to_string()).hash(&mut hasher);
-    }
-    for message in request.conversation {
-        match message {
-            Message::System(rules) => rules.hash(&mut hasher),
+    let tools = request.tools.iter().flat_map(|spec| {
+        [
+            spec.name.clone(),
+            spec.description.clone(),
+            spec.parameters.to_string(),
+        ]
+    });
+    let rules = request
+        .conversation
+        .iter()
+        .map_while(|message| match message {
+            Message::System(rules) => Some(rules.clone()),
             Message::User(_)
             | Message::Assistant { .. }
             | Message::Image { .. }
-            | Message::ToolResult { .. } => break,
-        }
-    }
-    format!("llx-{:016x}", hasher.finish())
+            | Message::ToolResult { .. } => None,
+        });
+    let model = std::iter::once(selection.model().id.clone());
+    provider_kit::cache::key(model.chain(tools).chain(rules))
 }
 
 /// A message as the Responses API's input items.

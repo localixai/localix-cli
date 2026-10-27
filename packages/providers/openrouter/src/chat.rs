@@ -1,13 +1,14 @@
 //! The chat port over OpenAI's chat completions, with tool calling: OpenRouter's models, and any
 //! provider's that speaks the same wire. OpenRouter takes its own `reasoning` object, a usage
-//! report with the cost, and prompt-cache marks; the others take `reasoning_effort`.
+//! report with the cost, and prompt-cache marks; the others take `reasoning_effort`, and OpenAI's
+//! own API the prompt cache's key.
 
 use contracts::catalog::{Effort, Selection};
 use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
 use contracts::tool::{Image, ToolSpec};
 use serde_json::{Value, json};
 
-use crate::client::{ApiError, OpenRouter};
+use crate::client::{ApiError, OpenRouter, Wire};
 
 pub struct ChatModel {
     pub client: OpenRouter,
@@ -17,7 +18,7 @@ pub struct ChatModel {
 impl Chat for ChatModel {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let model = &self.selection.model().id;
-        let body = body(self.client.is_openrouter(), &self.selection, &request);
+        let body = body(self.client.wire(), &self.selection, &request);
         let (value, timing) = self
             .client
             .post("/chat/completions", &body)
@@ -61,7 +62,7 @@ impl Chat for ChatModel {
 }
 
 /// The request's body: OpenRouter's own fields, or the generic ones.
-fn body(openrouter: bool, selection: &Selection, request: &Request) -> Value {
+fn body(host: Wire, selection: &Selection, request: &Request) -> Value {
     let model = &selection.model().id;
     let messages: Vec<Value> = request.conversation.iter().map(wire).collect();
     // No output limit: a whole file in one call is a long reply, and a cut one breaks the
@@ -69,7 +70,7 @@ fn body(openrouter: bool, selection: &Selection, request: &Request) -> Value {
     let mut body = json!({"model": model});
     // Only a model that takes levels is sent one: another may refuse the field.
     let levels = !selection.model().efforts.is_empty();
-    if openrouter {
+    if host == Wire::OpenRouter {
         body["messages"] = json!(cached(messages));
         if levels {
             body["reasoning"] = reasoning(selection.effort());
@@ -87,6 +88,9 @@ fn body(openrouter: bool, selection: &Selection, request: &Request) -> Value {
             body["reasoning_effort"] = json!(name);
         }
     }
+    if host == Wire::OpenAi {
+        body["prompt_cache_key"] = json!(cache_key(model, request));
+    }
     if !request.tools.is_empty() {
         body["tools"] = request.tools.iter().map(function).collect();
         body["tool_choice"] = json!(if request.may_call { "auto" } else { "none" });
@@ -95,6 +99,29 @@ fn body(openrouter: bool, selection: &Selection, request: &Request) -> Value {
         body["parallel_tool_calls"] = json!(true);
     }
     body
+}
+
+/// The prompt cache's key: the model, the tools and the system prompt, the start every request of
+/// every session with them shares.
+fn cache_key(model: &str, request: &Request) -> String {
+    let tools = request.tools.iter().flat_map(|spec| {
+        [
+            spec.name.clone(),
+            spec.description.clone(),
+            spec.parameters.to_string(),
+        ]
+    });
+    let rules = request
+        .conversation
+        .iter()
+        .map_while(|message| match message {
+            Message::System(rules) => Some(rules.clone()),
+            Message::User(_)
+            | Message::Assistant { .. }
+            | Message::Image { .. }
+            | Message::ToolResult { .. } => None,
+        });
+    provider_kit::cache::key(std::iter::once(model.to_string()).chain(tools).chain(rules))
 }
 
 /// The level as OpenRouter's `reasoning` takes it. Off is no thinking at all: it costs seconds

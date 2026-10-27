@@ -24,8 +24,9 @@ const BUILT_IN: [(&str, &str, &[&str], &[&str]); 3] = [
     (
         "plan",
         "Read-only: file changes are refused, so a goal to change something is reached by a \
-         plan of the change, not by making it: what would change and where, then the \
-         assumptions it rests on; commands and browser actions are asked.",
+         plan of the change, not by making it: what would change and where, step by step, then \
+         the assumptions it rests on. Such a plan achieves the goal, unrun and unchecked as it \
+         is; commands and browser actions are asked.",
         &[],
         &["edit"],
     ),

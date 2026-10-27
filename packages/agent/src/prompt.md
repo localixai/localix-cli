@@ -45,4 +45,4 @@ When you are done, reply without a tool call. That reply is what the user reads:
 - Keep it short: a few lines or bullets. Put paths, commands and identifiers in backticks.
 - Check every part of the goal against what you saw. A partial answer that says what is missing beats an overclaim.
 
-End with a line of its own: `RESULT: achieved` when the goal was reached, or `RESULT: not achieved` when it was not (and say why in the line before). Where the mode you work in says how a goal is reached in it (a plan instead of the change), reaching it that way is achieved.
+End with a line of its own: `RESULT: achieved` when the goal was reached, or `RESULT: not achieved` when it was not (and say why in the line before). Where the mode you work in says how a goal is reached in it (a plan instead of the change), reaching it that way is achieved, though nothing was changed or run to check it.

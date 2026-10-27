@@ -1,29 +1,7 @@
 /* The window section: a drawn llx window, then two short lists. */
-.window {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1.25rem;
-  padding-block: clamp(2rem, 6vw, 4rem) clamp(3rem, 7vw, 5rem);
-}
-.window h2 {
-  margin: 0;
-  font: 700 clamp(1.75rem, 3.4vw, 2.75rem) / 1.05 var(--display);
-  letter-spacing: -0.04em;
-}
-.window-lede {
-  max-width: 40rem;
-  margin: 0;
-  color: var(--soft);
-}
-.window code {
-  color: var(--white);
-  font: 0.9em var(--mono);
-}
-
 .window-lists {
   display: grid;
-  gap: 1.5rem;
-  margin-top: 1rem;
+  gap: clamp(2rem, 4vw, 3rem) 4rem;
 }
 @media (min-width: 48rem) {
   .window-lists {
@@ -31,23 +9,35 @@
   }
 }
 .window h3 {
-  margin: 0 0 0.6rem;
-  font: 600 1rem/1.3 var(--text);
+  margin: 0 0 1rem;
+  font: 600 var(--step-1) / 1.3 var(--display);
+  letter-spacing: -0.02em;
 }
 .window ol,
 .window ul {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.75rem;
   margin: 0;
-  padding-left: 1.2rem;
+  padding-left: 1.4rem;
   color: var(--soft);
+}
+.window li {
+  max-width: 34rem;
+  padding-left: 0.2rem;
+}
+.window li::marker {
+  color: var(--muted);
 }
 .window li b {
   color: var(--white);
   font-weight: 600;
 }
 .window-vs {
-  margin: 0.9rem 0 0;
+  max-width: 34rem;
+  margin: 1.25rem 0 0;
   color: var(--muted);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
+}
+.window-vs code {
+  color: var(--soft);
 }

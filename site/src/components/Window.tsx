@@ -18,12 +18,14 @@ const GETS = [
 /** The window, drawn: tabs of pages and terminals, the agent at work, the person's comments. */
 export function Window() {
   return (
-    <section className="window wrap" aria-labelledby="window-title">
-      <h2 id="window-title">One window you can watch.</h2>
-      <p className="window-lede">
-        Pages in the system’s own WebView and terminals in a real PTY, as tabs of one native window, each
-        project’s together. It never takes your keyboard.
-      </p>
+    <section className="section window wrap" aria-labelledby="window-title">
+      <div className="sec-head">
+        <h2 id="window-title">One window you can watch.</h2>
+        <p>
+          Pages in the system’s own WebView and terminals in a real PTY, as tabs of one native window, each
+          project’s together. It never takes your keyboard.
+        </p>
+      </div>
 
       <Mock />
 

@@ -21,16 +21,168 @@ pub(crate) struct World<'a> {
     pub say: &'a dyn Fn(&str),
 }
 
-/// Sign in to a provider in a way, asking at the terminal; what was saved, in words.
+/// Sign in to a provider in a way, asking at the terminal under the step's path; what was
+/// saved, in words, or `None` when the person cancelled.
 pub(crate) type SignIn<'a> =
-    dyn Fn(Provider, Method, &mut dyn Terminal) -> Result<String, String> + 'a;
+    dyn Fn(Provider, Method, &str, &mut dyn Terminal) -> Result<Option<String>, String> + 'a;
 
-/// The steps from `current`: the choice made, `Ok(None)` when the person cancelled.
+/// How the steps ended.
+#[derive(Debug, PartialEq)]
+pub(crate) enum Ended {
+    Chose(Choice),
+    /// Nothing was done.
+    Nothing,
+    /// A sign-in was saved, then the person gave up before choosing a model.
+    SignedIn(Provider),
+}
+
+/// One step of the stack: what is asked now.
+#[derive(Clone)]
+enum Step {
+    Provider,
+    Keep(Provider, String),
+    Method(Provider),
+    SignIn(Provider, Method),
+    Model(Provider),
+}
+
+/// What a step came to.
+enum Move {
+    Next(Step),
+    Back,
+    Signed(Provider),
+    Chose(Choice),
+}
+
+/// What each step shows as marked when it is asked again: what was chosen there.
+struct Marks {
+    provider: Provider,
+    keep: usize,
+    method: usize,
+}
+
+/// The steps from `current`, a stack: a cancel goes back one step (as it was), and ends the
+/// flow at the first.
 pub(crate) fn choose(
     current: &Choice,
     terminal: &mut dyn Terminal,
     world: &World,
-) -> Result<Option<Choice>, String> {
+) -> Result<Ended, String> {
+    let mut marks = Marks {
+        provider: current.provider.clone(),
+        keep: 0,
+        method: 0,
+    };
+    let mut stack = vec![Step::Provider];
+    let mut signed = None;
+    while let Some(step) = stack.last().cloned() {
+        match advance(&step, current, terminal, world, &mut marks)? {
+            Move::Next(next) => stack.push(next),
+            Move::Back => {
+                stack.pop();
+            }
+            // The sign-in happened: back from its model is the providers, not a second sign-in.
+            Move::Signed(provider) => {
+                stack.clear();
+                stack.push(Step::Provider);
+                stack.push(Step::Model(provider.clone()));
+                signed = Some(provider);
+            }
+            Move::Chose(choice) => return Ok(Ended::Chose(choice)),
+        }
+    }
+    Ok(signed.map_or(Ended::Nothing, Ended::SignedIn))
+}
+
+fn advance(
+    step: &Step,
+    current: &Choice,
+    terminal: &mut dyn Terminal,
+    world: &World,
+    marks: &mut Marks,
+) -> Result<Move, String> {
+    Ok(match step {
+        Step::Provider => match pick_provider(current, terminal, world, marks) {
+            Some(provider) => Move::Next(match (world.signed_in)(&provider) {
+                Some(from) => Step::Keep(provider, from),
+                None => after_keep(provider),
+            }),
+            None => Move::Back,
+        },
+        Step::Keep(provider, from) => {
+            let items = [
+                Item::new("Keep it", "", marks.keep == 0),
+                Item::new("Sign in again", "", marks.keep == 1),
+            ];
+            let title = format!("{} › Signed in with {from}", path(provider));
+            match terminal.pick(&title, &items) {
+                None => Move::Back,
+                Some(at) => {
+                    marks.keep = at;
+                    Move::Next(if at == 0 {
+                        Step::Model(provider.clone())
+                    } else {
+                        after_keep(provider.clone())
+                    })
+                }
+            }
+        }
+        Step::Method(provider) => {
+            let methods = provider.methods();
+            let items: Vec<Item> = methods
+                .iter()
+                .enumerate()
+                .map(|(at, method)| Item::new(describe(*method), "", at == marks.method))
+                .collect();
+            let title = format!("{} › Sign in with", path(provider));
+            match terminal.pick(&title, &items).and_then(|at| {
+                marks.method = at;
+                methods.get(at)
+            }) {
+                Some(method) => Move::Next(Step::SignIn(provider.clone(), *method)),
+                None => Move::Back,
+            }
+        }
+        Step::SignIn(provider, method) => {
+            let signing = (world.sign_in)(provider.clone(), *method, &path(provider), terminal)?;
+            match signing {
+                Some(said) => {
+                    (world.say)(&format!("{said}\n"));
+                    Move::Signed(provider.clone())
+                }
+                None => Move::Back,
+            }
+        }
+        Step::Model(provider) => {
+            let title = format!("{} › Model", path(provider));
+            match models(current, terminal, std::slice::from_ref(provider), &title) {
+                Some(choice) => Move::Chose(choice),
+                None => Move::Back,
+            }
+        }
+    })
+}
+
+/// The breadcrumb of a provider's steps: `Login › OpenAI`.
+fn path(provider: &Provider) -> String {
+    format!("Login › {}", provider.name())
+}
+
+/// The step that signs in: straight to the sign-in when there is one way, else which way.
+fn after_keep(provider: Provider) -> Step {
+    match provider.methods() {
+        [only] => Step::SignIn(provider.clone(), *only),
+        _ => Step::Method(provider),
+    }
+}
+
+/// The provider chosen; `None` when the person cancelled.
+fn pick_provider(
+    current: &Choice,
+    terminal: &mut dyn Terminal,
+    world: &World,
+    marks: &mut Marks,
+) -> Option<Provider> {
     let mut offered = offered(Provider::all(), &current.provider, world.signed_in);
     let items: Vec<Item> = offered
         .iter()
@@ -42,18 +194,17 @@ pub(crate) fn choose(
                 (None, None) => ("", format!("{id} · not signed in")),
             };
             let label = format!("{}{mark}", provider.name());
-            Item::new(label, detail, *provider == current.provider)
+            Item::new(label, detail, *provider == marks.provider)
         })
         .collect();
-    let Some(at) = terminal.pick("Provider", &items) else {
-        return Ok(None);
-    };
+    let at = terminal.pick("Login › Provider", &items)?;
     let provider = offered.swap_remove(at);
-    if !signed_in(&provider, terminal, world)? {
-        return Ok(None);
+    if provider != marks.provider {
+        marks.keep = 0;
+        marks.method = 0;
     }
-    let title = format!("Model ({})", provider.name());
-    Ok(models(current, terminal, &[provider], &title))
+    marks.provider.clone_from(&provider);
+    Some(provider)
 }
 
 /// Every provider of the catalog, in the order a person looks for one: the popular (in their
@@ -73,44 +224,6 @@ fn offered(
     all
 }
 
-/// Keep the sign-in there is, or sign in; `false` when the person cancelled.
-fn signed_in(
-    provider: &Provider,
-    terminal: &mut dyn Terminal,
-    world: &World,
-) -> Result<bool, String> {
-    if let Some(from) = (world.signed_in)(provider) {
-        let items = [
-            Item::new("Keep it", "", true),
-            Item::new("Sign in again", "", false),
-        ];
-        let title = format!("Signed in to {} with {from}", provider.name());
-        match terminal.pick(&title, &items) {
-            None => return Ok(false),
-            Some(0) => return Ok(true),
-            Some(_) => {}
-        }
-    }
-    let methods = provider.methods();
-    let method = match methods {
-        [only] => *only,
-        _ => {
-            let items: Vec<Item> = methods
-                .iter()
-                .enumerate()
-                .map(|(at, method)| Item::new(describe(*method), "", at == 0))
-                .collect();
-            let Some(at) = terminal.pick("Sign in with", &items) else {
-                return Ok(false);
-            };
-            methods[at]
-        }
-    };
-    let said = (world.sign_in)(provider.clone(), method, terminal)?;
-    (world.say)(&format!("{said}\n"));
-    Ok(true)
-}
-
 fn describe(method: Method) -> &'static str {
     match method {
         Method::Key => "Paste an API key",
@@ -125,8 +238,8 @@ pub(crate) fn run(rig: &mut Rig, ui: &Ui) {
 }
 
 fn steps(rig: &mut Rig, terminal: &mut dyn Terminal, shown: &dyn Fn(&str)) {
-    let sign_in = |provider, method, terminal: &mut dyn Terminal| {
-        signin::sign_in(&provider, method, terminal, shown)
+    let sign_in = |provider, method, path: &str, terminal: &mut dyn Terminal| {
+        signin::sign_in(&provider, method, path, terminal, shown)
     };
     let world = World {
         signed_in: &Provider::signed_in,
@@ -134,8 +247,13 @@ fn steps(rig: &mut Rig, terminal: &mut dyn Terminal, shown: &dyn Fn(&str)) {
         say: shown,
     };
     match choose(&rig.choice, terminal, &world) {
-        Ok(Some(choice)) => rig.output.note(&now(rig, choice)),
-        Ok(None) => rig.output.note("Nothing changed.\n"),
+        Ok(Ended::Chose(choice)) => rig.output.note(&now(rig, choice)),
+        Ok(Ended::Nothing) => rig.output.note("Nothing changed.\n"),
+        Ok(Ended::SignedIn(provider)) => rig.output.note(&format!(
+            "Signed in to {}; the model is still {}.\n",
+            provider.name(),
+            rig.choice.label()
+        )),
         Err(why) => rig.output.note(&format!("Not signed in: {why}\n")),
     }
 }

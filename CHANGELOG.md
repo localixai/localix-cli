@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **`/login` goes back one step.** Its steps (provider, keep the sign-in or sign in again, how to sign in, the key line or the browser's wait, the model) are a stack: Esc or Ctrl+C goes back to the step before, as you left it, and ends `/login` only at the providers. Each step's title is its path (`Login › OpenAI › Model`). A sign-in already saved stays so: Esc at the model goes back to the providers, and ending there says `Signed in to OpenAI; the model is still …` instead of `Nothing changed.`. A cancelled key line or browser wait is no longer an error.
+
 - **`/model` in tabs, one per provider.** The models of each provider signed in to are a tab of their own over the list (`OpenAI 36 · [OpenRouter 288] · Anthropic 15`), opened on the current model's; Tab and Shift+Tab switch, each tab keeps its marker, and ←/→ still change the reasoning level. A search finds a model by its name or its id in every tab, counts each tab's matches, and goes to the tab of the best one when the tab shown has none. A row is the model's name and id: the tab names the provider, one provider's list too. The protocol's `choose_adjustable` carries the groups as an optional field; an interface that does not know it shows one list.
 - **New models within the hour.** The catalog is asked of models.dev at most once an hour instead of once a day (an unchanged one is a 304 with no body, a changed one about 800 KB gzipped), and a session or the daemon looks for a newer file each minute instead of each hour: a model released in the morning is in `/model` by then, not the next day.
 

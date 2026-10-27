@@ -21,7 +21,7 @@ impl Lines for Typed {
 }
 
 /// `come_back` with lines typed, the callback coming back on the `back`-th wait.
-fn signed(lines: &[&'static str], back: usize) -> (Result<String, String>, String) {
+fn signed(lines: &[&'static str], back: usize) -> (Result<Option<String>, String>, String) {
     let mut terminal = Typed(lines.iter().copied().collect());
     let said = Mutex::new(String::new());
     let waits = AtomicUsize::new(0);
@@ -31,25 +31,25 @@ fn signed(lines: &[&'static str], back: usize) -> (Result<String, String>, Strin
     };
     let pasted = |text: &str| Ok(format!("pasted:{text}"));
     let say = |text: &str| lock(&said).push_str(text);
-    let outcome = come_back(&mut terminal, &say, &wait, &pasted);
+    let outcome = come_back(&mut terminal, "Login › X", &say, &wait, &pasted);
     (outcome, said.into_inner().unwrap())
 }
 
 #[test]
 fn enter_waits_for_the_browser_and_says_when_it_has_not_come_back() {
     let (outcome, said) = signed(&["", ""], 2);
-    assert_eq!(outcome, Ok("from-browser".into()));
+    assert_eq!(outcome, Ok(Some("from-browser".into())));
     assert!(said.contains("has not come back yet"), "{said}");
 }
 
 #[test]
-fn a_pasted_address_is_read_and_q_or_the_end_of_input_cancels() {
+fn a_pasted_address_is_read_and_q_or_the_end_of_input_goes_back() {
     assert_eq!(
         signed(&["http://x/?code=c"], 0).0,
-        Ok("pasted:http://x/?code=c".into())
+        Ok(Some("pasted:http://x/?code=c".into()))
     );
-    assert_eq!(signed(&["q"], 0).0, Err("cancelled".into()));
-    assert_eq!(signed(&[], 0).0, Err("cancelled".into()));
+    assert_eq!(signed(&["q"], 0).0, Ok(None));
+    assert_eq!(signed(&[], 0).0, Ok(None));
 }
 
 #[test]
@@ -83,8 +83,10 @@ fn the_browser_coming_back_closes_the_line_with_nothing_pressed() {
     let waits = AtomicUsize::new(0);
     let wait =
         |_| (waits.fetch_add(1, Ordering::SeqCst) + 1 == 3).then(|| Ok("from-browser".to_string()));
-    let outcome = come_back(&mut Open, &|_| {}, &wait, &|_| Err("not pasted".into()));
-    assert_eq!(outcome, Ok("from-browser".into()));
+    let outcome = come_back(&mut Open, "Login › X", &|_| {}, &wait, &|_| {
+        Err("not pasted".into())
+    });
+    assert_eq!(outcome, Ok(Some("from-browser".into())));
     assert_eq!(
         waits.load(Ordering::SeqCst),
         3,

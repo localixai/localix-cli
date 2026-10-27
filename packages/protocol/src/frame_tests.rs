@@ -134,7 +134,7 @@ fn every_question_to_the_person_comes_back_the_same_through_json() {
         },
         ToClient::Done {
             id: 3,
-            done: Done::Status {
+            done: Done::Status(crate::Status {
                 build: "0.4.0+1".into(),
                 pid: 42,
                 attached: 2,
@@ -142,7 +142,7 @@ fn every_question_to_the_person_comes_back_the_same_through_json() {
                 working: 1,
                 kept: 1,
                 jobs: 2,
-            },
+            }),
         },
         ToClient::Done {
             id: 1,

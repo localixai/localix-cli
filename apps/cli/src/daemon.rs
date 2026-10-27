@@ -36,53 +36,11 @@ pub(crate) fn build() -> String {
     format!("{}+{size:x}.{made:x}", env!("CARGO_PKG_VERSION"))
 }
 
-/// What a daemon says of itself.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Status {
-    pub build: String,
-    pub pid: u32,
-    pub attached: usize,
-    pub lanes: usize,
-    pub working: usize,
-    pub kept: usize,
-    pub jobs: usize,
-}
-
-impl Status {
-    /// Whether nothing needs the daemon: no terminal attached, no session open or moved to the
-    /// background, no task working, no monitor or schedule running.
-    pub(crate) fn idle(&self) -> bool {
-        [
-            self.attached,
-            self.lanes,
-            self.working,
-            self.kept,
-            self.jobs,
-        ] == [0; 5]
-    }
-}
-
 /// The daemon at `path`, if one answers within `wait`.
-pub(crate) fn status(path: &Path, wait: Duration) -> Option<Status> {
+pub(crate) fn status(path: &Path, wait: Duration) -> Option<protocol::Status> {
     let client = client::Client::connect(path, |_| {}).ok()?;
     match client.call(Command::Status, wait) {
-        Ok(Done::Status {
-            build,
-            pid,
-            attached,
-            lanes,
-            working,
-            kept,
-            jobs,
-        }) => Some(Status {
-            build,
-            pid,
-            attached,
-            lanes,
-            working,
-            kept,
-            jobs,
-        }),
+        Ok(Done::Status(status)) => Some(status),
         _ => None,
     }
 }

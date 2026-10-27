@@ -114,6 +114,35 @@ pub struct Running {
     pub name: String,
 }
 
+/// What a daemon says of itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Status {
+    pub build: String,
+    pub pid: u32,
+    pub attached: usize,
+    pub lanes: usize,
+    pub working: usize,
+    /// Absent from an older daemon: its lanes open still say whether it is in use.
+    #[serde(default)]
+    pub kept: usize,
+    #[serde(default)]
+    pub jobs: usize,
+}
+
+impl Status {
+    /// Whether nothing needs the daemon: no terminal attached, no session open or moved to the
+    /// background, no task working, no monitor or schedule running.
+    pub fn idle(&self) -> bool {
+        [
+            self.attached,
+            self.lanes,
+            self.working,
+            self.kept,
+            self.jobs,
+        ] == [0; 5]
+    }
+}
+
 /// What came of a command.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -148,18 +177,7 @@ pub enum Done {
     },
     /// The daemon: its build and process, the interfaces attached, the lanes open and working,
     /// the desks moved to the background, and the monitors and schedules running.
-    Status {
-        build: String,
-        pid: u32,
-        attached: usize,
-        lanes: usize,
-        working: usize,
-        /// Absent from an older daemon: its lanes open still say whether it is in use.
-        #[serde(default)]
-        kept: usize,
-        #[serde(default)]
-        jobs: usize,
-    },
+    Status(Status),
     /// The tools a tool client may call.
     Tools {
         tools: Vec<ToolInfo>,

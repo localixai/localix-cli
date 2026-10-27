@@ -125,7 +125,7 @@ fn said(done: Done, shots: &Path, out: &mut impl Write) -> io::Result<Came> {
         | Done::Interrupted { .. }
         | Done::Work { .. }
         | Done::Attached { .. }
-        | Done::Status { .. }
+        | Done::Status(_)
         | Done::Failed { .. }) => {
             writeln!(out, "the daemon answered something else: {other:?}")?;
             Ok(Came::Failed)

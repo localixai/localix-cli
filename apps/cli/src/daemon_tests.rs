@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use protocol::Status;
+
 use super::*;
 use crate::server::socket::tests::{daemon, place};
 use crate::testing::Scratch;
@@ -115,7 +117,7 @@ fn a_daemon_is_idle_only_when_nothing_needs_it() {
     let with = |set: fn(&mut Status)| {
         let mut status = Status {
             build: build(),
-            ..nothing
+            ..nothing.clone()
         };
         set(&mut status);
         status.idle()

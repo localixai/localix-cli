@@ -38,7 +38,7 @@ pub(crate) fn serve(action: Option<&ServeAction>) -> Result<i32, Failure> {
         None => host(&config, daemon::own_socket(&config)),
         Some(ServeAction::Status) => match daemon::status(&path, ENDING) {
             Some(found) => {
-                let daemon::Status {
+                let protocol::Status {
                     build,
                     pid,
                     attached,

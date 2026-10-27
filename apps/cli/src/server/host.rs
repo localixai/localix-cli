@@ -84,7 +84,7 @@ impl Host {
 
     /// What `llx serve status` says.
     pub(crate) fn status(&self) -> Done {
-        Done::Status {
+        Done::Status(protocol::Status {
             build: self.build.clone(),
             pid: std::process::id(),
             attached: self.attached.load(Ordering::SeqCst),
@@ -93,7 +93,7 @@ impl Host {
             // An owner's tabs wait for its next call as sessions moved there wait for theirs.
             kept: lock(&self.kept).len() + self.owners.holding(),
             jobs: crate::interrupt::jobs(),
-        }
+        })
     }
 
     /// Asked to end: [`Host::wait`] returns.

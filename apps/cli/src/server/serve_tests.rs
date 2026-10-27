@@ -394,12 +394,12 @@ fn a_daemon_says_what_it_is_and_ends_when_asked() {
     let served = served_by(Some(Arc::clone(&host)));
     let _attached = host.attach();
     served.call(1, Command::Status);
-    let Done::Status {
+    let Done::Status(protocol::Status {
         build,
         pid,
         attached,
         ..
-    } = served.done(1)
+    }) = served.done(1)
     else {
         panic!("no status");
     };

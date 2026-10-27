@@ -90,7 +90,8 @@ interface cannot start) it is a usage error pointing to `llx exec`, which prints
 
 - Enter sends. Shift+Enter, Ctrl-J or a line ending in `\` start a new line; a paste keeps its lines. Up and Down walk earlier entries.
 - While a task works, Enter sends what you type to it, read at its next step (`↳`); Tab keeps it for after the task (`⏎`).
-- Ctrl-R finds the last earlier entry with the words already typed (type them first; again for older ones). Ctrl-G writes the entry in `$EDITOR`.
+- Ctrl-R finds the last earlier entry with the words already typed (type them first; again for older ones). Ctrl-G writes the entry in `$EDITOR`. Ctrl-U clears the line before the cursor. Ctrl-Z (unix) gives the terminal back and stops llx, as vim does; the shell's `fg` continues it with the screen drawn again, and the session's tasks go on meanwhile.
+- Leaving (Ctrl-C twice, Ctrl-D, `/exit`) prints, dim under the history, `Resume this session: llx resume <id>` for each session with a task, the one shown first; moving to the background says to run `llx` in this directory to come back.
 - Clipboard text shows as `[Paste]` (numbered for several) and is expanded when sent.
 - Shift+Tab goes round the modes (default → plan → bypass → your own → default) without Enter; while a task runs, the switch waits until it ends.
 

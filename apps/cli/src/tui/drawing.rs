@@ -7,9 +7,11 @@ use std::time::{Duration, Instant};
 
 use client::Client;
 use protocol::{Command, Done, ToClient};
+use ratatui::text::Line;
 
 use super::app::{Action, App};
 use super::event::{Event, Input, Out};
+use super::farewell::Leaving;
 use super::screen::Screen;
 use super::{live, style, terminal};
 
@@ -28,10 +30,12 @@ pub(super) struct Seat {
 /// The terminal as frames are drawn on it.
 type Terminal = Screen<Box<dyn io::Write>>;
 
-pub(super) fn draw(mut app: App, inbox: &Receiver<Input>, seat: &Seat) {
+/// Runs until the session is over; what to say once the terminal is given back.
+pub(super) fn draw(mut app: App, inbox: &Receiver<Input>, seat: &Seat) -> Vec<Line<'static>> {
     let mut screen = Screen::new(terminal::out(), style::colour_stdout());
     let mut over = false;
     let mut shown = None;
+    let mut background = false;
     while !over {
         let wait = if app.moving() {
             FRAME
@@ -60,6 +64,7 @@ pub(super) fn draw(mut app: App, inbox: &Receiver<Input>, seat: &Seat) {
                 })
             );
             let action = app.input(input, Instant::now());
+            background |= matches!(action, Some(Action::Background));
             over |= act(action, ended, &mut app, &mut screen, &mut shown, seat);
             flush(&mut app, &seat.client);
         }
@@ -83,6 +88,11 @@ pub(super) fn draw(mut app: App, inbox: &Receiver<Input>, seat: &Seat) {
         shown = Some(drawn);
     }
     let _ = screen.clear();
+    match (background, app.left) {
+        (true, _) => app.farewell(Leaving::Background),
+        (false, true) => app.farewell(Leaving::Quit),
+        (false, false) => vec![],
+    }
 }
 
 /// What the person asked for that the interface cannot do itself; whether the session is over.
@@ -91,10 +101,7 @@ fn act(
     ended: bool,
     app: &mut App,
     screen: &mut Terminal,
-    shown: &mut Option<(
-        Vec<ratatui::text::Line<'static>>,
-        Option<super::screen::Cursor>,
-    )>,
+    shown: &mut Option<(Vec<Line<'static>>, Option<super::screen::Cursor>)>,
     seat: &Seat,
 ) -> bool {
     match action {
@@ -103,6 +110,16 @@ fn act(
             let _ = screen.clear();
             let text = terminal::editor(&app.composer.text());
             app.composer.set(text.trim_end_matches('\n'));
+            *shown = None;
+        }
+        Some(Action::Suspend) => {
+            let _ = screen.clear();
+            #[cfg(unix)]
+            terminal::suspend();
+            // The window may have been resized meanwhile, and the live area is drawn again.
+            if let Ok((width, height)) = crossterm::terminal::size() {
+                app.input(Input::Resize(width, height), Instant::now());
+            }
             *shown = None;
         }
         Some(Action::Clipboard) => match super::attach::clipboard(&super::attach::pasted_dir()) {
@@ -152,6 +169,7 @@ fn stop(screen: &mut Terminal, app: &mut App, seat: &Seat, session: String) {
         let _ = screen.frame(&history, &[], None, app.height, app.width);
         let _ = screen.clear();
         terminal::restore();
+        terminal::say(&app.farewell(Leaving::Quit));
         (seat.quit_now)();
     }
 }

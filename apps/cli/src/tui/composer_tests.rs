@@ -194,3 +194,17 @@ fn ctrl_r_finds_earlier_entries_with_the_words_typed() {
     composer.key(ctrl_r);
     assert_eq!(composer.text(), "run the tests", "no earlier one: it stays");
 }
+
+#[test]
+fn ctrl_u_clears_the_line_before_the_cursor_and_no_other() {
+    let mut composer = Composer::default();
+    typed(&mut composer, "one");
+    composer.key(with(KeyCode::Char('j'), KeyModifiers::CONTROL));
+    typed(&mut composer, "two words");
+    composer.key(with(KeyCode::Char('u'), KeyModifiers::CONTROL));
+    assert_eq!(composer.text(), "one\n");
+    typed(&mut composer, "ab");
+    composer.key(key(KeyCode::Left));
+    composer.key(with(KeyCode::Char('u'), KeyModifiers::CONTROL));
+    assert_eq!(composer.text(), "one\nb", "the text after the cursor stays");
+}

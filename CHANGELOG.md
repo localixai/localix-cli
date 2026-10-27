@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Ctrl+Z suspends llx (unix).** At the prompt it gives the terminal back as quitting does and stops the process; the shell's `fg` continues it, the terminal's modes set again and the live area drawn again with the draft, the session untouched. Ctrl+U, which clears the line before the cursor, is in the help and the docs now.
+- **Leaving says how to come back.** After the terminal is given back, one dim line per session with a task, the one shown first: `Resume this session: llx resume <id>`; moving to the background says to run `llx` in the directory to come back to it.
 - **`/model` in tabs, one per provider.** The models of each provider signed in to are a tab of their own over the list (`OpenAI 36 · [OpenRouter 288] · Anthropic 15`), opened on the current model's; Tab and Shift+Tab switch, each tab keeps its marker, and ←/→ still change the reasoning level. A search finds a model by its name or its id in every tab, counts each tab's matches, and goes to the tab of the best one when the tab shown has none. A row is the model's name and id: the tab names the provider, one provider's list too. The protocol's `choose_adjustable` carries the groups as an optional field; an interface that does not know it shows one list.
 - **New models within the hour.** The catalog is asked of models.dev at most once an hour instead of once a day (an unchanged one is a 304 with no body, a changed one about 800 KB gzipped), and a session or the daemon looks for a newer file each minute instead of each hour: a model released in the morning is in `/model` by then, not the next day.
 

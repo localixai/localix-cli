@@ -21,6 +21,8 @@ Keys
   Tab               complete a command
   Ctrl-R            the last earlier entry with the words typed before it; again for older
   Ctrl-G            write the entry in $EDITOR
+  Ctrl-U            clear the line before the cursor
+  Ctrl-Z            suspend llx (unix): `fg` in the shell comes back to it
   Shift+Tab         the next mode (after the task if working)
   Shift+Up, Down    more or less reasoning, as far as the model takes it
   Left, Right       on an empty prompt: switch to an agent's session and back

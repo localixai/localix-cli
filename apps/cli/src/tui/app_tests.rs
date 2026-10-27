@@ -906,3 +906,14 @@ fn lanes_ending_as_the_person_quits_leave_the_screen_as_it_is() {
     assert_eq!(app.lane_id(), "A", "no other lane drawn on the way out");
     assert!(!app.take_replay());
 }
+
+#[cfg(unix)]
+#[test]
+fn ctrl_z_suspends_and_keeps_the_draft() {
+    let now = Instant::now();
+    let mut app = app();
+    typed(&mut app, "half a thought", now);
+    assert_eq!(app.input(ctrl('z'), now), Some(Action::Suspend));
+    assert_eq!(app.composer.text(), "half a thought");
+    assert!(render(&mut app, now).contains("half a thought"));
+}

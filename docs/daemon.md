@@ -204,8 +204,8 @@ on attach); its events are numbered and kept in a ring. Quitting while work runs
 move to the background (only in the daemon), or stay; the next `llx` in a directory comes back
 to the sessions moved to the background there (`server::host::Kept`, `serve::rejoin`). A served
 session's providers' keys come from its client's environment (`providers::Vars`, the place's);
-the catalog is read again when a refresh wrote a newer one (looked at hourly, models.dev asked at
-most daily); the `LLX_*` model variables are the client's too, its command line saying them
+the catalog is read again when a refresh wrote a newer one (looked at each minute, models.dev asked
+at most hourly); the `LLX_*` model variables are the client's too, its command line saying them
 unless it says another. Left for later: `daemon.log` rotation; one desk per directory shared by
 two terminals at once.
 

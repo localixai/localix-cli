@@ -20,8 +20,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
-use agent::agent::Spend;
 use agent::conversation::Conversation;
+use contracts::chat::Spend;
 use contracts::history::Session;
 use queue::Queue;
 

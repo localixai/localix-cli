@@ -3,10 +3,10 @@
 
 use std::time::{Duration, Instant};
 
+use contracts::chat::Spend;
 use contracts::history::Turn;
 use contracts::tool::Image;
 use contracts::view::View;
-use decision_loop::meter::Spend;
 use serde_json::Value;
 
 use super::{Ended, since};
@@ -137,13 +137,10 @@ impl Rig<'_> {
             at: session::now(),
             steps: self.output.take_steps(),
         };
-        let hands = contracts::history::Spent {
-            input_tokens: hands.input_tokens,
-            cached_tokens: 0,
-            output_tokens: hands.output_tokens,
-            cost: hands.cost,
-        };
-        turn.steps.extend(self.output.hands_spent(hands));
+        turn.steps.extend(
+            self.output
+                .hands_spent(contracts::history::Spent::from(hands)),
+        );
         self.session.record(turn, location.as_deref());
         if let Err(error) = self.meta.save(self.history, &mut self.session) {
             self.output

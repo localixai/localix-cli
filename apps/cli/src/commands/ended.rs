@@ -2,7 +2,7 @@
 //! on it.
 
 use agent::agent::Status;
-use decision_loop::meter::Spend;
+use contracts::chat::Spend;
 use serde_json::Value;
 
 use crate::brake::Halt;
@@ -58,6 +58,7 @@ pub(crate) fn since(now: &Spend, before: &Spend) -> Spend {
         model: now.model.clone(),
         calls: now.calls - before.calls,
         input_tokens: now.input_tokens - before.input_tokens,
+        cached_tokens: now.cached_tokens - before.cached_tokens,
         output_tokens: now.output_tokens - before.output_tokens,
         cost: now.cost - before.cost,
         millis: now.millis - before.millis,

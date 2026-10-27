@@ -15,7 +15,7 @@ owner's agreement; an exception is never made in code. Cite the rule ids a chang
 Packages and an app. Every dependency points inward (rules L1-L5 below).
 
 - `packages/contracts`: ports only, no logic.
-  - `chat.rs`: the chat-model port, with our own `Message`, `ToolCall`, `Request`, `Completion` and `Usage`.
+  - `chat.rs`: the chat-model port, with our own `Message`, `ToolCall`, `Request`, `Completion`, `Usage` and `Spend` (usages summed: the chat model's in a run, the decision model's).
   - `catalog.rs`: what a provider offers: `ModelEntry` (an id, a name, the `Effort` levels it takes, its default) and `Selection`, a model with a level it takes (its fields are private: no other level can be put in).
   - `tool.rs`: the agent's tools: `ToolSpec`, `ToolOutput { report, state }`, `ToolError { Failed, Fatal }`.
   - `gate.rs`: a tool asks before an effect: `Effect { tool, summary }`, `Verdict { Allow, Deny(why) }`, `Gate`, and `Open`.
@@ -27,7 +27,6 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
   - `inbox.rs`: what reaches a run between its turns, `Inbox`.
 - `packages/agent`: the agent.
   - `agent.rs`: the loop: a turn's calls (those that may, at once: `calls.rs`), the inbox between turns, the stop conditions. `Agent::context` is the app's environment block, sent before the first goal; `Agent::tell` is what the app says between goals (a changed mode), naming no tool. `agent/handling.rs`: a turn's calls carried out, answered and counted; a `result` checked against its schema.
-  - `spend.rs`: `Spend`, what the chat model spent in a run.
   - `observer.rs`: what a run shows as it goes: calls, results, turns.
   - `conversation.rs`: messages that only grow. Older states are dropped past a budget, and open calls are closed; `truncate` for a rewind.
   - `history.rs`: how a conversation is prepared before each request, a `Strategy` the app chooses: `Pipeline` (stages `superseded`, `outputs`, `arguments`, behind a 90%→60% gate of the model's limit, a protected tail, elisions that stay: made for the prompt cache) or `Keep`. `history_tests.rs` simulates a 300-turn dialogue.

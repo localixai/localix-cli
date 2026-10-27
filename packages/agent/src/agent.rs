@@ -6,7 +6,7 @@
 
 mod handling;
 
-use contracts::chat::{Chat, Completion, Message, Request};
+use contracts::chat::{Chat, Completion, Message, Request, Spend};
 use contracts::inbox::Inbox;
 use contracts::tool::{Image, Tool, ToolSpec};
 use serde_json::Value;
@@ -16,7 +16,6 @@ use crate::conversation::Conversation;
 use crate::history::{Strategy, whole};
 use crate::observer::Observer;
 use crate::schema;
-pub use crate::spend::Spend;
 
 const SYSTEM: &str = include_str!("prompt.md");
 /// Turns whose calls all failed, in a row, before the model is asked to answer.

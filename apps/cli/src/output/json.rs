@@ -9,10 +9,9 @@
 //! - `run.completed`: `status`, `exit_code`, `answer`, `data` or `data_error`, `error`,
 //!   `session`, `usage` {`agent`, `decision`, `cost_usd`}, `duration_ms`
 
-use agent::agent::Spend as AgentSpend;
+use contracts::chat::Spend;
 use contracts::chat::{ToolCall, Usage};
 use contracts::tool::{ToolError, ToolOutput};
-use decision_loop::meter::Spend;
 use decision_loop::step::GoalStep;
 use serde_json::{Value, json};
 
@@ -111,7 +110,7 @@ pub(super) fn completed(summary: &Summary) -> Value {
     event
 }
 
-fn agent(spend: &AgentSpend) -> Value {
+fn agent(spend: &Spend) -> Value {
     json!({
         "model": spend.model,
         "calls": spend.calls,

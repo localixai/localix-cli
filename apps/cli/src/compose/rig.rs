@@ -56,7 +56,7 @@ pub(crate) struct Rig<'a> {
     /// The files as each task of the conversation found them, for `/rewind`.
     pub checkpoints: &'a Checkpoints,
     /// What the session's tasks spent, and when it began: `/usage`.
-    pub spent: agent::agent::Spend,
+    pub spent: contracts::chat::Spend,
     pub begun: std::time::Instant,
     pub session: Session,
     /// The conversation so far: the next task goes on from it.
@@ -154,7 +154,7 @@ pub(super) fn drive(
                 jobs_kit: lane.jobs_kit,
                 window: lane.window,
                 checkpoints: lane.checkpoints,
-                spent: agent::agent::Spend::default(),
+                spent: contracts::chat::Spend::default(),
                 begun: std::time::Instant::now(),
                 session,
                 conversation: None,

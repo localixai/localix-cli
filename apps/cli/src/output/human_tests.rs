@@ -2,11 +2,10 @@ use serde_json::json;
 
 use super::*;
 use crate::output::Summary;
-use agent::agent::Spend as AgentSpend;
-use decision_loop::meter::Spend;
+use contracts::chat::Spend;
 
 fn summary<'a>(
-    agent: &'a AgentSpend,
+    agent: &'a Spend,
     decision: &'a Spend,
     data: Option<&'a Result<serde_json::Value, String>>,
 ) -> Summary<'a> {
@@ -25,7 +24,7 @@ fn summary<'a>(
 
 #[test]
 fn the_spend_says_what_each_model_took() {
-    let agent = AgentSpend {
+    let agent = Spend {
         model: "m/agent".into(),
         calls: 3,
         cost: 0.01,
@@ -45,7 +44,7 @@ fn the_spend_says_what_each_model_took() {
 
 #[test]
 fn the_answer_goes_to_stdout_and_with_data_only_the_data() {
-    let (agent, decision) = (AgentSpend::default(), Spend::default());
+    let (agent, decision) = (Spend::default(), Spend::default());
     let plain = summary(&agent, &decision, None);
     assert_eq!(
         answer(&plain),

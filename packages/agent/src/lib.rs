@@ -14,7 +14,6 @@ pub mod conversation;
 pub mod history;
 pub mod observer;
 pub mod schema;
-mod spend;
 
 #[cfg(test)]
 mod fakes;

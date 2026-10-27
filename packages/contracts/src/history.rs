@@ -4,6 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::chat::Spend;
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Session {
     pub id: String,
@@ -76,6 +78,17 @@ pub struct Spent {
 impl Spent {
     pub fn is_empty(&self) -> bool {
         *self == Self::default()
+    }
+}
+
+impl From<&Spend> for Spent {
+    fn from(spend: &Spend) -> Self {
+        Self {
+            input_tokens: spend.input_tokens,
+            cached_tokens: spend.cached_tokens,
+            output_tokens: spend.output_tokens,
+            cost: spend.cost,
+        }
     }
 }
 

@@ -15,8 +15,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::Instant;
 
-use agent::agent::Spend as AgentSpend;
-use decision_loop::meter::Spend;
+use contracts::chat::Spend;
 use decision_loop::step::GoalStep;
 use serde_json::Value;
 
@@ -65,7 +64,7 @@ pub(crate) struct Summary<'a> {
     /// `--schema`: the data, or why none matched.
     pub data: Option<&'a Result<Value, String>>,
     pub error: Option<&'a str>,
-    pub agent: &'a AgentSpend,
+    pub agent: &'a Spend,
     pub decision: &'a Spend,
     pub millis: u64,
     pub session: &'a str,

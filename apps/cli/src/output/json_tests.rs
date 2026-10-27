@@ -1,4 +1,4 @@
-use decision_loop::meter::Spend;
+use contracts::chat::Spend;
 use decision_loop::step::Operation;
 
 use super::*;
@@ -58,11 +58,11 @@ fn a_step_carries_what_the_hands_did() {
 
 #[test]
 fn the_run_completes_with_its_status_usage_and_data() {
-    let agent = AgentSpend {
+    let agent = Spend {
         calls: 2,
         cost: 0.5,
         millis: 1200,
-        ..AgentSpend::default()
+        ..Spend::default()
     };
     let decision = Spend {
         calls: 7,

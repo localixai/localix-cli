@@ -1,7 +1,7 @@
 use agent::agent::Status;
 use clap::Parser;
+use contracts::chat::Spend;
 use contracts::chat::{Completion, ToolCall};
-use decision_loop::meter::Spend;
 use serde_json::{Value, json};
 use session::Sessions;
 
@@ -94,6 +94,7 @@ fn a_task_counts_only_what_it_spent() {
         output_tokens: 10,
         cost: 0.5,
         millis: 300,
+        ..Spend::default()
     };
     let now = Spend {
         calls: 5,

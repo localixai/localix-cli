@@ -70,6 +70,47 @@ pub struct Usage {
     pub output_tokens: u64,
 }
 
+/// What a model spent over a run: its calls' usage, summed.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Spend {
+    /// The model that answered last, as its provider names it.
+    pub model: String,
+    pub calls: u64,
+    pub cost: f64,
+    pub millis: u64,
+    pub input_tokens: u64,
+    pub cached_tokens: u64,
+    pub output_tokens: u64,
+}
+
+impl Spend {
+    /// One more call's usage. An answer that names no model keeps the one before.
+    pub fn add(&mut self, usage: &Usage) {
+        if !usage.model.is_empty() {
+            self.model.clone_from(&usage.model);
+        }
+        self.calls += 1;
+        self.cost += usage.cost;
+        self.millis += usage.millis;
+        self.input_tokens += usage.input_tokens;
+        self.cached_tokens += usage.cached_tokens;
+        self.output_tokens += usage.output_tokens;
+    }
+
+    /// Add what another run spent (an agent this one started): its turns and tokens count here.
+    pub fn absorb(&mut self, other: &Spend) {
+        if self.model.is_empty() {
+            self.model.clone_from(&other.model);
+        }
+        self.calls += other.calls;
+        self.cost += other.cost;
+        self.millis += other.millis;
+        self.input_tokens += other.input_tokens;
+        self.cached_tokens += other.cached_tokens;
+        self.output_tokens += other.output_tokens;
+    }
+}
+
 /// Why no completion came back.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChatError {
@@ -102,3 +143,7 @@ pub struct Request<'a> {
 pub trait Chat: Send + Sync {
     fn complete(&self, request: Request) -> Result<Completion, ChatError>;
 }
+
+#[cfg(test)]
+#[path = "chat_tests.rs"]
+mod tests;

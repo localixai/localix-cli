@@ -14,7 +14,7 @@ fn call() -> ToolCall {
     }
 }
 
-fn summary<'a>(agent: &'a AgentSpend, decision: &'a Spend) -> Summary<'a> {
+fn summary<'a>(agent: &'a Spend, decision: &'a Spend) -> Summary<'a> {
     Summary {
         status: "achieved",
         code: 0,
@@ -45,7 +45,7 @@ fn run(output: &Output) {
     });
     output.result(&call(), &done);
     output.turn(&Usage::default());
-    let (agent, decision) = (AgentSpend::default(), Spend::default());
+    let (agent, decision) = (Spend::default(), Spend::default());
     output.completed(&summary(&agent, &decision));
 }
 
@@ -215,7 +215,7 @@ fn on_a_github_runner_the_answer_on_stdout_stays_byte_exact() {
     let (out, err) = (Captured::default(), Captured::default());
     let mut output = Output::with(false, false, Box::new(out.clone()), Box::new(err));
     output.runner = Runner::GitHub;
-    let (agent, decision) = (AgentSpend::default(), Spend::default());
+    let (agent, decision) = (Spend::default(), Spend::default());
     let answer = "::set-output name=x::1\n##[add-matcher]m.json";
     output.completed(&Summary {
         answer,

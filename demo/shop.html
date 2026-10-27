@@ -41,6 +41,8 @@
     display: grid;
     place-items: center;
     font-size: 2.6rem;
+    background: var(--sunk);
+    filter: grayscale(1);
   }
   .product h2 {
     font-size: var(--step-0);
@@ -200,18 +202,18 @@
 <script>
   header("Pine and Pot");
   const PLANTS = [
-    { id: "monstera", name: "Monstera", kind: "Tropical", price: 38, light: "Bright, indirect light", leaf: "🌿", hue: 150 },
-    { id: "boston", name: "Boston fern", kind: "Ferns", price: 24, light: "Shade and humidity", leaf: "🌿", hue: 120 },
-    { id: "maidenhair", name: "Maidenhair fern", kind: "Ferns", price: 19, light: "Soft, indirect light", leaf: "🍃", hue: 105 },
-    { id: "bird", name: "Bird's nest fern", kind: "Ferns", price: 27, light: "Low light", leaf: "🌱", hue: 135 },
-    { id: "echeveria", name: "Echeveria", kind: "Succulents", price: 9, light: "Full sun", leaf: "🪴", hue: 170 },
-    { id: "jade", name: "Jade plant", kind: "Succulents", price: 16, light: "Full sun", leaf: "🪴", hue: 95 },
-    { id: "aloe", name: "Aloe vera", kind: "Succulents", price: 12, light: "Bright light", leaf: "🌵", hue: 80 },
-    { id: "basil", name: "Sweet basil", kind: "Herbs", price: 6, light: "Sunny sill", leaf: "🌿", hue: 110 },
-    { id: "rosemary", name: "Rosemary", kind: "Herbs", price: 8, light: "Full sun", leaf: "🌿", hue: 140 },
-    { id: "mint", name: "Mint", kind: "Herbs", price: 5, light: "Part shade", leaf: "🍃", hue: 160 },
-    { id: "olive", name: "Olive tree", kind: "Trees", price: 64, light: "Full sun", leaf: "🌳", hue: 75 },
-    { id: "fig", name: "Fiddle leaf fig", kind: "Trees", price: 52, light: "Bright, indirect light", leaf: "🌳", hue: 125 },
+    { id: "monstera", name: "Monstera", kind: "Tropical", price: 38, light: "Bright, indirect light", leaf: "🌿" },
+    { id: "boston", name: "Boston fern", kind: "Ferns", price: 24, light: "Shade and humidity", leaf: "🌿" },
+    { id: "maidenhair", name: "Maidenhair fern", kind: "Ferns", price: 19, light: "Soft, indirect light", leaf: "🍃" },
+    { id: "bird", name: "Bird's nest fern", kind: "Ferns", price: 27, light: "Low light", leaf: "🌱" },
+    { id: "echeveria", name: "Echeveria", kind: "Succulents", price: 9, light: "Full sun", leaf: "🪴" },
+    { id: "jade", name: "Jade plant", kind: "Succulents", price: 16, light: "Full sun", leaf: "🪴" },
+    { id: "aloe", name: "Aloe vera", kind: "Succulents", price: 12, light: "Bright light", leaf: "🌵" },
+    { id: "basil", name: "Sweet basil", kind: "Herbs", price: 6, light: "Sunny sill", leaf: "🌿" },
+    { id: "rosemary", name: "Rosemary", kind: "Herbs", price: 8, light: "Full sun", leaf: "🌿" },
+    { id: "mint", name: "Mint", kind: "Herbs", price: 5, light: "Part shade", leaf: "🍃" },
+    { id: "olive", name: "Olive tree", kind: "Trees", price: 64, light: "Full sun", leaf: "🌳" },
+    { id: "fig", name: "Fiddle leaf fig", kind: "Trees", price: 52, light: "Bright, indirect light", leaf: "🌳" },
   ];
   const KINDS = ["All", ...new Set(PLANTS.map((p) => p.kind))];
   const CODES = { SAVE10: 0.1 };
@@ -248,7 +250,7 @@
       ? shown
           .map(
             (p) => `<li class="product">
-              <div class="swatch" style="background: hsl(${p.hue} 30% 50% / 0.16)" aria-hidden="true">${p.leaf}</div>
+              <div class="swatch" aria-hidden="true">${p.leaf}</div>
               <div><h2>${p.name}</h2><p>${p.kind}. ${p.light}.</p></div>
               <div class="buy"><span class="price">${money.format(p.price)}</span>
                 <button type="button" data-add="${p.id}" aria-label="Add ${p.name} to cart">Add to cart</button></div>

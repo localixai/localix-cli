@@ -33,7 +33,7 @@ pub(super) fn answer(mut stream: TcpStream, roots: &Mutex<HashMap<String, Root>>
         words.next().unwrap_or_default(),
     );
     let (status, kind, body) = match method {
-        "GET" | "HEAD" => found(target, roots),
+        "GET" | "HEAD" => found(target, referer(&head), roots),
         _ => ("405 Method Not Allowed", "text/plain", b"only GET".to_vec()),
     };
     let reply = format!(
@@ -48,21 +48,52 @@ pub(super) fn answer(mut stream: TcpStream, roots: &Mutex<HashMap<String, Root>>
     let _ = stream.shutdown(Shutdown::Both);
 }
 
-/// What `target` names: its status, its type and its bytes.
+/// The `Referer` of a request's head: the address of the page that asked.
+fn referer(head: &str) -> Option<&str> {
+    head.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("referer").then(|| value.trim())
+    })
+}
+
+/// The first segment of the path of `address`, an absolute address or a path.
+fn first_segment(address: &str) -> &str {
+    let path = address.split_once("://").map_or(address, |(_, rest)| {
+        rest.find('/').map_or("", |at| rest.get(at..).unwrap_or(""))
+    });
+    (path.trim_start_matches('/'))
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default()
+}
+
+/// What `target` names: its status, its type and its bytes. A path with no prefix of a served
+/// root (a built site names `/assets/app.css`) is read in the root its `referer` is of, else in
+/// the only root served.
 fn found(
     target: &str,
+    referer: Option<&str>,
     roots: &Mutex<HashMap<String, Root>>,
 ) -> (&'static str, &'static str, Vec<u8>) {
     let missing = ("404 Not Found", "text/plain", b"not found".to_vec());
     let refused = ("403 Forbidden", "text/plain", b"not served".to_vec());
     let path = target.split(['?', '#']).next().unwrap_or_default();
-    let mut parts = path.trim_start_matches('/').split('/');
-    let prefix = parts.next().unwrap_or_default();
-    let root = roots
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .get(prefix)
-        .cloned();
+    let mut parts = path.trim_start_matches('/').split('/').peekable();
+    let roots = roots.lock().unwrap_or_else(PoisonError::into_inner);
+    let root = match parts.peek().and_then(|prefix| roots.get(*prefix)) {
+        Some(root) => {
+            parts.next();
+            Some(root.clone())
+        }
+        None => referer
+            .and_then(|from| roots.get(first_segment(from)))
+            .or_else(|| match roots.len() {
+                1 => roots.values().next(),
+                _ => None,
+            })
+            .cloned(),
+    };
+    drop(roots);
     let Some(root) = root else {
         return missing;
     };

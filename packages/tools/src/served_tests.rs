@@ -7,10 +7,20 @@ use crate::testing::Scratch;
 
 /// `GET path` of `address`'s server, as a browser asks: its status line and its whole answer.
 fn get(address: &str, path: &str) -> (String, String) {
+    get_from(address, path, None)
+}
+
+/// [`get`] with the `Referer` a browser sends for a page's own subresources.
+fn get_from(address: &str, path: &str, referer: Option<&str>) -> (String, String) {
     let rest = address.strip_prefix("http://").unwrap();
     let (host, _) = rest.split_once('/').unwrap();
     let mut stream = TcpStream::connect(host).unwrap();
-    write!(stream, "GET {path} HTTP/1.1\r\nHost: {host}\r\n\r\n").unwrap();
+    let referer = referer.map_or_else(String::new, |r| format!("Referer: {r}\r\n"));
+    write!(
+        stream,
+        "GET {path} HTTP/1.1\r\nHost: {host}\r\n{referer}\r\n"
+    )
+    .unwrap();
     let mut answer = String::new();
     stream.read_to_string(&mut answer).unwrap();
     let status = answer.lines().next().unwrap_or_default().to_string();
@@ -121,10 +131,8 @@ fn nothing_outside_the_page_s_directory_nor_hidden_nor_off_limits_is_served() {
             "{refused}"
         );
     }
-    // Another directory's prefix, or none, serves nothing.
+    // Another directory's prefix serves nothing.
     let (status, _) = get(&address, "/llx-0000/index.html");
-    assert!(status.contains(" 404 "), "{status}");
-    let (status, _) = get(&address, "/");
     assert!(status.contains(" 404 "), "{status}");
 }
 
@@ -193,4 +201,50 @@ fn a_connection_that_sends_nothing_holds_up_no_other() {
         started.elapsed()
     );
     drop(idle);
+}
+
+#[test]
+fn a_root_absolute_request_is_answered_from_the_root_its_page_came_from() {
+    let (scratch, workspace) = site();
+    scratch.file("demo/other/index.html", "<h1>Other</h1>");
+    scratch.file("demo/other/style.css", "h1 { color: blue }");
+    scratch.file("demo/shop/assets/app.js", "shop()");
+    let served = Served::default();
+    let shop = served
+        .address(&workspace, "demo/shop/index.html")
+        .unwrap()
+        .unwrap();
+    let other = served
+        .address(&workspace, "demo/other/index.html")
+        .unwrap()
+        .unwrap();
+    // A built site names `/style.css`, no prefix: its Referer says which directory it means.
+    let (status, css) = get_from(&shop, "/style.css", Some(&shop));
+    assert_eq!(status, "HTTP/1.1 200 OK");
+    assert!(css.contains("red"), "{css}");
+    let (_, css) = get_from(&other, "/style.css", Some(&other));
+    assert!(css.contains("blue"), "{css}");
+    let (status, _) = get_from(&shop, "/assets/app.js", Some(&shop));
+    assert_eq!(status, "HTTP/1.1 200 OK");
+    // With two roots and no Referer, no guess is made.
+    let (status, _) = get_from(&shop, "/style.css", None);
+    assert_eq!(status, "HTTP/1.1 404 Not Found");
+    // Every guard holds: not outside the root, not a dot-file.
+    for path in ["/%2E%2E/notes.txt", "/.env", "/img/%2E%2E/%2E%2E/notes.txt"] {
+        let (status, body) = get_from(&shop, path, Some(&shop));
+        assert!(!status.contains("200"), "{path}: {body}");
+    }
+}
+
+#[test]
+fn with_one_root_served_a_root_absolute_request_needs_no_referer() {
+    let (_scratch, workspace) = site();
+    let served = Served::default();
+    let shop = served
+        .address(&workspace, "demo/shop/index.html")
+        .unwrap()
+        .unwrap();
+    let (status, css) = get_from(&shop, "/style.css", None);
+    assert_eq!(status, "HTTP/1.1 200 OK");
+    assert!(css.contains("red"), "{css}");
 }

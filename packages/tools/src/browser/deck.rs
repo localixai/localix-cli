@@ -59,6 +59,10 @@ pub(super) struct Deck {
     commenting: bool,
     /// How many batches of comments were sent: a page drops the marks of earlier ones.
     sent: u32,
+    /// The loop's own handle: a tab's picture, drawn later, comes back through it.
+    proxy: EventLoopProxy<Cmd>,
+    /// The tabs' colours under the strip, and which are being drawn.
+    tints: std::sync::Mutex<super::tint::Memory<(Shown, u32)>>,
 }
 
 impl Deck {
@@ -131,6 +135,7 @@ impl Deck {
             true => None,
             false => {
                 let strip = strip_view(&frame.native, look, proxy.clone())?;
+                platform::collapse_button(&frame.native, proxy);
                 // Shows the window too, without making it the key window.
                 frame.show(&strip);
                 Some(strip)
@@ -147,6 +152,8 @@ impl Deck {
             rows: AtomicBool::new(false),
             commenting: false,
             sent: 0,
+            proxy: proxy.clone(),
+            tints: std::sync::Mutex::default(),
         })
     }
 

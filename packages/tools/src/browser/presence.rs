@@ -46,7 +46,7 @@ pub(super) enum Event {
     Vanished,
     /// The person clicked the mini.
     Expand,
-    /// The person clicked the strip's collapse button.
+    /// The person pressed the window's minimize button.
     Collapse,
     /// The agent began an action.
     Acting,

@@ -6,22 +6,26 @@
 //! becomes the key window only when a click needs it (a text field), never making llx the
 //! active app: the person's keys stay where they were. Nothing here calls activate.
 
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, Sel};
 use objc2::{class, msg_send, sel};
+use tao::event_loop::EventLoopProxy;
 use tao::platform::macos::WindowExtMacOS;
 use tao::window::Window;
 
 use super::capture::CGRect;
+use super::host::Cmd;
 use super::placement::Area;
 use super::platform::unseen;
+use super::presence::Event;
 
 /// NSWindowStyleMask.
 const NONACTIVATING_PANEL: usize = 1 << 7;
 /// NSWindowCollectionBehavior: on every Space, over a full-screen app, out of window cycling.
 const CAN_JOIN_ALL_SPACES: usize = 1 << 0;
+const MOVE_TO_ACTIVE_SPACE: usize = 1 << 1;
 const STATIONARY: usize = 1 << 4;
 const IGNORES_CYCLE: usize = 1 << 6;
 const FULL_SCREEN_AUXILIARY: usize = 1 << 8;
@@ -39,6 +43,15 @@ pub(super) enum Role {
 impl Role {
     /// The mini floats over every app; the expanded deck is an ordinary window among the
     /// person's, which another app's window may cover.
+    /// The mini is on every Space; the deck on the one it was expanded on, a full-screen app's
+    /// too, and stays there when the person goes to another.
+    const fn spaces(self) -> usize {
+        match self {
+            Self::Deck => MOVE_TO_ACTIVE_SPACE | FULL_SCREEN_AUXILIARY,
+            Self::Mini => CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY | STATIONARY | IGNORES_CYCLE,
+        }
+    }
+
     const fn level(self) -> isize {
         match self {
             Self::Deck => NORMAL,
@@ -53,6 +66,57 @@ extern "C" fn yes(_this: &AnyObject, _sel: Sel) -> Bool {
 
 extern "C" fn no(_this: &AnyObject, _sel: Sel) -> Bool {
     Bool::NO
+}
+
+/// Where the window's own minimize button goes: the loop, told to collapse to the mini. One
+/// deck per process.
+static COLLAPSE: OnceLock<Mutex<Option<EventLoopProxy<Cmd>>>> = OnceLock::new();
+
+/// The minimize button (and its key) collapses the deck to the mini, as the strip did with a
+/// button of its own: llx has no Dock icon to minimize into.
+extern "C" fn collapse(_this: &AnyObject, _sel: Sel, _sender: *mut AnyObject) {
+    let proxy = COLLAPSE.get().and_then(|held| crate::lock(held).clone());
+    if let Some(proxy) = proxy {
+        let _ = proxy.send_event(Cmd::Presence(Event::Collapse));
+    }
+}
+
+/// What the minimize button calls instead of minimizing: one object for the process.
+fn collapser() -> Option<&'static AnyObject> {
+    static TARGET: OnceLock<Option<usize>> = OnceLock::new();
+    let at = (*TARGET.get_or_init(|| {
+        let mut class = ClassBuilder::new(c"LlxCollapse", AnyClass::get(c"NSObject")?)?;
+        // SAFETY: an action's signature: the receiver, the selector, the sender.
+        unsafe { class.add_method(sel!(collapse:), collapse as extern "C" fn(_, _, _)) };
+        let class = class.register();
+        // SAFETY: `new` on an NSObject subclass answers a retained instance.
+        let object: Retained<AnyObject> = unsafe { msg_send![class, new] };
+        // Kept for the process: a button holds its target weakly.
+        Some(Retained::into_raw(object) as usize)
+    }))?;
+    // SAFETY: the object was made above and never released.
+    unsafe { (at as *const AnyObject).as_ref() }
+}
+
+/// `window`'s minimize button collapses it to the mini, told to `proxy`.
+pub(super) fn collapse_to(window: &Window, proxy: &EventLoopProxy<Cmd>) {
+    /// NSWindowButton: the minimize button.
+    const MINIATURIZE: usize = 1;
+    *crate::lock(COLLAPSE.get_or_init(|| Mutex::new(None))) = Some(proxy.clone());
+    let Some(target) = collapser() else {
+        return;
+    };
+    // SAFETY: a window answers its standard button of a kind, or nil.
+    let button: *mut AnyObject =
+        unsafe { msg_send![native(window), standardWindowButton: MINIATURIZE] };
+    // SAFETY: checked for nil; the window keeps its buttons alive.
+    let Some(button) = (unsafe { button.as_ref() }) else {
+        return;
+    };
+    // SAFETY: an NSControl takes a target and an action.
+    let _: () = unsafe { msg_send![button, setTarget: target] };
+    // SAFETY: as above.
+    let _: () = unsafe { msg_send![button, setAction: sel!(collapse:)] };
 }
 
 /// An NSPanel that may become the key window (a text field in its page needs it) and never the
@@ -110,12 +174,8 @@ pub(super) fn adopt(window: &Window, role: Role) {
     }
     // SAFETY: an NSWindow takes a BOOL.
     let _: () = unsafe { msg_send![object, setHidesOnDeactivate: Bool::NO] };
-    let behavior = match role {
-        Role::Deck => CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY,
-        Role::Mini => CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY | STATIONARY | IGNORES_CYCLE,
-    };
     // SAFETY: an NSWindow takes an NSWindowCollectionBehavior (an NSUInteger).
-    let _: () = unsafe { msg_send![object, setCollectionBehavior: behavior] };
+    let _: () = unsafe { msg_send![object, setCollectionBehavior: role.spaces()] };
     // SAFETY: an NSWindow takes an NSWindowLevel (an NSInteger).
     let _: () = unsafe { msg_send![object, setLevel: role.level()] };
 }
@@ -135,6 +195,15 @@ pub(super) fn reveal(window: &Window, role: Role, rendering: Rendering) {
     let _: () = unsafe { msg_send![object, setHasShadow: Bool::YES] };
     // SAFETY: an NSWindow takes an NSWindowLevel (an NSInteger).
     let _: () = unsafe { msg_send![object, setLevel: role.level()] };
+    // SAFETY: an NSWindow answers a BOOL.
+    let here: Bool = unsafe { msg_send![object, isOnActiveSpace] };
+    if role == Role::Deck && !here.as_bool() {
+        // Collapsed, it stayed on the Space it was on: taken off the screen and put back in the
+        // same turn, it comes back on the Space the person is on now. On that Space already, it
+        // is only brought forward: nothing flickers.
+        // SAFETY: `orderOut:` takes a sender, which may be nil, and returns nothing.
+        let _: () = unsafe { msg_send![object, orderOut: std::ptr::null::<AnyObject>()] };
+    }
     front(object);
 }
 

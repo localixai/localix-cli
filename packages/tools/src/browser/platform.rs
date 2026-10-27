@@ -24,6 +24,9 @@ pub(super) fn dock<T>(target: &EventLoopWindowTarget<T>, shown: bool) {
         false => ActivationPolicy::Prohibited,
     };
     target.set_activation_policy_at_runtime(policy);
+    if shown {
+        super::edit_menu::install();
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -54,6 +57,23 @@ pub(super) fn work_area<T>(target: &EventLoopWindowTarget<T>) -> Option<super::p
 #[cfg(target_os = "macos")]
 pub(super) fn adopt_mini(window: &tao::window::Window) {
     super::nspanel::adopt(window, super::nspanel::Role::Mini);
+}
+
+/// The deck's minimize button collapses it to the mini.
+#[cfg(target_os = "macos")]
+pub(super) fn collapse_button(
+    window: &tao::window::Window,
+    proxy: &tao::event_loop::EventLoopProxy<super::host::Cmd>,
+) {
+    super::nspanel::collapse_to(window, proxy);
+}
+
+/// Elsewhere there is no mini: the button minimizes as the system does.
+#[cfg(not(target_os = "macos"))]
+pub(super) fn collapse_button(
+    _window: &tao::window::Window,
+    _proxy: &tao::event_loop::EventLoopProxy<super::host::Cmd>,
+) {
 }
 
 /// The mini's own grip over its page: a press moves it, a click expands it.

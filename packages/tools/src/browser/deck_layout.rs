@@ -6,8 +6,10 @@ use std::sync::mpsc::SyncSender;
 
 use tao::dpi::LogicalSize;
 
-use super::super::capture::{Shot, capture};
+use super::super::capture::{Shot, capture, top};
+use super::super::host::Cmd;
 use super::super::tabs::Tabs;
+use super::super::tint;
 
 use super::super::host::Shared;
 use std::sync::atomic::Ordering;
@@ -127,5 +129,49 @@ impl Deck {
         let _ = strip.evaluate_script(&strip::menu(rows.as_deref()));
         let held = shared.comments.count();
         let _ = strip.evaluate_script(&strip::commenting(self.commenting, held));
+        self.tint();
+    }
+
+    /// Draw the top of the tab shown, and tint the strip in its colour once it is drawn.
+    fn tint(&self) {
+        let view = match self.shown {
+            Shown::Web => self.web.as_ref().map(Tabs::active),
+            Shown::Term(id) => {
+                (self.terms.iter().find(|open| open.id == id)).map(|open| &open.webview)
+            }
+        };
+        let (Some(view), Some(_)) = (view, &self.strip) else {
+            return;
+        };
+        let under = self.signature();
+        // A tab seen before takes its colour at once; its picture only corrects it.
+        let (known, start) = {
+            let mut tints = crate::lock(&self.tints);
+            (tints.recall(&under), tints.start(under))
+        };
+        if let Some(seen) = known {
+            self.paint(seen.ground());
+        }
+        if !start {
+            return;
+        }
+        let proxy = self.proxy.clone();
+        top(view, move |pixels| {
+            let _ = proxy.send_event(Cmd::Tinted(under, tint::dominant(&pixels)));
+        });
+    }
+
+    /// The strip in `ground`, the colour of the tab `under` it, unless another is shown by now.
+    pub(in super::super) fn tinted(&self, under: (Shown, u32), ground: Option<tint::Rgb>) {
+        crate::lock(&self.tints).remember(under, ground);
+        if self.signature() == under {
+            self.paint(ground);
+        }
+    }
+
+    fn paint(&self, ground: Option<tint::Rgb>) {
+        if let Some(strip) = &self.strip {
+            let _ = strip.evaluate_script(&tint::script(ground));
+        }
     }
 }

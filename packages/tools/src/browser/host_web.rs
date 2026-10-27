@@ -131,6 +131,7 @@ pub(super) fn on_browser(
         | Cmd::Titled(..)
         | Cmd::Clicked(_)
         | Cmd::Strip
+        | Cmd::Tinted(..)
         | Cmd::Dressed(_)
         | Cmd::Listing(_)
         | Cmd::Sized(..)

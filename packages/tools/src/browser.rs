@@ -7,6 +7,8 @@ mod args;
 mod capture;
 mod comments;
 mod deck;
+#[cfg(target_os = "macos")]
+mod edit_menu;
 mod feedback;
 mod frame;
 mod guard;
@@ -26,6 +28,7 @@ mod script;
 mod strip;
 mod tab_view;
 mod tabs;
+mod tint;
 mod told;
 mod tool;
 mod toolbar;

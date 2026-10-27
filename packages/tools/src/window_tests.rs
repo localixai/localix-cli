@@ -732,24 +732,37 @@ fn a_goal_given_with_open_works_in_each_tab_it_opened_in_the_same_call() {
             {"kind": "terminal", "thing": "top"}]}),
     )
     .unwrap();
-    // Opened, then the goal on what opened, then a read; the tab with no goal is only opened.
+    // Opened, then the goal on what opened, then a read; the tab with no goal is only opened. The
+    // two open at once, so either may be numbered first: the goal's tab is the one `sh` got.
+    let saw = hands.saw.lock().unwrap().clone();
+    let (sh, top) = match saw.as_slice() {
+        [one] if one == "terminal 1: Say hi" => (1, 2),
+        [one] if one == "terminal 2: Say hi" => (2, 1),
+        other => panic!("the goal went to {other:?}"),
+    };
     let mut did = term.done.lock().unwrap().clone();
     did.sort_unstable();
-    assert_eq!(did, ["interact 1 null", "open \"sh\"", "open \"top\""]);
-    assert_eq!(*hands.saw.lock().unwrap(), ["terminal 1: Say hi"]);
+    let read = format!("interact {sh} null");
+    assert_eq!(did, [read.as_str(), "open \"sh\"", "open \"top\""]);
     assert!(
-        done.report
-            .starts_with("t1 (terminal): opened \"sh\"\nt1: ### Helper: done"),
+        done.report.starts_with(&format!(
+            "t{sh} (terminal): opened \"sh\"\nt{sh}: ### Helper: done"
+        )),
         "{}",
         done.report
     );
     assert!(
-        done.report.ends_with("t2 (terminal): opened \"top\""),
+        done.report
+            .ends_with(&format!("t{top} (terminal): opened \"top\"")),
         "{}",
         done.report
     );
     // What the tab shows after its goal, not what it showed when it opened.
     let state = done.state.unwrap_or_default();
-    assert!(state.contains("### t1\nsnapshot of 1 after"), "{state}");
-    assert!(state.contains("### t2\nsnapshot of 2"), "{state}");
+    let after = format!("### t{sh}\nsnapshot of {sh} after");
+    assert!(state.contains(&after), "{state}");
+    assert!(
+        state.contains(&format!("### t{top}\nsnapshot of {top}")),
+        "{state}"
+    );
 }

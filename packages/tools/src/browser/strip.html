@@ -8,6 +8,10 @@
 :root{--ground:#f7f7f7;color:#1d1d1f;font:12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
 @media (prefers-color-scheme: dark){:root{--ground:#070707;color:#e6e6e6}}
 body{margin:0;cursor:default;user-select:none;-webkit-user-select:none}
+/* Tinted in the colour of the tab under it (tint.rs): the bar and its words, not the menu. */
+html{transition:background-color .2s}
+html[data-tint]{background:var(--tint)}
+html[data-tint] #projects,html[data-tint] #bar{color:var(--ink);transition:color .2s}
 #head{position:relative;z-index:2}
 #projects{display:none;align-items:center;gap:4px;height:28px;padding:0 8px;box-sizing:border-box;overflow:hidden}
 #projects.on{display:flex}
@@ -53,7 +57,6 @@ html[data-glass] #projects.on,html[data-glass] #projects:not(.on)+#bar{padding-l
     <div id="tabs"></div>
     <span class="s" id="sd" title="Send the comments to the agent"></span>
     <span class="b" id="cm" title="Comment on the page: click what to change"><svg viewBox="0 0 16 16"><path d="M3 3.5h10v7H7l-3 2.5v-2.5H3z"/></svg></span>
-    <span class="b" id="co" title="Collapse to the preview"><svg viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg></span>
     <span class="b" id="hs" title="History"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.3 1.4"/></svg></span>
   </div>
   <div id="menu"></div>
@@ -61,6 +64,14 @@ html[data-glass] #projects.on,html[data-glass] #projects:not(.on)+#bar{padding-l
 <div id="back"></div>
 <script>
 "use strict";
+// The colour of the tab under the strip and the ink that reads on it, or null: its own again.
+function T(tint) {
+  const root = document.documentElement;
+  if (tint === null) return void root.removeAttribute("data-tint");
+  root.style.setProperty("--tint", tint.ground);
+  root.style.setProperty("--ink", tint.ink === "dark" ? "#1d1d1f" : "#f2f2f2");
+  root.setAttribute("data-tint", "");
+}
 // The project shown last in each tab, so a click on a project goes back to where it was.
 const lastOf = new Map();
 // Draw the tabs: with several projects, a row of them above and under it the shown project's
@@ -167,7 +178,7 @@ for (const id of ["projects", "bar", "tabs"]) {
     if (event.target === part) window.ipc.postMessage("zoom");
   });
 }
-for (const [id, what] of [["sd", "send"], ["cm", "comment"], ["bk", "back"], ["fw", "forward"], ["hs", "history"], ["co", "collapse"], ["back", "history"]]) {
+for (const [id, what] of [["sd", "send"], ["cm", "comment"], ["bk", "back"], ["fw", "forward"], ["hs", "history"], ["back", "history"]]) {
   document.getElementById(id).addEventListener("click", () => window.ipc.postMessage(what));
 }
 </script>

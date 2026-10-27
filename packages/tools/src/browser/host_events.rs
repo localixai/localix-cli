@@ -184,6 +184,11 @@ impl On<'_> {
                 }
                 self.renamed();
             }
+            Cmd::Tinted(under, ground) => {
+                if let Some(open) = self.deck.as_ref() {
+                    open.tinted(under, ground);
+                }
+            }
             Cmd::Presence(event) => self.presence(event),
             Cmd::Pictured(shot) => self.pictured(&shot),
             Cmd::Presented(reply) => {

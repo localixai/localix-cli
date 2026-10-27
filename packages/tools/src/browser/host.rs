@@ -121,6 +121,8 @@ pub(super) enum Cmd {
     Noted(Noted),
     /// Tell the strip what the window holds (a tab's title changed, its page loaded).
     Strip,
+    /// The colour of the tab now under the strip (the one `Deck::signature` names), if one.
+    Tinted((super::deck::Shown, u32), Option<super::tint::Rgb>),
     /// For checks: how the window is dressed, once tinted again.
     Dressed(SyncSender<Option<Dressing>>),
     /// The window's tabs; `None` while it is closed.

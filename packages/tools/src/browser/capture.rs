@@ -7,8 +7,10 @@ use std::sync::mpsc::SyncSender;
 
 #[cfg(target_os = "linux")]
 mod gtk;
+mod top;
 #[cfg(target_os = "linux")]
 pub(super) use gtk::capture;
+pub(super) use top::top;
 
 /// The long side of a picture, in pixels.
 #[cfg_attr(

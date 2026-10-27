@@ -45,9 +45,9 @@ where
     {
         use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
         event_loop.set_activate_ignoring_other_apps(false);
-        // An accessory app until a window is shown (`platform::dock`): no Dock icon and no menu
-        // bar, so a window that appears mid-task never pulls the person out of their terminal.
-        event_loop.set_activation_policy(ActivationPolicy::Accessory);
+        // A background app until a window is shown (`platform::dock`): no Dock icon, no menu bar,
+        // and never the active app, so nothing mid-task takes the keys of the person's terminal.
+        event_loop.set_activation_policy(ActivationPolicy::Prohibited);
     }
     let proxy = event_loop.create_proxy();
     let shared = Arc::new(Shared {

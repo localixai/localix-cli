@@ -12,14 +12,15 @@ fn unseen() -> bool {
 }
 
 /// Whether the app is in the Dock while its window is shown, so a click on its icon brings the
-/// window back from another desktop. A headless window has no icon: the app stays an accessory.
-/// Showing the icon never activates the app (the window still never takes the keyboard).
+/// window back from another desktop. Otherwise (no window shown, or only a headless one) it is a
+/// background app macOS never activates: an accessory one was, by a process started from the
+/// terminal the person types in (a test, `exec`, `--no-daemon`), and their keys went to it.
 #[cfg(target_os = "macos")]
 pub(super) fn dock<T>(target: &EventLoopWindowTarget<T>, shown: bool) {
     use tao::platform::macos::{ActivationPolicy, EventLoopWindowTargetExtMacOS};
     let policy = match shown && !unseen() {
         true => ActivationPolicy::Regular,
-        false => ActivationPolicy::Accessory,
+        false => ActivationPolicy::Prohibited,
     };
     target.set_activation_policy_at_runtime(policy);
 }

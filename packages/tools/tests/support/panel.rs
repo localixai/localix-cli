@@ -330,6 +330,16 @@ pub(crate) fn first(browser: &Browser) {
     assert_eq!(showing(browser), Some((tab.clone(), vec![tab.clone()])));
     // Long enough for WebKit to have settled what it thinks of the window.
     std::thread::sleep(Duration::from_millis(300));
+    // A window that never takes the keyboard never makes llx the active app either: the person's
+    // full-screen terminal keeps its keys while a test, `exec` or the agent opens one.
+    #[cfg(target_os = "macos")]
+    for _ in 0..20 {
+        assert!(
+            !active(),
+            "the process became the active app: it took the person's keys"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
     let count = "window.seen = 0; (function f() { window.seen++; requestAnimationFrame(f); })(); 1";
     browser.peek(&panel, count).unwrap();
     let read = "[window.seen, document.visibilityState]";
@@ -457,4 +467,18 @@ fn menu_entry(browser: &Browser, key: &str, state: &str) -> u64 {
         assert!(Instant::now() < deadline, "{key} in the menu: {read}");
         std::thread::sleep(Duration::from_millis(20));
     }
+}
+
+/// Whether this process is the app the person's keys go to.
+#[cfg(target_os = "macos")]
+fn active() -> bool {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject, Bool};
+    let class = AnyClass::get(c"NSRunningApplication").unwrap();
+    // SAFETY: `currentApplication` is a class method that takes nothing and returns this
+    // process's NSRunningApplication, which lives as long as the process.
+    let app: *mut AnyObject = unsafe { msg_send![class, currentApplication] };
+    // SAFETY: `isActive` is a BOOL property of the object above, readable from any thread.
+    let active: Bool = unsafe { msg_send![app, isActive] };
+    active.as_bool()
 }

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Nothing unseen takes your keys (macOS).** A process of llx's started from the terminal you type in (`exec`, `--no-daemon`, the browser tests `scripts/check` runs) became the active app as it made a hidden window, and the keys went to it: a full-screen terminal lost them with nothing on screen to say why. Until a window is shown llx is now a background app that macOS never activates; a shown window still comes forward as it opens.
 - **`read` reads pictures.** A PNG, JPEG, GIF or WebP file, known by its first bytes rather than its name, up to 8 MB as an attached picture, reaches the model as a picture with its size (`shot.png (image/png, 1440 × 900)`), where it was refused as binary; `offset` and `limit` are refused for it. Only the header is checked, not the whole picture: a broken file is the provider's to refuse. The file is read through the same `Workspace` checks as any other; a path pasted at the prompt is enough for the agent to look at the picture. `read` and attachments share one reader of these formats.
 - **Text in the prompt can be selected.** Shift+Left and Shift+Right select (with Alt or Ctrl by word, Shift+Home and Shift+End to the line's ends), shown in reverse; Backspace or Delete deletes the selection, and typing or a paste replaces it, instead of a character at a time.
 - **A terminal tab no longer fills a large window with a huge font.** Its 120 × 40 grid grew to fit the window, centred with a wide margin, which full screen made worse; the font now stops at 16 px and the grid sits at the top left.

@@ -9,8 +9,8 @@ use protocol::Command;
 use super::app::{Action, App, SHIFT_TAB};
 use super::composer::Edit;
 use super::event::{Out, Typed};
-use super::terminal::CAN_SUSPEND;
 use super::search::stepped;
+use super::terminal::CAN_SUSPEND;
 use super::time::in_quit_window;
 
 impl App {

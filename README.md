@@ -5,11 +5,18 @@
 <h1 align="center">llx</h1>
 
 <p align="center">
-  <strong>The agent runtime other agents build on</strong>
+  <strong>More hands for the agent you already use</strong>
 </p>
 
 <p align="center">
-  Building blocks in one binary under 4 MB: a window of real browser pages and terminals any agent can work in, helpers on any model, decisions for scripts and CI. And a minimal agent for your terminal, too.
+  One binary under 4 MB that Claude Code, Codex, a script or CI calls from its shell: real browser pages and terminals in one native window you watch it work in, helpers on any model, and a choice made in a second. With a minimal agent of its own.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-black" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/macOS%20%C2%B7%20Linux-black" alt="macOS and Linux">
+  <img src="https://img.shields.io/badge/binary-under%204%20MB-black" alt="One binary under 4 MB">
+  <img src="https://img.shields.io/badge/Rust-black?logo=rust" alt="Written in Rust">
 </p>
 
 <p align="center">
@@ -43,7 +50,7 @@ llx is the part of an agent that touches the world. It opens real browser pages 
     </td>
     <td width="33%" valign="top">
       <strong>Say the goal</strong><br>
-      "Book the cheapest flight on Friday": a small model does the clicking. Median task 8.5 s, $0.002 in our evals.<br>
+      "Book the cheapest flight on Friday": a small model does the clicking. Median task 11.5 s and $0.002 across the 26 tasks of our latest evals.<br>
       <a href="benchmarks/HISTORY.md">Benchmarks →</a>
     </td>
     <td width="33%" valign="top">

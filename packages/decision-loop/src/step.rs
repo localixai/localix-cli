@@ -56,7 +56,9 @@ impl Operation {
             Self::ScrollDown => "Scroll the view down to reveal controls below.",
             Self::ScrollUp => "Scroll the view up to reveal controls above.",
             Self::Wait => "Wait: what the goal needs next is still loading or on its way.",
-            Self::Done => "Every part of the goal is visibly satisfied in the view.",
+            Self::Done => {
+                "Every part of the goal is satisfied: visibly in the view, or, for a goal that ends with a step (click Next, submit), by that step among the recent actions."
+            }
             Self::Blocked => "No offered operation can make progress.",
         }
     }

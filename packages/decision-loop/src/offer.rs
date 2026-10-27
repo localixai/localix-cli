@@ -4,7 +4,7 @@
 
 use serde_json::{Map, Value, json};
 
-use contracts::view::Element;
+use contracts::view::{Element, SelectOption};
 
 use crate::step::{GoalStep, OPERATIONS, Operation};
 
@@ -17,7 +17,15 @@ fn editable(element: &Element) -> bool {
 }
 
 pub(crate) fn dropdown(element: &Element) -> bool {
-    clickable(element) && !element.options.is_empty()
+    clickable(element) && choices(element).next().is_some()
+}
+
+/// A dropdown's options that choosing would change, each with its place among them all: the one
+/// it shows already is no step.
+pub(crate) fn choices(element: &Element) -> impl Iterator<Item = (usize, &SelectOption)> {
+    let shown = element.value.as_deref();
+    (element.options.iter().enumerate())
+        .filter(move |(_, option)| Some(option.label.as_str()) != shown)
 }
 
 /// While a dialog is open, only its controls are offered: it blocks the rest of the view.

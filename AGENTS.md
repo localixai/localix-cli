@@ -51,7 +51,7 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
     - `page.rs`: `Page`, the window as a `View`.
     - `host.rs`: the tao event loop on the main thread; a closed window fails the calls waiting on it and opens again when needed. With `host_events.rs` (the loop and the window's commands), `host_web.rs` (the browser's commands on its tabs), `host_window.rs` (what the person does to the window itself: closes it, resizes it) and `host_handle.rs` (`Browser`, the work thread's handle).
     - `webview.rs`: the driver, with `webview_driver.rs` (each `Driver` call on the page, and the load it starts followed).
-    - `toolbar.rs` (Back, Reload, page size) and `viewport.rs`.
+    - `toolbar.rs` (Back, Reload, the reload keys; the page sizes `size` takes) and `viewport.rs`.
     - `platform.rs`: what differs by OS.
     - `guard.rs`: what may load, and the probe's token.
     - `script.rs`.

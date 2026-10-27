@@ -26,3 +26,9 @@ fn a_browsers_reload_keys_are_its_reload_and_other_keys_are_the_pages() {
         assert_eq!(shortcut(key), None, "{key}");
     }
 }
+
+#[test]
+fn the_toolbar_offers_back_and_reload_and_no_page_size_to_pick_by_mistake() {
+    let named: Vec<String> = controls().iter().map(|c| c.describe()).collect();
+    assert_eq!(named, ["button \"Back\"", "button \"Reload\""]);
+}

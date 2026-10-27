@@ -11,7 +11,7 @@ use contracts::model::{Answer, Question};
 
 use crate::choice::valid_choice;
 pub(crate) use crate::offer::in_scope;
-use crate::offer::{clickable, covered, criteria, dropdown, entries, operations_now};
+use crate::offer::{choices, clickable, covered, criteria, dropdown, entries, operations_now};
 pub(crate) use crate::step::{GoalStep, OPERATIONS, Operation, Pick};
 use contracts::view::{Element, Observation};
 
@@ -182,7 +182,7 @@ impl Heads {
     fn options(&mut self, elements: &[&Element]) -> Map<String, Value> {
         let mut options = Map::new();
         for element in elements.iter().filter(|e| dropdown(e)) {
-            for (i, option) in element.options.iter().enumerate() {
+            for (i, option) in choices(element) {
                 let key = format!("{}:{}", element.reference, i + 1);
                 options.insert(
                     key.clone(),

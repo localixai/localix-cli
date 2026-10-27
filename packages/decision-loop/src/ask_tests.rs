@@ -312,3 +312,33 @@ fn the_operation_is_chosen_knowing_the_values_it_may_type() {
     .state;
     assert_eq!(state["values"], json!(["7 + 7"]));
 }
+
+#[test]
+fn an_option_already_chosen_is_never_offered_again() {
+    let option = |value: &str, label: &str| SelectOption {
+        value: value.into(),
+        label: label.into(),
+    };
+    let mut seat = element("e3", "combobox", "Seat class");
+    seat.value = Some("Economy".into());
+    seat.options = vec![option("eco", "Economy"), option("biz", "Business")];
+    let mut only = element("e2", "combobox", "Currency");
+    only.value = Some("EUR".into());
+    only.options = vec![option("eur", "EUR")];
+    let asked = ask_of(&view(vec![seat, element("e1", "button", "Language")]));
+    let keys: Vec<String> = asked.offered["select_target"].keys().cloned().collect();
+    assert_eq!(keys, ["e3:2"]);
+    // A dropdown with no other option to choose offers no SELECT at all.
+    let asked = ask_of(&view(vec![only, element("e1", "button", "Language")]));
+    assert!(!asked.offered["operation"].contains_key("SELECT"));
+}
+
+fn ask_of(view: &Observation) -> Ask {
+    ask(&AskInput {
+        goal: "g",
+        conventions: "",
+        view,
+        values: &[],
+        history: &[],
+    })
+}

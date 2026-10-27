@@ -203,7 +203,7 @@ impl Instructed<'_> {
             .unwrap_or_default();
         for part in parts {
             dir.push(part);
-            let new = crate::output::lock(self.seen).insert(dir.clone());
+            let new = crate::sync::lock(self.seen).insert(dir.clone());
             if new && let Some(found) = in_dir(&dir, FILE_LIMIT) {
                 out.push(found);
             }

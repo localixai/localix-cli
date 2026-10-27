@@ -138,7 +138,16 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
     keep(kit, registry, id, message, run, status, seen, now);
 }
 
-/// Put the agent's conversation back, record its task, count its spend and post its answer.
+/// What the agent's thread keeps once its record is made, for the work done after the lock.
+struct Recorded {
+    session: contracts::history::Session,
+    unread: Vec<String>,
+    name: String,
+    open: bool,
+}
+
+/// Put the agent's conversation back, record its task, count its spend and post its answer. The
+/// registry is locked to change it only: the session is saved and the answer posted after (R6).
 #[expect(
     clippy::too_many_arguments,
     reason = "the parts of a finished task, each used once; a struct would only rename them"
@@ -153,33 +162,50 @@ fn keep(
     seen: std::collections::HashSet<std::path::PathBuf>,
     told: mode::Mode,
 ) {
-    let mut state = registry.lock();
-    state.spent.absorb(&run.spend);
-    let Some(child) = state.children.iter_mut().find(|c| c.session.id == id) else {
+    let recorded = {
+        let mut state = registry.lock();
+        state.spent.absorb(&run.spend);
+        state
+            .children
+            .iter_mut()
+            .find(|c| c.session.id == id)
+            .map(|child| {
+                child.seen = seen;
+                child.told = told;
+                child.status = status.to_string();
+                if child.open {
+                    child.conversation = Some(run.conversation);
+                }
+                child.session.record(
+                    Turn {
+                        goal: message.to_string(),
+                        answer: run.answer.clone(),
+                        status: status.to_string(),
+                        at: session::now(),
+                        steps: vec![],
+                    },
+                    None,
+                );
+                Recorded {
+                    session: child.session.clone(),
+                    // What the main agent sent after the agent's last look at its letters.
+                    unread: child.letters.take(),
+                    name: child.session.name.clone(),
+                    open: child.open,
+                }
+            })
+    };
+    let Some(Recorded {
+        session,
+        unread,
+        name,
+        open,
+    }) = recorded
+    else {
         registry.changed.notify_all();
         return;
     };
-    child.working = false;
-    child.seen = seen;
-    child.told = told;
-    child.status = status.to_string();
-    if child.open {
-        child.conversation = Some(run.conversation);
-    }
-    child.session.record(
-        Turn {
-            goal: message.to_string(),
-            answer: run.answer.clone(),
-            status: status.to_string(),
-            at: session::now(),
-            steps: vec![],
-        },
-        None,
-    );
-    let saved = kit.history.save(&child.session);
-    // What the main agent sent after the agent's last look at its letters.
-    let unread = child.letters.take();
-    let (name, open) = (child.session.name.clone(), child.open);
+    let saved = kit.history.save(&session);
     let mut answer = match &run.status {
         Status::Exhausted => "It ran out of turns before an answer: `send` it a message to have \
                               it answer with what it has."
@@ -210,6 +236,14 @@ fn keep(
         let came = crate::arrivals::report(&name, id, status, &answer);
         registry.queue.post(came);
     }
-    drop(state);
+    // Working ends after the answer is posted: a wait that sees no agent working finds it.
+    if let Some(child) = registry
+        .lock()
+        .children
+        .iter_mut()
+        .find(|c| c.session.id == id)
+    {
+        child.working = false;
+    }
     registry.changed.notify_all();
 }

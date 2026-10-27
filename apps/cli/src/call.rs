@@ -38,16 +38,8 @@ pub(crate) enum Came {
 
 /// Where this interface is and whose tabs it calls: its command line is `window`, then `owner`.
 pub(crate) fn here(owner: &str) -> Place {
-    let env = std::env::vars_os()
-        .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)));
     let dir = std::env::current_dir().unwrap_or_default();
-    Place {
-        cwd: dir.display().to_string(),
-        env: env.collect(),
-        theme: None,
-        args: vec!["window".into(), owner.to_string()],
-        dir: dir.display().to_string(),
-    }
+    client::place::here(&dir, None, vec!["window".into(), owner.to_string()])
 }
 
 /// `asked`, from `place`, of the daemon `client` is connected to, its answer written to `out`

@@ -23,10 +23,10 @@ use crate::kinds::{self, BrowserLocks};
 use crate::live::LiveDecider;
 use crate::mode::{Mode, ModeCell, ModeGate};
 use crate::modes::{BYPASS, Modes};
-use crate::output::lock;
 use crate::providers::{self, Provider};
 use crate::rules::Rules;
 use crate::server::{place, wire};
+use crate::sync::lock;
 use crate::windows::{self, Tabs};
 
 /// The one tool a tool client calls.

@@ -11,8 +11,8 @@ mod observer;
 mod spent;
 
 use std::io::Write;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Mutex, MutexGuard};
 use std::time::Instant;
 
 use agent::agent::Spend as AgentSpend;
@@ -23,6 +23,7 @@ use serde_json::Value;
 use ratatui::text::Line;
 
 use crate::server::Ui;
+use crate::sync::lock;
 use crate::tui::{cells, style};
 use protocol::Event;
 
@@ -347,11 +348,6 @@ impl Output {
             self.closed.store(true, Ordering::SeqCst);
         }
     }
-}
-
-/// `mutex` locked: a thread that panicked holding it left a value that is still whole.
-pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poison| poison.into_inner())
 }
 
 /// `n` of `noun`, as the server says it (the interface counts its own): `1 task`, `3 tasks`.

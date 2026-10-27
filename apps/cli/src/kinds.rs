@@ -40,7 +40,7 @@ pub(crate) struct BrowserLocks {
 impl BrowserLocks {
     fn tab(&self, id: u32) -> std::sync::MutexGuard<'_, ()> {
         let lock = self.tabs.get(id as usize).unwrap_or(&self.tabs[0]);
-        crate::output::lock(lock)
+        crate::sync::lock(lock)
     }
 }
 
@@ -94,7 +94,7 @@ impl Browser<'_> {
         let Some(page) = done.state.take() else {
             return done;
         };
-        let mut seen = crate::output::lock(&self.locks.seen);
+        let mut seen = crate::sync::lock(&self.locks.seen);
         match seen.get(&id).and_then(|before| changes(before, &page)) {
             Some(changed) => done.report = format!("{}\n\n{changed}", done.report),
             None => {
@@ -108,14 +108,14 @@ impl Browser<'_> {
     /// Tab `id` read whole: what later changes are told against.
     fn read_whole(&self, id: u32, done: ToolOutput) -> ToolOutput {
         if let Some(page) = &done.state {
-            crate::output::lock(&self.locks.seen).insert(id, page.clone());
+            crate::sync::lock(&self.locks.seen).insert(id, page.clone());
         }
         done
     }
 
     /// `arguments` that change the tabs (close one), one such call at a time.
     fn on_tabs(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
-        let _change = crate::output::lock(&self.locks.tabs_change);
+        let _change = crate::sync::lock(&self.locks.tabs_change);
         let tool = BrowserTool {
             page: self.page,
             gate: self.gate,
@@ -201,7 +201,7 @@ impl Kind for Browser<'_> {
             // never open two windows, nor does one load in the other's tab. The lock is held for
             // the window's loop to make the tab, not for its page: tabs opened together load
             // together, each after its lock is let go.
-            let _change = crate::output::lock(&self.locks.tabs_change);
+            let _change = crate::sync::lock(&self.locks.tabs_change);
             (self.page.start(&url)).map_err(|error| ToolError::Failed(error.to_string()))?
         };
         let _ = self.page.pinned(id).driver().map(|tab| tab.wait_new());

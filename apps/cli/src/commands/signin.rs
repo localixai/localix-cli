@@ -12,9 +12,9 @@ use provider_kit::oauth;
 use crate::compose::APP;
 use crate::error::{self, Failure};
 use crate::exit;
-use crate::output::lock;
 use crate::picker::Terminal;
 use crate::providers::{Method, Provider};
+use crate::sync::lock;
 
 /// How long the token endpoint may take.
 const TOKEN_TIMEOUT: Duration = Duration::from_secs(60);

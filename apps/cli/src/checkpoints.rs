@@ -31,7 +31,7 @@ pub(crate) struct Checkpoints(Mutex<Vec<Task>>);
 
 impl Checkpoints {
     fn lock(&self) -> std::sync::MutexGuard<'_, Vec<Task>> {
-        crate::output::lock(&self.0)
+        crate::sync::lock(&self.0)
     }
 
     /// A task starts, the conversation `at` messages long.

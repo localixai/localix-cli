@@ -11,7 +11,7 @@ use crate::cli::RunOptions;
 use crate::commands::run::{self, Kind};
 use crate::error::{self, Failure};
 use crate::exit;
-use crate::tui::printable::printable;
+use crate::printable::{one_line, printable};
 
 /// Sessions listed at most.
 const LISTED: usize = 30;
@@ -98,7 +98,7 @@ fn first_task(session: &Session) -> String {
         return printable(&session.title);
     }
     let first = session.turns.first().map_or("", |turn| turn.goal.as_str());
-    let first = printable(&first.split_whitespace().collect::<Vec<_>>().join(" "));
+    let first = printable(&one_line(first));
     let mut shown: String = first.chars().take(TASK_CHARS).collect();
     if shown.len() < first.len() {
         shown.push('…');

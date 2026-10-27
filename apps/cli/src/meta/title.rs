@@ -6,6 +6,7 @@ use contracts::chat::{Chat, Message, Request};
 
 use super::Update;
 use crate::compose::Rig;
+use crate::printable::{one_line, printable};
 use protocol::Event;
 
 /// Characters a title takes at most.
@@ -97,7 +98,7 @@ fn clean(said: &str) -> Option<String> {
     let line = line
         .trim_end_matches(['.', '?', '!', '。'])
         .trim_matches(quotes);
-    let words = line.split_whitespace().collect::<Vec<_>>().join(" ");
+    let words = one_line(line);
     if words.is_empty() {
         return None;
     }
@@ -114,25 +115,6 @@ fn clean(said: &str) -> Option<String> {
         }
         false => shown,
     })
-}
-
-/// `text` with its control characters and reordering marks escaped, as the interface shows text
-/// (`tui::printable`): the server keeps its own, for it knows nothing of the interface (L7).
-fn printable(text: &str) -> String {
-    fn reorders(c: char) -> bool {
-        matches!(
-            c,
-            '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
-        )
-    }
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c.is_control() || reorders(c) {
-            true => out.extend(c.escape_default()),
-            false => out.push(c),
-        }
-    }
-    out
 }
 
 #[cfg(test)]

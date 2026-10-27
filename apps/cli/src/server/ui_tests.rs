@@ -189,7 +189,7 @@ fn a_question_waiting_does_not_keep_asking_whether_it_was_stopped() {
         })
     });
     let id = asked(&frames);
-    let rung = || *RUNG.lock().unwrap();
+    let rung = || BELL.rung();
     let before = rung();
     assert!(approved.recv_timeout(Duration::from_millis(1500)).is_err());
     // The other tests ring the bell too: each ring may look once, and so may each second.

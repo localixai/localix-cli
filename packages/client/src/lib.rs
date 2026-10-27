@@ -186,6 +186,8 @@ fn lock(waiting: &Waiting) -> MutexGuard<'_, Pending> {
     waiting.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+pub mod place;
+
 #[cfg(unix)]
 mod socket;
 

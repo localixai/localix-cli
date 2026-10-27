@@ -4,7 +4,8 @@
 
 use contracts::history::{Session, Spent, Step};
 
-use super::{Output, lock};
+use super::Output;
+use crate::sync::lock;
 
 impl Output {
     /// Begin from what `session`'s tasks spent before: a resumed session shows its whole spend.

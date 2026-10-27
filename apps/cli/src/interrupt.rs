@@ -10,7 +10,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::output::lock;
+use crate::sync::lock;
 
 /// What the signal handler and the browser window stop: every task running, in every session.
 /// Only atomics, so a signal handler may use it.

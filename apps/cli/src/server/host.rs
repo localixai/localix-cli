@@ -11,7 +11,7 @@ use protocol::Done;
 use super::Peer;
 use super::toolbox::Owners;
 use crate::desk::Request;
-use crate::output::lock;
+use crate::sync::lock;
 
 /// Sessions moved to the background in a directory: their peer, and their desk's requests.
 pub(crate) struct Kept {

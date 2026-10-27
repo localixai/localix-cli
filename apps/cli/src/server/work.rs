@@ -2,7 +2,7 @@
 //! names what would stop. Only lanes are known here, by the desk's `LaneStarted`: an agent's
 //! task is its lane's work.
 
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard};
 
 use protocol::{Event, JobRow, Running};
 
@@ -106,7 +106,7 @@ impl Work {
     }
 
     fn lock(&self) -> MutexGuard<'_, Vec<Lane>> {
-        self.lanes.lock().unwrap_or_else(PoisonError::into_inner)
+        crate::sync::lock(&self.lanes)
     }
 }
 

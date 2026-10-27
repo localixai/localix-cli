@@ -12,7 +12,7 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use protocol::{Event, ToClient};
 
@@ -144,6 +144,7 @@ impl Hub {
         state.clients.len()
     }
 
+    #[cfg(test)]
     pub(crate) fn attached(&self) -> usize {
         self.lock().clients.len()
     }
@@ -182,7 +183,7 @@ impl Hub {
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+        crate::sync::lock(&self.state)
     }
 }
 

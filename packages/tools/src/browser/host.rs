@@ -131,8 +131,8 @@ pub(super) enum Cmd {
     Act(Click, SyncSender<Result<(), String>>),
     /// What the agent or the person did to the window's presence (presence.rs).
     Presence(super::presence::Event),
-    /// What the mini's page said: `expand` is its click; its own `drag` moves it.
-    MiniDrag,
+    /// The person moves the mini: pressed on it, the pointer this far from where it was, let go.
+    MiniDrag(super::mini::Drag),
     /// The mini's picture, taken or not.
     Pictured(Result<Shot, String>),
     /// For checks: the window's state, `hidden`, `mini` or `expanded`.

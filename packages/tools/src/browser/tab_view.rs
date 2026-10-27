@@ -9,6 +9,7 @@ use wry::{NewWindowResponse, PageLoadEvent, WebView, WebViewBuilder};
 use super::guard::allowed;
 use super::host::{Cmd, PROBE, Shared, Window};
 use super::platform::user_agent;
+use super::presence::Event;
 use super::tabs::BLANK;
 
 pub(super) fn builder<'a>(
@@ -47,6 +48,10 @@ pub(super) fn builder<'a>(
             });
             loads.page_load(id, &event, &url);
             let _ = loaded.send_event(Cmd::Strip);
+            // The mini's picture was taken as the tab appeared, before its page: take it again.
+            if matches!(event, PageLoadEvent::Finished) {
+                let _ = loaded.send_event(Cmd::Presence(Event::Changed));
+            }
         })
         .with_document_title_changed_handler(move |title| {
             titles.titled(id, title);

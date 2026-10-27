@@ -6,27 +6,40 @@
 <title>llx</title>
 <style>
 html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none;-webkit-user-select:none;cursor:default;font:11px/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
-#c{position:absolute;inset:0;display:flex;flex-direction:column;border-radius:12px;overflow:hidden;background:#111;color:#e8e8e8;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
-#p{flex:none;width:100%;height:175px;object-fit:cover;object-position:top left;background:#1b1b1b;display:block}
-#r{flex:1;display:flex;align-items:center;gap:8px;padding:0 10px;min-height:0}
-#g{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
-#i{flex:none;font:10px ui-monospace,SFMono-Regular,Menlo,monospace;opacity:.7}
-#s{flex:none;display:none;width:9px;height:9px;box-sizing:border-box;border-radius:50%;border:2px solid #4f7cff;border-right-color:transparent;animation:r .8s linear infinite}
+#c{position:absolute;inset:0;border-radius:12px;overflow:hidden;background:#111;color:#f2f2f2;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+#p{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 0;display:block}
+#p:not([src]){visibility:hidden}
+.o{position:absolute;display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .12s}
+#c:hover .o{opacity:1}
+#t{top:8px;right:8px}
+#l{left:8px;bottom:8px;max-width:calc(100% - 16px);padding:4px 7px;border-radius:6px;background:rgba(10,10,10,.82);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+#g{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
+#i{flex:none;font:10px ui-monospace,SFMono-Regular,Menlo,monospace;opacity:.65}
+button{all:unset;display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:rgba(10,10,10,.82);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);color:#f2f2f2;cursor:pointer}
+button:hover{background:rgba(40,40,40,.92)}
+button svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#s{position:absolute;top:10px;left:10px;display:none;width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid #f2f2f2;border-right-color:transparent;animation:r .8s linear infinite;filter:drop-shadow(0 0 2px rgba(0,0,0,.8))}
 #s.on{display:block}
-#h{position:absolute;inset:0;border-radius:12px;pointer-events:none;box-shadow:inset 0 0 0 3px #4f7cff;opacity:0}
+#h{position:absolute;inset:0;border-radius:12px;pointer-events:none;box-shadow:inset 0 0 0 3px #f2f2f2;opacity:0}
 #h.on{animation:b var(--ms,700ms) ease-out}
 @keyframes r{to{transform:rotate(360deg)}}
 @keyframes b{0%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.o{transition:none}#s{animation:none;border-right-color:#f2f2f2}}
 </style>
 </head>
 <body>
 <div id="c">
   <img id="p" alt="">
-  <div id="r"><span id="g"></span><span id="i"></span><span id="s"></span></div>
+  <span id="s"></span>
+  <div class="o" id="t">
+    <button id="x" title="Expand" aria-label="Expand"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg></button>
+  </div>
+  <div class="o" id="l"><span id="g"></span><span id="i"></span></div>
   <div id="h"></div>
 </div>
 <script>
 "use strict";
+const say = (word) => window.ipc.postMessage(word);
 // The shown tab's latest picture; a data: address the window made itself.
 function P(src) { document.getElementById("p").src = src; }
 // Which tab it is: its project and its id, set as text.
@@ -44,18 +57,28 @@ function K(ms) {
   void h.offsetWidth;
   h.className = "on";
 }
-// A click expands the window; a press that moves is a drag of the mini itself.
+// The button expands; a press elsewhere that moves drags the mini, one that does not expands.
+document.getElementById("x").addEventListener("mousedown", (e) => e.stopPropagation());
+document.getElementById("x").addEventListener("click", () => say("expand"));
 let down = null;
-document.addEventListener("mousedown", (e) => { if (e.button === 0) down = { x: e.screenX, y: e.screenY }; });
+document.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  down = { x: e.screenX, y: e.screenY, moved: false };
+  say("press");
+});
 document.addEventListener("mousemove", (e) => {
-  if (down && Math.hypot(e.screenX - down.x, e.screenY - down.y) > 3) {
-    down = null;
-    window.ipc.postMessage("drag");
-  }
+  if (!down) return;
+  const dx = e.screenX - down.x, dy = e.screenY - down.y;
+  if (!down.moved && Math.hypot(dx, dy) < 4) return;
+  down.moved = true;
+  say("by " + dx + " " + dy);
 });
 document.addEventListener("mouseup", () => {
-  if (down) window.ipc.postMessage("expand");
+  if (!down) return;
+  const moved = down.moved;
   down = null;
+  say("let");
+  if (!moved) say("expand");
 });
 </script>
 </body>

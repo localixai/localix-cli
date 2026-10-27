@@ -32,9 +32,18 @@ fn viewport(driver: &WebviewDriver) -> (u32, u32) {
     (size.w, size.h)
 }
 
+/// The mini's picture's mean brightness, 0 to 255; -1 while it has none.
+const BRIGHTNESS: &str = "(() => { const i = document.getElementById('p'); \
+    if (!i.complete || !i.naturalWidth) return -1; \
+    const c = document.createElement('canvas'); c.width = 8; c.height = 8; \
+    const x = c.getContext('2d'); x.drawImage(i, 0, 0, 8, 8); \
+    const d = x.getImageData(0, 0, 8, 8).data; let s = 0; \
+    for (let k = 0; k < d.length; k += 4) s += d[k] + d[k + 1] + d[k + 2]; \
+    return s / (d.length / 4) / 3; })()";
+
 pub(crate) fn scenario(browser: &Browser, window: &Window, origin: &str) {
     let shown = Window {
-        url: format!("{origin}/form.html"),
+        url: format!("{origin}/slow/light.html"),
         headless: false,
         ..window.clone()
     };
@@ -63,6 +72,13 @@ pub(crate) fn scenario(browser: &Browser, window: &Window, origin: &str) {
             src.as_str()
                 .is_some_and(|s| s.starts_with("data:image/jpeg"))
         })
+    });
+
+    // The picture is the loaded page, not the blank tab it was before: light, as the page is.
+    until("the loaded page on the mini", || {
+        browser
+            .peek_mini(BRIGHTNESS)
+            .is_ok_and(|seen| seen.as_f64().is_some_and(|b| b > 200.0))
     });
 
     // The agent shows a tab: the mini blinks and stays the mini.

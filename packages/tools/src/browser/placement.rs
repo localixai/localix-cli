@@ -26,8 +26,8 @@ pub(super) struct Kept {
     pub mini: Option<(f64, f64)>,
 }
 
-/// The mini's size: its picture, and a row of status under it.
-pub(super) const MINI: (f64, f64) = (280.0, 201.0);
+/// The mini's size: its picture, 16 by 10.
+pub(super) const MINI: (f64, f64) = (288.0, 180.0);
 /// The gap between the expanded window and the screen's edges.
 const MARGIN: f64 = 12.0;
 /// The gap between the mini and the screen's corner.

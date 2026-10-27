@@ -136,7 +136,7 @@ pub(super) fn on_browser(
         | Cmd::Sized(..)
         | Cmd::Act(..)
         | Cmd::Presence(_)
-        | Cmd::MiniDrag
+        | Cmd::MiniDrag(_)
         | Cmd::Pictured(_)
         | Cmd::Presented(_)
         | Cmd::Exit(_) => return,

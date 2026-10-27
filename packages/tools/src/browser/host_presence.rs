@@ -14,7 +14,7 @@ use wry::WebView;
 
 use super::super::capture::Shot;
 use super::super::deck::{Deck, Shown};
-use super::super::mini::Mini;
+use super::super::mini::{Drag, Mini};
 use super::super::placement::{self, Rect};
 use super::super::platform;
 use super::super::presence::{Effect, Event, Presence, State, Support, Timing};
@@ -199,9 +199,12 @@ impl Presenter {
         self.mini.as_ref().is_some_and(|mini| mini.id() == id)
     }
 
-    pub(super) fn drag(&self) {
+    pub(super) fn drag(&self, drag: Drag, shared: &Shared) {
         if let Some(mini) = &self.mini {
-            mini.drag();
+            mini.drag(drag);
+            if drag == Drag::Let {
+                self.mini_moved(shared);
+            }
         }
     }
 

@@ -54,9 +54,11 @@ pub(crate) fn stop(path: &Path) -> bool {
     }) else {
         return true;
     };
-    // A daemon under load answers late: a stop is given as long as the daemon has to end.
-    if client.call(protocol::Command::Shutdown, ENDING).is_err() {
-        return false;
+    // A daemon under load answers late: a stop is given as long as the daemon has to end. One
+    // that ends before its answer leaves is gone, which is what was asked.
+    match client.call(protocol::Command::Shutdown, ENDING) {
+        Ok(_) | Err(client::CallError::Gone) => {}
+        Err(client::CallError::Timeout | client::CallError::Failed(_)) => return false,
     }
     matches!(
         ended.recv_timeout(ENDING),

@@ -163,6 +163,27 @@ fn a_daemon_slow_to_answer_its_stop_under_load_is_still_stopped() {
     assert!(stop(&path), "a stop answered in 3 s is a stop");
 }
 
+/// A daemon that ends as soon as it reads `shutdown`, its connection gone before any answer.
+fn quick_daemon(path: &Path) {
+    use std::io::{BufRead, BufReader};
+    let listener = crate::server::socket::bind(path).unwrap();
+    let serving = std::thread::Builder::new().name("quick".into());
+    serving
+        .spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut line = String::new();
+            BufReader::new(&stream).read_line(&mut line).unwrap();
+        })
+        .unwrap();
+}
+
+#[test]
+fn a_daemon_that_ends_before_it_answers_its_stop_is_stopped() {
+    let path = place("quick-stop");
+    quick_daemon(&path);
+    assert!(stop(&path), "a daemon gone is a daemon stopped");
+}
+
 #[test]
 fn a_client_finds_the_daemon_by_its_lock_whatever_its_own_runtime_directory() {
     let scratch = Scratch::new();

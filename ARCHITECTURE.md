@@ -149,7 +149,7 @@ every new file already goes where its target crate will be.
   app's too, never taking focus, with a live picture of the tab shown; the agent's `show` makes it
   blink and never expands it. Expanded: the deck as a non-activating panel over the Space the person
   is on, not full screen, opened only by the person's click on the mini and closed to it by the
-  strip's collapse button; it becomes key only when the person clicks into a text field. llx never
+  strip's collapse button, at the ordinary windows' level, so another app's window may cover it; it becomes key only when the person clicks into a text field. llx never
   activates the app. The window keeps its size and keeps rendering in every state (collapsed, it is
   invisible and click-through, as a headless one is), so nothing the agent reads depends on the
   state. Elsewhere there is no mini: an ordinary window that does not take focus.

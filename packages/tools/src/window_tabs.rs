@@ -10,7 +10,7 @@ use super::{Kind, Opened, WindowTab, WindowTool, failed};
 /// What a goal given with `open` did in the tab it opened.
 type Worked = Result<ToolOutput, ToolError>;
 
-impl WindowTool<'_> {
+impl<'a> WindowTool<'a> {
     /// Open each tab asked for; one that fails says why, and the others still open.
     #[expect(
         clippy::needless_collect,
@@ -23,11 +23,15 @@ impl WindowTool<'_> {
         };
         let mut kinds = vec![];
         for spec in &asked {
-            let kind = spec.get("kind").and_then(Value::as_str);
-            let Some(kind) = self.kinds.iter().find(|k| Some(k.name()) == kind) else {
+            let named = spec.get("kind").and_then(Value::as_str);
+            let kind = match named {
+                Some(named) => self.kinds.iter().copied().find(|k| k.name() == named),
+                None => self.implied(spec),
+            };
+            let Some(kind) = kind else {
                 return Err(failed(&format!("`kind` is one of: {}", self.names())));
             };
-            kinds.push(*kind);
+            kinds.push(kind);
         }
         // Every tab of the call opens at once, and its goal, if it has one, works in it as soon
         // as it is open; the reports keep the order they were asked in.
@@ -181,6 +185,26 @@ impl WindowTool<'_> {
             _ => Err(failed(&format!(
                 "there is no tab {tab}: ids are like w1 or t2"
             ))),
+        }
+    }
+
+    /// The kind a tab with no `kind` is of: the one kind with a field of its own among those it
+    /// gives (`url`, `command`), so a call that left `kind` out still opens what it names.
+    fn implied(&self, spec: &Value) -> Option<&'a dyn Kind> {
+        let given = |field: &str| spec.get(field).is_some();
+        let owns = |kind: &&'a dyn Kind| {
+            kind.fields().iter().any(|(field, _)| {
+                given(field)
+                    && (self.kinds.iter())
+                        .filter(|other| other.fields().iter().any(|(f, _)| f == field))
+                        .count()
+                        == 1
+            })
+        };
+        let mut implied = self.kinds.iter().copied().filter(|kind| owns(kind));
+        match (implied.next(), implied.next()) {
+            (Some(kind), None) => Some(kind),
+            (Some(_), Some(_)) | (None, _) => None,
         }
     }
 

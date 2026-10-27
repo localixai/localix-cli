@@ -13,6 +13,8 @@ use crate::testing::Recorder;
 struct Fake {
     name: &'static str,
     letter: char,
+    /// A field of its own, beside the `thing` every fake takes.
+    own: Option<&'static str>,
     open: Mutex<Vec<u32>>,
     done: Mutex<Vec<String>>,
 }
@@ -22,6 +24,7 @@ impl Fake {
         Self {
             name,
             letter,
+            own: None,
             open: Mutex::new(vec![]),
             done: Mutex::new(vec![]),
         }
@@ -55,7 +58,11 @@ impl Kind for Fake {
         "how to use it"
     }
     fn fields(&self) -> Vec<(&'static str, Value)> {
-        vec![("thing", json!({"type": "string"}))]
+        let own = self.own.map(|own| (own, json!({"type": "string"})));
+        [("thing", json!({"type": "string"}))]
+            .into_iter()
+            .chain(own)
+            .collect()
     }
     #[expect(
         clippy::unwrap_in_result,
@@ -424,6 +431,34 @@ fn what_the_person_sent_comes_after_the_next_calls_report_once() {
     );
     let second = call(&tool, json!({"action": "list"})).unwrap().report;
     assert!(!second.contains("make it red"), "{second}");
+}
+
+#[test]
+fn a_tab_opened_without_its_kind_is_of_the_one_kind_whose_own_field_it_names() {
+    let page = Fake {
+        own: Some("url"),
+        ..Fake::new("browser", 'w')
+    };
+    let term = Fake {
+        own: Some("command"),
+        ..Fake::new("terminal", 't')
+    };
+    let tool = WindowTool {
+        kinds: vec![&term, &page],
+        window: None,
+        hands: None,
+        gate: &Open,
+    };
+    // A smaller model left `kind` out three times running, with the address given.
+    let opened = call(&tool, json!({"action": "open", "url": "demo/index.html"})).unwrap();
+    assert!(opened.report.contains("w1"), "{}", opened.report);
+    let opened = call(&tool, json!({"action": "open", "command": "python3"})).unwrap();
+    assert!(opened.report.contains("t1"), "{}", opened.report);
+    // A field both take names no kind.
+    let Err(ToolError::Failed(why)) = call(&tool, json!({"action": "open", "thing": "x"})) else {
+        panic!("opened with no kind to go by");
+    };
+    assert!(why.contains("`kind` is one of: terminal, browser"), "{why}");
 }
 
 #[test]

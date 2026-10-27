@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 use super::super::host::{Cmd, Loads, WINDOW_CLOSED};
 use super::super::presence::Event;
 use super::super::script::script_forms;
+use super::super::toolbar;
 use super::super::{Clip, Driver, Observation, PageText, Shot};
 use super::{CALL_TIMEOUT, LOAD_TIMEOUT, PROBE_READY, WebviewDriver, closed};
 
@@ -126,6 +127,17 @@ impl WebviewDriver {
         let _ = self.proxy.send_event(Cmd::Presence(Event::Acting));
         Acting(self.proxy.clone())
     }
+
+    /// Keys pressed in the page, and the load they start followed.
+    fn press_page(&self, keys: &[String], delay_ms: u64) -> ViewResult<()> {
+        let _acting = self.acting();
+        let before = self.loads();
+        let budget = Duration::from_millis(delay_ms * keys.len() as u64) + CALL_TIMEOUT;
+        self.call("keys", &json!({"keys": keys, "delay": delay_ms}), budget)?;
+        let settled = self.call("settle", &json!({}), SETTLE_TIMEOUT);
+        self.follow_navigation(before, &settled);
+        Ok(())
+    }
 }
 
 impl Driver for WebviewDriver {
@@ -209,13 +221,21 @@ impl Driver for WebviewDriver {
         Ok(())
     }
 
+    /// The browser's own shortcuts (a reload) are its own, as a person's are; the keys between
+    /// them reach the page.
     fn press(&self, keys: &[String], delay_ms: u64) -> ViewResult<()> {
-        let _acting = self.acting();
-        let before = self.loads();
-        let budget = Duration::from_millis(delay_ms * keys.len() as u64) + CALL_TIMEOUT;
-        self.call("keys", &json!({"keys": keys, "delay": delay_ms}), budget)?;
-        let settled = self.call("settle", &json!({}), SETTLE_TIMEOUT);
-        self.follow_navigation(before, &settled);
+        for run in keys.split_inclusive(|key| toolbar::shortcut(key).is_some()) {
+            let (page, reload) = match run.split_last() {
+                Some((last, before)) if toolbar::shortcut(last).is_some() => (before, true),
+                _ => (run, false),
+            };
+            if !page.is_empty() {
+                self.press_page(page, delay_ms)?;
+            }
+            if reload {
+                self.evaluate("location.reload()")?;
+            }
+        }
         Ok(())
     }
 

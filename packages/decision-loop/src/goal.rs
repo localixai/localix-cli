@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use crate::ask::{AskInput, GoalStep, Operation, Pick, ask};
 pub(crate) use crate::step::Stop;
-use crate::step::{action_of, actions_of, changed, cycling, fingerprint};
+use crate::step::{acted, action_of, actions_of, changed, cycling, fingerprint};
 use contracts::model::{DecideError, Decider};
 use contracts::view::{Observation, View, ViewError};
 
@@ -308,7 +308,7 @@ impl GoalRun<'_> {
             Ok(()) => walk.retried_stale = false,
         }
         let after = self.view.observe();
-        step.changed = Some(after.as_ref().map_or(true, |after| changed(&view, after)));
+        step.changed = Some(after.as_ref().map_or(true, |after| acted(&view, after)));
         step.new_view = after.as_ref().is_ok_and(|after| after.epoch != view.epoch);
         (self.on_step)(&step);
         let unchanged = step.changed == Some(false);

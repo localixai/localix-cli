@@ -48,6 +48,7 @@ impl View for Quiz {
                 options: vec![],
             }],
             busy: false,
+            revision: 0,
         })
     }
     #[expect(

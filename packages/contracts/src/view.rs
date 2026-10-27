@@ -38,6 +38,11 @@ pub struct Observation {
     /// How far the view is scrolled: a scroll that moved nothing is told apart from one that did.
     #[serde(default)]
     pub scroll: i64,
+    /// How many times the view has changed anywhere, in sight or out of it (a counter scrolled
+    /// above, a message shown again in the same words): an action that changed only that still
+    /// changed something.
+    #[serde(default)]
+    pub revision: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]

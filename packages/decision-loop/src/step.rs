@@ -216,6 +216,12 @@ pub(crate) fn changed(before: &Observation, after: &Observation) -> bool {
         || before.scroll != after.scroll
 }
 
+/// Whether an action changed the view, in sight or out of it (a counter scrolled above): one that
+/// changed only what the model cannot see still did something, and doing it again does it again.
+pub(crate) fn acted(before: &Observation, after: &Observation) -> bool {
+    changed(before, after) || before.revision != after.revision
+}
+
 /// The steps that acted on the view: a wait does not.
 pub(crate) fn actions_of(steps: &[GoalStep]) -> usize {
     steps
@@ -223,3 +229,7 @@ pub(crate) fn actions_of(steps: &[GoalStep]) -> usize {
         .filter(|step| step.operation != Operation::Wait)
         .count()
 }
+
+#[cfg(test)]
+#[path = "step_tests.rs"]
+mod tests;

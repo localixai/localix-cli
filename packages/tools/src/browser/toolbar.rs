@@ -68,6 +68,23 @@ pub(crate) fn outline(controls: &[Element]) -> String {
     lines.join("\n")
 }
 
+/// The control a key stands for: a browser takes its own shortcuts before the page sees them, and
+/// Ctrl+R, Cmd+R and F5 (Shift with them too) reload it.
+pub(crate) fn shortcut(key: &str) -> Option<&'static str> {
+    let parts: Vec<String> = key.split('+').map(str::to_ascii_lowercase).collect();
+    let (last, held) = parts.split_last()?;
+    let command =
+        |part: &String| ["ctrl", "control", "meta", "cmd", "command"].contains(&part.as_str());
+    if !held.iter().all(|part| command(part) || part == "shift") {
+        return None;
+    }
+    match last.as_str() {
+        "f5" => Some(RELOAD),
+        "r" if held.iter().any(command) => Some(RELOAD),
+        _ => None,
+    }
+}
+
 /// The width and height a toolbar value names.
 pub(crate) fn size(value: &str) -> Option<(f64, f64)> {
     SIZES
@@ -75,3 +92,7 @@ pub(crate) fn size(value: &str) -> Option<(f64, f64)> {
         .find(|(known, ..)| *known == value)
         .map(|(.., width, height)| (*width, *height))
 }
+
+#[cfg(test)]
+#[path = "toolbar_tests.rs"]
+mod tests;

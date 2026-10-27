@@ -54,6 +54,7 @@ mod covered {
                 options: vec![],
             }],
             busy: false,
+            revision: 0,
         }
     }
 
@@ -251,6 +252,7 @@ mod typing {
                     options: vec![],
                 }],
                 busy: false,
+                revision: 0,
             })
         }
         #[expect(

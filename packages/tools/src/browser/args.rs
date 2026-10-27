@@ -28,8 +28,8 @@ within 20 s; `press(key)` and `sleep(ms)` are defined in it; never run a script 
 to run), `read` returns the page's whole text (`offset` to go on), `size` reframes the page \
 (desktop, tablet, mobile). The snapshot is the page's outline; after an `interact`, only its \
 changes since you last read it whole (`- ` gone, `+ ` new, each after the unchanged line above \
-it, `…` between changes apart; or no visible change), and the whole outline again when much \
-changed. Games: when a script can read the \
+it, `…` between changes apart), or that the call changed nothing visible, and the whole outline \
+again when much changed. Games: when a script can read the \
 game's state, let a `script` play: a loop that reads the state, picks a move by a real strategy, \
 calls `press(key)`, `await sleep(ms)`, and repeats for at most 15 s, then returns the score; run \
 it again, improving it. When the state is only drawn (a canvas), take a `screenshot` each turn \
@@ -67,7 +67,7 @@ pub(super) fn parameters() -> Value {
     json!({"type": "object", "properties": {
         "url": {"type": "string", "description": "An address to open first: a site, or a search page with the query in its address."},
         "size": {"type": "string", "enum": ["desktop", "tablet", "mobile"], "description": "Reframe the page first (layout only)."},
-        "keys": {"type": "array", "items": {"type": "string"}, "description": "Keys to press, in order: [\"ArrowUp\", \"ArrowLeft\"], [\"Escape\"], [\"Ctrl+A\"]. Up to 500."},
+        "keys": {"type": "array", "items": {"type": "string"}, "description": "Keys to press, in order: [\"ArrowUp\", \"ArrowLeft\"], [\"Escape\"], [\"Ctrl+A\"]; [\"Ctrl+R\"] reloads the page. Up to 500."},
         "key_delay_ms": {"type": "integer", "minimum": 0, "maximum": MAX_KEY_DELAY_MS, "description": "Pause between keys (default 60), for games that animate each move."},
         "script": {"type": "string", "description": "JavaScript run in the page after the keys: an expression, or statements whose last value is returned (await works)."},
         "wait_for": {"type": "string", "description": "Return once the page shows this exact text, after the keys and the script."},

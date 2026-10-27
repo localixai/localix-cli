@@ -78,6 +78,9 @@ pub struct Observation {
     /// The page says it is still working (parsing, fetching its own data, a progress bar).
     #[serde(default)]
     pub busy: bool,
+    /// How many times its words or nodes changed, anywhere in the document.
+    #[serde(default)]
+    pub revision: u64,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -103,6 +106,7 @@ impl From<Observation> for contracts::view::Observation {
             elements: page.elements,
             busy: page.busy,
             scroll: page.scroll.y,
+            revision: page.revision,
         }
     }
 }

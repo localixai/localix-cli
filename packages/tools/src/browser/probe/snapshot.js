@@ -38,6 +38,13 @@
 
   // Whether this document is being replaced: a link, a form or a script started a navigation of
   // the main frame. Seen here first; the native side only hears of it once the server answers.
+  // How many times the document's words or nodes changed, anywhere: an action that changed only
+  // what is out of sight (a counter scrolled above, a message shown again in the same words)
+  // changed something. Attributes are left out: an animation changes them all the time.
+  let revision = 0
+  new MutationObserver((records) => { revision += records.length })
+    .observe(document, { subtree: true, childList: true, characterData: true })
+
   let leaving = false
   addEventListener('beforeunload', () => { leaving = true }, { capture: true })
   window.navigation?.addEventListener('navigate', (event) => {
@@ -268,6 +275,7 @@
       scroll: { y: Math.round(scrollY), height: document.documentElement.scrollHeight },
       elements,
       busy: busy(),
+      revision,
     }
   }
 

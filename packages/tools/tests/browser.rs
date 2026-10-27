@@ -249,6 +249,22 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
         "keys:ArrowDown/ArrowDown/40;b/KeyB/66;"
     );
     assert_eq!(driver.evaluate("const press = 2; press * 3").unwrap(), "6");
+    // A change anywhere in the document, in sight or not, moves its revision; a look moves none.
+    let seen = driver.observe().unwrap().revision;
+    assert_eq!(driver.observe().unwrap().revision, seen);
+    driver
+        .evaluate("document.title = 'keys:'; document.body.append('out of sight')")
+        .unwrap();
+    assert!(driver.observe().unwrap().revision > seen);
+    // A browser's own reload keys reload the page, as a person's would; the keys after them reach
+    // the page loaded again.
+    driver.press(&["a".into(), "Ctrl+R".into()], 0).unwrap();
+    assert_eq!(driver.evaluate("document.title").unwrap(), "keys:");
+    driver.press(&["F5".into(), "b".into()], 0).unwrap();
+    assert_eq!(
+        driver.evaluate("document.title").unwrap(),
+        "keys:b/KeyB/66;"
+    );
 
     // Calendar days carry their date or month: "5" alone is ambiguous across two months.
     driver.navigate(&format!("{origin}/calendar.html")).unwrap();

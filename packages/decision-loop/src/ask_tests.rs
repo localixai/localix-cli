@@ -24,6 +24,7 @@ fn view(elements: Vec<Element>) -> Observation {
         scroll: 0,
         elements,
         busy: false,
+        revision: 0,
     }
 }
 

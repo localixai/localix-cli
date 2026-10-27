@@ -75,24 +75,18 @@ pub(crate) struct Own<'a> {
 /// A session's tools: `read`, `edit`, `bash` (commands run to their end), and `window`, whose
 /// tabs are terminal sessions and the browser's pages where there is one.
 pub(crate) struct Tools<'a> {
+    kit: &'a Kit<'a>,
+    own: &'a Own<'a>,
     read: ReadTool<'a>,
     edit: EditTool<'a>,
     bash: BashTool<'a>,
-    browser: Option<&'a Page>,
-    hands: &'a dyn Hands,
-    windowed: Option<&'a dyn Windowed>,
-    sessions: &'a tools::shell::Sessions,
-    stop: &'a (dyn Fn() -> bool + Sync),
-    root: PathBuf,
-    seen: &'a Mutex<HashSet<PathBuf>>,
-    lock: &'a crate::kinds::BrowserLocks,
-    workspace: &'a Workspace,
-    checkpoints: &'a crate::checkpoints::Checkpoints,
 }
 
 impl<'a> Tools<'a> {
     pub(crate) fn new(kit: &'a Kit<'a>, own: &'a Own<'a>) -> Self {
         Self {
+            kit,
+            own,
             read: ReadTool {
                 workspace: kit.workspace,
             },
@@ -107,45 +101,36 @@ impl<'a> Tools<'a> {
                 stop: own.stop,
                 sessions: kit.sessions,
             },
-            browser: kit.browser,
-            hands: kit.hands,
-            windowed: kit.windowed,
-            sessions: kit.sessions,
-            stop: own.stop,
-            root: kit.root(),
-            seen: &own.seen,
-            lock: kit.browser_lock,
-            workspace: kit.workspace,
-            checkpoints: kit.checkpoints,
         }
     }
 
     /// Run `work` with the tools as the agent offers them.
     pub(crate) fn with<T>(&self, work: impl FnOnce(&[&dyn Tool]) -> T) -> T {
+        let (kit, own) = (self.kit, self.own);
         let read = Instructed {
             inner: &self.read,
-            root: self.root.clone(),
-            seen: self.seen,
+            root: kit.root(),
+            seen: &own.seen,
         };
         let tracked = crate::checkpoints::Tracked {
             inner: &self.edit,
-            workspace: self.workspace,
-            checkpoints: self.checkpoints,
+            workspace: kit.workspace,
+            checkpoints: kit.checkpoints,
         };
         let edit = Instructed {
             inner: &tracked,
-            root: self.root.clone(),
-            seen: self.seen,
+            root: kit.root(),
+            seen: &own.seen,
         };
         let parts = crate::kinds::Parts {
             bash: &self.bash,
-            sessions: self.sessions,
-            stop: self.stop,
-            page: self.browser,
-            locks: self.lock,
-            windowed: self.windowed,
-            hands: self.hands,
-            gate: self.edit.gate,
+            sessions: kit.sessions,
+            stop: own.stop,
+            page: kit.browser,
+            locks: kit.browser_lock,
+            windowed: kit.windowed,
+            hands: kit.hands,
+            gate: own.gate,
         };
         crate::kinds::window(&parts, |window| {
             let mut tools: Vec<&dyn Tool> = vec![&read, &edit, &self.bash];

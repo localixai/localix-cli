@@ -158,5 +158,10 @@ fn the_sessions_of_one_numbering_are_listed_and_killed_apart() {
     }
     let (sessions, id) = started[2];
     let still = sessions.send(id, b"", &[], poll, None, &|| false).unwrap();
-    assert_eq!(still.until, Until::Deadline, "theirs runs on: {still:?}");
+    // Its first line may still end after its start matched (the needle came before the line's
+    // break), and the poll then settles on that: alive either way, what counts is not killed.
+    assert!(
+        matches!(still.until, Until::Deadline | Until::Settled),
+        "theirs runs on: {still:?}"
+    );
 }

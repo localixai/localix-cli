@@ -420,6 +420,7 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     tabs(driver, origin);
     screenshots(driver, origin);
     rerendered(driver, origin);
+    drifted(driver, origin);
 
     // A dialog in an open shadow root (a consent web component): its controls are offered, as a
     // dialog; what it covers names it; its button closes it.
@@ -870,6 +871,23 @@ fn rerendered(driver: &WebviewDriver, origin: &str) {
     );
     assert!(matches!(gone, Err(BrowserError::Stale(_))), "{gone:?}");
     assert_eq!(driver.observe().unwrap().title, "plums:0 apples:1 pears:1");
+}
+
+/// A page is the same one however its `performance.timeOrigin` reads later: a ref acts on it.
+fn drifted(driver: &WebviewDriver, origin: &str) {
+    driver.navigate(&format!("{origin}/drift.html")).unwrap();
+    let page = driver.observe().unwrap();
+    let count = find(&page, "button", "Count").to_string();
+    for _ in 0..3 {
+        act(
+            driver,
+            &page,
+            Action::Click {
+                reference: count.clone(),
+            },
+        );
+    }
+    assert_eq!(driver.observe().unwrap().title, "clicks:3");
 }
 
 /// The tool waits for text a page shows late (`wait_for`), and says when it did not come within

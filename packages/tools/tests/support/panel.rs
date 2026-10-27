@@ -215,7 +215,16 @@ pub(crate) fn glass(browser: &Browser, driver: &WebviewDriver, window: &Window, 
         vec![Some(opaque)]
     };
     assert!(looks.contains(&dressed), "the browser's frame: {dressed:?}");
-    let size = driver.observe().unwrap().viewport;
+    // Under an X server with no window manager (xvfb on a CI runner) GTK gives the view its size
+    // a moment after the page loaded: it is read once the view has one, each try a short backoff.
+    let mut size = driver.observe().unwrap().viewport;
+    for _ in 0..30 {
+        if size.h > 1 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        size = driver.observe().unwrap().viewport;
+    }
     // A shown window fits the person's screen (960 to 1440 wide), the strip of tabs above it.
     assert!(
         (960..=1440).contains(&size.w) && (600..=930).contains(&size.h),

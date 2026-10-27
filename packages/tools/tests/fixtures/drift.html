@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>clicks:0</title>
+<script>
+  // WebKit answers performance.timeOrigin as a wall time worked out again on each read, so it
+  // moves when the clock is slewed. Here it moves on every read: the page stays the same one.
+  const origin = performance.timeOrigin
+  let reads = 0
+  Object.defineProperty(Performance.prototype, 'timeOrigin', { get: () => origin + (++reads % 2) })
+</script>
+</head>
+<body>
+<button type="button" id="count">Count</button>
+<script>
+  let clicks = 0
+  document.getElementById('count').addEventListener('click', () => {
+    clicks += 1
+    document.title = `clicks:${clicks}`
+  })
+</script>
+</body>
+</html>

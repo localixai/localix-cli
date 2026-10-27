@@ -30,7 +30,11 @@
     return 'e' + id
   }
   const nodeOf = (ref) => nodes.get(Number(String(ref).slice(1)))
-  const epoch = () => String(performance.timeOrigin)
+  // Which document this is, read once as the probe starts in it: WebKit works the time origin out
+  // again from the wall clock on each read, so a later read can differ by a millisecond on the
+  // same page, and a ref would then be refused as stale.
+  const EPOCH = String(performance.timeOrigin)
+  const epoch = () => EPOCH
 
   // Whether this document is being replaced: a link, a form or a script started a navigation of
   // the main frame. Seen here first; the native side only hears of it once the server answers.

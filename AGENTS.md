@@ -17,8 +17,8 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
 - `packages/contracts`: ports only, no logic.
   - `chat.rs`: the chat-model port, with our own `Message`, `ToolCall`, `Request`, `Completion` and `Usage`.
   - `catalog.rs`: what a provider offers: `ModelEntry` (an id, a name, the `Effort` levels it takes, its default) and `Selection`, a model with a level it takes (its fields are private: no other level can be put in).
-  - `tool.rs`: the agent's tools: `ToolSpec`, `ToolOutput { report, state }`, `ToolError { Failed, Fatal }`.
-  - `gate.rs`: a tool asks before an effect: `Effect { tool, summary }`, `Verdict { Allow, Deny(why) }`, `Gate`, and `Open`.
+  - `tool.rs`: the agent's tools: `ToolSpec`, `ToolOutput { report, image, state }`, `ToolError { Failed, Fatal }`.
+  - `gate.rs`: a tool asks before an effect: `Effect { tool, subject, summary }`, `Verdict { Allow, Deny(why) }`, `Gate`, and `Open`.
   - `person.rs`: a tool asks the person: `Question` with its `Choice`s, `Answer`, `Reply { Answers, Nobody(why), Stopped }`, `Person`.
   - `view.rs`: what the hands drive: `Observation` with an outline and refs, `Action`, `View`.
   - `model.rs`: the decision-model port: typed questions, `Decider`.
@@ -30,7 +30,7 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
   - `spend.rs`: `Spend`, what the chat model spent in a run.
   - `observer.rs`: what a run shows as it goes: calls, results, turns.
   - `conversation.rs`: messages that only grow. Older states are dropped past a budget, and open calls are closed; `truncate` for a rewind.
-  - `history.rs`: how a conversation is prepared before each request, a `Strategy` the app chooses: `Pipeline` (stages `superseded`, `outputs`, `arguments`, behind a 90%→60% gate of the model's limit, a protected tail, elisions that stay: made for the prompt cache) or `Keep`. `history_tests.rs` simulates a 300-turn dialogue.
+  - `history.rs`: how a conversation is prepared before each request, a `Strategy` the app chooses (it uses `Pipeline`: stages `superseded`, `outputs`, `arguments`, behind a 90%→60% gate of the model's limit, a protected tail, elisions that stay: made for the prompt cache; `Keep`, which sends it as it is, is a test strategy). `history_tests.rs` simulates a 300-turn dialogue.
   - `schema.rs`: `--schema` as the `result` tool.
   - `answer.rs`: the `RESULT:` line.
   - `prompt.md`: the system prompt.

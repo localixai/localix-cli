@@ -8,8 +8,8 @@ use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::{Value, json};
 
 use crate::agent::Agent;
+use crate::fakes::Silent;
 use crate::fakes::{Recorder, Scripted, says};
-use crate::observer::Silent;
 
 /// Where the calls of a test's tools run, whichever tool they belong to: how many run now,
 /// the most that ever ran at once, and the order they started and ended in.
@@ -142,7 +142,7 @@ fn agent<'a>(
         schema: None,
         inbox,
         window: 0,
-        strategy: &crate::history::Keep,
+        strategy: &crate::fakes::Keep,
     }
 }
 
@@ -353,7 +353,7 @@ fn a_message_that_comes_with_the_answer_is_not_lost() {
         schema: None,
         inbox: Some(&mail),
         window: 0,
-        strategy: &crate::history::Keep,
+        strategy: &crate::fakes::Keep,
     };
     let run = agent.run("work");
     assert_eq!(run.answer, "Done, with the tests too.");

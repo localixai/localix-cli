@@ -21,7 +21,7 @@ pub(crate) fn dropdown(element: &Element) -> bool {
 }
 
 /// While a dialog is open, only its controls are offered: it blocks the rest of the view.
-pub fn in_scope(elements: &[Element]) -> Vec<&Element> {
+pub(crate) fn in_scope(elements: &[Element]) -> Vec<&Element> {
     let dialog: Vec<&Element> = elements.iter().filter(|element| element.dialog).collect();
     if dialog.is_empty() {
         elements.iter().collect()

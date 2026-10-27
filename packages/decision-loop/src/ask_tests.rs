@@ -23,7 +23,6 @@ fn view(elements: Vec<Element>) -> Observation {
         text: "Book a trip".into(),
         scroll: 0,
         elements,
-        omitted: 0,
         busy: false,
     }
 }

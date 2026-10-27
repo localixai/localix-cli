@@ -2,7 +2,7 @@
 //! whether the goal was reached.
 
 /// The answer without its closing `RESULT:` line, and what that line says.
-pub fn read(text: &str) -> (String, Option<bool>) {
+pub(crate) fn read(text: &str) -> (String, Option<bool>) {
     let text = text.trim();
     let Some((answer, verdict)) = text.rsplit_once("RESULT:") else {
         return (text.to_string(), None);

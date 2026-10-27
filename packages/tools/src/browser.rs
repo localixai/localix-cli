@@ -14,6 +14,8 @@ mod history;
 mod host;
 mod mini;
 #[cfg(target_os = "macos")]
+mod mini_grip;
+#[cfg(target_os = "macos")]
 mod nspanel;
 mod page;
 mod panel;

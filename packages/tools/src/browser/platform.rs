@@ -56,6 +56,15 @@ pub(super) fn adopt_mini(window: &tao::window::Window) {
     super::nspanel::adopt(window, super::nspanel::Role::Mini);
 }
 
+/// The mini's own grip over its page: a press moves it, a click expands it.
+#[cfg(target_os = "macos")]
+pub(super) fn grip_mini(
+    window: &tao::window::Window,
+    proxy: &tao::event_loop::EventLoopProxy<super::host::Cmd>,
+) {
+    super::mini_grip::grip(window, proxy);
+}
+
 #[cfg(target_os = "macos")]
 pub(super) fn show_mini(window: &tao::window::Window) {
     super::nspanel::reveal(window, super::nspanel::Rendering::Switched);
@@ -68,6 +77,13 @@ pub(super) fn hide_mini(window: &tao::window::Window) {
 
 #[cfg(not(target_os = "macos"))]
 pub(super) fn adopt_mini(_window: &tao::window::Window) {}
+
+#[cfg(not(target_os = "macos"))]
+pub(super) fn grip_mini(
+    _window: &tao::window::Window,
+    _proxy: &tao::event_loop::EventLoopProxy<super::host::Cmd>,
+) {
+}
 
 #[cfg(not(target_os = "macos"))]
 pub(super) fn show_mini(window: &tao::window::Window) {

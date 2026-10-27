@@ -185,7 +185,6 @@ impl On<'_> {
                 self.renamed();
             }
             Cmd::Presence(event) => self.presence(event),
-            Cmd::MiniDrag(drag) => self.presenter.drag(drag, shared),
             Cmd::Pictured(shot) => self.pictured(&shot),
             Cmd::Presented(reply) => {
                 let _ = reply.send(self.presenter.name());

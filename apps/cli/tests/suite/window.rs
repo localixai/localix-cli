@@ -164,6 +164,20 @@ fn a_call_that_fails_says_why_and_exits_1() {
 }
 
 #[test]
+fn a_call_to_a_browser_tab_never_opened_opens_nothing() {
+    let home = Home::new();
+    let keys = call(&json!({"action": "interact", "tab": "w1", "keys": ["a"]}));
+    let failed = window(&home, home.path(), &[&keys]);
+    assert_eq!(failed.status.code(), Some(1), "{}", text(&failed.stdout));
+    let listed = window(&home, home.path(), &[&call(&json!({"action": "list"}))]);
+    assert!(
+        text(&listed.stdout).contains("No tabs are open"),
+        "{}",
+        text(&listed.stdout)
+    );
+}
+
+#[test]
 fn with_no_call_it_says_how_to_call_it() {
     let home = Home::new();
     let told = window(&home, home.path(), &[]);

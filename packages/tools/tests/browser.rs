@@ -515,6 +515,17 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
 
 /// A second page on the one open window (another client of the daemon): it opens a tab of its own
 /// beside the first page's, and the first page's tab is left as it was.
+/// Two calls that open the window at once: the second is refused, and the window stays open to
+/// every driver and to the next page that would open it.
+fn opened_twice(browser: &browser::Browser, driver: &WebviewDriver, window: &Window) {
+    assert!(browser.open(window.clone()).is_err());
+    assert!(
+        driver.is_open(),
+        "the window is open, but its drivers see it closed"
+    );
+    assert!(browser.attach().is_some(), "an open window is attached to");
+}
+
 fn second_page(browser: &browser::Browser, driver: &WebviewDriver, origin: &str) {
     let (before, _) = driver.tabs();
     let page = browser::Page::new(browser.clone(), true);
@@ -997,6 +1008,7 @@ fn main() {
                     driver
                         .wait_loaded(Duration::from_secs(10))
                         .expect("it loads");
+                    opened_twice(&browser, &driver, &window);
                     second_page(&browser, &driver, &origin);
                     answers_while_loading(&browser, &driver, &origin);
                     starts_at_once(&browser, &driver, &origin);

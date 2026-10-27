@@ -77,9 +77,16 @@ impl Browser<'_> {
         Value::Object(call)
     }
 
-    /// `arguments` carried out in tab `id`, while no other call works in it.
+    /// `arguments` carried out in tab `id`, while no other call works in it. A tab of a browser
+    /// not open is none: acting in it would open the window on a page nobody asked for, beside
+    /// the `open` that may be making it at the same time.
     fn in_tab(&self, id: u32, arguments: &Value) -> Result<ToolOutput, ToolError> {
         let _tab = self.locks.tab(id);
+        if !self.page.is_open() {
+            return Err(ToolError::Failed(format!(
+                "there is no browser tab w{id}: no page is open; `open` one first"
+            )));
+        }
         let page = self.page.pinned(id);
         let tool = BrowserTool {
             page: &page,

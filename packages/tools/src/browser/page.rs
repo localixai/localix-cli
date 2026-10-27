@@ -1,6 +1,5 @@
 //! The browser window and the page it shows, as a `View`: the window opens on the first address
-//! it is sent to, and later addresses load in it. The browser's own toolbar (Back, Reload, page
-//! size) is part of the view, so the hands can use it like any control; with several tabs open,
+//! it is sent to, and later addresses load in it. The browser's own toolbar (Back, Reload) is part of the view, so the hands can use it like any control; with several tabs open,
 //! it also says which tab the view is, but the hands do not switch tabs: the agent does.
 
 use std::fmt::Write as _;
@@ -26,8 +25,6 @@ pub struct Page {
     browser: Browser,
     /// Hidden unless a call asks to show it: the default the app chose for this run.
     headless: bool,
-    /// The page size the toolbar shows (`desktop`, `tablet`, `mobile`).
-    size: Mutex<String>,
     held: Mutex<Held>,
     /// Rung when an opening ends, for the calls that wait to open the window.
     opened: Condvar,
@@ -55,7 +52,6 @@ impl Page {
         Self {
             browser,
             headless,
-            size: Mutex::new("desktop".into()),
             held: Mutex::new(Held {
                 driver: None,
                 hidden: headless,
@@ -125,19 +121,26 @@ impl Page {
         if let Some(stale) = stale {
             closed(&stale);
         }
-        if let Some(attached) = self.browser.attach() {
+        let attach = |attached: WebviewDriver| {
             let tab = (attached.add_tab(url))
                 .map_err(|error| ViewError::Unavailable(error.to_string()))?;
             self.held().driver = Some(attached.clone());
-            return Ok((attached, tab));
+            Ok((attached, tab))
+        };
+        if let Some(attached) = self.browser.attach() {
+            return attach(attached);
         }
         self.held().hidden = hidden;
-        let opened = self.browser.open(Window {
+        let opened = match self.browser.open(Window {
             url: url.to_string(),
             title: title.to_string(),
             headless: hidden,
             viewport: Viewport::DESKTOP,
-        })?;
+        }) {
+            Ok(opened) => opened,
+            // Another page opened it between the look and this: a tab of its own in it.
+            Err(refused) => return self.browser.attach().map_or(Err(refused), attach),
+        };
         let (_, tab) = opened.tabs();
         self.held().driver = Some(opened.clone());
         Ok((opened, tab))
@@ -166,7 +169,6 @@ impl Page {
         Page {
             browser: self.browser.clone(),
             headless: self.headless,
-            size: Mutex::new(crate::lock(&self.size).clone()),
             held: Mutex::new(Held {
                 driver,
                 hidden,
@@ -180,7 +182,7 @@ impl Page {
         crate::lock(&self.held)
     }
 
-    /// A toolbar control: back, reload, or a page size.
+    /// A toolbar control: back or reload.
     fn toolbar(&self, action: &Action) -> ViewResult<()> {
         let driver = self.driver()?;
         match action {
@@ -190,24 +192,20 @@ impl Page {
             Action::Click { reference } if reference == toolbar::RELOAD => {
                 driver.evaluate("location.reload()").map(|_| ())
             }
-            Action::Select { value, .. } => self.resize(value),
             Action::Click { .. }
+            | Action::Select { .. }
             | Action::Type { .. }
             | Action::PressEnter { .. }
             | Action::ScrollDown
-            | Action::ScrollUp => Err(ViewError::Refused(
-                "a toolbar control is clicked, or the page size selected".into(),
-            )),
+            | Action::ScrollUp => Err(ViewError::Refused("a toolbar control is clicked".into())),
         }
     }
 
-    /// Reframe the page to a toolbar size (`desktop`, `tablet`, `mobile`).
+    /// Reframe the page to a size (`desktop`, `tablet`, `mobile`).
     pub fn resize(&self, size: &str) -> ViewResult<()> {
         let (width, height) = toolbar::size(size)
             .ok_or_else(|| ViewError::Refused(format!("no page size {size}")))?;
-        self.driver()?.resize(width, height)?;
-        *crate::lock(&self.size) = size.to_string();
-        Ok(())
+        self.driver()?.resize(width, height)
     }
 }
 
@@ -242,7 +240,7 @@ impl View for Page {
 
     fn observe(&self) -> ViewResult<Observation> {
         let mut view = Observation::from(self.driver()?.observe()?);
-        let controls = toolbar::controls(&crate::lock(&self.size));
+        let controls = toolbar::controls();
         let mut bar = toolbar::outline(&controls);
         let (tabs, active) = self.driver()?.tabs();
         if tabs.len() > 1 {

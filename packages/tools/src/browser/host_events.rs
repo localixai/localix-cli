@@ -256,7 +256,9 @@ impl On<'_> {
                 *self.deck = Some(open);
             }),
         };
-        shared.open.store(opened.is_ok(), Ordering::SeqCst);
+        // Whether the window is open now: a second open refused leaves the first one open.
+        let web = self.deck.as_ref().is_some_and(|open| open.web.is_some());
+        shared.open.store(web, Ordering::SeqCst);
         let _ = reply.send(opened.clone());
         if let (Ok(()), Some(open)) = (opened, self.deck.as_ref()) {
             open.refresh(shared);

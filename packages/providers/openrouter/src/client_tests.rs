@@ -98,7 +98,7 @@ fn a_request_sent_and_not_answered_is_not_sent_again_and_one_not_sent_is() {
 #[test]
 fn a_decision_not_answered_is_asked_once_more() {
     // A decision is short and cheap: one that hangs is better asked again than waited on.
-    let deciding = OpenRouter::deciding("k".into(), APP);
+    let deciding = OpenRouter::new("k".into(), APP).deciding();
     assert!(deciding.is_openrouter());
     let unanswered = || Err(HttpError::Unanswered("timed out".into()));
     let (client, sent) = scripted(deciding, vec![unanswered(), unanswered(), unanswered()]);
@@ -111,7 +111,7 @@ fn a_decision_not_answered_is_asked_once_more() {
 fn openrouter_at_another_address_is_still_sent_openrouters_fields() {
     // A server standing in for OpenRouter at a local address must see its wire.
     let reply = r#"{"choices":[{"message":{"content":"hi"}}]}"#;
-    let local = OpenRouter::openrouter_at(Some("http://127.0.0.1:1".into()), "k".into(), APP);
+    let local = OpenRouter::standing_in("http://127.0.0.1:1", "k".into(), APP);
     assert!(local.is_openrouter());
     assert!(!lab().is_openrouter());
     let (client, sent) = scripted(local, vec![Ok((200, reply))]);

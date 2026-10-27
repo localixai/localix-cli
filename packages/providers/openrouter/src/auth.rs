@@ -89,8 +89,7 @@ impl Login {
     }
 
     /// Exchange `code` for the key it issues.
-    pub fn finish(&self, app: App, code: &str) -> Result<String, String> {
-        let client = crate::client::OpenRouter::new(String::new(), app);
+    pub fn finish(&self, client: &crate::client::OpenRouter, code: &str) -> Result<String, String> {
         let body = json!({"code": code, "code_verifier": self.verifier,
             "code_challenge_method": "S256"});
         let (value, _) = client

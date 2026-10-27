@@ -125,11 +125,15 @@ pub(crate) fn run(rig: &mut Rig, ui: &Ui) {
 }
 
 fn steps(rig: &mut Rig, terminal: &mut dyn Terminal, shown: &dyn Fn(&str)) {
+    // The session's environment (its client's, in the daemon), kept while the rig changes.
+    let env = rig.workspace.env().map(<[_]>::to_vec);
+    let vars = env.as_deref();
     let sign_in = |provider, method, terminal: &mut dyn Terminal| {
-        signin::sign_in(&provider, method, terminal, shown)
+        signin::sign_in(&provider, method, terminal, shown, vars)
     };
+    let signed_in = |provider: &Provider| provider.signed_in_by(vars);
     let world = World {
-        signed_in: &Provider::signed_in,
+        signed_in: &signed_in,
         sign_in: &sign_in,
         say: shown,
     };

@@ -65,26 +65,25 @@ pub struct Timing {
 
 impl OpenRouter {
     pub fn new(key: String, app: crate::App) -> Self {
-        Self::openrouter_at(std::env::var("OPENROUTER_BASE_URL").ok(), key, app)
+        Self::standing_in(BASE_URL, key, app)
     }
 
-    /// OpenRouter at `base` (one standing in for it), else at its own address.
-    fn openrouter_at(base: Option<String>, key: String, app: crate::App) -> Self {
-        let base = base.unwrap_or_else(|| BASE_URL.into());
-        let at = Self::at(&base, key, app, crate::NAME);
+    /// OpenRouter at `base` (one standing in for it): it takes OpenRouter's fields wherever it is.
+    pub fn standing_in(base: &str, key: String, app: crate::App) -> Self {
         Self {
             openrouter: true,
-            ..at
+            ..Self::at(base, key, app, crate::NAME)
         }
     }
 
-    /// OpenRouter for the browser's decisions: a decision is short and cheap, so one that hangs
+    /// This client for the browser's decisions: a decision is short and cheap, so one that hangs
     /// is given up on sooner and asked once more.
-    pub fn deciding(key: String, app: crate::App) -> Self {
+    #[must_use]
+    pub fn deciding(self) -> Self {
         Self {
-            http: Box::new(Web::new(app, DECIDING)),
+            http: Box::new(Web::new(self.app, DECIDING)),
             retry_timeout: true,
-            ..Self::new(key, app)
+            ..self
         }
     }
 

@@ -14,7 +14,7 @@ use crate::error::{self, Failure};
 use crate::exit;
 use crate::output::lock;
 use crate::picker::Terminal;
-use crate::providers::{Method, Provider};
+use crate::providers::{self, Method, Provider, Vars};
 
 /// How long the token endpoint may take.
 const TOKEN_TIMEOUT: Duration = Duration::from_secs(60);
@@ -25,6 +25,7 @@ pub(crate) fn sign_in(
     method: Method,
     terminal: &mut dyn Terminal,
     say: &dyn Fn(&str),
+    vars: Vars,
 ) -> Result<String, String> {
     let saved = |path: PathBuf| format!("saved in {}", path.display());
     match (provider.id(), method) {
@@ -46,7 +47,7 @@ pub(crate) fn sign_in(
             let code = browser(login.address(), terminal, say, &|t| login.wait(t), &|p| {
                 login.pasted(p)
             })?;
-            let key = login.finish(APP, &code)?;
+            let key = login.finish(&providers::openrouter_client(String::new(), vars), &code)?;
             let path = openrouter::auth::save(APP, &key).map_err(|e| e.to_string())?;
             Ok(format!(
                 "Signed in: the key {} is {}.",
@@ -63,7 +64,7 @@ pub(crate) fn sign_in(
             let key = openrouter::auth::as_key(&line).ok_or("that is not a key")?;
             let path = provider.save_key(key).map_err(|e| e.to_string())?;
             let mut said = format!("Saved the key {}; {}.", mask(key), saved(path));
-            if provider.key_in_env() {
+            if provider.key_in_env(vars) {
                 said.push_str(" Its variable is set, and it wins over the saved key.");
             }
             Ok(said)
@@ -137,7 +138,7 @@ pub(crate) fn logout() -> Result<i32, Failure> {
             any = true;
             error::print(&format!("{}: signed out\n", provider.name()))?;
         }
-        if provider.key_in_env() {
+        if provider.key_in_env(None) {
             in_env.push(provider.name());
         }
     }

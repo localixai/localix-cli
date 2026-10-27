@@ -111,3 +111,39 @@ fn a_served_session_reads_its_key_from_its_clients_environment() {
     assert!(provider.chat_in(&selection, Some(&client)).is_some());
     assert!(provider.signed_in_by(Some(&client)).is_some());
 }
+
+#[test]
+fn openrouters_address_is_read_from_the_sessions_environment() {
+    // A stand-in for OpenRouter named only in the client's environment gets the request.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let asked = std::thread::Builder::new()
+        .name("stand-in".into())
+        .spawn(move || {
+            use std::io::Read;
+            let mut peer = listener.accept().unwrap().0;
+            // What the first peer sent: the request; the wake-up below sends nothing.
+            peer.read(&mut [0; 16]).unwrap() > 0
+        })
+        .unwrap();
+    let provider = Provider::openrouter();
+    let variable = provider.variables().into_iter().next().unwrap();
+    let client = vec![
+        (variable, "sk-or-test".to_string()),
+        (
+            "OPENROUTER_BASE_URL".to_string(),
+            format!("http://{address}"),
+        ),
+    ];
+    let selection = Selection::new(provider.entry(&provider.default_model()));
+    let chat = provider.chat_in(&selection, Some(&client)).unwrap();
+    let request = Request {
+        conversation: &[],
+        tools: &[],
+        may_call: false,
+    };
+    let _ = chat.complete(request);
+    // Wakes the stand-in when nothing reached it.
+    drop(std::net::TcpStream::connect(address));
+    assert!(asked.join().unwrap(), "the stand-in was called");
+}

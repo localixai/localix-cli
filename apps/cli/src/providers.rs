@@ -200,10 +200,8 @@ impl Provider {
     }
 
     /// Whether the key comes from the environment, which no saved one replaces.
-    pub(crate) fn key_in_env(&self) -> bool {
-        self.variables()
-            .iter()
-            .any(|name| std::env::var(name).is_ok_and(|k| !k.trim().is_empty()))
+    pub(crate) fn key_in_env(&self, vars: Vars) -> bool {
+        (self.variables().iter()).any(|name| var(vars, name).is_some_and(|k| !k.trim().is_empty()))
     }
 
     /// What commands never see: the variables its key is read from, and OpenRouter's, which
@@ -271,7 +269,7 @@ impl Provider {
         }
         let (key, _) = self.key_in(vars)?;
         let client = match self.0.as_str() {
-            "openrouter" => openrouter::client::OpenRouter::new(key, APP),
+            "openrouter" => openrouter_client(key, vars),
             id => {
                 let catalog = catalog();
                 let model = catalog.model(id, &selection.model().id);
@@ -335,11 +333,20 @@ pub(crate) fn decider(model: &str) -> Option<Box<dyn Decider>> {
 pub(crate) fn decider_in(model: &str, vars: Vars) -> Option<Box<dyn Decider>> {
     let names = [openrouter::auth::KEY_VARIABLE.to_string()];
     let (key, _) = key_from(&names, vars, Provider::openrouter().key_path())?;
-    let client = openrouter::client::OpenRouter::deciding(key, APP);
+    let client = openrouter_client(key, vars).deciding();
     Some(Box::new(openrouter::system_one::SystemOne {
         client,
         model: model.to_string(),
     }))
+}
+
+/// OpenRouter's client for `key`, at the address the session's environment names for a server
+/// standing in for it, else at its own.
+pub(crate) fn openrouter_client(key: String, vars: Vars) -> openrouter::client::OpenRouter {
+    match var(vars, "OPENROUTER_BASE_URL") {
+        Some(base) => openrouter::client::OpenRouter::standing_in(&base, key, APP),
+        None => openrouter::client::OpenRouter::new(key, APP),
+    }
 }
 
 /// What `llx decide` says with no key for the decision model, read off no catalog.

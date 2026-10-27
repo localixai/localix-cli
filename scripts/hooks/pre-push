@@ -1,7 +1,9 @@
 #!/bin/sh
-# Git's pre-push hook (scripts/setup installs it): `scripts/check`, the checks the branch's change
-# needs (its crates and their dependents, tested in both builds), or `scripts/check --all` when
-# main is pushed, as CI then runs everything. `git push --no-verify` skips it.
+# Git's pre-push hook (scripts/setup installs it): `scripts/check --fast` on what is pushed, the
+# commits since the remote's (fmt, clippy on the crates changed, the repository's rules, the
+# linters of what changed): seconds, not minutes. The tests, both builds, the size and the site
+# run in CI on every push, and by hand with `scripts/check` (or `--all`) before a change is
+# called done. `git push --no-verify` skips it.
 #
 # The checks read the working tree, so it must be what is pushed: a ref whose commit is not the
 # one checked out is not checked here (CI checks it), and uncommitted changes to tracked files
@@ -10,9 +12,10 @@ set -eu
 
 root=$(git rev-parse --show-toplevel)
 head=$(git rev-parse HEAD)
-mode=
+checked=
+base=
 while read -r local_ref local_sha remote_ref remote_sha; do
-  : "$remote_sha"
+  : "$remote_ref"
   case $local_sha in
     *[!0]*) ;;
     *) continue ;; # a deletion pushes nothing
@@ -21,12 +24,13 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     echo "pre-push: $local_ref is not the commit checked out; not checked here" >&2
     continue
   fi
-  case $remote_ref in
-    refs/heads/main) mode=all ;;
-    *) [ -n "$mode" ] || mode=changed ;;
+  checked=yes
+  # What the remote has is the base, when this clone knows it; a new branch's is main's.
+  case $remote_sha in
+    *[!0]*) git cat-file -e "$remote_sha^{commit}" 2>/dev/null && base=$remote_sha ;;
   esac
 done
-[ -n "$mode" ] || exit 0
+[ -n "$checked" ] || exit 0
 
 dirty=$(git status --porcelain --untracked-files=no)
 if [ -n "$dirty" ]; then
@@ -36,7 +40,4 @@ if [ -n "$dirty" ]; then
   exit 1
 fi
 
-if [ "$mode" = all ]; then
-  exec "$root/scripts/check" --all
-fi
-exec "$root/scripts/check"
+LLX_CHECK_BASE=$base exec "$root/scripts/check" --fast

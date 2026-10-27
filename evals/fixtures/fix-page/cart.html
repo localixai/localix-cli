@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Cart</title>
+<style>
+body{font:15px/1.5 system-ui,sans-serif;max-width:420px;margin:40px auto;padding:0 16px}
+li{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
+#total{font-weight:600}
+</style>
+</head>
+<body>
+<h1>Cart</h1>
+<ul>
+  <li>Lamp, $24 <button data-price="24" onclick="add(this)">Add</button></li>
+  <li>Mug, $9 <button data-price="9" onclick="add(this)">Add</button></li>
+  <li>Rug, $57 <button data-price="57" onclick="add(this)">Add</button></li>
+</ul>
+<p>Items: <span id="count">0</span></p>
+<p>Total: <span id="total">$0</span></p>
+<script src="cart.js"></script>
+</body>
+</html>

@@ -233,7 +233,7 @@ def select(tasks, only):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--only", help="comma-separated task ids or kinds (code, browser, demo)")
+    parser.add_argument("--only", help="comma-separated task ids or kinds (code, build, browser, demo)")
     parser.add_argument("--repeat", type=int, default=1, help="runs per task")
     parser.add_argument("--jobs", type=int, default=3, help="runs at once")
     parser.add_argument("--bin", default=os.path.join(ROOT, "target/release/llx"))

@@ -1,11 +1,11 @@
 # Evals
 
-Live tasks for the release binary: coding tasks on small fixtures, and browser tasks on real sites. Each task is one goal, phrased the way a person would type it. A browser task names the site it starts on.
+Live tasks for the release binary: coding tasks on small fixtures, pages built or fixed and then checked in the window, and browser tasks on real sites. Each task is one goal, phrased the way a person would type it. A browser task names the site it starts on.
 
 ```bash
 cargo build --release
 OPENROUTER_API_KEY=sk-or-... python3 evals/run.py           # every task once
-python3 evals/run.py --only code                           # one kind: code, browser or demo
+python3 evals/run.py --only code                           # one kind: code, build, browser or demo
 python3 evals/run.py --only fix-test,login --repeat 3      # some tasks, for stability
 python3 evals/run.py --jobs 6                              # more runs at once (default 3)
 LLX_MODEL=<id> LLX_DECISION_MODEL=<id> python3 evals/run.py   # other models
@@ -45,7 +45,7 @@ Terminal tabs (a session, on a machine with a display): start one with a task li
 
 ## Tasks
 
-A task in `tasks.json` has an `id`, a `kind` (`code`, `browser`, or `demo`: a browser task on the sites of [`demo/`](../demo/index.html)) and a `goal`. It can also have a `fixture`, a `site` (a directory of the repository copied beside the fixture under its own name, so the goal opens `demo/shop.html` by its path), `contains`, `matches`, `uses`, `avoids`, `check`, `schema` and `args` (more llx arguments, such as `["--mode", "plan"]`).
+A task in `tasks.json` has an `id`, a `kind` (`code`; `build`, a page written or fixed and then tried in the window; `browser`; or `demo`: a browser task on the sites of [`demo/`](../demo/index.html)) and a `goal`. It can also have a `fixture`, a `site` (a directory of the repository copied beside the fixture under its own name, so the goal opens `demo/shop.html` by its path), `contains`, `matches`, `uses`, `avoids`, `check`, `schema` and `args` (more llx arguments, such as `["--mode", "plan"]`).
 
 | Id | Kind | What it exercises |
 | --- | --- | --- |
@@ -75,5 +75,9 @@ A task in `tasks.json` has an `id`, a `kind` (`code`, `browser`, or `demo`: a br
 | demo-lights | demo | A puzzle solved: the state read and the moves worked out, not guessed |
 | demo-2048 | demo | A game played by keys toward a goal; `--schema` data |
 | demo-snake | demo | A canvas with no outline, in real time or by steps; `--schema` data |
+| demo-tour | demo | Three pages one after another in one tab, a step and a fact on each: a page and its goal in one call, not two |
+| fix-page | build | A page whose total is wrong (prices added as text): the bug seen in the window, fixed in the code, the page tried again (`check` runs the fix with `node`) |
+| build-tally | build | A page written from nothing, opened by its path and pressed through: a counter, a reset, the number read back |
+| build-2048 | build | A game written from nothing in a given style, its keys checked in the window, then played to a goal; `--schema` data |
 
 Add a task when a real failure shows something general the suite does not cover yet. Keep its fixture tiny and limited to the standard library, and make its `check` pass only for a correct result. Do not add one that only rewards wording.

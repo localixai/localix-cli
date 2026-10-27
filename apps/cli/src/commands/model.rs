@@ -1,4 +1,5 @@
-//! `/model` and the reasoning level: one list, with Left/Right choosing the level inline.
+//! `/model` and the reasoning level: one list, each provider's models a group of their own (a
+//! tab in the interface), with Left/Right choosing the level inline.
 //! Shift+Up and Shift+Down also step the level. A model switch starts at that model's
 //! default level, and only its own levels are offered. The choice is put in at once (the chat
 //! model, and its key's variables kept from commands) and saved as the default for later
@@ -10,7 +11,7 @@ use contracts::catalog::{ModelEntry, Selection};
 
 use crate::choice::{self, Choice};
 use crate::compose::Rig;
-use crate::picker::{Adjustment, Item, Terminal};
+use crate::picker::{Adjustment, Group, Item, Terminal};
 use crate::providers::{self, Provider};
 use crate::server::Ui;
 use crate::server::asking::UiTerminal;
@@ -37,11 +38,18 @@ pub(super) fn models(
     title: &str,
 ) -> Option<Choice> {
     let mut offered: Vec<(Provider, ModelEntry)> = vec![];
+    // Each provider's models together, under its name: the interface shows them as its tab.
+    let mut groups: Vec<Group> = vec![];
     for provider in providers {
         let mut models = provider.models();
         if *provider == current.provider && !models.iter().any(|m| m.id == current.model()) {
             models.insert(0, current.selection.model().clone());
         }
+        let rows = models.len();
+        groups.push(Group {
+            name: provider.name(),
+            rows,
+        });
         offered.extend(models.into_iter().map(|model| (provider.clone(), model)));
     }
     let now = |(provider, model): &(Provider, ModelEntry)| {
@@ -57,10 +65,7 @@ pub(super) fn models(
     let items: Vec<Item> = offered
         .iter()
         .enumerate()
-        .map(|(at, (provider, model))| {
-            let detail = format!("{} · {}", provider.name(), model.id);
-            Item::new(&model.name, detail, Some(at) == marked)
-        })
+        .map(|(at, (_, model))| Item::new(&model.name, &model.id, Some(at) == marked))
         .collect();
     let adjustments: Vec<Adjustment> = offered
         .iter()
@@ -79,7 +84,7 @@ pub(super) fn models(
             }
         })
         .collect();
-    let (at, level) = terminal.pick_adjustable(title, &items, &adjustments)?;
+    let (at, level) = terminal.pick_adjustable(title, &items, &adjustments, &groups)?;
     let (provider, model) = offered.swap_remove(at);
     let effort = *model.offered().get(level)?;
     Some(Choice {

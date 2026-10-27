@@ -3,7 +3,7 @@
 
 use ratatui::text::{Line, Span};
 
-use super::{Select, WINDOW};
+use super::{Select, Tabs, WINDOW};
 use crate::tui::printable::printable;
 use crate::tui::style;
 use crate::tui::wrap::wrap;
@@ -20,8 +20,11 @@ impl Select {
             out.push(Line::default());
         }
         let listed = if self.direct { vec![] } else { self.rows() };
+        if let Some(tabs) = self.tabs.as_ref().filter(|_| !self.direct) {
+            out.extend(tabs.render(&self.matching(), width));
+        }
         if let Some(search) = self.search.as_ref().filter(|_| !self.direct) {
-            out.extend(search.render());
+            out.extend(search.render(listed.is_empty()));
         }
         // A long list shows a window around the marked option, and how many are past it.
         let now = listed.iter().position(|at| *at == self.at).unwrap_or(0);
@@ -124,7 +127,12 @@ impl Select {
                 } else {
                     ""
                 };
-                format!("  {search}↑↓ to choose · {adjust}{check}enter to confirm · {escape}")
+                let tabs = if self.tabs.as_ref().is_some_and(Tabs::several) {
+                    "tab to switch · "
+                } else {
+                    ""
+                };
+                format!("  {search}↑↓ to choose · {adjust}{tabs}{check}enter to confirm · {escape}")
             }
         }
     }

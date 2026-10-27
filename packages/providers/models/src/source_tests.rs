@@ -23,7 +23,7 @@ fn modified(path: &Path) -> SystemTime {
 }
 
 #[test]
-fn a_catalog_fetched_today_is_not_asked_for_again() {
+fn a_catalog_fetched_within_the_hour_is_not_asked_for_again() {
     let (cache, etag) = kept("fresh", "{}");
     age(&cache, Duration::from_secs(60));
     let asked = settle(&cache, &etag, |_| panic!("asked")).unwrap();
@@ -31,7 +31,21 @@ fn a_catalog_fetched_today_is_not_asked_for_again() {
 }
 
 #[test]
-fn an_unchanged_catalog_is_kept_another_day() {
+fn a_catalog_fetched_hours_ago_is_asked_for_again() {
+    // A model released this morning must not wait for tomorrow: an unchanged catalog costs a 304.
+    let (cache, etag) = kept("hours", "{}");
+    age(&cache, Duration::from_secs(2 * 3600));
+    let mut asked = false;
+    let settled = settle(&cache, &etag, |_| {
+        asked = true;
+        Ok((304, String::new(), String::new()))
+    });
+    assert_eq!(settled, Ok(false));
+    assert!(asked, "a two-hour-old catalog is asked for");
+}
+
+#[test]
+fn an_unchanged_catalog_is_kept_another_hour() {
     let (cache, etag) = kept("unchanged", "{}");
     let mut sent = None;
     let settled = settle(&cache, &etag, |tag| {
@@ -42,7 +56,7 @@ fn an_unchanged_catalog_is_kept_another_day() {
     assert_eq!(sent.as_deref(), Some("\"v1\""));
     assert_eq!(store::read(&cache).as_deref(), Some("{}"));
     let age = SystemTime::now().duration_since(modified(&cache)).unwrap();
-    assert!(age < Duration::from_secs(60), "fresh for another day");
+    assert!(age < Duration::from_secs(60), "fresh for another hour");
 }
 
 #[test]

@@ -24,18 +24,23 @@ impl Item {
 
 /// One row's inline values and the value initially selected.
 pub(crate) use protocol::Adjustment;
+/// Consecutive rows under one name: a provider's models.
+pub(crate) use protocol::Group;
 
 pub(crate) trait Picker {
     /// The index of the option chosen; `None` when the person cancels.
     fn pick(&mut self, title: &str, items: &[Item]) -> Option<usize>;
 
-    /// The row and its selected value; non-interactive pickers keep the initial value.
+    /// The row and its selected value, the rows in `groups`; non-interactive pickers keep the
+    /// initial value, and show one list.
     fn pick_adjustable(
         &mut self,
         title: &str,
         items: &[Item],
         adjustments: &[Adjustment],
+        groups: &[Group],
     ) -> Option<(usize, usize)> {
+        let _ = groups;
         let at = self.pick(title, items)?;
         Some((
             at,

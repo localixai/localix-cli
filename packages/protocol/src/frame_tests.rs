@@ -2,8 +2,8 @@ use serde_json::json;
 
 use super::*;
 use crate::{
-    Adjustment, Answer, Approval, Input, JobRow, Label, Outcome, Picture, Place, Question, Running,
-    Saved, Target, Theme, ToolInfo, Turn,
+    Adjustment, Answer, Approval, Group, Input, JobRow, Label, Outcome, Picture, Place, Question,
+    Running, Saved, Target, Theme, ToolInfo, Turn,
 };
 
 fn through_json<T: Serialize + for<'de> Deserialize<'de>>(frame: &T) -> T {
@@ -124,6 +124,10 @@ fn every_question_to_the_person_comes_back_the_same_through_json() {
                 adjustments: vec![Adjustment {
                     values: vec!["low".into()],
                     at: 0,
+                }],
+                groups: vec![Group {
+                    name: "OpenAI".into(),
+                    rows: 1,
                 }],
             },
         },
@@ -333,4 +337,13 @@ fn a_server_that_says_less_of_its_work_still_reads() {
         panic!("{said}");
     };
     assert!(!background, "no background unless the server says so");
+}
+
+#[test]
+fn a_choice_in_no_groups_still_reads() {
+    let said = r#"{"type":"choose_adjustable","title":"Model","options":[],"marked":null,"adjustments":[]}"#;
+    let Asked::ChooseAdjustable { groups, .. } = serde_json::from_str(said).unwrap() else {
+        panic!("{said}");
+    };
+    assert!(groups.is_empty());
 }

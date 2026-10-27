@@ -271,8 +271,11 @@ impl App {
                 options,
                 marked,
                 adjustments,
+                groups,
             } => {
-                let select = questions::choice(&title, &options, marked).adjustable(adjustments);
+                let select = questions::choice(&title, &options, marked)
+                    .adjustable(adjustments)
+                    .grouped(&groups);
                 self.ask_own(lane, select, Open::Adjustable(id), now);
             }
             protocol::Asked::Line { prompt, hidden } => {

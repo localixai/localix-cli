@@ -10,7 +10,7 @@ use std::sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError, sync_channel};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, Weak};
 use std::time::Duration;
 
-use protocol::{Adjustment, Approval, Asked, Event, Reply, ToClient};
+use protocol::{Adjustment, Approval, Asked, Event, Group, Reply, ToClient};
 
 use super::hub::{ClientId, Hub};
 use super::inputs::{Inputs, Typed};
@@ -266,13 +266,15 @@ impl Ui {
         }
     }
 
-    /// A row and its inline value, starting on `marked`; `None` when cancelled.
+    /// A row and its inline value, starting on `marked`, the rows in `groups`; `None` when
+    /// cancelled.
     pub(crate) fn pick_adjustable(
         &self,
         title: &str,
         options: Vec<(String, String)>,
         marked: Option<usize>,
         adjustments: Vec<Adjustment>,
+        groups: Vec<Group>,
     ) -> Option<(usize, usize)> {
         let title = title.into();
         let asked = Asked::ChooseAdjustable {
@@ -280,6 +282,7 @@ impl Ui {
             options,
             marked,
             adjustments,
+            groups,
         };
         match self.ask(asked, None) {
             Some(Reply::Adjusted(picked)) => picked,

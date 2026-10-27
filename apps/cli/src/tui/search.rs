@@ -133,8 +133,9 @@ impl Search {
         self.shown = ranked(&self.query, &self.keys);
     }
 
-    /// `Search: open▏  2 matches`, and a line for no match at all.
-    pub(super) fn render(&self) -> Vec<Line<'static>> {
+    /// `Search: open▏  2 matches`, and a line when `none` is listed (none matches, or none in
+    /// the tab shown).
+    pub(super) fn render(&self, none: bool) -> Vec<Line<'static>> {
         let count = match (self.query.is_empty(), self.shown.len()) {
             (true, all) => format!("{all} in all"),
             (false, 1) => "1 match".into(),
@@ -147,7 +148,7 @@ impl Search {
             Span::styled(count, style::dim()),
         ])];
         out.push(Line::default());
-        if self.shown.is_empty() {
+        if none {
             let query = printable(&self.query);
             let none = format!("  No {} matches '{query}'", self.noun);
             out.push(Line::from(Span::styled(none, style::dim())));

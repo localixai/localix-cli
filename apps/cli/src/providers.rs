@@ -56,9 +56,10 @@ const DEFAULTS: [(&str, &str); 2] = [
 /// The browser's decision model llx starts with: a policy, by catalog id (OpenRouter's).
 pub(crate) const DECISION_DEFAULT: &str = "~typesafe/jev-latest";
 
-/// How often a long-lived process looks for a newer catalog (the refresh itself asks models.dev
-/// at most once a day).
-const LOOK: Duration = Duration::from_secs(3600);
+/// How often a long-lived process looks for a newer catalog: a file's time, and the refresh
+/// asked, which asks models.dev at most once an hour. A `/model` opened a minute after a
+/// refresh wrote one lists its models.
+const LOOK: Duration = Duration::from_secs(60);
 
 /// The catalog: the built-in files under the last fetched one, read again when a refresh wrote
 /// a newer one (unit tests see the built-in files only, the same on every machine).

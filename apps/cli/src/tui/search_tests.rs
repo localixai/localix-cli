@@ -83,6 +83,7 @@ fn adjustable(
         options,
         marked,
         adjustments,
+        groups: vec![],
     };
     app.asked(1, "", asked, Instant::now());
     app

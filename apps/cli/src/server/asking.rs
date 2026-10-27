@@ -12,7 +12,7 @@ use protocol::Approval;
 
 use super::Ui;
 use crate::gate::Asker;
-use crate::picker::{Adjustment, Item, Lines, Picker};
+use crate::picker::{Adjustment, Group, Item, Lines, Picker};
 
 /// Approvals asked in the interface; a stopped task closes the question with a no.
 pub(crate) struct UiGate<'a> {
@@ -85,6 +85,7 @@ impl Picker for UiTerminal {
         title: &str,
         items: &[Item],
         adjustments: &[Adjustment],
+        groups: &[Group],
     ) -> Option<(usize, usize)> {
         let options = items
             .iter()
@@ -95,6 +96,7 @@ impl Picker for UiTerminal {
             options,
             items.iter().position(|item| item.marked),
             adjustments.to_vec(),
+            groups.to_vec(),
         )
     }
 }

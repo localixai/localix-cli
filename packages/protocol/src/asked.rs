@@ -21,12 +21,15 @@ pub enum Asked {
         options: Vec<(String, String)>,
         marked: Option<usize>,
     },
-    /// A choice with a value adjusted inline for each row.
+    /// A choice with a value adjusted inline for each row, its rows in `groups` when it has
+    /// any (an interface that does not know them shows one list).
     ChooseAdjustable {
         title: String,
         options: Vec<(String, String)>,
         marked: Option<usize>,
         adjustments: Vec<Adjustment>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        groups: Vec<Group>,
     },
     /// A line to type, shown as dots when it is a secret.
     Line { prompt: String, hidden: bool },
@@ -82,4 +85,12 @@ pub struct Answer {
 pub struct Adjustment {
     pub values: Vec<String>,
     pub at: usize,
+}
+
+/// Consecutive rows of a choice under one name (a provider's models): the first `rows` rows not
+/// in an earlier group.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Group {
+    pub name: String,
+    pub rows: usize,
 }

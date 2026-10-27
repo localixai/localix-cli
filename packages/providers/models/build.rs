@@ -109,12 +109,6 @@ fn resolve(
         model["type"] = json!("chat");
     }
     model["api"] = apis(own.get("api"), provider);
-    // The mid-conversation flags are published as true or false: unset is false.
-    if let Some(capabilities) = model.get_mut("capabilities").and_then(Value::as_object_mut) {
-        for flag in ["system_updates", "effort_updates"] {
-            capabilities.entry(flag).or_insert(json!(false));
-        }
-    }
     model
 }
 
@@ -176,11 +170,7 @@ fn apis(tables: Option<&Value>, provider: &Map<String, Value>) -> Value {
             for (protocol, table) in tables {
                 let sdk = table.pointer("/sdk/aisdk").and_then(Value::as_str);
                 let sdk = sdk.filter(|s| *s != "none").unwrap_or(npm);
-                let mut entry = json!({"base_url": address(table, sdk)});
-                if let Some(compatibility) = table.get("compatibility") {
-                    entry["compatibility"] = compatibility.clone();
-                }
-                out.insert(protocol.clone(), entry);
+                out.insert(protocol.clone(), json!({"base_url": address(table, sdk)}));
             }
         }
         None => {
@@ -216,12 +206,8 @@ fn kept(model: &Value) -> Value {
         "/modalities/output",
         "/capabilities/tools/supported",
         "/capabilities/reasoning",
-        "/capabilities/cache",
-        "/capabilities/system_updates",
-        "/capabilities/effort_updates",
         "/limit/context",
         "/limit/input",
-        "/limit/output",
         "/cost/text/input/price",
         "/cost/text/input/cache/read",
         "/cost/text/input/overrides",

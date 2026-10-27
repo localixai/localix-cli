@@ -45,15 +45,6 @@ pub struct Capabilities {
     pub tools: Option<Tools>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<Reasoning>,
-    /// `false`, or `implicit` and/or `explicit` with their details.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache: Option<Value>,
-    /// A system message mid-conversation keeps the prompt cache.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub system_updates: Option<bool>,
-    /// A reasoning level changed mid-conversation keeps the prompt cache.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effort_updates: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -99,16 +90,11 @@ pub struct Limit {
     pub context: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Api {
     pub base_url: String,
-    /// Where reasoning comes back and must go back (`reasoning_field`, `replay_reasoning`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compatibility: Option<Value>,
 }
 
 impl Model {

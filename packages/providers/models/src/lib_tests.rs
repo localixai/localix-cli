@@ -291,16 +291,6 @@ fn the_built_in_files_resolve_as_models_dev_resolves_them() {
         luna.address(CHAT_COMPLETIONS),
         Some("https://api.openai.com/v1")
     );
-    // The mid-conversation flags of a usable model are always published: unset is false.
-    for (provider, found) in &catalog.providers {
-        for (id, model) in found.models().filter(|(_, m)| m.usable()) {
-            let flags = &model.capabilities;
-            assert!(
-                flags.system_updates.is_some() && flags.effort_updates.is_some(),
-                "{provider}/{id}"
-            );
-        }
-    }
 }
 
 /// Every built-in model against models.dev's own resolution of it, in what llx reads:
@@ -345,7 +335,6 @@ fn the_built_in_files_match_models_dev_s_own_resolution() {
                         &m.limit,
                         &m.capabilities,
                         api,
-                        m.api.values().map(|a| &a.compatibility).collect::<Vec<_>>(),
                     )
                 )
             };

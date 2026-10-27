@@ -1,5 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 
 use super::*;
 use crate::tui::style;
@@ -173,4 +173,21 @@ fn letters_typed_ahead_into_an_approval_pick_nothing() {
         assert_eq!(select.key(key(KeyCode::Char(c))), None, "{c:?} picked");
     }
     assert_eq!(select.key(key(KeyCode::Enter)), Some(Picked::Option(0)));
+}
+
+#[test]
+fn a_heading_too_long_for_a_row_goes_on_under_its_words() {
+    let title = vec![Line::from(vec![
+        Span::raw("• "),
+        Span::raw("Login › OpenAI › a step whose name is long"),
+    ])];
+    let select = Select::new(title, vec![Choice::new("Yes")], "esc cancel");
+    insta::assert_snapshot!(shown(&select, 30), @"
+    • Login › OpenAI › a step
+      whose name is long
+
+    ❯ 1. Yes
+
+      enter select · esc cancel
+    ");
 }

@@ -123,23 +123,35 @@ impl Select {
         }
     }
 
-    /// How wide the label and the detail columns are among `rows`: a long list's labels line up
-    /// (no number before them), and its details too where a value follows them. Neither column
-    /// takes more than a third of `width`; a longer label pushes its own row's detail along.
+    /// How wide the label and the detail columns are among `rows`: where any row has a detail,
+    /// the details line up after the labels (at most a third of `width`; a longer label pushes
+    /// its own row's along), and where a value follows, the values after the details too.
     fn columns(&self, rows: &[usize], width: usize) -> (usize, usize) {
-        if self.search.is_none() {
+        if rows.iter().all(|at| self.choices[*at].detail.is_empty()) {
             return (0, 0);
         }
-        let widest = |of: &dyn Fn(&Choice) -> &str| {
-            let widths = rows.iter().map(|at| text_width(of(&self.choices[*at])));
-            widths.max().unwrap_or(0).min(width / 3)
+        let widest =
+            |of: &dyn Fn(&Choice) -> usize| rows.iter().map(|at| of(&self.choices[*at])).max();
+        // Rows with nothing after their label (`Something else: type it`) leave its width be.
+        let described = |c: &Choice| match c.detail.is_empty() && self.adjustments.is_none() {
+            true => 0,
+            false => text_width(&c.label),
         };
-        let labels = widest(&|c| &c.label);
-        let details = match self.adjustments {
-            Some(_) => widest(&|c| &c.detail),
-            None => 0,
+        let labels = widest(&described).unwrap_or(0).min(width / 3);
+        let Some(adjustments) = &self.adjustments else {
+            return (labels, 0);
         };
-        (labels, details)
+        let details = widest(&|c| text_width(&c.detail)).unwrap_or(0);
+        let values = rows.iter().filter_map(|at| adjustments.get(*at));
+        let value = values
+            .filter_map(|a| a.values.get(a.at))
+            .map(|v| text_width(v))
+            .max();
+        // The mark, the number, the label, its gap, the detail and `  ← value →`: when a row
+        // would not fit, the details go unaligned rather than wrap.
+        let number = if self.search.is_some() { 0 } else { 4 };
+        let row = 2 + number + labels + 2 + details + value.map_or(0, |v| v + 6);
+        (labels, if row <= width { details } else { 0 })
     }
 
     /// The keys' hint under the choice: each key that does something here and what it does,
@@ -194,6 +206,12 @@ fn title_rows(line: &Line<'static>, width: usize) -> Vec<Line<'static>> {
             first.content = kept.to_string().into();
             break;
         }
+    }
+    // A heading's bullet hangs: its rows go on under its words, not under the bullet.
+    if body.spans.first().is_some_and(|span| span.content == "• ") {
+        let bullet = body.spans.remove(0);
+        let first = Line::from(vec![Span::raw(indent.clone()), bullet]);
+        return wrap(&body, width, &first, &Line::from(format!("{indent}  ")));
     }
     let prefix = Line::from(indent);
     wrap(&body, width, &prefix, &prefix)

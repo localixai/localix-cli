@@ -116,7 +116,7 @@ fn working_shows_the_call_its_steps_the_time_and_the_queue() {
     ⠸ Working in w1: Buy one
       └ click "Buy" [e12]
 
-    ⠸ Working (12s · esc to interrupt)
+    ⠸ Working (12s · esc stop)
       ⏎ then update the changelog
 
     ❯ Type a task, / for commands
@@ -208,7 +208,7 @@ fn what_waits_reads_as_the_transcript_shows_it() {
     let screen = shown(&app, now);
     assert!(!screen.contains('\u{1b}'), "{screen}");
     insta::assert_snapshot!(screen, @"
-    ⠋ Working (0s · esc to interrupt)
+    ⠋ Working (0s · esc stop)
       ⏎ shift+tab · next mode
       ⏎ more reasoning
       ≋ m · x

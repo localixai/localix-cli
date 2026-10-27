@@ -64,10 +64,21 @@ pub(crate) fn choice(title: &str, options: &[(String, String)], marked: Option<u
     Select::new(title, choices, "esc cancel").at(marked.unwrap_or(0))
 }
 
-/// A line to type, its characters hidden for a secret.
+/// A line to type, its characters hidden for a secret. A step's prompt (`Login › OpenAI › API
+/// key: paste it…`) is its path as the heading, and what to do under it.
 pub(crate) fn line(prompt: &str, hidden: bool) -> Select {
     let prompt = printable(prompt.trim().trim_end_matches(['>', ':']).trim());
-    let title = vec![heading(&prompt, "")];
+    let mut title = vec![];
+    match prompt
+        .split_once(": ")
+        .filter(|(path, _)| path.contains(" › "))
+    {
+        Some((path, what)) => {
+            title.push(heading(path, ""));
+            title.push(Line::from(Span::styled(format!("  {what}"), style::dim())));
+        }
+        None => title.push(heading(&prompt, "")),
+    }
     let select = Select::new(title, vec![Choice::new("Type it").types()], "esc cancel");
     select.hidden(hidden).typing(0)
 }
@@ -82,7 +93,7 @@ fn asker(name: &str) -> Line<'static> {
 }
 
 /// A question's first line: `• title`, and `after` dimmed.
-fn heading(title: &str, after: &str) -> Line<'static> {
+pub(super) fn heading(title: &str, after: &str) -> Line<'static> {
     Line::from(vec![
         Span::styled("• ", style::waiting()),
         Span::styled(title.to_string(), style::bold()),

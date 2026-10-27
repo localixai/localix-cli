@@ -5,6 +5,7 @@ use protocol::{Asked, Choice as Offered, ToClient};
 
 use super::*;
 use crate::tui::app::App;
+use crate::tui::style;
 use crate::tui::test_support::{key, live_area, replies, typed};
 
 fn asked(choices: &[&str], multiple: bool) -> Question {
@@ -170,4 +171,15 @@ fn answered(app: &mut App) -> Answer {
         [(1, Reply::Question(Some(answer)))] => answer.clone(),
         other => panic!("not an answer: {other:?}"),
     }
+}
+
+#[test]
+fn a_steps_line_is_headed_by_its_path_and_says_what_to_do_under_it() {
+    let select = line(
+        "Login › OpenAI › API key: paste it and press Enter (it is not shown)",
+        true,
+    );
+    let shown: Vec<String> = select.render(60).0.iter().map(style::plain).collect();
+    assert_eq!(shown[0], "• Login › OpenAI › API key");
+    assert_eq!(shown[1], "  paste it and press Enter (it is not shown)");
 }

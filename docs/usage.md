@@ -78,7 +78,7 @@ interface cannot start) it is a usage error pointing to `llx exec`, which prints
 
 ### The screen
 
-- What finished goes into the terminal's own scrollback, so scrolling, selecting and copying are the terminal's. Only the bottom is redrawn: the call running, `Working (12s · esc to interrupt)`, the messages you queued meanwhile, and the prompt `❯`.
+- What finished goes into the terminal's own scrollback, so scrolling, selecting and copying are the terminal's. Only the bottom is redrawn: the call running, `Working (12s · esc stop)`, the messages you queued meanwhile, and the prompt `❯`.
 - Under the prompt, a list shows the session, the agents it started (as a branch) and the jobs running; with no agents it is gone. Time and tokens follow each row's status. The other sessions take one line, `← 2 other sessions (1 working, 1 waiting for you)`.
 - ↓ from an empty prompt gives the list the keys: ↑↓ choose, Enter or → shows an agent's transcript, `x` stops an agent or a job, Esc or ← go back.
 - Each session gets a short title from its first task, made in the background by the same model at its lowest reasoning level (the task never waits for it), shown in the list and saved with the session.

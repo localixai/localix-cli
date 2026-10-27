@@ -334,3 +334,35 @@ fn a_list_in_steps_says_what_it_holds_by_its_last_step() {
     let shown = screen(&mut app);
     assert!(shown.contains("No provider matches 'zzz'"), "{shown}");
 }
+
+#[test]
+fn a_models_levels_line_up_even_when_an_id_is_long() {
+    let options = [
+        ("Claude Haiku 5.5", "anthropic/claude-haiku-5.5"),
+        ("Mistral Large 4", "mistralai/mistral-large-4-0"),
+        ("Gemini 4 Argon", "google/gemini-4-argon"),
+    ];
+    let options = options
+        .iter()
+        .map(|(name, id)| (name.to_string(), id.to_string()))
+        .collect();
+    let levels = vec![
+        levels(&["off", "low"], 0),
+        levels(&["off", "medium"], 1),
+        levels(&["off", "high"], 1),
+    ];
+    let mut app = adjustable(options, levels, Some(0));
+    app.input(key(KeyCode::Down), Instant::now());
+    let shown = screen(&mut app);
+    // Where each row's level starts: the same column, the marked row's arrows around it.
+    let column = |name: &str, level: &str| {
+        let line = shown.lines().find(|line| line.contains(name)).unwrap();
+        line.split(level).next().unwrap().chars().count()
+    };
+    assert_eq!(column("Claude", "off"), column("Gemini", "high"), "{shown}");
+    assert_eq!(
+        column("Claude", "off"),
+        column("Mistral", "medium"),
+        "{shown}"
+    );
+}

@@ -48,7 +48,7 @@ pub(crate) fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cur
         } else if app.shown().parent.is_some() {
             "ctrl-c to interrupt"
         } else {
-            "esc to interrupt"
+            "esc stop"
         };
         out.push(Line::from(vec![
             spinner(started),

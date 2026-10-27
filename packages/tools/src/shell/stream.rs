@@ -3,7 +3,7 @@
 //! it; a call takes from it. Nothing is lost between calls: what comes while no call waits stays
 //! until the next one.
 
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use super::filter::Filter;
@@ -25,7 +25,7 @@ pub(super) struct Shared {
 
 impl Shared {
     pub(super) fn lock(&self) -> MutexGuard<'_, Stream> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+        crate::lock(&self.state)
     }
 
     /// Tell the window what the stream left for it, with no lock held: a frame to paint (a window

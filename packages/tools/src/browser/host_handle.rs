@@ -5,31 +5,31 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 
+use contracts::view::{ViewError, ViewResult};
 use serde_json::Value;
+
+use crate::window::WindowTab;
 
 use super::super::panel::Panel;
 use super::super::strip::{Click, Key};
 use super::super::webview::WebviewDriver;
-use super::super::{BrowserError, BrowserResult};
-use super::{Browser, Cmd, Dressing, Heard, Listed, STRIP, Window};
+use super::{Browser, Cmd, Dressing, Heard, STRIP, Window};
 
 impl Browser {
     /// Open the window on `window.url` and wait for its document. One window per process: the
     /// browser shows one page.
-    pub fn open(&self, window: Window) -> BrowserResult<WebviewDriver> {
+    pub fn open(&self, window: Window) -> ViewResult<WebviewDriver> {
         let (reply, opened) = mpsc::sync_channel(1);
         self.proxy
             .send_event(Cmd::Open { window, reply })
             .map_err(|error| {
-                BrowserError::Unavailable(format!("the browser host is gone: {error}"))
+                ViewError::Unavailable(format!("the browser host is gone: {error}"))
             })?;
         opened
             .recv()
+            .map_err(|error| ViewError::Unavailable(format!("the browser host is gone: {error}")))?
             .map_err(|error| {
-                BrowserError::Unavailable(format!("the browser host is gone: {error}"))
-            })?
-            .map_err(|error| {
-                BrowserError::Unavailable(format!("could not open the browser window: {error}"))
+                ViewError::Unavailable(format!("could not open the browser window: {error}"))
             })?;
         Ok(WebviewDriver::new(
             self.proxy.clone(),
@@ -75,11 +75,11 @@ impl Browser {
     /// Hear what the person does in the window: a tab or the window closed, by key (`window` for
     /// the whole of it) and in words. It runs on the window's thread: it must not wait.
     pub fn listen(&self, listener: impl Fn(&str, Heard<'_>) + Send + Sync + 'static) {
-        *crate::lock(&self.shared.listener) = Some(Box::new(listener));
+        *crate::lock(&self.shared.listener) = Some(Arc::new(listener));
     }
 
     /// The window's tabs, in the strip's order; `None` while it is closed.
-    pub fn listing(&self) -> Option<Vec<Listed>> {
+    pub fn listing(&self) -> Option<Vec<WindowTab>> {
         let (reply, answer) = mpsc::sync_channel(1);
         self.proxy.send_event(Cmd::Listing(reply)).ok()?;
         answer

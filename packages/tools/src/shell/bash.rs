@@ -90,8 +90,7 @@ impl BashTool<'_> {
     /// A terminal session's call, for the window's terminal tabs: what it did, and the id of a
     /// session it started while that session runs.
     pub fn terminal(&self, arguments: &Value) -> Result<(ToolOutput, Option<u32>), ToolError> {
-        let args: Args = serde_json::from_value(arguments.clone())
-            .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
+        let args: Args = crate::args(arguments)?;
         interactive::run(self, &args)
     }
 }
@@ -114,8 +113,7 @@ impl Tool for BashTool<'_> {
     }
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
-        let args: Args = serde_json::from_value(arguments.clone())
-            .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
+        let args: Args = crate::args(arguments)?;
         // Terminal sessions are reached through `terminal`: the window's tabs.
         if args.interactive() {
             return Err(ToolError::Failed(

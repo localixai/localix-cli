@@ -80,7 +80,11 @@ fn a_window_stays_within_its_byte_budget() {
         .collect();
     dir.file("wide.txt", text);
     let report = read(&dir, json!({"path": "wide.txt"})).unwrap();
-    assert!(report.len() < MAX_BYTES + 200, "{} bytes", report.len());
+    assert!(
+        report.len() < MAX_TEXT_BYTES + 200,
+        "{} bytes",
+        report.len()
+    );
     assert!(report.starts_with("wide.txt (lines 1-19 of 100)\n"));
     assert!(report.ends_with("read again with offset 20 to continue)"));
 }

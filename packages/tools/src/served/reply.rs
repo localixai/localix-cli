@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::path::Path;
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use super::Root;
@@ -58,11 +58,7 @@ fn found(
     let path = target.split(['?', '#']).next().unwrap_or_default();
     let mut parts = path.trim_start_matches('/').split('/');
     let prefix = parts.next().unwrap_or_default();
-    let root = roots
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .get(prefix)
-        .cloned();
+    let root = crate::lock(roots).get(prefix).cloned();
     let Some(root) = root else {
         return missing;
     };

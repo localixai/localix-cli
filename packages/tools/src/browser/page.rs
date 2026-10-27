@@ -143,24 +143,6 @@ impl Page {
         Ok((opened, tab))
     }
 
-    /// Close the window, as the agent asks (not the person: the task goes on); the next call that
-    /// needs it opens it again. Returns whether one was open.
-    pub fn close(&self) -> bool {
-        let open = self.held().driver.clone().filter(WebviewDriver::is_open);
-        match open {
-            Some(open) => {
-                closed(&open);
-                true
-            }
-            None => false,
-        }
-    }
-
-    /// Whether the window is (or opens) hidden.
-    pub fn hidden(&self) -> bool {
-        self.held().hidden
-    }
-
     pub fn is_open(&self) -> bool {
         (self.held().driver.as_ref()).is_some_and(WebviewDriver::is_open)
     }

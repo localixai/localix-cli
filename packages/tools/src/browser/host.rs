@@ -15,12 +15,14 @@ use serde_json::Value;
 use tao::event_loop::EventLoopProxy;
 use wry::PageLoadEvent;
 
+use crate::window::WindowTab;
+
 use super::capture::{Clip, Shot};
 use super::comments::Comments;
 use super::history::History;
 use super::panel;
 use super::strip::{Click, Key};
-pub use super::told::{Heard, Listed, Tab};
+pub use super::told::{Heard, Tab};
 use super::viewport::Viewport;
 
 #[path = "host_events.rs"]
@@ -120,7 +122,7 @@ pub(super) enum Cmd {
     /// For checks: how the window is dressed, once tinted again.
     Dressed(SyncSender<Option<Dressing>>),
     /// The window's tabs; `None` while it is closed.
-    Listing(SyncSender<Option<Vec<Listed>>>),
+    Listing(SyncSender<Option<Vec<WindowTab>>>),
     /// Size the whole window, in points.
     Sized(f64, f64, SyncSender<Result<(), String>>),
     /// Show or close a tab by its key, for the agent: the task goes on whatever closes.
@@ -160,7 +162,7 @@ pub(super) struct Shared {
 }
 
 /// Told what the person did to a tab (its key; `window` for the whole window), in words.
-type Listener = Box<dyn Fn(&str, Heard<'_>) + Send + Sync>;
+type Listener = Arc<dyn Fn(&str, Heard<'_>) + Send + Sync>;
 
 /// A comment the person made on browser tab `tab`, in words, and the part of the view it is about.
 pub(super) struct Noted {
@@ -187,7 +189,9 @@ pub(super) struct Loads {
 impl Shared {
     /// Tell the listener what the person did to `key`.
     pub(super) fn heard(&self, key: &str, what: Heard<'_>) {
-        if let Some(listen) = crate::lock(&self.listener).as_ref() {
+        // Cloned out: the app's listener runs with no guard held (R6).
+        let listen = crate::lock(&self.listener).clone();
+        if let Some(listen) = listen {
             listen(key, what);
         }
     }

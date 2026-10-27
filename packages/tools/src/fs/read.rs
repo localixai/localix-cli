@@ -18,7 +18,7 @@ const NAME: &str = "read";
 const DEFAULT_LIMIT: usize = 2000;
 /// Bytes of numbered lines one call returns at most, whatever `limit` says: below what the agent
 /// keeps of one result, so the continuation hint is always true.
-const MAX_BYTES: usize = 20_000;
+const MAX_TEXT_BYTES: usize = 20_000;
 /// Entries of a directory listed at most.
 const MAX_ENTRIES: usize = 500;
 /// Bytes at the start of a file searched for a NUL, as git does, to tell a binary file.
@@ -69,8 +69,7 @@ impl Tool for ReadTool<'_> {
     }
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
-        let args: Args = serde_json::from_value(arguments.clone())
-            .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
+        let args: Args = crate::args(arguments)?;
         let path = self.workspace.readable(&args.path)?;
         let shown = self.workspace.shown(&path);
         let unreadable = |error: io::Error| failure(&shown, &error);
@@ -132,7 +131,7 @@ fn list(dir: &Path, shown: &str) -> io::Result<String> {
     Ok(out.join("\n"))
 }
 
-/// Lines `first..` of `reader`, at most `limit` and [`MAX_BYTES`], under a header saying which.
+/// Lines `first..` of `reader`, at most `limit` and [`MAX_TEXT_BYTES`], under a header saying which.
 fn lines(
     mut reader: impl BufRead,
     shown: &str,
@@ -153,7 +152,7 @@ fn lines(
         }
         probed += length + 1;
         total += 1;
-        if total < first || out.len() == limit || bytes >= MAX_BYTES {
+        if total < first || out.len() == limit || bytes >= MAX_TEXT_BYTES {
             continue;
         }
         let content = line.strip_suffix(b"\r").unwrap_or(&line);
@@ -164,7 +163,7 @@ fn lines(
         );
         bytes += numbered.len() + 1;
         // The first line is always shown, so a call always makes progress.
-        if bytes <= MAX_BYTES || out.is_empty() {
+        if bytes <= MAX_TEXT_BYTES || out.is_empty() {
             out.push(numbered);
         }
     }

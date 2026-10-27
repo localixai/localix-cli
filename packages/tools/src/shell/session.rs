@@ -6,7 +6,7 @@
 
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use super::process::{Ending, Env};
@@ -308,7 +308,7 @@ impl Sessions {
     }
 
     fn registry(&self) -> MutexGuard<'_, Registry> {
-        self.inner.lock().unwrap_or_else(PoisonError::into_inner)
+        crate::lock(&self.inner)
     }
 }
 

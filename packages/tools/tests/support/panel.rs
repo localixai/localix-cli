@@ -143,7 +143,10 @@ pub(crate) fn scenario(browser: &Browser, driver: &WebviewDriver) {
     browser.act("w1", false).unwrap();
     until_shown("w1");
     let listed = browser.listing().unwrap();
-    assert_eq!((listed[0].kind, listed[0].acted_on), ("browser", true));
+    assert_eq!(
+        (listed[0].kind.as_str(), listed[0].acted_on),
+        ("browser", true)
+    );
     assert_eq!(listed[1].kind, "terminal");
     assert!(listed[1].title.starts_with("session 1 · cat"), "{listed:?}");
     let missing = browser.act("t999", false).unwrap_err();
@@ -431,7 +434,7 @@ fn history_menu(browser: &Browser) {
         std::thread::sleep(Duration::from_millis(20));
     }
     let after = browser.listing().unwrap_or_default();
-    let ids = |listed: &[tools::browser::Listed]| -> Vec<String> {
+    let ids = |listed: &[tools::window::WindowTab]| -> Vec<String> {
         listed.iter().map(|tab| tab.id.clone()).collect()
     };
     assert_eq!(ids(&after), ids(&before));

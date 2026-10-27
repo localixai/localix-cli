@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 use contracts::tool::ToolError;
@@ -107,7 +107,7 @@ impl Served {
                 page.display()
             )));
         };
-        let mut running = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut running = crate::lock(&self.0);
         if running.is_none() {
             *running = Some(start()?);
         }
@@ -126,7 +126,7 @@ impl Served {
 impl Running {
     /// The prefix `dir` is served under: its own, made the first time it is opened.
     fn prefix(&self, dir: &Path, workspace: &Workspace) -> String {
-        let mut roots = self.roots.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut roots = crate::lock(&self.roots);
         if let Some((prefix, _)) = roots.iter().find(|(_, root)| root.dir == dir) {
             return prefix.clone();
         }

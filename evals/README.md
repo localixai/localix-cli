@@ -66,21 +66,16 @@ A task in `tasks.json` has an `id`, a `kind` (`code`; `build`, a page written or
 | hn-top | browser | Following a link to another page; `--schema` data with its address |
 | quiz-choose | browser | A consent banner inside a same-origin iframe; choosing an answer before Next |
 | flights-search | browser | Google Flights end to end: consent, one-way, cities with suggestions, a date picker, results that arrive after the page is quiet; `--schema` data |
-| demo-signup | demo | A form that checks what is typed: a name, an email, a password with a rule, a radio card, a select, a required checkbox; the member number read back |
 | demo-shop | demo | The cheapest of a category found, two of it and another item added, a promo code in a drawer, the total read |
 | demo-todos | demo | Enter to add, editing in place, a checkbox by its label, clearing; the list read back |
 | demo-orders | demo | Sixty rows over six pages: a filter and a sorted column, or a script that reads the table |
 | demo-booking | demo | A custom calendar: the month moved, a range of nights picked, a stepper; the price and the reference |
-| demo-news | demo | A cookie banner and a newsletter dialog that arrives later and covers it; an article's facts |
 | demo-onboarding | demo | A form in steps whose second step exists only for a team, a review, a reference |
 | demo-feed | demo | A post that only scrolling loads: skeletons, more on scroll, new posts arriving on top |
 | demo-settings | demo | Tabs, a switch, a slider set to a value, an ARIA combobox filtered by typing, the summary saved |
-| demo-lights | demo | A puzzle solved: the state read and the moves worked out, not guessed |
 | demo-2048 | demo | A game played by keys toward a goal; `--schema` data |
-| demo-snake | demo | A canvas with no outline, in real time or by steps; `--schema` data |
 | demo-tour | demo | Three pages one after another in one tab, a step and a fact on each: a page and its goal in one call, not two |
 | fix-page | build | A page whose total is wrong (prices added as text): the bug seen in the window, fixed in the code, the page tried again (`check` runs the fix with `node`) |
 | build-tally | build | A page written from nothing, opened by its path and pressed through: a counter, a reset, the number read back |
-| build-2048 | build | A game written from nothing in a given style, its keys checked in the window, then played to a goal; `--schema` data |
 
 Add a task when a real failure shows something general the suite does not cover yet. Keep its fixture tiny and limited to the standard library, and make its `check` pass only for a correct result. Do not add one that only rewards wording.

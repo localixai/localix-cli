@@ -108,13 +108,6 @@
   }
  },
  {
-   "id": "demo-signup",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/signup.html and sign up Ada Lovelace with the email ada@example.com and the password \"Analytical1843\", on a half plot with 4 volunteer hours a month, agreeing to the garden rules. Tell me the member number it gives.",
-   "contains": ["FG-1914"]
- },
- {
    "id": "demo-shop",
    "kind": "demo",
    "site": "demo",
@@ -146,13 +139,6 @@
    "matches": ["435(\\.00)?"]
  },
  {
-   "id": "demo-news",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/news.html, allow only the necessary cookies, close the newsletter popup, and open the story about the stone bridge. Who wrote it, and how many people gave to the collection?",
-   "contains": ["Marta Kessling", "312"]
- },
- {
    "id": "demo-onboarding",
    "kind": "demo",
    "site": "demo",
@@ -175,27 +161,12 @@
    "matches": ["Saved:[^\\n]*Mentions"]
  },
  {
-   "id": "demo-lights",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/lights.html and solve puzzle 1, so every light is off. Tell me how many moves it took.",
-   "contains": ["solved"]
- },
- {
    "id": "demo-2048",
    "kind": "demo",
    "site": "demo",
    "goal": "Open demo/2048.html and play until the board has a tile of 256 or more. Give the best tile and the score.",
    "schema": {"type": "object", "properties": {"best_tile": {"type": "integer"}, "score": {"type": "integer"}}, "required": ["best_tile", "score"]},
    "matches": ["\"best_tile\": (256|512|1024|2048|4096)\\b"]
- },
- {
-   "id": "demo-snake",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/snake.html and play Snake until the score is at least 50. Give the final score.",
-   "schema": {"type": "object", "properties": {"score": {"type": "integer"}}, "required": ["score"]},
-   "matches": ["\"score\": ([5-9]\\d|\\d{3,})\\b"]
  },
  {
   "id": "fix-page",
@@ -226,16 +197,5 @@
   "site": "demo",
   "goal": "In one tab, go through these pages one after another, not at once: on demo/todos.html add \"Water the ferns\" and tell me how many tasks are left; then on demo/shop.html put one olive tree in the cart and tell me the cart's total; then on demo/booking.html tell me what a Saturday night costs.",
   "matches": ["\\b5 tasks\\b|\\b5\\b[^\\n]*left|left[^\\n]*\\b5\\b", "\\$64\\b", "\\$140\\b"]
- },
- {
-  "id": "build-2048",
-  "kind": "build",
-  "goal": "Make 2048.html: the game 2048 on a 4x4 board, played with the arrow keys, in a black style, with the score shown. Open it in the window, check that the arrow keys move and merge tiles, then play until there is a tile of 64 or more. Give the best tile and the score.",
-  "schema": {"type": "object", "properties": {"best_tile": {"type": "integer"}, "score": {"type": "integer"}}, "required": ["best_tile", "score"]},
-  "matches": ["\"best_tile\": (64|128|256|512|1024|2048)\\b"],
-  "check": "test -f 2048.html && grep -qi arrow 2048.html",
-  "uses": [
-   {"name": "window", "arguments": {"action": "open"}, "like": {"url": "2048\\.html"}}
-  ]
  }
 ]

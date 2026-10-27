@@ -57,7 +57,7 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 | `--max-steps N` | Actions for one browser task of the decision model (40; 1 to 10000). |
 | `--timeout SECONDS` | Seconds one task may take (1800; at most 86400). It stops at the first model turn past them, or while the task waits on its monitors or agents. Time spent waiting on you (an approval, a question) does not count. |
 | `--no-daemon` | Run the session in this process instead of the daemon (`llx serve`). Env `LLX_NO_DAEMON=1`. `exec` always runs in process. |
-| `--show-browser` | Show the browser window, and a window for each terminal session `bash` keeps. By default they show in a session, and stay hidden in `exec` and over SSH (`SSH_CONNECTION` or `SSH_TTY` set; the browser then works without a window). The browser window opens only when the browser is first used. On macOS the shared window opens in native full-screen mode; this may switch Spaces. Elsewhere it opens as an ordinary window. |
+| `--show-browser` | Show the browser window, and a window for each terminal session `bash` keeps. By default they show in a session, and stay hidden in `exec` and over SSH (`SSH_CONNECTION` or `SSH_TTY` set; the browser then works without a window). The browser window opens only when the browser is first used. On macOS it first shows as a small floating preview in a screen corner, over every Space and never taking your keyboard; a click on it opens the window, and the strip's collapse button (–) returns to the preview. Elsewhere it opens as an ordinary window that does not take focus. |
 
 ### Commands
 

@@ -22,7 +22,8 @@ def version():
     cargo = open(os.path.join(ROOT, "Cargo.toml")).read()
     number = cargo.split('version = "', 1)[1].split('"', 1)[0]
     commit = git("rev-parse", "--short", "HEAD")
-    dirty = "+dirty" if git("status", "--porcelain") else ""
+    # A run recorded earlier changes benchmarks/: that is no change to what is measured.
+    dirty = "+dirty" if git("status", "--porcelain", "--", ".", ":!benchmarks") else ""
     return f"{number} ({commit}{dirty})" if commit else f"{number} (uncommitted)"
 
 
@@ -63,15 +64,20 @@ def p90(values):
     return values[min(len(values) - 1, int(round(0.9 * (len(values) - 1))))] if values else 0
 
 
-def summarize(results, binary, models):
+def source():
+    """What a run measures: the version and the commit, read when it starts (the tree may move on
+    while it runs)."""
+    return {"version": version(), "commit": git("rev-parse", "--short", "HEAD") or None}
+
+
+def summarize(results, binary, models, measured=None):
     tasks = {}
     for r in results:
         tasks.setdefault(r["id"], []).append(r)
     walls = [r["wall"] for r in results]
     return {
         "date": time.strftime("%Y-%m-%d %H:%M"),
-        "version": version(),
-        "commit": git("rev-parse", "--short", "HEAD") or None,
+        **(measured or source()),
         "host": f"{platform.system()} {platform.release()} {platform.machine()}",
         "models": models,
         "runs": len(results),
@@ -225,8 +231,8 @@ def write_all(runs):
     open(readme_path, "w").write(readme)
 
 
-def record(results, binary, models):
-    run = summarize(results, binary, models)
+def record(results, binary, models, measured=None):
+    run = summarize(results, binary, models, measured)
     os.makedirs(RUNS, exist_ok=True)
     name = run["date"].replace(" ", "-").replace(":", "") + ".json"
     with open(os.path.join(RUNS, name), "w") as f:

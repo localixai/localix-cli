@@ -18,6 +18,9 @@ Live: every task makes paid OpenRouter calls; browser tasks open real sites.
 import argparse, json, math, os, re, shutil, statistics, subprocess, sys, tempfile, time
 from concurrent.futures import ThreadPoolExecutor
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import record  # noqa: E402  (beside this file)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURES = os.path.join(ROOT, "evals", "fixtures")
 TIMEOUT_S = 240  # llx's own --timeout for one task
@@ -250,7 +253,7 @@ def select(tasks, only):
     return chosen
 
 
-def bench(model, tasks, opts):
+def bench(model, tasks, opts, measured):
     """Every task with `model`, printed, saved and recorded when asked; the count passed."""
     agent = ["--provider", PROVIDER, "-m", model, "--reasoning", REASONING]
     out_dir = os.path.join(ROOT, "evals/results", time.strftime("%Y%m%d-%H%M%S"))
@@ -277,10 +280,8 @@ def bench(model, tasks, opts):
         # The model never answered (a usage limit, no key): that is no benchmark of llx.
         print("not recorded: no task got a turn from the model")
     elif opts.record:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import record
         models = {"agent": used(results, "model"), "decision": used(results, "decision_model")}
-        print("recorded", record.record(results, opts.bin, models))
+        print("recorded", record.record(results, opts.bin, models, measured))
     return passed == len(results)
 
 
@@ -299,7 +300,9 @@ def main():
         sys.exit(f"{opts.bin} is missing: cargo build --release, or pass --bin")
     with open(os.path.join(ROOT, "evals/tasks.json")) as f:
         tasks = select(json.load(f), opts.only)
-    passed = [bench(model, tasks, opts) for model in opts.model or MODELS]
+    # The version every model's run measures: the tree as it is now, not when each run ends.
+    measured = record.source() if opts.record else None
+    passed = [bench(model, tasks, opts, measured) for model in opts.model or MODELS]
     sys.exit(0 if all(passed) else 1)
 
 

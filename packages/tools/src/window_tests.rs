@@ -459,6 +459,16 @@ fn a_tab_opened_without_its_kind_is_of_the_one_kind_whose_own_field_it_names() {
         panic!("opened with no kind to go by");
     };
     assert!(why.contains("`kind` is one of: terminal, browser"), "{why}");
+    // What the call gave is said back, so the next one can mend it.
+    let Err(ToolError::Failed(why)) = call(&tool, json!({"action": "open", "path": "a.html"}))
+    else {
+        panic!("opened with no kind to go by");
+    };
+    assert!(why.contains("no `kind`") && why.contains("`path`"), "{why}");
+    let Err(ToolError::Failed(why)) = call(&tool, json!({"action": "open", "kind": "page"})) else {
+        panic!("opened a kind that is none");
+    };
+    assert!(why.contains("`kind` \"page\""), "{why}");
 }
 
 #[test]

@@ -29,7 +29,7 @@ impl<'a> WindowTool<'a> {
                 None => self.implied(spec),
             };
             let Some(kind) = kind else {
-                return Err(failed(&format!("`kind` is one of: {}", self.names())));
+                return Err(failed(&self.no_kind(named, spec)));
             };
             kinds.push(kind);
         }
@@ -206,6 +206,27 @@ impl<'a> WindowTool<'a> {
             (Some(kind), None) => Some(kind),
             (Some(_), Some(_)) | (None, _) => None,
         }
+    }
+
+    /// Why a tab has no kind, with what the call gave, so the next call can mend it.
+    fn no_kind(&self, named: Option<&str>, spec: &Value) -> String {
+        let gave = match named {
+            Some(named) => format!("`kind` \"{named}\" is none of them"),
+            None => {
+                let fields = spec
+                    .as_object()
+                    .into_iter()
+                    .flat_map(|fields| fields.keys());
+                let fields: Vec<String> = (fields.filter(|field| *field != "action"))
+                    .map(|field| format!("`{field}`"))
+                    .collect();
+                match fields.is_empty() {
+                    true => "the call gave no `kind` and no field".into(),
+                    false => format!("the call gave no `kind`, only {}", fields.join(", ")),
+                }
+            }
+        };
+        format!("`kind` is one of: {}; {gave}", self.names())
     }
 
     fn names(&self) -> String {

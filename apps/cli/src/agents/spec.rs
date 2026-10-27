@@ -14,8 +14,9 @@ const MAX_WAIT_MS: u64 = 600_000;
 const NAME_CHARS: usize = 24;
 
 const DESCRIPTION: &str = "Start other agents and work with them. An agent is a session of its \
-own: a new conversation with the same tools (except this one and `ask`), the same workspace and \
-the same approvals; the person can watch it. It sees nothing of this conversation, so give it a \
+own: a new conversation with the same tools (it cannot use this one, `ask` or `jobs`), the same \
+workspace and the same approvals; the person can watch it. It sees nothing of this conversation, \
+so give it a \
 complete, self-contained task: the goal, the paths and facts you already know, the constraints, \
 and what its answer must contain. Use one for a self-contained part of the work that would fill \
 this conversation with reading and output: exploring an unfamiliar area, a search across many \

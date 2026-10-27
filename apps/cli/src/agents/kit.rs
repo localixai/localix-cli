@@ -11,7 +11,8 @@ use contracts::chat::Chat;
 use contracts::gate::Gate;
 use contracts::hands::Hands;
 use contracts::history::History;
-use contracts::tool::Tool;
+use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
+use serde_json::Value;
 use tools::browser::Page;
 use tools::fs::{EditTool, ReadTool};
 use tools::shell::BashTool;
@@ -57,6 +58,10 @@ pub(crate) struct Kit<'a> {
     /// The command line's rules, beside each mode's.
     pub rules: crate::rules::Rules,
     pub terminal: bool,
+    /// The tools the main session offers, as its last task offered them: an agent is offered the
+    /// same, so its requests start as the main session's do and read the provider's prompt cache
+    /// from there.
+    pub main: Mutex<Vec<ToolSpec>>,
 }
 
 impl Kit<'_> {
@@ -139,5 +144,52 @@ impl<'a> Tools<'a> {
             }
             work(&tools)
         })
+    }
+
+    /// Run `work` with the tools as the main session offers them, in its order: an agent's own
+    /// where it has one, the rest withheld. Before the main session's first task, its own alone.
+    pub(crate) fn as_main<T>(&self, work: impl FnOnce(&[&dyn Tool]) -> T) -> T {
+        let main = crate::sync::lock(&self.kit.main).clone();
+        self.with(|own| {
+            let withheld: Vec<Withheld> = (main.iter())
+                .filter(|spec| !own.iter().any(|tool| tool.spec().name == spec.name))
+                .cloned()
+                .map(Withheld)
+                .collect();
+            let offered = main.iter().filter_map(|spec| {
+                let mine = own
+                    .iter()
+                    .find(|tool| tool.spec().name == spec.name)
+                    .copied();
+                mine.or_else(|| {
+                    (withheld.iter())
+                        .find(|kept| kept.0.name == spec.name)
+                        .map(|kept| kept as &dyn Tool)
+                })
+            });
+            let tools: Vec<&dyn Tool> = match main.is_empty() {
+                true => own.to_vec(),
+                false => offered.collect(),
+            };
+            work(&tools)
+        })
+    }
+}
+
+/// A tool of the main session an agent is offered but may not use (`agents`, `ask`, `jobs`):
+/// offered the same, refused when called.
+struct Withheld(ToolSpec);
+
+impl Tool for Withheld {
+    fn spec(&self) -> ToolSpec {
+        self.0.clone()
+    }
+
+    fn call(&self, _: &Value) -> Result<ToolOutput, ToolError> {
+        Err(ToolError::Failed(format!(
+            "`{}` is the main session's alone: an agent works with read, edit, bash and window, \
+             and decides on its best assumption where it would ask",
+            self.0.name
+        )))
     }
 }

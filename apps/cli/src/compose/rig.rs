@@ -128,6 +128,7 @@ pub(super) fn drive(
             }
             tools.push(&agents);
             tools.push(&jobs_tool);
+            *lock(&lane.kit.main) = tools.iter().map(|tool| tool.spec()).collect();
             let agent = Agent {
                 chat: base.brake,
                 tools: &tools,

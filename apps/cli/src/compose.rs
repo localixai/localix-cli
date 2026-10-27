@@ -173,8 +173,8 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
     let window = AtomicU64::new(seat.choice.selection.model().context);
     // Each participant keeps its own conversation; one pipeline prepares them all.
     let strategy = agent::history::Pipeline::default();
-    // Agents build tools of their own from these, on a gate that names them, with neither
-    // `agents` (one level) nor `ask` (nobody answers an agent).
+    // Agents build tools of their own from these, on a gate that names them; `agents` (one
+    // level), `ask` (nobody answers an agent) and `jobs` are offered to them but refused.
     let kit = Kit {
         chat: base.brake,
         workspace,
@@ -199,6 +199,7 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
         started: seat.mode.clone(),
         rules: shared.rules.clone(),
         terminal: *terminal,
+        main: Mutex::default(),
     };
     // The main session's tools are an agent's, on the session's own gate and stop. A
     // subdirectory's own instructions come with the first call that touches a file there; the

@@ -2,8 +2,12 @@ use std::sync::Arc;
 
 use contracts::catalog::{Effort, ModelEntry, Selection};
 use provider_kit::http::Reply;
-use serde_json::json;
+use serde_json::{Value, json};
 
+use contracts::chat::Message;
+use contracts::tool::ToolSpec;
+
+use super::request::items;
 use super::*;
 use crate::testing::{Scripted, access};
 
@@ -139,14 +143,13 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
     let selection = Selection::new(entry("gpt-6-sol"))
         .with_effort(Effort::High)
         .unwrap();
-    let body = body(&selection, "s1", request);
+    let body = body(&selection, request);
     assert_eq!(body["model"], "gpt-6-sol");
     assert_eq!(
         (body["store"].clone(), body["stream"].clone()),
         (json!(false), json!(true))
     );
     assert_eq!(body["reasoning"], json!({"effort": "high"}));
-    assert_eq!(body["prompt_cache_key"], "s1");
     let input = body["input"].as_array().unwrap();
     assert_eq!(input[0]["role"], "developer");
     assert_eq!(
@@ -183,7 +186,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
         may_call: true,
     };
     assert_eq!(
-        super::body(&off, "s", request)["reasoning"],
+        super::body(&off, request)["reasoning"],
         json!({"effort": "none"})
     );
 
@@ -193,7 +196,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
         tools: &[],
         may_call: false,
     };
-    let body = super::body(&Selection::new(entry("gpt-next")), "s", bare);
+    let body = super::body(&Selection::new(entry("gpt-next")), bare);
     assert!(body.get("reasoning").is_none() && body.get("tools").is_none());
 }
 
@@ -401,4 +404,34 @@ fn a_request_that_never_went_out_is_sent_again() {
     };
     assert!(model.complete(request).is_ok());
     assert_eq!(http.sent().len(), 2);
+}
+
+#[test]
+fn sessions_with_the_same_prompt_and_tools_share_the_prompt_cache_and_others_do_not() {
+    let spec = |name: &str| ToolSpec {
+        name: name.into(),
+        description: "A tool".into(),
+        parameters: json!({"type": "object"}),
+    };
+    let key = |tools: &[ToolSpec], rules: &str| {
+        let (model, http, _) = model(vec![(200, streamed(&[completed()]))], tokens(LATER));
+        let conversation = vec![
+            Message::System(rules.into()),
+            Message::User("a goal of its own".into()),
+        ];
+        let request = Request {
+            conversation: &conversation,
+            tools,
+            may_call: true,
+        };
+        model.complete(request).unwrap();
+        let body: Value = serde_json::from_str(&http.sent()[0].body).unwrap();
+        body["prompt_cache_key"].as_str().unwrap().to_string()
+    };
+    let tools = [spec("read"), spec("bash")];
+    // Two sessions (two models made), each its own goal: one key, so the backend sends both to
+    // where the prompt and the tools are cached already.
+    assert_eq!(key(&tools, "rules"), key(&tools, "rules"));
+    assert_ne!(key(&tools, "rules"), key(&tools[..1], "rules"));
+    assert_ne!(key(&tools, "rules"), key(&tools, "other rules"));
 }

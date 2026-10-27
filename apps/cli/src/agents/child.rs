@@ -92,7 +92,7 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
     let now = kit.mode.get();
     watch.show(Event::TaskStarted(message.to_string()));
     let started = Instant::now();
-    let run = tools.with(|tools| {
+    let run = tools.as_main(|tools| {
         let agent = Agent {
             chat: &chat,
             tools,

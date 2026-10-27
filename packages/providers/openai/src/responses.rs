@@ -5,16 +5,18 @@
 
 use std::sync::{Condvar, Mutex};
 
-use contracts::catalog::{Effort, Selection};
-use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
-use contracts::tool::ToolSpec;
+use contracts::catalog::Selection;
+use contracts::chat::{Chat, ChatError, Completion, Request, ToolCall, Usage};
 use provider_kit::http::{Http, HttpError};
 use provider_kit::retry::{Attempt, PAUSE, TRANSIENT, retried};
 use provider_kit::{App, oauth, sse};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::auth;
 use crate::tokens::{self, Tokens};
+
+mod request;
+use request::body;
 
 pub(crate) const BASE: &str = "https://chatgpt.com/backend-api/codex";
 
@@ -51,7 +53,7 @@ pub struct ChatModel {
     tokens: Mutex<Held>,
     /// Rung when a refresh ends.
     renewed: Condvar,
-    /// One per process: the backend keys its prompt cache on it.
+    /// One per process: the backend's `session_id`.
     session: String,
     base: String,
 }
@@ -74,7 +76,7 @@ impl ChatModel {
                 refreshing: false,
             }),
             renewed: Condvar::new(),
-            // Only the prompt cache's key: without randomness, the time is unique enough.
+            // Only the session's id: without randomness, the time is unique enough.
             session: oauth::random(16).unwrap_or_else(|_| format!("llx-{}", tokens::now())),
             base: BASE.into(),
         }
@@ -127,7 +129,7 @@ impl ChatModel {
 
 impl Chat for ChatModel {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
-        let body = body(&self.selection, &self.session, request).to_string();
+        let body = body(&self.selection, request).to_string();
         let address = format!("{}/responses", self.base);
         let started = std::time::Instant::now();
         let mut renewed = false;
@@ -183,77 +185,6 @@ impl Chat for ChatModel {
             }
         })
     }
-}
-
-/// The request body for `request`.
-pub(crate) fn body(selection: &Selection, session: &str, request: Request) -> Value {
-    let mut body = json!({
-        "model": selection.model().id,
-        "input": request.conversation.iter().flat_map(items).collect::<Vec<_>>(),
-        "store": false,
-        "stream": true,
-        "include": [],
-        "prompt_cache_key": session,
-    });
-    // Off is said: a request without the field reasons at the backend's own default.
-    if !selection.model().efforts.is_empty() {
-        let effort = selection.effort();
-        let name = if effort == Effort::Off {
-            "none"
-        } else {
-            effort.name()
-        };
-        body["reasoning"] = json!({"effort": name});
-    }
-    if !request.tools.is_empty() {
-        body["tools"] = request.tools.iter().map(function).collect();
-        body["tool_choice"] = json!(if request.may_call { "auto" } else { "none" });
-        // Several calls in one turn: independent reads and searches cost one turn, not many. The
-        // agent runs together only the calls whose tools allow it, the rest in order.
-        body["parallel_tool_calls"] = json!(true);
-    }
-    body
-}
-
-/// A message as the Responses API's input items.
-fn items(message: &Message) -> Vec<Value> {
-    let text = |role: &str, kind: &str, text: &str| json!({"type": "message", "role": role, "content": [{"type": kind, "text": text}]});
-    match message {
-        Message::System(rules) => vec![text("developer", "input_text", rules)],
-        Message::User(said) => vec![text("user", "input_text", said)],
-        Message::Assistant { text: said, calls } => said
-            .iter()
-            .map(|said| text("assistant", "output_text", said))
-            .chain(calls.iter().map(|call| {
-                let arguments = (call.arguments.as_str())
-                    .map_or_else(|| call.arguments.to_string(), str::to_string);
-                json!({"type": "function_call", "call_id": call.id, "name": call.name,
-                    "arguments": arguments})
-            }))
-            .collect(),
-        // A picture goes in as the person's message, after the call that took it.
-        Message::Image { caption, image } => vec![json!({"type": "message", "role": "user",
-            "content": [{"type": "input_text", "text": caption},
-                {"type": "input_image",
-                 "image_url": format!("data:{};base64,{}", image.media_type, image.data)}]})],
-        // The wire has no failure flag for a tool result: the text says it.
-        Message::ToolResult {
-            id,
-            content,
-            failed,
-        } => {
-            let output = match failed {
-                true => format!("Error: {content}"),
-                false => content.clone(),
-            };
-            vec![json!({"type": "function_call_output", "call_id": id, "output": output})]
-        }
-    }
-}
-
-fn function(spec: &ToolSpec) -> Value {
-    json!({"type": "function", "name": spec.name, "description": spec.description,
-        "parameters": spec.parameters, "strict": false})
 }
 
 /// The completion in a streamed reply: its finished output items and the usage it ended with.

@@ -5,6 +5,7 @@ use std::time::Duration;
 use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall};
 use contracts::gate::{Effect, Gate, Verdict};
 use contracts::history::History;
+use contracts::tool::ToolSpec;
 use serde_json::json;
 
 use super::watch::Labeled;
@@ -37,6 +38,10 @@ struct Router {
     scripts: Mutex<HashMap<String, VecDeque<Completion>>>,
     /// The tools each conversation was offered.
     tools: Mutex<HashMap<String, Vec<String>>>,
+    /// The tools each conversation was offered, whole: the start of every request it makes.
+    offered: Mutex<HashMap<String, Vec<ToolSpec>>>,
+    /// What each conversation's calls came back with, failed or not, as its latest request says.
+    answered: Mutex<HashMap<String, Vec<(bool, String)>>>,
     meet: Vec<&'static str>,
     /// Agents that think a while before each answer, so the main agent gets to wait for them.
     slow: Vec<&'static str>,
@@ -145,6 +150,20 @@ impl Chat for Router {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let key = Self::key(&request);
         let names = request.tools.iter().map(|tool| tool.name.clone()).collect();
+        (self.offered.lock().unwrap()).insert(key.clone(), request.tools.to_vec());
+        let answered = request
+            .conversation
+            .iter()
+            .filter_map(|message| match message {
+                Message::ToolResult {
+                    content, failed, ..
+                } => Some((*failed, content.clone())),
+                Message::System(_)
+                | Message::User(_)
+                | Message::Assistant { .. }
+                | Message::Image { .. } => None,
+            });
+        (self.answered.lock().unwrap()).insert(key.clone(), answered.collect());
         let first = self
             .tools
             .lock()
@@ -293,20 +312,54 @@ fn send_goes_on_in_the_agents_conversation_and_close_ends_it() {
 }
 
 #[test]
-fn an_agent_has_neither_agents_nor_ask() {
-    let chat = Router::new(&[(
-        "main",
-        vec![call(
-            "c1",
-            json!({"action": "spawn", "task": "look", "name": "a"}),
-        )],
-    )]);
+fn an_agent_is_offered_the_main_tools_so_its_requests_start_as_the_main_ones_but_it_starts_no_agent_and_asks_no_one()
+ {
+    let child_calls = Completion {
+        calls: vec![
+            ToolCall {
+                id: "a1".into(),
+                name: "agents".into(),
+                arguments: json!({"action": "spawn", "task": "more", "name": "b"}),
+            },
+            ToolCall {
+                id: "a2".into(),
+                name: "ask".into(),
+                arguments: json!({"questions": [{"question": "Which?", "options": ["x", "y"]}]}),
+            },
+        ],
+        ..Completion::default()
+    };
+    let chat = Router::new(&[
+        (
+            "main",
+            vec![
+                call(
+                    "c1",
+                    json!({"action": "spawn", "task": "look", "name": "a"}),
+                ),
+                says("Waiting for a."),
+            ],
+        ),
+        ("a", vec![child_calls]),
+    ]);
     composed_with(crate::modes::built("bypass"), true, &chat, |rig| {
         rig.task("look");
-        let tools = chat.tools.lock().unwrap();
-        assert_eq!(tools["a"], ["read", "edit", "bash", "window"]);
-        assert!(tools["main"].contains(&"agents".to_string()));
-        assert!(tools["main"].contains(&"ask".to_string()));
+        let offered = chat.offered.lock().unwrap();
+        // The same tools, in the same order, said the same way: the provider's prompt cache holds
+        // the start of the main session's requests, and the agent's read it from there.
+        assert_eq!(offered["a"], offered["main"]);
+        let names: Vec<&str> = offered["a"].iter().map(|t| t.name.as_str()).collect();
+        assert!(
+            names.contains(&"agents") && names.contains(&"ask"),
+            "{names:?}"
+        );
+        let answered = &chat.answered.lock().unwrap()["a"];
+        assert_eq!(answered.len(), 2, "{answered:?}");
+        assert!(answered.iter().all(|(failed, _)| *failed), "{answered:?}");
+        assert!(
+            !chat.tools.lock().unwrap().contains_key("b"),
+            "no agent of an agent"
+        );
         0
     });
 }

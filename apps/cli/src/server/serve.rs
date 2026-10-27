@@ -27,13 +27,6 @@ pub(crate) struct Info {
     pub host: Option<Arc<Host>>,
 }
 
-/// Who a connection is to the peer: a client attached, or one that has not said `Attach` yet,
-/// with its own channel for what its commands come to.
-enum Link {
-    Attached(ClientId),
-    Waiting(Sender<ToClient>),
-}
-
 /// Serve the peer's first client ([`Peer::new`]'s) until it is gone: replies to their
 /// questions, lanes' commands to the desk, the person's entries to the lanes' queues. Whether
 /// the person moved the session to the background: then its prompts wait for the next interface.
@@ -45,7 +38,7 @@ pub(crate) fn serve(
     desk: &Sender<Request>,
     info: &Info,
 ) -> bool {
-    serving(None, incoming, peer, Link::Attached(FIRST), desk, info)
+    serving(None, incoming, peer, FIRST, desk, info)
 }
 
 /// [`serve`], from `first`, a frame already read from the connection (the daemon reads its
@@ -57,14 +50,7 @@ pub(crate) fn serve_from(
     desk: &Sender<Request>,
     info: &Info,
 ) -> bool {
-    serving(
-        Some(first),
-        incoming,
-        peer,
-        Link::Attached(FIRST),
-        desk,
-        info,
-    )
+    serving(Some(first), incoming, peer, FIRST, desk, info)
 }
 
 /// A connection back to sessions moved to the background: attached at once, so it is given
@@ -79,30 +65,14 @@ pub(crate) fn rejoin(
 ) -> bool {
     peer.inputs.back();
     let (me, _) = peer.attach(out, None);
-    serving(Some(first), incoming, peer, Link::Attached(me), desk, info)
-}
-
-/// Serve a later connection to `peer`, whose frames go to `out`: it hears the sessions once it
-/// says `Attach` with its cursor, and is detached when it is gone.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "D4: `llx serve`'s later connections, hosted next")
-)]
-pub(crate) fn connection(
-    incoming: &Receiver<ToServer>,
-    peer: &Arc<Peer>,
-    out: Sender<ToClient>,
-    desk: &Sender<Request>,
-    info: &Info,
-) -> bool {
-    serving(None, incoming, peer, Link::Waiting(out), desk, info)
+    serving(Some(first), incoming, peer, me, desk, info)
 }
 
 fn serving(
     first: Option<ToServer>,
     incoming: &Receiver<ToServer>,
     peer: &Peer,
-    mut link: Link,
+    me: ClientId,
     desk: &Sender<Request>,
     info: &Info,
 ) -> bool {
@@ -114,9 +84,13 @@ fn serving(
                 id,
                 command: Command::Attach { cursor },
             } => {
-                let (attached, done) = attach(peer, link, cursor);
-                link = Link::Attached(attached);
-                peer.to(attached, ToClient::Done { id, done });
+                peer.to(
+                    me,
+                    ToClient::Done {
+                        id,
+                        done: attach(peer, me, cursor),
+                    },
+                );
             }
             ToServer::Call { id, command } => {
                 kept |= command == Command::Background;
@@ -124,21 +98,13 @@ fn serving(
                     id,
                     done: guarded(command, peer, desk, info),
                 };
-                match &link {
-                    Link::Attached(me) => peer.to(*me, done),
-                    Link::Waiting(out) => {
-                        let _ = out.send(done);
-                    }
-                }
+                peer.to(me, done);
             }
         }
     }
     // The last interface is gone, and the work was not kept: nobody will answer what waits for
     // the person.
-    let left = match link {
-        Link::Attached(me) => peer.detach(me),
-        Link::Waiting(_) => peer.attached(),
-    };
+    let left = peer.detach(me);
     if !kept && left == 0 {
         peer.inputs.leave();
         peer.abandon(None);
@@ -146,23 +112,12 @@ fn serving(
     kept
 }
 
-/// The connection attached from `cursor`: replayed to, if it was attached already.
-fn attach(peer: &Peer, link: Link, cursor: Option<u64>) -> (ClientId, Done) {
-    match link {
-        Link::Waiting(out) => {
-            // An interface is here: what waits for the person waits again.
-            peer.inputs.back();
-            let (attached, seq) = peer.attach(out, cursor);
-            (attached, Done::Attached { seq })
-        }
-        Link::Attached(me) => match peer.rewind(me, cursor) {
-            Some(seq) => (me, Done::Attached { seq }),
-            None => (
-                me,
-                Done::Failed {
-                    why: "this client was dropped".into(),
-                },
-            ),
+/// The connection attached again from `cursor`: replayed to.
+fn attach(peer: &Peer, me: ClientId, cursor: Option<u64>) -> Done {
+    match peer.rewind(me, cursor) {
+        Some(seq) => Done::Attached { seq },
+        None => Done::Failed {
+            why: "this client was dropped".into(),
         },
     }
 }

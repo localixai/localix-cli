@@ -14,7 +14,7 @@ use contracts::model::{DecideError, Decider, Decision, Question};
 use serde_json::Value;
 
 use crate::interrupt::Interrupt;
-use crate::output::lock;
+use crate::sync::lock;
 
 /// Why a task was stopped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

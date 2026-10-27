@@ -19,7 +19,7 @@ use self::kit::Kit;
 use super::host::Host;
 use crate::arrivals::Lanes;
 use crate::interrupt::{self, Interrupt};
-use crate::output::lock;
+use crate::sync::lock;
 
 /// What the daemon gives a toolbox: itself, its window, the lanes the window tells what the
 /// person does there, the numbering of a new owner's terminal sessions, and the owners' toolboxes.

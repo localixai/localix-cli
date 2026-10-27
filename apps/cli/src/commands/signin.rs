@@ -9,9 +9,9 @@ use provider_kit::{oauth, store};
 
 use crate::error::{self, Failure};
 use crate::exit;
-use crate::output::lock;
 use crate::picker::Terminal;
 use crate::providers::{Method, Provider};
+use crate::sync::lock;
 
 /// Sign in to `provider` with `method`; what was saved, in words with no secret in them.
 pub(crate) fn sign_in(

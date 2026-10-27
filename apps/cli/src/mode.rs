@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 use contracts::gate::{Effect, Gate, Verdict};
 
 use crate::gate::{Asker, Prompter, TerminalGate, declined};
-use crate::output::lock;
 use crate::rules::{Rules, Ruling};
+use crate::sync::lock;
 use protocol::Approval;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

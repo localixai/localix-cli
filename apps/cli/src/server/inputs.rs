@@ -207,7 +207,7 @@ impl Inputs {
     }
 
     fn lock(&self) -> MutexGuard<'_, Table> {
-        self.lanes.lock().unwrap_or_else(PoisonError::into_inner)
+        crate::sync::lock(&self.lanes)
     }
 }
 

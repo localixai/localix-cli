@@ -188,16 +188,7 @@ impl Drop for Gone {
 /// environment (a variable that is not text is left out), and the command line it was started
 /// with, whose options the sessions take.
 fn here(root: &std::path::Path, theme: Option<protocol::Theme>) -> Place {
-    let env = std::env::vars_os()
-        .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)));
-    let dir = std::env::current_dir().unwrap_or_default();
-    Place {
-        cwd: root.display().to_string(),
-        env: env.collect(),
-        theme,
-        args: std::env::args().skip(1).collect(),
-        dir: dir.display().to_string(),
-    }
+    client::place::here(root, theme, std::env::args().skip(1).collect())
 }
 
 impl Running {

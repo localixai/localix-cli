@@ -110,29 +110,32 @@ pub(crate) struct Lanes {
 
 impl Lanes {
     pub(crate) fn join(&self, queue: &Arc<Queue>) {
-        crate::output::lock(&self.queues).push(Arc::downgrade(queue));
+        crate::sync::lock(&self.queues).push(Arc::downgrade(queue));
     }
 
     /// Tab `key` is the lane's whose queue is `queue`.
     pub(crate) fn own(&self, key: &str, queue: &Arc<Queue>) {
-        crate::output::lock(&self.owners).insert(key.into(), Arc::downgrade(queue));
+        crate::sync::lock(&self.owners).insert(key.into(), Arc::downgrade(queue));
     }
 
     /// What the person did to tab `key`, to its owner while it lives, else to every lane.
     pub(crate) fn post(&self, key: &str, what: Heard<'_>) {
-        let owner = crate::output::lock(&self.owners)
+        let owner = crate::sync::lock(&self.owners)
             .get(key)
             .and_then(Weak::upgrade);
         if let Some(owner) = owner {
             return owner.post(window(key, what));
         }
-        let mut queues = crate::output::lock(&self.queues);
-        queues.retain(|queue| queue.strong_count() > 0);
-        for queue in queues.iter().filter_map(Weak::upgrade) {
+        // The table is let go before posting: a queue's opener takes locks of its own.
+        let queues: Vec<_> = {
+            let mut queues = crate::sync::lock(&self.queues);
+            queues.retain(|queue| queue.strong_count() > 0);
+            queues.iter().filter_map(Weak::upgrade).collect()
+        };
+        for queue in queues {
             queue.post(window(key, what));
         }
-        drop(queues);
-        crate::output::lock(&self.owners).retain(|_, queue| queue.strong_count() > 0);
+        crate::sync::lock(&self.owners).retain(|_, queue| queue.strong_count() > 0);
     }
 }
 

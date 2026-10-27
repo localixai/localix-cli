@@ -158,7 +158,7 @@ fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, la
     let kept_terminals = Arc::clone(&terminals);
     let ended: run::Left = Box::new(move |kept, peer, desk| {
         drop(attached);
-        let cwd = crate::output::lock(&theirs).clone();
+        let cwd = crate::sync::lock(&theirs).clone();
         match (kept, cwd) {
             (true, Some(cwd)) => daemon.keep(Kept {
                 cwd,
@@ -184,7 +184,7 @@ fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, la
             Err(_gone) => return,
         }
     };
-    *crate::output::lock(&at) = Some(place.cwd.clone());
+    *crate::sync::lock(&at) = Some(place.cwd.clone());
     let _forgotten = Forget(Arc::clone(host), Arc::clone(&peer));
     let ui = Ui::new(peer);
     let arrivals = Arc::clone(lanes);

@@ -10,7 +10,7 @@ pub(crate) mod spec;
 mod tool;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use contracts::gate::Gate;
@@ -18,6 +18,7 @@ use tools::workspace::Workspace;
 
 pub(crate) use self::tool::JobsTool;
 use crate::output::Output;
+use crate::sync::Bell;
 use protocol::{Event, JobRow};
 
 /// What the jobs are built from.
@@ -43,35 +44,6 @@ pub(crate) struct Jobs {
     owner: String,
     /// Wakes the scheduler: a schedule added or stopped, the session over.
     bell: Arc<Bell>,
-}
-
-/// A count rung with a notification, so a ring between a look and the wait is not missed.
-#[derive(Default)]
-struct Bell {
-    rung: Mutex<u64>,
-    rang: Condvar,
-}
-
-impl Bell {
-    fn ring(&self) {
-        let mut rung = self.rung.lock().unwrap_or_else(PoisonError::into_inner);
-        *rung = rung.wrapping_add(1);
-        self.rang.notify_all();
-    }
-
-    fn rung(&self) -> u64 {
-        *self.rung.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    /// Until it rings past `seen`, or `most` passes (forever for `None`).
-    fn wait(&self, seen: u64, most: Option<Duration>) {
-        let rung = self.rung.lock().unwrap_or_else(PoisonError::into_inner);
-        let quiet = |now: &mut u64| *now == seen;
-        match most {
-            Some(most) => drop(self.rang.wait_timeout_while(rung, most, quiet)),
-            None => drop(self.rang.wait_while(rung, quiet)),
-        }
-    }
 }
 
 /// The longest the scheduler waits for a schedule unwoken: the wall clock may jump (the machine
@@ -130,7 +102,7 @@ impl Jobs {
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
-        crate::output::lock(&self.state)
+        crate::sync::lock(&self.state)
     }
 
     /// The task ended: in `exec` its monitors end (what they gave back goes by its kind).

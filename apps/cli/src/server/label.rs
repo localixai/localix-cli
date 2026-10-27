@@ -4,6 +4,8 @@
 
 use serde_json::Value;
 
+use crate::printable::one_line;
+
 /// How the call of `name` with `args` reads.
 pub(crate) fn label(name: &str, args: &Value) -> protocol::Label {
     let what = describe(name, args);
@@ -30,11 +32,10 @@ struct What {
 
 fn describe(name: &str, args: &Value) -> What {
     let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or("").trim();
-    let flat = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     let what = |verb, subject: String| What { verb, subject };
     match name {
         "bash" => {
-            let mut subject = flat(text("command"));
+            let mut subject = one_line(text("command"));
             if !text("workdir").is_empty() {
                 subject = format!("{subject} (in {})", text("workdir"));
             }
@@ -60,11 +61,11 @@ fn describe(name: &str, args: &Value) -> What {
         }
         "agents" => {
             let (verb, subject) = crate::agents::spec::describe(args);
-            what(verb, flat(&subject))
+            what(verb, one_line(&subject))
         }
         "jobs" => {
             let (verb, subject) = crate::jobs::spec::describe(args);
-            what(verb, flat(&subject))
+            what(verb, one_line(&subject))
         }
         "window" => window(args),
         _ => what(("Calling", "Called"), name.to_string()),

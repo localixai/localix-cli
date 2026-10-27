@@ -234,7 +234,9 @@ fn another(served: &Served) -> (Sender<ToServer>, Receiver<ToClient>) {
             background: true,
             host: None,
         };
-        connection(&incoming, &peer, out, &desk, &info);
+        // A later interface joins as the daemon makes it: attached at once, then its `Attach`.
+        let Ok(first) = incoming.recv() else { return };
+        rejoin(first, &incoming, &peer, out, &desk, &info);
     });
     (to_server, from_server)
 }
@@ -279,9 +281,10 @@ fn a_connection_that_attaches_later_gets_what_it_missed_then_what_waits_then_the
     attach(&to_server, 1, Some(1));
     let (before, done) = until_done(&frames, 1);
     assert_eq!(done, Done::Attached { seq: 2 });
-    assert_eq!(before.len(), 2, "{before:?}");
-    assert!(matches!(&before[0], ToClient::Event { seq: Some(2), .. }));
-    assert!(matches!(&before[1], ToClient::Ask { id: asked, .. } if *asked == id));
+    // Joining replayed everything; the `Attach` from its cursor replays what came after it.
+    assert_eq!(before.len(), 5, "{before:?}");
+    assert!(matches!(&before[3], ToClient::Event { seq: Some(2), .. }));
+    assert!(matches!(&before[4], ToClient::Ask { id: asked, .. } if *asked == id));
     // The first reply wins, from the later client; both are told it no longer waits.
     let reply = Reply::Approval(Approval::Always);
     to_server.send(ToServer::Reply { id, reply }).unwrap();

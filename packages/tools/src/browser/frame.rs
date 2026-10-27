@@ -12,7 +12,7 @@ use tao::window::{Theme, Window, WindowBuilder};
 use wry::WebView;
 
 use super::host::Cmd;
-use super::platform::{conceal, keep_rendering};
+use super::platform::{conceal, keep_rendering, keep_tab_rendering};
 
 /// A colour as red, green and blue.
 pub(super) type Rgb = [u8; 3];
@@ -89,16 +89,6 @@ pub(super) fn fill(size: LogicalSize<f64>, x: f64, top: f64) -> wry::Rect {
     }
 }
 
-/// The size a shown window opens at on a screen of `(width, height)` points: a good part of the
-/// screen, within what reads well.
-pub(super) fn moderate((width, height): (f64, f64)) -> (f64, f64) {
-    let round = |value: f64| (value / 10.0).round() * 10.0;
-    (
-        round(width * 0.6).clamp(960.0, 1440.0),
-        round(height * 0.72).clamp(640.0, 960.0),
-    )
-}
-
 /// Whether `event` changes the size the pages must fill.
 pub(super) fn relayout(event: &WindowEvent) -> bool {
     matches!(
@@ -161,6 +151,9 @@ pub(super) struct Frame {
     ground: Option<Rgb>,
     #[cfg(target_os = "macos")]
     glass: Option<native::Glass>,
+    /// How the window keeps drawing while it is concealed.
+    #[cfg(target_os = "macos")]
+    rendering: super::nspanel::Rendering,
 }
 
 impl Frame {
@@ -196,27 +189,66 @@ impl Frame {
             Look::Opaque => builder,
         };
         let native = builder.build(target).map_err(|error| error.to_string())?;
+        // A panel before any page is built in it: a WebView observes its window (KVO), and a
+        // window whose class is swapped afterwards fails to remove the observer.
+        #[cfg(target_os = "macos")]
+        if look != Look::Hidden {
+            super::nspanel::adopt(&native, super::nspanel::Role::Deck);
+        }
         Ok(Self {
             native,
             look,
             ground,
             #[cfg(target_os = "macos")]
             glass: None,
+            #[cfg(target_os = "macos")]
+            rendering: super::nspanel::Rendering::Switched,
         })
     }
 
-    /// Show the window with its first page, without taking the keyboard, then its glass.
+    /// Show the window with its first page, its glass, and, where it is shown to the person, as a
+    /// panel (macOS) concealed: [`Frame::reveal`] opens it, when the person expands it.
     pub(super) fn show(&mut self, first: &WebView) {
-        keep_rendering(first, self.look == Look::Hidden);
-        #[cfg(not(target_os = "macos"))]
         if self.look == Look::Hidden {
+            keep_rendering(first);
+            #[cfg(not(target_os = "macos"))]
             self.native.set_visible(true);
+            return;
         }
         #[cfg(target_os = "macos")]
-        if self.look == Look::Glass {
-            self.glass = native::Glass::under(&self.native);
-            self.retint();
+        {
+            use super::nspanel::Rendering;
+            self.rendering = match keep_tab_rendering(first) {
+                true => Rendering::Switched,
+                false => Rendering::Floating,
+            };
+            self.conceal();
+            if self.look == Look::Glass {
+                self.glass = native::Glass::under(&self.native);
+                self.retint();
+            }
         }
+        #[cfg(not(target_os = "macos"))]
+        let _ = keep_tab_rendering(first);
+    }
+
+    /// The window on screen, for the person to use (macOS: it comes over the Space they are in
+    /// without taking the keyboard; elsewhere it is always shown).
+    pub(super) fn reveal(&self) {
+        // Elsewhere the window is an ordinary one, always as it is.
+        #[cfg(not(target_os = "macos"))]
+        let _ = &self.native;
+        #[cfg(target_os = "macos")]
+        super::nspanel::reveal(&self.native, self.rendering);
+    }
+
+    /// The window out of sight, at the size it has, clear and click-through, still drawing.
+    pub(super) fn conceal(&self) {
+        // Elsewhere the window is an ordinary one, always as it is.
+        #[cfg(not(target_os = "macos"))]
+        let _ = &self.native;
+        #[cfg(target_os = "macos")]
+        super::nspanel::conceal(&self.native, self.rendering);
     }
 
     /// Tint the glass for the system's appearance now, unless its ground is the page's own.

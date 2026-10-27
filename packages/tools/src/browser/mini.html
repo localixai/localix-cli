@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>llx</title>
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none;-webkit-user-select:none;cursor:default;font:11px/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+#c{position:absolute;inset:0;display:flex;flex-direction:column;border-radius:12px;overflow:hidden;background:#111;color:#e8e8e8;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
+#p{flex:none;width:100%;height:175px;object-fit:cover;object-position:top left;background:#1b1b1b;display:block}
+#r{flex:1;display:flex;align-items:center;gap:8px;padding:0 10px;min-height:0}
+#g{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
+#i{flex:none;font:10px ui-monospace,SFMono-Regular,Menlo,monospace;opacity:.7}
+#s{flex:none;display:none;width:9px;height:9px;box-sizing:border-box;border-radius:50%;border:2px solid #4f7cff;border-right-color:transparent;animation:r .8s linear infinite}
+#s.on{display:block}
+#h{position:absolute;inset:0;border-radius:12px;pointer-events:none;box-shadow:inset 0 0 0 3px #4f7cff;opacity:0}
+#h.on{animation:b var(--ms,700ms) ease-out}
+@keyframes r{to{transform:rotate(360deg)}}
+@keyframes b{0%{opacity:1}100%{opacity:0}}
+</style>
+</head>
+<body>
+<div id="c">
+  <img id="p" alt="">
+  <div id="r"><span id="g"></span><span id="i"></span><span id="s"></span></div>
+  <div id="h"></div>
+</div>
+<script>
+"use strict";
+// The shown tab's latest picture; a data: address the window made itself.
+function P(src) { document.getElementById("p").src = src; }
+// Which tab it is: its project and its id, set as text.
+function T(tab) {
+  document.getElementById("g").textContent = tab.group || "";
+  document.getElementById("i").textContent = tab.id || "";
+}
+// The agent is acting: a spinner.
+function B(on) { document.getElementById("s").className = on ? "on" : ""; }
+// The agent showed a tab: one highlight.
+function K(ms) {
+  const h = document.getElementById("h");
+  h.style.setProperty("--ms", ms + "ms");
+  h.className = "";
+  void h.offsetWidth;
+  h.className = "on";
+}
+// A click expands the window; a press that moves is a drag of the mini itself.
+let down = null;
+document.addEventListener("mousedown", (e) => { if (e.button === 0) down = { x: e.screenX, y: e.screenY }; });
+document.addEventListener("mousemove", (e) => {
+  if (down && Math.hypot(e.screenX - down.x, e.screenY - down.y) > 3) {
+    down = null;
+    window.ipc.postMessage("drag");
+  }
+});
+document.addEventListener("mouseup", () => {
+  if (down) window.ipc.postMessage("expand");
+  down = null;
+});
+</script>
+</body>
+</html>

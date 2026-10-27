@@ -233,9 +233,9 @@ pub(crate) fn glass(browser: &Browser, driver: &WebviewDriver, window: &Window, 
         std::thread::sleep(Duration::from_millis(100));
         size = driver.observe().unwrap().viewport;
     }
-    // A shown window fits the person's screen (960 to 1440 wide), the strip of tabs above it.
+    // A shown window fits the person's screen (960 to 1440 wide, its height), the strip of tabs above it.
     assert!(
-        (960..=1440).contains(&size.w) && (600..=930).contains(&size.h),
+        (960..=1440).contains(&size.w) && size.h >= 600,
         "{} by {}",
         size.w,
         size.h
@@ -474,7 +474,7 @@ fn menu_entry(browser: &Browser, key: &str, state: &str) -> u64 {
 
 /// Whether this process is the app the person's keys go to.
 #[cfg(target_os = "macos")]
-fn active() -> bool {
+pub(crate) fn active() -> bool {
     use objc2::msg_send;
     use objc2::runtime::{AnyClass, AnyObject, Bool};
     let class = AnyClass::get(c"NSRunningApplication").unwrap();

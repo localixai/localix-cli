@@ -2,7 +2,12 @@
 //! sight, and the strip told what the window holds. While the history menu is open it takes the
 //! whole window.
 
+use std::sync::mpsc::SyncSender;
+
 use tao::dpi::LogicalSize;
+
+use super::super::capture::{Shot, capture};
+use super::super::tabs::Tabs;
 
 use super::super::host::Shared;
 use std::sync::atomic::Ordering;
@@ -12,6 +17,35 @@ use super::super::tabs::{pin, place};
 use super::{Deck, Shown};
 
 impl Deck {
+    /// What the mini shows: the tab shown, and which of the browser's tabs it is.
+    pub(in super::super) fn signature(&self) -> (Shown, u32) {
+        (
+            self.shown,
+            self.web.as_ref().map_or(0, |web| web.listed().1),
+        )
+    }
+
+    /// The tab shown, as the mini names it: its key and its project.
+    pub(in super::super) fn shown_tab(&self, shared: &Shared) -> Option<(String, String)> {
+        let listed = self.listing(shared);
+        let tab = listed.into_iter().find(|tab| tab.shown)?;
+        Some((tab.id, tab.group))
+    }
+
+    /// A picture of the tab shown, for the mini; the reply says why when there is none.
+    pub(in super::super) fn capture_shown(&self, reply: SyncSender<Result<Shot, String>>) {
+        let view = match self.shown {
+            Shown::Web => self.web.as_ref().map(Tabs::active),
+            Shown::Term(id) => self.term(id).map(|open| &open.webview),
+        };
+        match view {
+            Some(view) => capture(view, None, reply),
+            None => {
+                let _ = reply.send(Err("no tab is shown".into()));
+            }
+        }
+    }
+
     /// How tall the strip is: its tabs, and above them the projects when there are several.
     fn top(&self) -> f64 {
         match (self.strip.is_some(), self.rows.load(Ordering::SeqCst)) {

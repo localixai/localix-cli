@@ -7,19 +7,20 @@ use tao::window::WindowBuilder;
 /// glass and panels, but on screen it is what a headless one is: clear, passing clicks through,
 /// with no Dock icon, so a test run never covers what the person is watching (macOS).
 #[cfg(target_os = "macos")]
-fn unseen() -> bool {
+pub(super) fn unseen() -> bool {
     std::env::var_os("LLX_WINDOWS").is_some_and(|value| value == "unseen")
 }
 
-/// Whether the app is in the Dock while its window is shown, so a click on its icon brings the
-/// window back from another desktop. Otherwise (no window shown, or only a headless one) it is a
-/// background app macOS never activates: an accessory one was, by a process started from the
-/// terminal the person types in (a test, `exec`, `--no-daemon`), and their keys went to it.
+/// Whether a window shows, so the app is an accessory one: no Dock icon and no menu bar (the mini
+/// replaces the icon's role), and never activated by anything llx does. Otherwise (no window shown,
+/// or only a headless one) it is a background app macOS never activates: an accessory one was, at
+/// launch, by a process started from the terminal the person types in (a test, `exec`,
+/// `--no-daemon`), and their keys went to it, so the policy changes only once a window shows.
 #[cfg(target_os = "macos")]
 pub(super) fn dock<T>(target: &EventLoopWindowTarget<T>, shown: bool) {
     use tao::platform::macos::{ActivationPolicy, EventLoopWindowTargetExtMacOS};
     let policy = match shown && !unseen() {
-        true => ActivationPolicy::Regular,
+        true => ActivationPolicy::Accessory,
         false => ActivationPolicy::Prohibited,
     };
     target.set_activation_policy_at_runtime(policy);
@@ -28,16 +29,55 @@ pub(super) fn dock<T>(target: &EventLoopWindowTarget<T>, shown: bool) {
 #[cfg(not(target_os = "macos"))]
 pub(super) fn dock<T>(_target: &EventLoopWindowTarget<T>, _shown: bool) {}
 
-/// Start the visible deck in macOS's native full-screen Space. Test windows stay unseen.
-#[cfg(target_os = "macos")]
-pub(super) fn fullscreen(window: &tao::window::Window) {
-    if !unseen() {
-        window.set_fullscreen(Some(tao::window::Fullscreen::Borderless(None)));
+/// The primary screen's room for windows: below the menu bar and above the Dock on macOS, else
+/// the whole monitor. `None` when there is no monitor.
+pub(super) fn work_area<T>(target: &EventLoopWindowTarget<T>) -> Option<super::placement::Area> {
+    #[cfg(target_os = "macos")]
+    if let Some(area) = super::nspanel::work_area() {
+        return Some(area);
     }
+    let monitor = target.primary_monitor()?;
+    let scale = monitor.scale_factor();
+    let (size, at) = (
+        monitor.size().to_logical::<f64>(scale),
+        monitor.position().to_logical::<f64>(scale),
+    );
+    Some(super::placement::Area {
+        x: at.x,
+        y: at.y,
+        width: size.width,
+        height: size.height,
+    })
+}
+
+/// The mini's window as a floating panel on every Space, never taking the keyboard.
+#[cfg(target_os = "macos")]
+pub(super) fn adopt_mini(window: &tao::window::Window) {
+    super::nspanel::adopt(window, super::nspanel::Role::Mini);
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn show_mini(window: &tao::window::Window) {
+    super::nspanel::reveal(window, super::nspanel::Rendering::Switched);
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn hide_mini(window: &tao::window::Window) {
+    super::nspanel::hide(window);
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(super) fn fullscreen(_window: &tao::window::Window) {}
+pub(super) fn adopt_mini(_window: &tao::window::Window) {}
+
+#[cfg(not(target_os = "macos"))]
+pub(super) fn show_mini(window: &tao::window::Window) {
+    window.set_visible(true);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(super) fn hide_mini(window: &tao::window::Window) {
+    window.set_visible(false);
+}
 
 /// Where a headless window goes. macOS keeps it on screen and makes it invisible afterwards
 /// ([`keep_rendering`]): WebKit marks an off-screen window hidden and stops its animation frames
@@ -58,63 +98,22 @@ pub(super) fn conceal(builder: WindowBuilder) -> WindowBuilder {
 
 /// WebKit stops animation frames and timers in a window it considers hidden, and a driven window
 /// usually sits behind the terminal that started it. So occlusion detection, a WKWebView switch,
-/// is off. A shown window is ordered behind other windows without taking focus, in an ordinary
-/// Space rather than over a full-screen app; the deck then takes a Space of its own
-/// ([`fullscreen`]), so a terminal the person keeps full screen is never covered. A headless window is fully
-/// transparent, passes clicks through, and goes behind every window, as Bun's and WebKit's own
-/// test windows do: on screen, so WebKit sees it shown and the display it is on stays awake,
-/// under whatever the person watches. Only where the switch is missing does it float, so that
-/// nothing covers it.
+/// is off ([`keep_tab_rendering`]). A headless window is fully transparent, passes clicks through,
+/// and goes behind every window, as Bun's and WebKit's own test windows do: on screen, so WebKit
+/// sees it shown and the display it is on stays awake, under whatever the person watches. Only
+/// where the switch is missing does it float, so that nothing covers it. (A shown window is
+/// concealed the same way while it is the mini: nspanel.rs.)
 #[cfg(target_os = "macos")]
-pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
-    use objc2::msg_send;
-    use objc2::runtime::Bool;
+pub(super) fn keep_rendering(webview: &wry::WebView) {
     use wry::WebViewExtMacOS;
-
-    // A shown window participates in ordinary Spaces and can itself go full screen. A headless
-    // one joins every Space, even over a full-screen app, and stays out of window cycling.
-    const CAN_JOIN_ALL_SPACES: usize = 1 << 0;
-    const MANAGED: usize = 1 << 2;
-    const TRANSIENT: usize = 1 << 3;
-    const IGNORES_CYCLE: usize = 1 << 6;
-    const FULL_SCREEN_PRIMARY: usize = 1 << 7;
-    const FULL_SCREEN_AUXILIARY: usize = 1 << 8;
     let switched = keep_tab_rendering(webview);
-    let headless = headless || unseen();
     let window = webview.ns_window();
-    // It never takes focus.
-    let behavior = if headless {
-        CAN_JOIN_ALL_SPACES | TRANSIENT | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY
+    let rendering = if switched {
+        super::nspanel::Rendering::Switched
     } else {
-        MANAGED | FULL_SCREEN_PRIMARY
+        super::nspanel::Rendering::Floating
     };
-    // SAFETY: wry's NSWindow is alive while its WebView is; it takes an
-    // NSWindowCollectionBehavior (an NSUInteger).
-    let _: () = unsafe { msg_send![&*window, setCollectionBehavior: behavior] };
-    // NSWindow levels: an invisible window floats (3), above every ordinary one (0), only when
-    // nothing else keeps it drawing.
-    let level: isize = if headless && !switched { 3 } else { 0 };
-    // SAFETY: as above; an NSWindowLevel is an NSInteger.
-    let _: () = unsafe { msg_send![&*window, setLevel: level] };
-    // A headless window is invisible before it is ever on screen: made clear after it came to the
-    // front, it flashed over whatever the person was watching, once for every `exec` and test.
-    if headless {
-        // SAFETY: as above; it takes a CGFloat.
-        let _: () = unsafe { msg_send![&*window, setAlphaValue: 0.0f64] };
-        // SAFETY: as above; it takes a BOOL.
-        let _: () = unsafe { msg_send![&*window, setIgnoresMouseEvents: Bool::YES] };
-        // SAFETY: as above; it takes a BOOL.
-        let _: () = unsafe { msg_send![&*window, setHasShadow: Bool::NO] };
-    }
-    if !headless || switched {
-        // SAFETY: as above; `orderBack:` takes a sender, which may be nil, and returns nothing.
-        let _: () = unsafe {
-            msg_send![&*window, orderBack: std::ptr::null::<objc2::runtime::AnyObject>()]
-        };
-    } else {
-        // SAFETY: as above; it takes no argument and returns nothing.
-        let _: () = unsafe { msg_send![&*window, orderFrontRegardless] };
-    }
+    super::nspanel::conceal_object(window.as_ref(), rendering);
 }
 
 /// A page keeps drawing while covered: WebKit's occlusion detection is off for its WebView.
@@ -149,7 +148,7 @@ pub(super) fn keep_tab_rendering(_webview: &wry::WebView) -> bool {
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(super) fn keep_rendering(_webview: &wry::WebView, _headless: bool) {}
+pub(super) fn keep_rendering(_webview: &wry::WebView) {}
 
 /// The installed Safari's user agent. A plain WKWebView omits the `Version/… Safari/…` tokens,
 /// and sites such as Google then serve a legacy page.

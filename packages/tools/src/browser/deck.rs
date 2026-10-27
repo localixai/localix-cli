@@ -9,7 +9,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tao::dpi::LogicalSize;
+use tao::dpi::{LogicalPosition, LogicalSize};
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 use wry::{NewWindowResponse, WebView, WebViewBuilder};
 
@@ -17,6 +17,7 @@ use super::frame::{self, Frame, Look};
 use super::host::{Cmd, Shared, Window};
 use super::panel::{self, Held, Open, Opening};
 use super::strip::{self, HEIGHT};
+use super::{placement, platform};
 
 #[path = "deck_acts.rs"]
 mod acts;
@@ -78,7 +79,7 @@ impl Deck {
             &window.title,
             &window.viewport,
             window.headless,
-            proxy,
+            (shared, proxy),
         )?;
         deck.open_web(window, shared, proxy)?;
         Ok(deck)
@@ -88,9 +89,10 @@ impl Deck {
     pub(super) fn for_term(
         target: &EventLoopWindowTarget<Cmd>,
         opening: Opening,
+        shared: &Shared,
         proxy: &EventLoopProxy<Cmd>,
     ) -> Result<Self, String> {
-        let mut deck = Self::build(target, "llx", &Viewport::DESKTOP, false, proxy)?;
+        let mut deck = Self::build(target, "llx", &Viewport::DESKTOP, false, (shared, proxy))?;
         deck.add_term(opening, proxy)?;
         Ok(deck)
     }
@@ -101,30 +103,36 @@ impl Deck {
         title: &str,
         viewport: &Viewport,
         headless: bool,
-        proxy: &EventLoopProxy<Cmd>,
+        (shared, proxy): (&Shared, &EventLoopProxy<Cmd>),
     ) -> Result<Self, String> {
         let look = frame::look(headless, frame::transparency());
         let top = if headless { 0.0 } else { HEIGHT };
-        // A shown window fits the person's screen; a hidden one keeps the page's own size.
-        let screen = (target.primary_monitor()).map(|monitor| {
-            let size = monitor.size().to_logical::<f64>(monitor.scale_factor());
-            frame::moderate((size.width, size.height))
-        });
-        let (width, height) = match (headless, screen) {
-            (false, Some(fit)) => fit,
-            _ => (viewport.width, viewport.height + top),
+        // A shown window opens on the right of the person's screen, or where they left it; a
+        // hidden one keeps the page's own size.
+        let placed = match headless {
+            true => None,
+            false => platform::work_area(target)
+                .map(|area| placement::deck(area, crate::lock(&shared.kept).deck)),
         };
-        let size = LogicalSize::new(width, height);
+        let (size, at) = match placed {
+            Some(at) => (
+                LogicalSize::new(at.width, at.height),
+                Some(LogicalPosition::new(at.x, at.y)),
+            ),
+            None => (
+                LogicalSize::new(viewport.width, viewport.height + top),
+                None,
+            ),
+        };
         // Coated in the system's appearance: the titlebar and the strip are not the bare
         // material's grey. The browser's pages paint their own ground over it, opaque.
-        let mut frame = Frame::build(target, (title, size, None), look, None)?;
+        let mut frame = Frame::build(target, (title, size, at), look, None)?;
         let strip = match headless {
             true => None,
             false => {
                 let strip = strip_view(&frame.native, look, proxy.clone())?;
                 // Shows the window too, without making it the key window.
                 frame.show(&strip);
-                super::platform::fullscreen(&frame.native);
                 Some(strip)
             }
         };

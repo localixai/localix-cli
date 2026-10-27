@@ -53,6 +53,7 @@ html[data-glass] #projects.on,html[data-glass] #projects:not(.on)+#bar{padding-l
     <div id="tabs"></div>
     <span class="s" id="sd" title="Send the comments to the agent"></span>
     <span class="b" id="cm" title="Comment on the page: click what to change"><svg viewBox="0 0 16 16"><path d="M3 3.5h10v7H7l-3 2.5v-2.5H3z"/></svg></span>
+    <span class="b" id="co" title="Collapse to the preview"><svg viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg></span>
     <span class="b" id="hs" title="History"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.3 1.4"/></svg></span>
   </div>
   <div id="menu"></div>
@@ -166,7 +167,7 @@ for (const id of ["projects", "bar", "tabs"]) {
     if (event.target === part) window.ipc.postMessage("zoom");
   });
 }
-for (const [id, what] of [["sd", "send"], ["cm", "comment"], ["bk", "back"], ["fw", "forward"], ["hs", "history"], ["back", "history"]]) {
+for (const [id, what] of [["sd", "send"], ["cm", "comment"], ["bk", "back"], ["fw", "forward"], ["hs", "history"], ["co", "collapse"], ["back", "history"]]) {
   document.getElementById(id).addEventListener("click", () => window.ipc.postMessage(what));
 }
 </script>

@@ -229,9 +229,9 @@ unsafe fn describe(error: *mut objc2::runtime::AnyObject) -> String {
 #[cfg(target_os = "macos")]
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct CGPoint {
-    x: f64,
-    y: f64,
+pub(super) struct CGPoint {
+    pub x: f64,
+    pub y: f64,
 }
 
 #[cfg(target_os = "macos")]
@@ -246,8 +246,8 @@ pub(super) struct CGSize {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub(super) struct CGRect {
-    origin: CGPoint,
-    size: CGSize,
+    pub origin: CGPoint,
+    pub size: CGSize,
 }
 
 #[cfg(target_os = "macos")]

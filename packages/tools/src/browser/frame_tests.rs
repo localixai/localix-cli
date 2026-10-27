@@ -98,13 +98,3 @@ fn a_page_is_dressed_in_the_frames_stylesheet() {
     assert_eq!(opaque.matches("<style>").count(), 1);
     assert!(CSS.contains("prefers-reduced-transparency"));
 }
-
-#[test]
-fn a_shown_window_opens_at_a_size_fit_for_its_screen() {
-    // A laptop's screen: a good part of it, not all of it.
-    assert_eq!(moderate((1512.0, 945.0)), (960.0, 680.0));
-    // A large screen: no larger than reads well.
-    assert_eq!(moderate((3008.0, 1692.0)), (1440.0, 960.0));
-    // A small one: never smaller than a page needs.
-    assert_eq!(moderate((1024.0, 700.0)), (960.0, 640.0));
-}

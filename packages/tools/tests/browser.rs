@@ -24,6 +24,9 @@ use tools::browser::{self, Driver, Observation, WebviewDriver, Window};
 
 #[path = "support/panel.rs"]
 mod panel;
+#[cfg(target_os = "macos")]
+#[path = "support/presence.rs"]
+mod presence;
 
 /// Serves `tests/fixtures` on an ephemeral port; returns its origin. Each connection has its own
 /// thread: a browser opens connections ahead of need, and one that never sends a request must not
@@ -955,6 +958,15 @@ fn main() {
                 Err(_) => false,
             };
             if paneling && !run("panel (first)", &|| panel::first(&browser)) {
+                return 1;
+            }
+            // The mini is macOS's: elsewhere the window opens expanded and stays so.
+            #[cfg(target_os = "macos")]
+            if paneling
+                && !run("presence", &|| {
+                    presence::never_active(|| presence::scenario(&browser, &window, &origin));
+                })
+            {
                 return 1;
             }
             let driver = match browser.open(window.clone()) {

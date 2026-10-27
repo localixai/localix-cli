@@ -29,6 +29,8 @@ use super::viewport::Viewport;
 mod events;
 #[path = "host_handle.rs"]
 mod handle;
+#[path = "host_presence.rs"]
+mod presence;
 #[path = "host_web.rs"]
 mod web;
 #[path = "host_window.rs"]
@@ -127,6 +129,14 @@ pub(super) enum Cmd {
     Sized(f64, f64, SyncSender<Result<(), String>>),
     /// Show or close a tab by its key, for the agent: the task goes on whatever closes.
     Act(Click, SyncSender<Result<(), String>>),
+    /// What the agent or the person did to the window's presence (presence.rs).
+    Presence(super::presence::Event),
+    /// What the mini's page said: `expand` is its click; its own `drag` moves it.
+    MiniDrag,
+    /// The mini's picture, taken or not.
+    Pictured(Result<Shot, String>),
+    /// For checks: the window's state, `hidden`, `mini` or `expanded`.
+    Presented(SyncSender<&'static str>),
     Exit(i32),
 }
 
@@ -159,6 +169,8 @@ pub(super) struct Shared {
     pub(super) history: History,
     /// The person's comments on the pages, until they send them.
     pub(super) comments: Comments,
+    /// Where the person put the window and its mini, for the process.
+    pub(super) kept: Mutex<super::placement::Kept>,
 }
 
 /// Told what the person did to a tab (its key; `window` for the whole window), in words.
@@ -305,6 +317,9 @@ pub struct Browser {
 
 /// The panel id that names the strip's own page, for checks.
 pub(super) const STRIP: u32 = u32::MAX;
+
+/// The panel id that names the mini's own page, for checks.
+pub(super) const MINI: u32 = u32::MAX - 1;
 
 /// The answer to every call while the window is closed.
 pub(super) const WINDOW_CLOSED: &str = "window_closed";

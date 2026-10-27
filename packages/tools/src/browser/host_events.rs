@@ -5,23 +5,25 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
-use serde_json::Value;
 use std::sync::mpsc::SyncSender;
 
 use tao::event::Event;
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
 
 use super::super::comments::Comments;
-use super::super::deck::{After, Deck, Revisit};
+use super::super::deck::Deck;
 use super::super::frame;
 use super::super::guard::token;
 use super::super::history::History;
 use super::super::panel::Opening;
+use super::super::placement::Kept;
 use super::super::platform;
-use super::super::strip::{Click, Key, click};
+use super::super::presence::Event as Presence;
+use super::super::strip::{Click, Key};
+use super::presence::{Presenter, Stage};
 use super::web::on_browser;
 use super::window::on_window;
-use super::{Browser, Cmd, Heard, Shared, WINDOW_CLOSED, Window};
+use super::{Browser, Cmd, Shared, Window};
 
 /// Take the main thread for the browser's event loop and run `work` on a worker thread with a
 /// handle that opens the window when it is needed. The event loop never returns, so the process
@@ -64,6 +66,7 @@ where
         groups: Mutex::new(HashMap::new()),
         history: History::default(),
         comments: Comments::default(),
+        kept: Mutex::new(Kept::default()),
     });
     let browser = Browser {
         proxy: proxy.clone(),
@@ -81,6 +84,7 @@ where
     }
 
     let mut deck: Option<Deck> = None;
+    let mut presenter = Presenter::new();
     let mut docked = false;
     event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -99,6 +103,7 @@ where
             Event::UserEvent(command) => {
                 let mut on = On {
                     deck: &mut deck,
+                    presenter: &mut presenter,
                     target,
                     shared: &shared,
                     proxy: &proxy,
@@ -108,9 +113,22 @@ where
             }
             Event::WindowEvent {
                 window_id, event, ..
-            } => on_window(&mut deck, window_id, &event, &shared, on_close),
+            } => on_window(
+                (&mut deck, &presenter),
+                window_id,
+                &event,
+                &shared,
+                on_close,
+            ),
             _ => {}
         }
+        let mut stage = Stage {
+            deck: &mut deck,
+            target,
+            shared: &shared,
+            proxy: &proxy,
+        };
+        presenter.sync(&mut stage);
         let shown = deck.as_ref().is_some_and(Deck::is_shown);
         if shown != docked {
             docked = shown;
@@ -119,9 +137,14 @@ where
     })
 }
 
+#[path = "host_clicks.rs"]
+mod clicks;
+use clicks::act;
+
 /// What a command is carried out with, on the event loop.
 struct On<'a> {
     deck: &'a mut Option<Deck>,
+    presenter: &'a mut Presenter,
     target: &'a EventLoopWindowTarget<Cmd>,
     shared: &'a Arc<Shared>,
     proxy: &'a EventLoopProxy<Cmd>,
@@ -159,6 +182,13 @@ impl On<'_> {
                 if let Some(open) = self.deck.as_ref() {
                     open.refresh(shared);
                 }
+                self.renamed();
+            }
+            Cmd::Presence(event) => self.presence(event),
+            Cmd::MiniDrag => self.presenter.drag(),
+            Cmd::Pictured(shot) => self.pictured(&shot),
+            Cmd::Presented(reply) => {
+                let _ = reply.send(self.presenter.name());
             }
             Cmd::Clicked(said) => self.clicked(&said),
             Cmd::Sized(width, height, reply) => {
@@ -174,7 +204,12 @@ impl On<'_> {
                 let _ = reply.send(sized.map_err(String::from));
             }
             Cmd::Act(said, reply) => {
-                let _ = reply.send(act(self.deck, said, shared, None));
+                let done = act(self.deck, said, shared, None);
+                // The agent showed a tab: the mini blinks, and never opens.
+                if done.is_ok() && matches!(said, Click::Show(_)) {
+                    self.presence(Presence::Show);
+                }
+                let _ = reply.send(done);
             }
             Cmd::Listing(reply) => {
                 let _ = reply.send(self.deck.as_ref().map(|open| open.listing(shared)));
@@ -234,7 +269,7 @@ impl On<'_> {
         self.shared.history.opened(Key::Term(opening.0), &opening.1);
         let opened = match self.deck.as_mut() {
             Some(open) => open.add_term(opening, self.proxy),
-            None => Deck::for_term(self.target, opening, self.proxy).map(|open| {
+            None => Deck::for_term(self.target, opening, self.shared, self.proxy).map(|open| {
                 *self.deck = Some(open);
             }),
         };
@@ -243,69 +278,4 @@ impl On<'_> {
             _ => alive.alive.store(false, Ordering::SeqCst),
         }
     }
-
-    /// The person's click: closing the browser's last tab is closing its window.
-    fn clicked(&mut self, said: &str) {
-        if let Some(Click::Visit(at)) = click(said) {
-            return self.visit(at);
-        }
-        if let Some(said) = click(said)
-            && act(self.deck, said, self.shared, Some(self.on_close)).is_ok()
-            && let Click::Close(key) = said
-        {
-            let what = match key {
-                Key::Web(_) => CLOSED_PAGE,
-                Key::Term(_) => CLOSED_TERMINAL,
-            };
-            self.shared.heard(&key.name(), Heard::Did(what));
-        }
-    }
-
-    /// An entry of the history menu shown again; a closed page opens in a tab of its own.
-    fn visit(&mut self, at: u64) {
-        let entry = self.shared.history.get(at);
-        if let (Some(entry), Some(open)) = (entry, self.deck.as_mut()) {
-            if let Revisit::Load(url) = open.revisit(&entry, self.shared) {
-                let _ = self.proxy.send_event(Cmd::NewTab { url, reply: None });
-            }
-            open.refresh(self.shared);
-        }
-    }
-
-    /// `script` in a panel's page, or in the strip's (`STRIP`, for checks).
-    fn eval_panel(&self, id: u64, script: &str, panel: u32) {
-        let answer = Arc::clone(self.shared);
-        let reply = move |value: String| {
-            let value = serde_json::from_str(&value).unwrap_or(Value::String(value));
-            answer.answer(id, Ok(value));
-        };
-        match self.deck.as_ref().and_then(|open| open.page(panel)) {
-            Some(page) => drop(page.evaluate_script_with_callback(script, reply)),
-            None => self.shared.answer(id, Err(WINDOW_CLOSED.into())),
-        }
-    }
 }
-
-/// Show or close the tab `said` names. A person's click closing the browser's last tab stops the
-/// task as closing its window does (`on_close`); the agent's goes on.
-fn act(
-    deck: &mut Option<Deck>,
-    said: Click,
-    shared: &Shared,
-    on_close: Option<fn()>,
-) -> Result<(), String> {
-    let open = deck.as_mut().ok_or("the window is not open")?;
-    let after = open.act(said, shared)?;
-    if let (After::BrowserGone { .. }, Some(on_close)) = (&after, on_close) {
-        on_close();
-    }
-    match after {
-        After::Empty | After::BrowserGone { empty: true } => *deck = None,
-        After::Kept | After::BrowserGone { .. } => open.refresh(shared),
-    }
-    Ok(())
-}
-
-/// What the person's closing says, to whoever listens.
-const CLOSED_PAGE: &str = "The person closed this browser tab.";
-const CLOSED_TERMINAL: &str = "The person closed this tab: its program runs on, out of sight.";

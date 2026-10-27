@@ -6,16 +6,24 @@ use tao::window::WindowId;
 
 use super::super::deck::Deck;
 use super::super::frame;
+use super::presence::Presenter;
 use super::{Heard, Shared};
 
 /// The person did something to the window itself.
 pub(super) fn on_window(
-    deck: &mut Option<Deck>,
+    (deck, presenter): (&mut Option<Deck>, &Presenter),
     window_id: WindowId,
     event: &WindowEvent<'_>,
     shared: &Shared,
     on_close: fn(),
 ) {
+    // The mini's own window: where the person moves it is where it stays.
+    if presenter.owns(window_id) {
+        if let WindowEvent::Moved(_) = event {
+            presenter.mini_moved(shared);
+        }
+        return;
+    }
     let Some(open) = deck.as_mut().filter(|d| d.frame.native.id() == window_id) else {
         return;
     };
@@ -35,7 +43,11 @@ pub(super) fn on_window(
                 on_close();
             }
         }
-        event if frame::relayout(event) => open.layout(),
+        event if frame::relayout(event) => {
+            open.layout();
+            presenter.deck_moved(open, event, shared);
+        }
+        WindowEvent::Moved(_) => presenter.deck_moved(open, event, shared),
         // The system's appearance changed: a glass that follows it is tinted again.
         WindowEvent::ThemeChanged(_) => open.frame.retint(),
         _ => {}

@@ -11,9 +11,10 @@ use serde_json::Value;
 use crate::window::WindowTab;
 
 use super::super::panel::Panel;
+use super::super::presence::Event;
 use super::super::strip::{Click, Key};
 use super::super::webview::WebviewDriver;
-use super::{Browser, Cmd, Dressing, Heard, STRIP, Window};
+use super::{Browser, Cmd, Dressing, Heard, MINI, STRIP, Window};
 
 impl Browser {
     /// Open the window on `window.url` and wait for its document. One window per process: the
@@ -112,6 +113,26 @@ impl Browser {
         answer
             .recv_timeout(std::time::Duration::from_secs(5))
             .map_err(gone)?
+    }
+
+    /// For checks: the window's state (`hidden`, `mini`, `expanded`); `None` once the loop is gone.
+    #[doc(hidden)]
+    pub fn presented(&self) -> Option<&'static str> {
+        let (reply, answer) = mpsc::sync_channel(1);
+        self.proxy.send_event(Cmd::Presented(reply)).ok()?;
+        answer.recv_timeout(std::time::Duration::from_secs(5)).ok()
+    }
+
+    /// For checks: the person clicks the mini.
+    #[doc(hidden)]
+    pub fn click_mini(&self) {
+        let _ = self.proxy.send_event(Cmd::Presence(Event::Expand));
+    }
+
+    /// For checks: what `script` evaluates to in the mini's page.
+    #[doc(hidden)]
+    pub fn peek_mini(&self, script: &str) -> Result<Value, String> {
+        self.peek_in(MINI, script)
     }
 
     /// For checks: what the person's click on the strip says (`show t1`, `close w2`).

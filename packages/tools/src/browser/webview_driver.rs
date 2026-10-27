@@ -8,6 +8,7 @@ use contracts::view::{Action, ViewError, ViewResult};
 use serde_json::{Value, json};
 
 use super::super::host::{Cmd, Loads, WINDOW_CLOSED};
+use super::super::presence::Event;
 use super::super::script::script_forms;
 use super::super::{Clip, Driver, Observation, PageText, Shot};
 use super::{CALL_TIMEOUT, LOAD_TIMEOUT, PROBE_READY, WebviewDriver, closed};
@@ -111,8 +112,25 @@ fn action_args(epoch: &str, action: &Action) -> Value {
     }
 }
 
+/// The agent is acting: the mini spins until this is dropped, and then takes a new picture.
+struct Acting(tao::event_loop::EventLoopProxy<Cmd>);
+
+impl Drop for Acting {
+    fn drop(&mut self) {
+        let _ = self.0.send_event(Cmd::Presence(Event::Settled));
+    }
+}
+
+impl WebviewDriver {
+    fn acting(&self) -> Acting {
+        let _ = self.proxy.send_event(Cmd::Presence(Event::Acting));
+        Acting(self.proxy.clone())
+    }
+}
+
 impl Driver for WebviewDriver {
     fn navigate(&self, url: &str) -> ViewResult<()> {
+        let _acting = self.acting();
         let url = super::loadable(url)?;
         self.open_or_closed()?;
         let before = self.loads();
@@ -166,6 +184,7 @@ impl Driver for WebviewDriver {
     }
 
     fn act(&self, epoch: &str, action: &Action) -> ViewResult<()> {
+        let _acting = self.acting();
         let started = Instant::now();
         let before = self.loads();
         let args = action_args(epoch, action);
@@ -191,6 +210,7 @@ impl Driver for WebviewDriver {
     }
 
     fn press(&self, keys: &[String], delay_ms: u64) -> ViewResult<()> {
+        let _acting = self.acting();
         let before = self.loads();
         let budget = Duration::from_millis(delay_ms * keys.len() as u64) + CALL_TIMEOUT;
         self.call("keys", &json!({"keys": keys, "delay": delay_ms}), budget)?;
@@ -200,6 +220,7 @@ impl Driver for WebviewDriver {
     }
 
     fn evaluate(&self, source: &str) -> ViewResult<String> {
+        let _acting = self.acting();
         let before = self.loads();
         let mut value = Err(ViewError::Refused("the script does not parse".into()));
         for form in script_forms(source) {

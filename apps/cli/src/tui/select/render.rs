@@ -5,6 +5,7 @@ use ratatui::text::{Line, Span};
 
 use super::{Select, WINDOW};
 use crate::tui::printable::printable;
+use crate::tui::search::window_start;
 use crate::tui::style;
 use crate::tui::wrap::wrap;
 
@@ -25,9 +26,7 @@ impl Select {
         }
         // A long list shows a window around the marked option, and how many are past it.
         let now = listed.iter().position(|at| *at == self.at).unwrap_or(0);
-        let start = now
-            .saturating_sub(WINDOW / 2)
-            .min(listed.len().saturating_sub(WINDOW));
+        let start = window_start(now, listed.len(), WINDOW);
         let end = (start + WINDOW).min(listed.len());
         let more = |count: usize, arrow: &str| {
             Line::from(Span::styled(

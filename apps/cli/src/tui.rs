@@ -37,9 +37,11 @@ pub(crate) mod style;
 mod terminal;
 #[cfg(test)]
 pub(crate) mod test_support;
+mod time;
 pub(crate) mod tool_cell;
 pub(crate) mod tree;
 pub(crate) mod views;
+mod within;
 pub(crate) mod wrap;
 
 use std::io::{self, Write};

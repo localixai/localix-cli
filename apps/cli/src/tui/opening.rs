@@ -2,7 +2,7 @@
 //! one not shown closes first, and is said in the lane that opens; it can be opened again from
 //! the list, as a saved session.
 
-use super::app::{Action, App};
+use super::app::App;
 use protocol::{Command, Target};
 
 use super::event::Out;
@@ -10,14 +10,14 @@ use super::event::Out;
 impl App {
     /// Open `target` in a lane of its own: at the most lanes, the oldest idle one not shown
     /// closes first (it can be opened again from the list); when none is idle, nothing opens.
-    pub(super) fn opening(&mut self, target: Target) -> Option<Action> {
+    pub(super) fn opening(&mut self, target: Target) {
         let lanes = self
             .views
             .sessions
             .iter()
             .filter(|view| view.lane.is_some());
         if lanes.count() < self.max_lanes {
-            return Some(Action::Open(target));
+            return self.outbox.push(Out::Call(Command::Open { target }));
         }
         let home = self.views.home();
         let views = &self.views.sessions;
@@ -34,7 +34,7 @@ impl App {
         let Some(at) = idle.filter(|&at| !self.waits_for_person(at)) else {
             let full = format!("{} sessions are working: stop one first", self.max_lanes);
             self.push(shown, super::cells::note(&full, self.width));
-            return None;
+            return;
         };
         let view = self.views.sessions.remove(at);
         let said = format!("closed the oldest idle session \"{}\"", view.title());
@@ -45,6 +45,6 @@ impl App {
             .retain(|agent| agent.parent.as_ref() != Some(&view.id));
         // Said in the lane that opens, which is shown next.
         self.closed = Some(said);
-        Some(Action::Open(target))
+        self.outbox.push(Out::Call(Command::Open { target }));
     }
 }

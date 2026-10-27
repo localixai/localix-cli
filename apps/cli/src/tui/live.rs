@@ -219,16 +219,12 @@ fn offer_rows(app: &App, offers: &[Offer], width: usize) -> Vec<Line<'static>> {
 fn command_context(text: &str, current: &str) -> Option<String> {
     match text {
         "/mode" | "/permissions" => Some(format!("mode  ›  current: {current} · enter to list")),
-        "/plan" => Some("plan  ›  enter to switch · tab to add a task".into()),
         "/mode " | "/permissions " => Some(format!(
             "mode  ›  current: {current} · ↑↓ choose · tab complete · enter apply"
         )),
         _ if text.starts_with("/mode ") || text.starts_with("/permissions ") => Some(format!(
             "mode  ›  current: {current} · ↑↓ choose · tab complete · enter apply"
         )),
-        _ if text.starts_with("/plan ") => {
-            Some("plan  ›  type a task · enter to run in plan mode".into())
-        }
         _ => None,
     }
 }
@@ -245,7 +241,7 @@ fn waiting(text: &str) -> String {
 }
 
 fn footer(app: &App, now: Instant) -> String {
-    let window = |at: Instant| now.duration_since(at).as_millis() < super::app::QUIT_WINDOW_MS;
+    let window = |at: Instant| super::time::in_quit_window(at, now);
     let mode = format!("{} mode · shift+tab to cycle", app.lane().mode);
     if app.quitting.is_some_and(window) {
         let back = if app.discarded {

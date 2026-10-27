@@ -114,8 +114,6 @@ fn act(
         Some(Action::Copy(text)) => {
             app.event(Event::Note(super::clipboard::copy(&text)), Instant::now());
         }
-        Some(Action::Open(target)) => app.outbox.push(Out::Call(Command::Open { target })),
-        Some(Action::Sessions) => app.outbox.push(Out::Call(Command::List)),
         // Every lane is stopped, its prompt given nothing; the server waits for them.
         Some(Action::QuitNow) => {
             app.leave();
@@ -126,7 +124,6 @@ fn act(
             let _ = seat.client.call(Command::Background, ANSWER);
             return true;
         }
-        Some(Action::Halt(id)) => app.outbox.push(Out::Call(Command::Halt { id })),
         Some(Action::Quit) if ended => return true,
         Some(Action::Quit) => app.leave(),
         None => {}

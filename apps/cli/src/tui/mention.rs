@@ -2,12 +2,12 @@
 //! named by its path and the agent reads it. The list is read once, when `@` is first typed, on a
 //! thread of its own: the interface draws on meanwhile, and the files show when it arrives.
 
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::process::Command;
 use std::thread;
 use std::time::Duration;
+
+use super::within::within;
 
 /// Files listed at most: a larger tree is cut, not walked to its end.
 const MOST: usize = 20_000;
@@ -114,41 +114,13 @@ fn list(root: &Path) -> Vec<String> {
     let mut git = Command::new("git");
     git.args(["ls-files", "-co", "--exclude-standard"])
         .current_dir(root);
-    if let Some(out) = within(git, GIT_WAIT) {
+    if let Some(out) = within(git, vec![], GIT_WAIT) {
         let out = String::from_utf8_lossy(&out);
         return out.lines().take(MOST).map(str::to_string).collect();
     }
     let mut out = vec![];
     walk(root, root, &mut out);
     out
-}
-
-/// What `command` printed, if it ended well within `wait`; past it, it is killed (R10). Its
-/// output is read on a thread of its own, so what is waited for is that output's end.
-fn within(mut command: Command, wait: Duration) -> Option<Vec<u8>> {
-    let mut child = (command.stdin(Stdio::null()))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let printed = child.stdout.take().and_then(|out| {
-        let (read, done) = mpsc::sync_channel(1);
-        let reader = thread::Builder::new().name("llx-files-out".into());
-        let reading = reader.spawn(move || {
-            let mut bytes = vec![];
-            let _ = out.take(64 << 20).read_to_end(&mut bytes);
-            let _ = read.send(bytes);
-        });
-        reading.ok().and_then(|_| done.recv_timeout(wait).ok())
-    });
-    let Some(printed) = printed else {
-        let _ = child.kill();
-        let _ = child.wait();
-        return None;
-    };
-    // Its output ended as it exited: the status is there to be read.
-    let ended = child.wait().ok()?;
-    ended.success().then_some(printed)
 }
 
 fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {

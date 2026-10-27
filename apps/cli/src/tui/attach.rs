@@ -67,9 +67,7 @@ pub(crate) fn keep(path: &Path, dir: &Path) -> PathBuf {
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| since.as_millis());
+    let stamp = super::time::now_ms();
     let copy = dir.join(format!("{stamp}-{name}"));
     match std::fs::create_dir_all(dir).and_then(|()| std::fs::copy(path, &copy)) {
         Ok(_) => copy,
@@ -88,15 +86,9 @@ pub(crate) fn pasted_dir() -> PathBuf {
 
 /// The clipboard's picture, saved as a PNG under `dir`; why not when there is none.
 #[cfg(target_os = "macos")]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "R10 debt: osascript writes one file and ends, with no deadline or stop yet"
-)]
 pub(crate) fn clipboard(dir: &Path) -> Result<PathBuf, String> {
     std::fs::create_dir_all(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| since.as_millis());
+    let stamp = super::time::now_ms();
     let path = dir.join(format!("pasted-{stamp}.png"));
     // AppleScript writes the clipboard's PNG data to the file; it fails when there is none.
     let script = format!(
@@ -104,11 +96,11 @@ pub(crate) fn clipboard(dir: &Path) -> Result<PathBuf, String> {
          write (the clipboard as «class PNGf») to f\nclose access f",
         path.display()
     );
-    let ran = std::process::Command::new("osascript")
-        .args(["-e", &script])
-        .output();
+    let mut osascript = std::process::Command::new("osascript");
+    osascript.args(["-e", &script]);
+    let ran = super::within::within(osascript, vec![], std::time::Duration::from_secs(5));
     match ran {
-        Ok(out) if out.status.success() && path.metadata().is_ok_and(|m| m.len() > 0) => Ok(path),
+        Some(_) if path.metadata().is_ok_and(|m| m.len() > 0) => Ok(path),
         _ => {
             let _ = std::fs::remove_file(&path);
             Err("the clipboard holds no picture".into())

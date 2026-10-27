@@ -18,12 +18,13 @@ pub(crate) const HELP: &str = "Type a task and press Enter; each one goes on fro
 Keys
   Shift+Enter       a new line (also Ctrl-J, or a line ending in \\)
   Up, Down          earlier entries
-  Tab               complete a command
+  Tab               complete a command or an @file; keep a message for after the task
   Ctrl-R            the last earlier entry with the words typed before it; again for older
   Ctrl-G            write the entry in $EDITOR
   Shift+Tab         the next mode (after the task if working)
   Shift+Up, Down    more or less reasoning, as far as the model takes it
-  Left, Right       on an empty prompt: switch to an agent's session and back
+  Left              on an empty prompt: the list of sessions, or back to main from an agent
+  Down              on an empty prompt: into the list under it (Enter or Right opens, x stops)
   Esc               stop the task (a message typed meanwhile waits for it), or back to main
   Esc Esc           on an empty prompt: /rewind
   Ctrl-C            stop the task, clear the line, or twice to quit\n";

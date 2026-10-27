@@ -156,6 +156,19 @@ impl Search {
     }
 }
 
+/// One row up (`code` is Up) or else down from `at` among `last + 1` rows, stopping at the ends.
+pub(super) fn stepped(at: usize, last: usize, code: KeyCode) -> usize {
+    match code == KeyCode::Up {
+        true => at.saturating_sub(1),
+        false => (at + 1).min(last),
+    }
+}
+
+/// The first of `size` rows shown of a list of `len`, so that row `at` is in the middle.
+pub(super) fn window_start(at: usize, len: usize, size: usize) -> usize {
+    at.saturating_sub(size / 2).min(len.saturating_sub(size))
+}
+
 /// Where Up, Down, PageUp, PageDown, Home and End move the marker among `rows` (positions in
 /// the whole list) from `at`; `None` for another key.
 pub(super) fn moved(rows: &[usize], at: usize, code: KeyCode, page: usize) -> Option<usize> {
@@ -166,8 +179,7 @@ pub(super) fn moved(rows: &[usize], at: usize, code: KeyCode, page: usize) -> Op
         reason = "crossterm's keys, a foreign enum: the others do not move"
     )]
     let to = match code {
-        KeyCode::Up => now.saturating_sub(1),
-        KeyCode::Down => (now + 1).min(last),
+        KeyCode::Up | KeyCode::Down => stepped(now, last, code),
         KeyCode::PageUp => now.saturating_sub(page),
         KeyCode::PageDown => (now + page).min(last),
         KeyCode::Home => 0,

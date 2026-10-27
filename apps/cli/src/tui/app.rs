@@ -31,12 +31,6 @@ pub(crate) enum Action {
     Copy(String),
     /// Write the composer's text in `$EDITOR`.
     Editor,
-    /// Open a lane (`/new`), whatever the lane shown is doing.
-    Open(protocol::Target),
-    /// The list of sessions opened: the saved ones are asked for.
-    Sessions,
-    /// Stop the task of the lane named, and never quit for it (`x` on its row).
-    Halt(String),
     /// Quit although work runs: every lane is stopped first ("Exit and stop tasks").
     QuitNow,
     /// Quit, the work left running in the server ("Move to background and exit").
@@ -118,8 +112,6 @@ pub(crate) struct App {
     /// What the interface sends next: commands and replies, in order.
     pub(crate) outbox: Vec<Out>,
 }
-/// How long a first Ctrl-C at the prompt waits for a second.
-pub(super) const QUIT_WINDOW_MS: u128 = 2000;
 
 impl App {
     pub(crate) fn new(width: usize, height: usize, commands: Vec<(String, String)>) -> Self {

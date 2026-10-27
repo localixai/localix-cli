@@ -5,9 +5,11 @@ use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::app::{Action, App, QUIT_WINDOW_MS, SHIFT_TAB};
+use super::app::{Action, App, SHIFT_TAB};
 use super::composer::Edit;
-use super::event::Typed;
+use super::event::{Out, Typed};
+use super::search::stepped;
+use super::time::in_quit_window;
 
 impl App {
     pub(super) fn key(&mut self, key: KeyEvent, now: Instant) -> Option<Action> {
@@ -41,9 +43,7 @@ impl App {
             }
             // Esc twice on an empty prompt with nothing running: rewind.
             KeyCode::Esc if self.busy().is_none() && self.composer.is_empty() => {
-                let again = self
-                    .escaped
-                    .is_some_and(|at| now.duration_since(at).as_millis() < QUIT_WINDOW_MS);
+                let again = self.escaped.is_some_and(|at| in_quit_window(at, now));
                 self.escaped = if again { None } else { Some(now) };
                 if again {
                     self.send("/rewind".into());
@@ -64,7 +64,7 @@ impl App {
             // ← from an empty prompt lists the sessions in this project.
             KeyCode::Left if self.opens_sessions(&key) => {
                 self.open_sessions();
-                return Some(Action::Sessions);
+                self.outbox.push(Out::Call(protocol::Command::List));
             }
             // ↓ from an empty prompt goes into the list of sessions under it.
             KeyCode::Down if self.enters_list(&key) => self.enter_list(),
@@ -93,11 +93,7 @@ impl App {
             }
             KeyCode::Up | KeyCode::Down if !self.offers().is_empty() => {
                 let last = self.offers().len() - 1;
-                self.offered = if key.code == KeyCode::Up {
-                    self.offered.saturating_sub(1)
-                } else {
-                    (self.offered + 1).min(last)
-                };
+                self.offered = stepped(self.offered, last, key.code);
             }
             KeyCode::Enter if !self.offers().is_empty() && key.modifiers.is_empty() => {
                 return self.enter_offer(key);
@@ -121,9 +117,7 @@ impl App {
         if draft {
             self.composer.discard();
         }
-        let again = self
-            .quitting
-            .is_some_and(|at| now.duration_since(at).as_millis() < QUIT_WINDOW_MS);
+        let again = self.quitting.is_some_and(|at| in_quit_window(at, now));
         if again && !draft {
             self.quitting = None;
             return self.quit();
@@ -204,7 +198,7 @@ impl App {
             Some(name) if protocol::EXIT.contains(&name) => return self.quit(),
             // A new lane opens now: the lane shown goes on in the background.
             Some(name) if protocol::NEW.contains(&name) => {
-                return self.opening(protocol::Target::New);
+                self.opening(protocol::Target::New);
             }
             _ => self.send(entry),
         }
@@ -262,7 +256,7 @@ impl App {
             .cloned();
         match &offer {
             Some(Offer::Command(name, _)) => {
-                let suffix = if name == "mode" || name == "permissions" || name == "plan" {
+                let suffix = if name == "mode" || name == "permissions" {
                     " "
                 } else {
                     ""

@@ -25,12 +25,15 @@ use ratatui::text::{Line, Span};
 
 use super::app::App;
 use super::cells;
+use super::printable::printable;
 use super::style;
+use super::time::now_ms;
 use super::wrap::{cut, width as text_width};
 
 mod row;
 
 use row::{Row, row, session_row};
+pub(super) use row::{columns, spent};
 
 /// Agents' rows shown at most; the rest are counted.
 pub(super) const ROWS: usize = 5;
@@ -62,7 +65,7 @@ pub(crate) fn render(
     };
     // An agent's name column is its siblings', and the last of them closes the branch.
     let agents = |row: usize| {
-        let names = (order.iter().skip(1)).map(|&at| text_width(sessions[at].title()));
+        let names = (order.iter().skip(1)).map(|&at| text_width(&printable(sessions[at].title())));
         (
             column(&mut names.into_iter(), AGENT),
             row + 1 == order.len(),
@@ -87,7 +90,10 @@ pub(crate) fn render(
         let (names, last) = match row.branch {
             true => agents(at_row),
             false => (
-                column(&mut std::iter::once(text_width(view.title())), NAME),
+                column(
+                    &mut std::iter::once(text_width(&printable(view.title()))),
+                    NAME,
+                ),
                 false,
             ),
         };
@@ -116,7 +122,11 @@ pub(crate) fn render(
         }
     }
     let names = column(
-        &mut app.views.jobs.iter().map(|job| text_width(&job.name)),
+        &mut app
+            .views
+            .jobs
+            .iter()
+            .map(|job| text_width(&printable(&job.name))),
         AGENT,
     );
     out.extend(jobs(app, order.len(), names, width));
@@ -238,12 +248,6 @@ fn more(count: usize, arrow: &str) -> Line<'static> {
         format!("  {arrow} {count} more"),
         style::dim(),
     ))
-}
-
-/// Now, in milliseconds since the epoch, as the wire gives times.
-fn now_ms() -> u64 {
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
-    u64::try_from(now.unwrap_or_default().as_millis()).unwrap_or(u64::MAX)
 }
 
 #[cfg(test)]

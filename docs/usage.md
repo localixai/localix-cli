@@ -135,7 +135,7 @@ Typing `/` lists them. Tab completes the selected command (with a trailing space
 
 ## Signing in and choosing a model
 
-`/login` asks for a provider (every one of the catalog in one list: the popular first, then the current one and those signed in to, then the rest by name; `✓` marks those signed in to or with a key set; type to search by name or id), signs you in to it, then opens its model list (↑↓ choose the model, ←/→ change its reasoning level, Enter confirms).
+`/login` asks for a provider (every one of the catalog in one list: the popular first, then the current one and those signed in to, then the rest by name; `✓` marks those signed in to or with a key set; type to search by name or id), signs you in to it, then opens its model list (↑↓ choose the model, ←/→ change its reasoning level, Enter confirms). Each step is titled by its path (`Login › OpenAI › Model`), and Esc goes back one step, as you left it; at the providers it ends /login. Once a sign-in is saved, Esc at the model goes back to the providers, and ending there says you are signed in and which model is still in use.
 
 - **OpenAI**, with a ChatGPT sign-in: your browser opens OpenAI's sign-in page and comes back to llx on `127.0.0.1:1455` (or 1457), and llx goes on by itself, with nothing to paste; requests are billed to your ChatGPT plan, and `/login` and `/model` offer the models the ChatGPT backend serves, those it serves alone (the Codex and Pro models) too. On a machine without a browser, open the address shown elsewhere and paste the address the browser ends on.
 - **OpenRouter**, with a key: paste it (it is not shown), or sign in in the browser for a new one. `OPENROUTER_API_KEY` works too, and wins over a saved key.

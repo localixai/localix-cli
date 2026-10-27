@@ -2,7 +2,7 @@
 //! newer than the copy read, looked at no more often than `every`. A daemon lives for weeks; the
 //! catalog it read at its start must not be the one it uses at their end.
 
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Instant, SystemTime};
 
 use models::Catalog;
@@ -64,7 +64,7 @@ impl Kept {
     }
 
     fn lock(&self) -> MutexGuard<'_, Option<Shelf>> {
-        self.shelf.lock().unwrap_or_else(PoisonError::into_inner)
+        crate::sync::lock(&self.shelf)
     }
 }
 

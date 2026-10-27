@@ -18,6 +18,7 @@ use std::time::Instant;
 use ratatui::text::{Line, Span};
 
 use super::app::{Action, App, Open};
+use super::printable::printable;
 use super::queue::Asked;
 use super::select::{Choice, Picked, Select};
 use super::style;
@@ -33,22 +34,22 @@ impl App {
             return None;
         }
         let mut title = vec![
-            Line::from(Span::styled("Background work is running", style::bold())),
+            super::questions::heading("Background work is running", ""),
             Line::from(Span::styled(
-                "The following will stop when you exit:",
+                "  The following will stop when you exit:",
                 style::dim(),
             )),
         ];
         let named = running
             .iter()
-            .map(|run| format!("  {} · {}", run.kind, run.name));
+            .map(|run| format!("    {} · {}", printable(&run.kind), printable(&run.name)));
         title.extend(named.map(|text| Line::from(Span::styled(text, style::dim()))));
         let mut choices = vec![Choice::new("Exit and stop tasks")];
         if self.background {
             choices.push(Choice::new("Move to background and exit"));
         }
         choices.push(Choice::new("Stay"));
-        let select = Select::new(title, choices, "esc to stay");
+        let select = Select::new(title, choices, "esc stay");
         self.questions.push_back(Asked::new(select, Open::Quit));
         if self.questions.len() == 1 {
             self.settling = None;

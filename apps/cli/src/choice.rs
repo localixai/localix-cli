@@ -69,10 +69,6 @@ pub(crate) fn settings_path() -> Option<PathBuf> {
     provider_kit::store::path(APP, FILE)
 }
 
-fn path() -> Option<PathBuf> {
-    settings_path()
-}
-
 /// The settings file's text with `choice` put in, the rest (the person's modes) kept; text that
 /// is not a JSON object is replaced.
 fn merged(existing: Option<&str>, choice: &Choice) -> String {
@@ -88,12 +84,12 @@ fn merged(existing: Option<&str>, choice: &Choice) -> String {
 
 /// The choice `/login` saved.
 pub(crate) fn saved() -> Option<Choice> {
-    let text = std::fs::read_to_string(path()?).ok()?;
+    let text = std::fs::read_to_string(settings_path()?).ok()?;
     Choice::from_json(&serde_json::from_str(&text).ok()?)
 }
 
 pub(crate) fn save(choice: &Choice) -> std::io::Result<PathBuf> {
-    let path = path().ok_or_else(|| std::io::Error::other("no home directory"))?;
+    let path = settings_path().ok_or_else(|| std::io::Error::other("no home directory"))?;
     let existing = std::fs::read_to_string(&path).ok();
     provider_kit::store::save(&path, &merged(existing.as_deref(), choice))?;
     Ok(path)

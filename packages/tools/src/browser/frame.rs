@@ -184,6 +184,11 @@ impl Frame {
         if let Some(at) = at {
             builder = builder.with_position(at);
         }
+        // On macOS, order the window only after its Space and level are configured.
+        #[cfg(target_os = "macos")]
+        {
+            builder = builder.with_visible(false);
+        }
         builder = match look {
             // Shown only once concealed, so it never flashes on screen.
             Look::Hidden => conceal(builder.with_decorations(false).with_visible(false)),

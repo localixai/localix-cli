@@ -129,7 +129,7 @@ fn an_agents_transcript_waits_in_its_view_until_it_is_shown() {
     assert!(!back.contains("Found."), "{back}");
     assert_eq!(
         (chosen(&back), hint(&back)),
-        (None, "↓ to manage · ← sessions"),
+        (None, "↓ manage · ← sessions"),
         "{back}"
     );
     assert!(composer(&back).starts_with("❯ Type a task"), "{back}");
@@ -156,10 +156,7 @@ fn the_list_takes_the_keys_only_from_an_empty_prompt_and_gives_them_back() {
         Some("scout"),
         "the last row stays chosen:\n{screen}"
     );
-    assert_eq!(
-        hint(&screen),
-        "↑↓ select · →/enter open · x stop · esc input"
-    );
+    assert_eq!(hint(&screen), "enter open · x stop · esc back");
     press(&mut app, KeyCode::Right, now);
     let screen = term.draw(&mut app, now);
     assert!(
@@ -173,7 +170,7 @@ fn the_list_takes_the_keys_only_from_an_empty_prompt_and_gives_them_back() {
         None,
         "↑ past the top gives the keys back:\n{screen}"
     );
-    assert_eq!(hint(&screen), "↓ to manage · esc back to New session");
+    assert_eq!(hint(&screen), "↓ manage · esc back to New session");
     press(&mut app, KeyCode::Down, now);
     let screen = term.draw(&mut app, now);
     assert_eq!(
@@ -526,4 +523,29 @@ fn a_resumed_lane_is_named_by_the_first_line_of_its_first_task() {
     app.event(Event::LaneStarted { id, name }, now);
     let at = app.views.find("resumed").unwrap();
     assert_eq!(app.views.sessions[at].name, "port the tests");
+}
+
+#[test]
+fn ctrl_c_in_an_agents_view_stops_that_agent_alone_then_goes_back() {
+    let now = Instant::now();
+    let mut app = with_scout_as("scout-1", now);
+    app.event(Event::TaskStarted("main task".into()), now);
+    app.show("scout-1");
+    let ctrl_c = || Input::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    assert_eq!(app.input(ctrl_c(), now), None, "the main task goes on");
+    let halt = Command::Halt {
+        id: "scout-1".into(),
+    };
+    assert_eq!(commands(&mut app), [halt]);
+    assert!(!app.lane().stopping);
+    let ended = Event::TaskEnded {
+        status: "stopped".into(),
+        millis: 10,
+        turns: 1,
+        cost: 0.0,
+    };
+    in_agent(&mut app, "scout-1", ended, now);
+    // Nothing left to stop in the view: the next goes back to the main one.
+    assert_eq!(app.input(ctrl_c(), now), None);
+    assert!(app.shown().parent.is_none());
 }

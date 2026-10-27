@@ -1,5 +1,5 @@
-//! `read`: a file's lines, numbered, a window at a time; or a directory's entries. The file is
-//! streamed, so a huge log costs only the window shown (and a count of its lines).
+//! `read`: a file's lines, numbered, a window at a time; a picture; or a directory's entries. The
+//! file is streamed, so a huge log costs only the window shown (and a count of its lines).
 
 use std::fmt::Write as _;
 use std::fs::File;
@@ -13,23 +13,26 @@ use serde_json::{Value, json};
 use super::text::{LINE_CHARS, cut};
 use crate::workspace::Workspace;
 
+mod image;
+
 const NAME: &str = "read";
 /// Lines one call returns unless `limit` says otherwise.
 const DEFAULT_LIMIT: usize = 2000;
 /// Bytes of numbered lines one call returns at most, whatever `limit` says: below what the agent
 /// keeps of one result, so the continuation hint is always true.
-const MAX_BYTES: usize = 20_000;
+const MAX_TEXT_BYTES: usize = 20_000;
 /// Entries of a directory listed at most.
 const MAX_ENTRIES: usize = 500;
 /// Bytes at the start of a file searched for a NUL, as git does, to tell a binary file.
 const BINARY_PROBE: usize = 8192;
 
-const DESCRIPTION: &str = "Read a text file, or list a directory. A file comes back as numbered \
-lines like `cat -n` (the number, a tab, the line); the numbers are not part of the file. One call \
-returns up to 2000 lines from `offset` (1-based, default 1) and about 20 KB; for a longer file, \
-call again with the `offset` it gives. Lines over 2000 characters are cut. Paths are relative to \
-the workspace root; absolute paths work too. Binary files are refused. Read a file before editing \
-it, and prefer this to `cat`, `head` or `sed` in bash.";
+const DESCRIPTION: &str = "Read a text file, a picture (PNG, JPEG, GIF or WebP, at most 8 MB) \
+or a directory's entries. A text file comes back as numbered lines like `cat -n` (the number, a \
+tab, the line); the numbers are not part of the file. One call returns up to 2000 lines from \
+`offset` (1-based, default 1) and about 20 KB; for a longer file, call again with the `offset` it \
+gives. Lines over 2000 characters are cut. A picture comes back as one; `offset` and `limit` are \
+for text only. Paths are relative to the workspace root; absolute paths work too. Other binary \
+files are refused. Read a file before editing it, and prefer this to `cat`, `head` or `sed` in bash.";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -37,6 +40,18 @@ struct Args {
     path: String,
     offset: Option<usize>,
     limit: Option<usize>,
+}
+
+/// A strategy may inspect the buffered prefix without consuming it. On `None`, the next strategy
+/// (or the text reader) must see the file from its beginning; on `Some`, it owns the read.
+trait FileStrategy {
+    fn read(
+        &self,
+        reader: &mut BufReader<File>,
+        shown: &str,
+        size: u64,
+        args: &Args,
+    ) -> Result<Option<ToolOutput>, ToolError>;
 }
 
 pub struct ReadTool<'a> {
@@ -69,27 +84,31 @@ impl Tool for ReadTool<'_> {
     }
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
-        let args: Args = serde_json::from_value(arguments.clone())
-            .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
+        let args: Args = crate::args(arguments)?;
         let path = self.workspace.readable(&args.path)?;
         let shown = self.workspace.shown(&path);
         let unreadable = |error: io::Error| failure(&shown, &error);
         // Followed through symlinks. Anything but a file or a directory (a FIFO, a device such as
         // /dev/zero or /dev/tty) would block or never end, and no deadline covers a read.
         let meta = path.metadata().map_err(unreadable)?;
-        let report = if meta.is_dir() {
-            list(&path, &shown).map_err(unreadable)?
-        } else if !meta.is_file() {
+        if meta.is_dir() {
+            return Ok(list(&path, &shown).map_err(unreadable)?.into());
+        }
+        if !meta.is_file() {
             return Err(ToolError::Failed(format!(
                 "{shown} is not a regular file: it cannot be read here"
             )));
-        } else {
-            let first = args.offset.unwrap_or(1).max(1);
-            let limit = args.limit.unwrap_or(DEFAULT_LIMIT).max(1);
-            let file = File::open(&path).map_err(unreadable)?;
-            lines(BufReader::new(file), &shown, first, limit)?
-        };
-        Ok(report.into())
+        }
+        let file = File::open(&path).map_err(unreadable)?;
+        let mut reader = BufReader::new(file);
+        for strategy in [&image::Images as &dyn FileStrategy] {
+            if let Some(output) = strategy.read(&mut reader, &shown, meta.len(), &args)? {
+                return Ok(output);
+            }
+        }
+        let first = args.offset.unwrap_or(1).max(1);
+        let limit = args.limit.unwrap_or(DEFAULT_LIMIT).max(1);
+        Ok(lines(reader, &shown, first, limit)?.into())
     }
 }
 
@@ -132,7 +151,7 @@ fn list(dir: &Path, shown: &str) -> io::Result<String> {
     Ok(out.join("\n"))
 }
 
-/// Lines `first..` of `reader`, at most `limit` and [`MAX_BYTES`], under a header saying which.
+/// Lines `first..` of `reader`, at most `limit` and [`MAX_TEXT_BYTES`], under a header saying which.
 fn lines(
     mut reader: impl BufRead,
     shown: &str,
@@ -153,7 +172,7 @@ fn lines(
         }
         probed += length + 1;
         total += 1;
-        if total < first || out.len() == limit || bytes >= MAX_BYTES {
+        if total < first || out.len() == limit || bytes >= MAX_TEXT_BYTES {
             continue;
         }
         let content = line.strip_suffix(b"\r").unwrap_or(&line);
@@ -164,7 +183,7 @@ fn lines(
         );
         bytes += numbered.len() + 1;
         // The first line is always shown, so a call always makes progress.
-        if bytes <= MAX_BYTES || out.is_empty() {
+        if bytes <= MAX_TEXT_BYTES || out.is_empty() {
             out.push(numbered);
         }
     }

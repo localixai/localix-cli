@@ -80,10 +80,7 @@ impl Pending {
     }
 
     fn lock(&self) -> MutexGuard<'_, Update> {
-        self.0
-            .update
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
+        crate::sync::lock(&self.0.update)
     }
 }
 

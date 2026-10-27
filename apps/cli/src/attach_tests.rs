@@ -11,19 +11,6 @@ fn png() -> Vec<u8> {
 }
 
 #[test]
-fn pictures_are_known_by_their_first_bytes() {
-    assert_eq!(kind(&png()), Some(("image/png", (3, 2))));
-    let gif = b"GIF89a\x05\x00\x04\x00rest".to_vec();
-    assert_eq!(kind(&gif), Some(("image/gif", (5, 4))));
-    // SOI, an APP0 segment of 4 bytes, then SOF0 with height 7 and width 9.
-    let jpeg = [
-        0xff, 0xd8, 0xff, 0xe0, 0, 4, 0, 0, 0xff, 0xc0, 0, 11, 8, 0, 7, 0, 9, 3, 0, 0, 0,
-    ];
-    assert_eq!(kind(&jpeg), Some(("image/jpeg", (9, 7))));
-    assert_eq!(kind(b"%PDF-1.7"), None);
-}
-
-#[test]
 fn a_picture_is_read_as_base64_with_its_name() {
     let dir = Scratch::new();
     let path = dir.path().join("shot one.png");

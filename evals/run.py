@@ -127,7 +127,7 @@ def run(job, binary, extra, out_dir):
     if task.get("schema"):
         args += ["--schema", json.dumps(task["schema"])]
     args += own + extra + [task["goal"]]
-    # Sessions go beside the results, not into the person's own ~/.lx/sessions.
+    # Sessions go beside the results, not into the person's own ~/.llx/sessions.
     env = dict(os.environ, LLX_SESSIONS=os.path.join(out_dir, "sessions"))
     started = time.time()
     try:

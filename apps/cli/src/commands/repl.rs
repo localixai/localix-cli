@@ -1,9 +1,9 @@
 //! A session's prompt, in the interface: `llx` at a terminal, after its first message when one was
 //! given. Each entry is the next task, in the same conversation, workspace, browser window and
 //! session. `/login` chooses the provider, model and reasoning level, `/new`
-//! starts over, `/status` says where things stand, `/mode` shows or switches the mode, `/plan`
-//! enters plan mode, and Ctrl-D or `/exit` quits. A plan that ends well is offered to be carried
-//! out. The time limit is per task, so waiting for the person to type never times out.
+//! starts over, `/status` says where things stand, `/mode` shows or switches the mode, and
+//! Ctrl-D or `/exit` quits. The time limit is per task, so waiting for the person to type never
+//! times out.
 
 use crate::commands::{login, model};
 use crate::compose::Rig;

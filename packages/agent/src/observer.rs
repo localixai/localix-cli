@@ -21,8 +21,3 @@ pub trait Observer {
     /// The conversation neared the model's limit, and was prepared so: what each stage did.
     fn fitted(&self, _report: &crate::history::Report) {}
 }
-
-/// Shows nothing: `--json`, quiet runs and tests.
-pub struct Silent;
-
-impl Observer for Silent {}

@@ -43,7 +43,7 @@ impl Decider for SystemOne {
                 .map_err(|error| match error {
                     ApiError::Invalid(message) => DecideError::Invalid(message),
                     other @ (ApiError::Auth(_) | ApiError::Http(..) | ApiError::Network(_)) => {
-                        DecideError::Unavailable(format!("OpenRouter {other}"))
+                        DecideError::Unavailable(format!("{} {other}", crate::NAME))
                     }
                 })?;
         let mut decision = Decision {

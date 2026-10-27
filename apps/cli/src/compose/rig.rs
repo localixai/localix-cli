@@ -23,10 +23,11 @@ use crate::jobs::{self, Jobs, JobsTool};
 use crate::live::Live;
 use crate::mode::{self, Mode, ModeCell};
 use crate::modes::Modes;
-use crate::output::{Output, lock};
+use crate::output::Output;
 use crate::providers::Provider;
 use crate::rules::Rules;
 use crate::server::Ui;
+use crate::sync::lock;
 use protocol::Event;
 
 /// The built agent and what a task needs around it; one per process, for every task it runs.

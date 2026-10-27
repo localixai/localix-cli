@@ -74,7 +74,9 @@ pub fn open(address: &str) {
         .spawn();
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let command = std::process::Command::new("xdg-open").arg(address).spawn();
-    let _ = command;
+    // The opener hands the address on and ends at once: waited for, it leaves no zombie behind
+    // in a daemon that runs for weeks. (R10's debt: a short local query with no deadline.)
+    let _ = command.and_then(|mut child| child.wait());
 }
 
 #[cfg(test)]

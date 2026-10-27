@@ -48,6 +48,46 @@ fn in_exec_a_task_waits_for_its_monitor_and_reads_each_batch() {
     });
 }
 
+#[cfg(unix)]
+#[test]
+fn monitor_remains_expected_until_completion_is_posted() {
+    use contracts::tool::Tool;
+    let scratch = Scratch::new();
+    let workspace = Workspace::new(scratch.path()).unwrap();
+    let output = Output::with(
+        false,
+        false,
+        Box::new(Captured::default()),
+        Box::new(Captured::default()),
+    );
+    let (entered, waiting) = std::sync::mpsc::sync_channel(1);
+    let (resume, released) = std::sync::mpsc::sync_channel::<()>(0);
+    let released = Mutex::new(released);
+    let queue = queue::Queue::new(16).on_open(move |_| {
+        entered.send(()).unwrap();
+        released.lock().unwrap().recv().unwrap();
+    });
+    let kit = Kit {
+        workspace: &workspace,
+        gate: &contracts::gate::Open,
+        hidden: &Vec::new,
+        output: &output,
+        session: false,
+        queue: &queue,
+    };
+    let jobs = Jobs::default();
+    std::thread::scope(|scope| {
+        let tool = JobsTool::new(&kit, &jobs, scope);
+        tool.call(&json!({"action":"monitor", "command":"true"}))
+            .unwrap();
+        waiting.recv_timeout(Duration::from_secs(5)).unwrap();
+        let expecting = jobs.expecting(&kit);
+        resume.send(()).unwrap();
+        assert!(expecting);
+    });
+    assert!(!jobs.expecting(&kit));
+}
+
 #[test]
 fn schedules_need_a_session_and_are_listed_and_stopped_there() {
     let schedule = json!({"action": "schedule", "prompt": "check the deploy", "in": "45m",

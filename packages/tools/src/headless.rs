@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 #[path = "browser/told.rs"]
 mod told;
 
-pub use told::{Heard, Listed, MAX_TABS, Tab};
+pub use told::{Heard, MAX_TABS, Tab};
 
 /// What the model is told of browser tabs: here, that there are none.
 pub const GUIDE: &str = "Not available in this build: it has no browser.";
@@ -60,7 +60,7 @@ pub struct Browser(());
 impl Browser {
     pub fn listen(&self, _listener: impl Fn(&str, Heard<'_>) + Send + Sync + 'static) {}
 
-    pub fn listing(&self) -> Option<Vec<Listed>> {
+    pub fn listing(&self) -> Option<Vec<crate::window::WindowTab>> {
         None
     }
 

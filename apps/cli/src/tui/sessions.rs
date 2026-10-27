@@ -16,7 +16,7 @@
 //!   Earlier
 //!     make the release binary   2 h ago · 4 tasks
 //!
-//!   ↑↓ choose · enter open · x stop · esc back
+//!   enter open · x stop · esc back
 //! ```
 
 use std::time::Instant;
@@ -27,10 +27,9 @@ use ratatui::text::{Line, Span};
 
 use super::app::{Action, App};
 use super::cells;
+use super::search::{stepped, window_start};
 use super::style;
 use super::views::AgentState;
-use super::wrap::cut;
-use crate::tui::printable::printable;
 use protocol::Target;
 
 /// Rows shown at once; a longer list scrolls with the row chosen.
@@ -125,33 +124,22 @@ impl App {
             reason = "crossterm's keys, a foreign enum: the others do nothing here"
         )]
         match key.code {
-            KeyCode::Up => list.at = list.at.saturating_sub(1),
-            KeyCode::Down => list.at = (list.at + 1).min(last),
+            KeyCode::Up | KeyCode::Down => list.at = stepped(list.at, last, key.code),
             KeyCode::Esc | KeyCode::Left => self.listing = None,
             KeyCode::Enter | KeyCode::Right => {
                 let row = list.rows.get(list.at).cloned();
                 self.listing = None;
-                return match row? {
-                    Row::Live(id) => {
-                        self.show(&id);
-                        None
-                    }
+                match row? {
+                    Row::Live(id) => self.show(&id),
                     Row::New => self.opening(Target::New),
                     Row::Saved(id, ..) => self.opening(Target::Saved(id)),
-                };
+                }
             }
             KeyCode::Char('x') if key.modifiers.is_empty() => {
                 let Some(Row::Live(id)) = list.rows.get(list.at).cloned() else {
                     return None;
                 };
-                let at = self.views.find(&id)?;
-                let view = &mut self.views.sessions[at];
-                let lane = view.lane.as_deref_mut()?;
-                if view.busy.is_none() || lane.stopping {
-                    return None;
-                }
-                lane.stopping = true;
-                return Some(Action::Halt(id));
+                self.halt_lane(&id);
             }
             // Ctrl-C closes the list, and does nothing more.
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -197,8 +185,7 @@ impl App {
             .max()
             .unwrap_or(0)
             .clamp(12, NAME.min(width / 2));
-        let start =
-            (list.at.saturating_sub(WINDOW / 2)).min(list.rows.len().saturating_sub(WINDOW));
+        let start = window_start(list.at, list.rows.len(), WINDOW);
         let mut earlier = false;
         for (at, row) in list.rows.iter().enumerate().skip(start).take(WINDOW) {
             if matches!(row, Row::Saved(..)) && !std::mem::replace(&mut earlier, true) {
@@ -213,19 +200,16 @@ impl App {
             match row {
                 Row::Live(id) => spans.extend(self.live_row(id, names, now, spinner)),
                 Row::New => spans.push(Span::styled("+ New session", style::bold())),
-                Row::Saved(_, title, meta) => spans.extend(columns(
-                    Span::raw(" "),
-                    title,
-                    Style::default(),
+                Row::Saved(_, title, meta) => spans.extend(super::tree::columns(
+                    (Span::raw(" "), title, Style::default()),
                     meta,
-                    names,
-                    width,
+                    (names, width.saturating_sub(2)),
                 )),
             }
             out.push(Line::from(spans));
         }
         out.push(Line::default());
-        let hint = "  ↑↓ choose · enter open · x stop · esc back";
+        let hint = "  enter open · x stop · esc back";
         out.push(Line::from(Span::styled(hint, style::dim())));
         out
     }
@@ -245,19 +229,7 @@ impl App {
         let agents = (self.views.sessions.iter())
             .filter(|agent| agent.parent.as_deref() == Some(id))
             .count();
-        let worked = view.worked
-            + view.busy.map_or(0, |b| {
-                u64::try_from(now.duration_since(b).as_millis()).unwrap_or(u64::MAX)
-            });
-        let spent = match (worked < 1000, view.tokens) {
-            (true, 0) => None,
-            (_, 0) => Some(cells::clock(worked / 1000)),
-            (_, count) => Some(format!(
-                "{} · {} tokens",
-                cells::clock(worked / 1000),
-                super::tree::tokens(count)
-            )),
-        };
+        let spent = Some(super::tree::spent(view, now)).filter(|text| !text.is_empty());
         let mut said = vec![];
         let glyph = match (&view.state, view.busy) {
             (_, Some(since)) => {
@@ -293,29 +265,12 @@ impl App {
             said.push(cells::count(agents as u64, "agent"));
         }
         let said = said.join(" · ");
-        columns(glyph, view.title(), style::bold(), &said, names, self.width)
+        super::tree::columns(
+            (glyph, view.title(), style::bold()),
+            &said,
+            (names, self.width.saturating_sub(2)),
+        )
     }
-}
-
-/// A row after its pointer: a mark, the name in its column, and where it stands, dimmed.
-fn columns(
-    glyph: Span<'static>,
-    name: &str,
-    name_style: Style,
-    said: &str,
-    names: usize,
-    width: usize,
-) -> Vec<Span<'static>> {
-    let name = cut(&printable(name), names);
-    let pad = names.saturating_sub(super::wrap::width(&name));
-    let room = width.saturating_sub(names + 6);
-    vec![
-        glyph,
-        Span::raw(" "),
-        Span::styled(name, name_style),
-        Span::raw(" ".repeat(pad + 2)),
-        Span::styled(cut(&printable(said), room), style::dim()),
-    ]
 }
 
 #[cfg(test)]

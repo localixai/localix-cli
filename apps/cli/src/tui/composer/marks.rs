@@ -25,6 +25,7 @@ impl Composer {
 
     /// `mark` at the cursor, a word of its own.
     fn insert_mark(&mut self, mark: &str) {
+        self.delete_selection();
         if self.at > 0 && !self.text[self.at - 1].is_whitespace() {
             self.insert(' ');
         }
@@ -72,6 +73,8 @@ impl Composer {
             let at_end = self.at >= end;
             let width = mark.chars().count();
             self.text.splice(start..end, mark.chars());
+            // The text's length changed: a selection would no longer cover what it did.
+            self.anchor = None;
             if at_end {
                 // The cursor is past the word: it moves by what the mark adds or takes.
                 self.at = self.at.saturating_sub(end - start) + width;

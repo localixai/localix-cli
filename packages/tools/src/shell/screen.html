@@ -8,7 +8,7 @@
 :root{--fg:#1d1d1f;--bg:#ffffff;--cursor:#1d1d1f;--cols:{{cols}};--rows:{{rows}}}
 @media (prefers-color-scheme: dark){:root{--fg:#e6e6e6;--bg:#1e1e1e;--cursor:#e6e6e6}}
 {{theme}}
-body{color:var(--fg);display:flex;align-items:center;justify-content:center}
+body{color:var(--fg);margin:0}
 :root{--ground:var(--bg)}
 #s{position:relative;padding:8px;width:calc(var(--cols) * 1ch);height:calc(var(--rows) * 1.2em);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"DejaVu Sans Mono",monospace;font-size:13px;line-height:1.2;white-space:pre;cursor:default}
 .r{height:1.2em}
@@ -34,7 +34,7 @@ probe.remove();
 function size() {
   if (!innerWidth || !innerHeight) return;
   const fits = Math.min((innerWidth - 2 * PAD) / (COLS * CH), (innerHeight - 2 * PAD) / (ROWS * LINE));
-  screen.style.fontSize = fits + "px";
+  screen.style.fontSize = Math.min(16, fits) + "px";
 }
 // For checks: a cell, and the grid with its space around it.
 function cells() {

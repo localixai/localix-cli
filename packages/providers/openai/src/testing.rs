@@ -42,17 +42,23 @@ impl Sent {
 /// Answers each request with the next reply of its script.
 #[derive(Default)]
 pub(crate) struct Scripted {
-    pub replies: Mutex<Vec<Reply>>,
+    pub replies: Mutex<Vec<Result<Reply, HttpError>>>,
     pub sent: Mutex<Vec<Sent>>,
 }
 
 impl Scripted {
     pub(crate) fn new(replies: Vec<(u16, String)>) -> Self {
-        let replies = replies
-            .into_iter()
-            .rev()
-            .map(|(status, body)| Reply { status, body })
-            .collect();
+        Self::answering(
+            replies
+                .into_iter()
+                .map(|(status, body)| Ok(Reply { status, body }))
+                .collect(),
+        )
+    }
+
+    /// Answers each request with the next of `replies`, a failure to answer among them.
+    pub(crate) fn answering(mut replies: Vec<Result<Reply, HttpError>>) -> Self {
+        replies.reverse();
         Self {
             replies: Mutex::new(replies),
             sent: Mutex::default(),
@@ -84,6 +90,6 @@ impl Http for Scripted {
             body: body.into(),
         });
         let next = self.replies.lock().unwrap().pop();
-        next.ok_or_else(|| HttpError::Unsent("no reply scripted".into()))
+        next.unwrap_or_else(|| Err(HttpError::Unsent("no reply scripted".into())))
     }
 }

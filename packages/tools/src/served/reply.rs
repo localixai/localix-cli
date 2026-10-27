@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::path::Path;
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use super::Root;
@@ -79,7 +79,7 @@ fn found(
     let refused = ("403 Forbidden", "text/plain", b"not served".to_vec());
     let path = target.split(['?', '#']).next().unwrap_or_default();
     let mut parts = path.trim_start_matches('/').split('/').peekable();
-    let roots = roots.lock().unwrap_or_else(PoisonError::into_inner);
+    let roots = crate::lock(roots);
     let root = match parts.peek().and_then(|prefix| roots.get(*prefix)) {
         Some(root) => {
             parts.next();

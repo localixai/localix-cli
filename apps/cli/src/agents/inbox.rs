@@ -57,7 +57,7 @@ impl Inbox for MainInbox<'_> {
                 crate::output::count(n, "background agent")
             ),
         };
-        let last = std::mem::replace(&mut *crate::output::lock(&self.registry.said), said.clone());
+        let last = std::mem::replace(&mut *crate::sync::lock(&self.registry.said), said.clone());
         if last != said {
             self.output.note(&said);
         }
@@ -80,11 +80,11 @@ pub(crate) struct Letters(Mutex<VecDeque<String>>);
 
 impl Letters {
     pub(crate) fn post(&self, message: &str) {
-        crate::output::lock(&self.0).push_back(message.to_string());
+        crate::sync::lock(&self.0).push_back(message.to_string());
     }
 
     pub(super) fn take(&self) -> Vec<String> {
-        crate::output::lock(&self.0).drain(..).collect()
+        crate::sync::lock(&self.0).drain(..).collect()
     }
 }
 

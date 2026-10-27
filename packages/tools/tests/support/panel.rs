@@ -84,6 +84,11 @@ pub(crate) fn scenario(browser: &Browser, driver: &WebviewDriver) {
         width >= Some(900.0) && height >= Some(600.0),
         "{width:?} by {height:?}"
     );
+    // A large window must not enlarge the fixed grid or center it away from the edge.
+    let layout = browser.peek(&panel, "(() => { const s = document.getElementById('s'), r = s.getBoundingClientRect(); return { font: parseFloat(getComputedStyle(s).fontSize), left: r.left, top: r.top }; })()").unwrap();
+    assert!(layout["font"].as_f64().unwrap() <= 16.0, "{layout}");
+    assert!(layout["left"].as_f64().unwrap() <= 16.0, "{layout}");
+    assert!(layout["top"].as_f64().unwrap() <= 16.0, "{layout}");
     let href = read["href"].clone();
 
     // A tab beside the browser's, shown as it opens.
@@ -143,7 +148,10 @@ pub(crate) fn scenario(browser: &Browser, driver: &WebviewDriver) {
     browser.act("w1", false).unwrap();
     until_shown("w1");
     let listed = browser.listing().unwrap();
-    assert_eq!((listed[0].kind, listed[0].acted_on), ("browser", true));
+    assert_eq!(
+        (listed[0].kind.as_str(), listed[0].acted_on),
+        ("browser", true)
+    );
     assert_eq!(listed[1].kind, "terminal");
     assert!(listed[1].title.starts_with("session 1 · cat"), "{listed:?}");
     let missing = browser.act("t999", false).unwrap_err();
@@ -325,6 +333,16 @@ pub(crate) fn first(browser: &Browser) {
     assert_eq!(showing(browser), Some((tab.clone(), vec![tab.clone()])));
     // Long enough for WebKit to have settled what it thinks of the window.
     std::thread::sleep(Duration::from_millis(300));
+    // A window that never takes the keyboard never makes llx the active app either: the person's
+    // full-screen terminal keeps its keys while a test, `exec` or the agent opens one.
+    #[cfg(target_os = "macos")]
+    for _ in 0..20 {
+        assert!(
+            !active(),
+            "the process became the active app: it took the person's keys"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
     let count = "window.seen = 0; (function f() { window.seen++; requestAnimationFrame(f); })(); 1";
     browser.peek(&panel, count).unwrap();
     let read = "[window.seen, document.visibilityState]";
@@ -431,7 +449,7 @@ fn history_menu(browser: &Browser) {
         std::thread::sleep(Duration::from_millis(20));
     }
     let after = browser.listing().unwrap_or_default();
-    let ids = |listed: &[tools::browser::Listed]| -> Vec<String> {
+    let ids = |listed: &[tools::window::WindowTab]| -> Vec<String> {
         listed.iter().map(|tab| tab.id.clone()).collect()
     };
     assert_eq!(ids(&after), ids(&before));
@@ -452,4 +470,18 @@ fn menu_entry(browser: &Browser, key: &str, state: &str) -> u64 {
         assert!(Instant::now() < deadline, "{key} in the menu: {read}");
         std::thread::sleep(Duration::from_millis(20));
     }
+}
+
+/// Whether this process is the app the person's keys go to.
+#[cfg(target_os = "macos")]
+fn active() -> bool {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject, Bool};
+    let class = AnyClass::get(c"NSRunningApplication").unwrap();
+    // SAFETY: `currentApplication` is a class method that takes nothing and returns this
+    // process's NSRunningApplication, which lives as long as the process.
+    let app: *mut AnyObject = unsafe { msg_send![class, currentApplication] };
+    // SAFETY: `isActive` is a BOOL property of the object above, readable from any thread.
+    let active: Bool = unsafe { msg_send![app, isActive] };
+    active.as_bool()
 }

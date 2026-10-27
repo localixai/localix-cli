@@ -8,12 +8,12 @@
 //! - [`answer`]: the final reply and its `RESULT:` line.
 
 pub mod agent;
-pub mod answer;
+mod answer;
 mod calls;
 pub mod conversation;
 pub mod history;
 pub mod observer;
-pub mod schema;
+mod schema;
 
 #[cfg(test)]
 mod fakes;

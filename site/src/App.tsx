@@ -8,7 +8,7 @@ export function App() {
   return (
     <>
       <Nav />
-      <main id="top">
+      <main id="main">
         <Hero />
         <Blocks />
         <Window />

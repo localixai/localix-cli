@@ -7,6 +7,8 @@ use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall, U
 use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::{Value, json};
 
+use crate::conversation::Conversation;
+use crate::history::{Report, Strategy};
 use crate::observer::Observer;
 
 /// A chat model that replies from a script, and remembers what each request allowed.
@@ -146,4 +148,18 @@ pub(crate) fn ok(report: &str) -> Result<ToolOutput, ToolError> {
         state: Some("state".into()),
         image: None,
     })
+}
+
+/// Shows nothing.
+pub(crate) struct Silent;
+
+impl Observer for Silent {}
+
+/// Sends the conversation as it is.
+pub(crate) struct Keep;
+
+impl Strategy for Keep {
+    fn prepare(&self, _: &mut Conversation, _: u64, _: f64) -> Report {
+        vec![]
+    }
 }

@@ -1,23 +1,23 @@
-/* The hero: one sentence, the install, and the thing itself: an agent's calls and what they printed,
-   the width of the page, as Ghostty's site leads with its terminal. */
+/* The hero: one sentence, the install, and the thing itself: an agent's calls and what they
+   printed, the width of the page. Left-aligned on one edge; the only motion is the first paint. */
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   justify-items: start;
-  padding-block: clamp(2.5rem, 6vw, 4.5rem) clamp(2.5rem, 6vw, 4.5rem);
+  padding-block: clamp(3rem, 8vw, 6rem) clamp(3rem, 7vw, 5.5rem);
 }
 h1 {
-  max-width: 13em;
+  max-width: 12.5em;
   margin: 0;
-  font: 700 clamp(2.5rem, 1.4rem + 4vw, 4.5rem) / 1 var(--display);
-  letter-spacing: -0.05em;
+  font: 700 clamp(2.5rem, 1.2rem + 5.2vw, 5.25rem) / 0.98 var(--display);
+  letter-spacing: -0.055em;
   text-wrap: balance;
 }
 .lede {
-  max-width: 34rem;
-  margin: 1.5rem 0 0;
+  max-width: 36rem;
+  margin: clamp(1.5rem, 3vw, 2rem) 0 0;
   color: var(--soft);
-  font-size: clamp(1.0625rem, 1.4vw, 1.1875rem);
+  font-size: var(--step-1);
   line-height: 1.55;
 }
 .lede code {
@@ -28,38 +28,53 @@ h1 {
   display: flex;
   max-width: 100%;
   flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
+  gap: 0.75rem 1.75rem;
   align-items: center;
-  margin-top: 1.75rem;
+  margin-top: clamp(1.75rem, 3vw, 2.25rem);
 }
-/* The install box sits in this row, so its own top margin goes. */
 .hero-start .install-box {
   margin-top: 0;
 }
 .hero-docs {
-  color: var(--soft);
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: var(--white);
   font-size: 0.9375rem;
+  font-weight: 500;
   text-decoration: underline;
-  text-underline-offset: 4px;
-  transition: color 160ms ease;
+  text-decoration-color: var(--faint);
+  text-underline-offset: 5px;
+  transition: text-decoration-color 160ms ease;
 }
 .hero-docs:hover {
-  color: var(--white);
+  text-decoration-color: currentColor;
 }
 
 .hero-session {
   justify-self: stretch;
-  margin: clamp(2.5rem, 5vw, 3.5rem) 0 0;
+  margin: clamp(3rem, 6vw, 4.5rem) 0 0;
 }
 .hero-session .term {
-  padding: clamp(1rem, 2.5vw, 1.75rem);
-  font-size: clamp(0.75rem, 0.68rem + 0.3vw, 0.875rem);
-  line-height: 1.75;
+  padding: clamp(1.1rem, 2.5vw, 1.75rem);
+  font-size: clamp(0.78rem, 0.7rem + 0.28vw, 0.9rem);
+  line-height: 1.8;
+}
+/* On a phone a long command wraps under its prompt instead of running off the frame. */
+.term-wrap .code-line {
+  padding-left: 2ch;
+  text-indent: -2ch;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.term-wrap .term-out {
+  padding-left: 0;
+  text-indent: 0;
 }
 .hero-session figcaption {
-  margin-top: 0.75rem;
+  margin-top: 0.85rem;
   color: var(--muted);
-  font-size: 0.8125rem;
+  font-size: var(--step-s);
 }
 
 /* First paint, the one moment of motion: the words, then the session under them. */

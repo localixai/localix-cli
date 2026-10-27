@@ -88,3 +88,30 @@ fn what_the_window_says_reaches_the_tabs_owner_else_every_lane_and_never_a_lane_
     assert!(gone.upgrade().is_none());
     assert_eq!(a.take_joining().len(), 1, "an owner gone: every lane left");
 }
+
+#[test]
+fn a_lane_opening_a_task_may_use_the_lanes_it_was_posted_through() {
+    use std::sync::{Arc, mpsc};
+    let lanes = Arc::new(Lanes::default());
+    let (done, finished) = mpsc::sync_channel(1);
+    let again = Arc::clone(&lanes);
+    // What a real opener does: the interface's `background` takes locks of the server, and a
+    // new lane joins the lanes. With the table held across `post`, this deadlocks.
+    let opening = Arc::new(Queue::new(8).on_open(move |_| {
+        again.join(&Arc::new(Queue::new(8)));
+        let _ = done.send(());
+    }));
+    lanes.join(&opening);
+    let posting = Arc::clone(&lanes);
+    let thread = std::thread::Builder::new()
+        .name("posting".into())
+        .spawn(move || posting.post("t1", Heard::Sent("a comment")))
+        .unwrap();
+    assert!(
+        finished
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .is_ok(),
+        "the opener ran while the table was held"
+    );
+    thread.join().unwrap();
+}

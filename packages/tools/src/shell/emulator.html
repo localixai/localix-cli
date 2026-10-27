@@ -10,8 +10,8 @@
 @media (prefers-color-scheme: dark){:root{--fg:#e6e6e6;--bg:#1e1e1e;--cursor:#e6e6e6}}
 {{theme}}
 :root{--ground:var(--bg)}
-body{display:flex;align-items:center;justify-content:center;color:var(--fg);cursor:default}
-#t{width:calc(100% - 28px);height:calc(100% - 28px);display:flex;align-items:center;justify-content:center}
+body{margin:0;color:var(--fg);cursor:default}
+#t{position:fixed;inset:14px}
 .xterm .xterm-viewport{background:transparent!important;overflow:hidden!important}
 </style>
 </head>

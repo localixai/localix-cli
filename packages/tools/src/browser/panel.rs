@@ -3,7 +3,7 @@
 //! input (no IPC), never navigates past its own page, and never takes the keyboard.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use tao::event_loop::EventLoopProxy;
 use wry::{NewWindowResponse, PageLoadEvent, WebView, WebViewBuilder};
@@ -30,7 +30,7 @@ impl Slot {
     /// a page that loads after it was painted.
     pub(super) fn latest(&self) -> Option<String> {
         self.queued.store(false, Ordering::SeqCst);
-        let frame = self.frame.lock().unwrap_or_else(PoisonError::into_inner);
+        let frame = crate::lock(&self.frame);
         frame.clone()
     }
 }
@@ -62,11 +62,7 @@ impl Panel {
     /// Show `frame`, a script the page runs. At most one paint waits in the loop's queue, and it
     /// shows the newest frame. False once the window is closed.
     pub fn paint(&self, frame: String) -> bool {
-        *self
-            .slot
-            .frame
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) = Some(frame);
+        *crate::lock(&self.slot.frame) = Some(frame);
         if !self.slot.queued.swap(true, Ordering::SeqCst) && !(self.send)(Cmd::Paint(self.id)) {
             self.slot.alive.store(false, Ordering::SeqCst);
         }

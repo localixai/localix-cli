@@ -240,10 +240,9 @@
     if (!document.body) return null
     for (const [id, e] of nodes) if (!e.isConnected || !e.ownerDocument.defaultView) nodes.delete(id)
     const elements = []
-    let omitted = 0
     const frames = subframes()
     for (const { e, role, box, at } of offered(frames)) {
-      if (elements.length >= MAX_ELEMENTS) { omitted++; continue }
+      if (elements.length >= MAX_ELEMENTS) continue
       const element = { ref: refOf(e), role, name: dayOf(e, labelOf(e)) }
       const value = valueOf(e, role)
       if (value) element.value = value.slice(0, 200)
@@ -268,7 +267,6 @@
       viewport: { w: innerWidth, h: innerHeight },
       scroll: { y: Math.round(scrollY), height: document.documentElement.scrollHeight },
       elements,
-      omitted,
       busy: busy(),
     }
   }

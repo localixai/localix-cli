@@ -5,6 +5,7 @@ use protocol::{Asked, Choice as Offered, ToClient};
 
 use super::*;
 use crate::tui::app::App;
+use crate::tui::style;
 use crate::tui::test_support::{key, live_area, replies, typed};
 
 fn asked(choices: &[&str], multiple: bool) -> Question {
@@ -51,7 +52,7 @@ fn a_question_with_several_answers_is_checked_then_sent() {
     ❯ 2. [x] Lint
       3. Something else: type it
 
-      ↑↓ to choose · space to check · enter to confirm · esc to skip
+      space check · enter send · esc skip
     ");
     press(&mut app, &[KeyCode::Enter], now);
     let sent = answered(&mut app);
@@ -95,7 +96,7 @@ fn the_plan_handoff_starts_on_the_option_marked() {
       1. Yes, in default mode
     ❯ 2. No, stay in plan mode
 
-      ↑↓ to choose · enter to confirm · esc to cancel
+      enter select · esc cancel
     ");
     press(&mut app, &[KeyCode::Enter], now);
     assert_eq!(replies(&mut app), [(1, Reply::Choice(Some(1)))]);
@@ -170,4 +171,15 @@ fn answered(app: &mut App) -> Answer {
         [(1, Reply::Question(Some(answer)))] => answer.clone(),
         other => panic!("not an answer: {other:?}"),
     }
+}
+
+#[test]
+fn a_steps_line_is_headed_by_its_path_and_says_what_to_do_under_it() {
+    let select = line(
+        "Login › OpenAI › API key: paste it and press Enter (it is not shown)",
+        true,
+    );
+    let shown: Vec<String> = select.render(60).0.iter().map(style::plain).collect();
+    assert_eq!(shown[0], "• Login › OpenAI › API key");
+    assert_eq!(shown[1], "  paste it and press Enter (it is not shown)");
 }

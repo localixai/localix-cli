@@ -90,6 +90,8 @@ impl Search {
                     .collect()
             })
             .unwrap_or_default();
+        // A list in steps (`Login › Provider`) holds what its last step names.
+        let heading = heading.rsplit('›').next().unwrap_or_default();
         let heading = heading.trim_start_matches(['•', ' ']);
         let noun = heading.split([' ', '(']).next().unwrap_or_default();
         Self {
@@ -107,8 +109,10 @@ impl Search {
         self.query.is_empty()
     }
 
-    /// Letters (digits and signs too) add to the query, Backspace takes one off, Esc clears it.
+    /// Letters (digits and signs too) add to the query, Backspace takes one off, Esc and Ctrl-C
+    /// clear it (on an empty one, Esc cancels and Ctrl-C is the list's), Ctrl-U clears it.
     pub(super) fn key(&mut self, key: KeyEvent) -> Searched {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let plain = !key
             .modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
@@ -117,6 +121,7 @@ impl Search {
             reason = "crossterm's keys, a foreign enum: the others leave the query"
         )]
         match key.code {
+            KeyCode::Char('c' | 'u') if ctrl && !self.query.is_empty() => self.query.clear(),
             KeyCode::Char(c) if plain => self.query.push(c),
             KeyCode::Backspace if self.query.pop().is_some() => {}
             KeyCode::Esc if self.query.is_empty() => return Searched::Cancel,
@@ -133,8 +138,9 @@ impl Search {
         self.shown = ranked(&self.query, &self.keys);
     }
 
-    /// `Search: open▏  2 matches`, and a line for no match at all.
-    pub(super) fn render(&self) -> Vec<Line<'static>> {
+    /// `Search: open▏  2 matches`, and a line when `none` is listed (none matches, or none in
+    /// the tab shown).
+    pub(super) fn render(&self, none: bool) -> Vec<Line<'static>> {
         let count = match (self.query.is_empty(), self.shown.len()) {
             (true, all) => format!("{all} in all"),
             (false, 1) => "1 match".into(),
@@ -147,13 +153,26 @@ impl Search {
             Span::styled(count, style::dim()),
         ])];
         out.push(Line::default());
-        if self.shown.is_empty() {
+        if none {
             let query = printable(&self.query);
             let none = format!("  No {} matches '{query}'", self.noun);
             out.push(Line::from(Span::styled(none, style::dim())));
         }
         out
     }
+}
+
+/// One row up (`code` is Up) or else down from `at` among `last + 1` rows, stopping at the ends.
+pub(super) fn stepped(at: usize, last: usize, code: KeyCode) -> usize {
+    match code == KeyCode::Up {
+        true => at.saturating_sub(1),
+        false => (at + 1).min(last),
+    }
+}
+
+/// The first of `size` rows shown of a list of `len`, so that row `at` is in the middle.
+pub(super) fn window_start(at: usize, len: usize, size: usize) -> usize {
+    at.saturating_sub(size / 2).min(len.saturating_sub(size))
 }
 
 /// Where Up, Down, PageUp, PageDown, Home and End move the marker among `rows` (positions in
@@ -166,8 +185,7 @@ pub(super) fn moved(rows: &[usize], at: usize, code: KeyCode, page: usize) -> Op
         reason = "crossterm's keys, a foreign enum: the others do not move"
     )]
     let to = match code {
-        KeyCode::Up => now.saturating_sub(1),
-        KeyCode::Down => (now + 1).min(last),
+        KeyCode::Up | KeyCode::Down => stepped(now, last, code),
         KeyCode::PageUp => now.saturating_sub(page),
         KeyCode::PageDown => (now + page).min(last),
         KeyCode::Home => 0,

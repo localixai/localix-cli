@@ -50,7 +50,7 @@ pub(crate) struct Kit<'a> {
     /// Where an agent's file changes are kept too, for `/rewind`.
     pub checkpoints: &'a crate::checkpoints::Checkpoints,
     pub output: &'a Output,
-    pub history: &'a (dyn History + Sync),
+    pub history: &'a dyn History,
     pub mode: &'a ModeCell,
     /// The mode the context states.
     pub started: Mode,

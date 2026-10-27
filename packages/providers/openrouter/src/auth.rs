@@ -19,13 +19,6 @@ pub fn credentials_path(app: App) -> Option<PathBuf> {
     store::path(app, "credentials")
 }
 
-/// `text` as a key, trimmed; `None` when it cannot be one (empty, or with spaces inside).
-pub fn as_key(text: &str) -> Option<&str> {
-    let key = text.trim();
-    let bad = key.is_empty() || key.contains(|c: char| c.is_whitespace() || c.is_control());
-    (!bad).then_some(key)
-}
-
 pub fn save(app: App, key: &str) -> std::io::Result<PathBuf> {
     let path = credentials_path(app).ok_or_else(|| std::io::Error::other("no home directory"))?;
     store::save(&path, key)?;

@@ -75,29 +75,6 @@ fn the_list_is_read_off_the_interface_s_thread_and_arrives_once() {
     assert!(arrived.recv_timeout(Duration::from_millis(200)).is_err());
 }
 
-#[cfg(unix)]
-#[test]
-fn a_lister_is_waited_for_until_its_deadline_then_killed() {
-    let mut echo = Command::new("sh");
-    echo.args(["-c", "echo one; echo two"]);
-    assert_eq!(
-        within(echo, Duration::from_secs(10)).unwrap(),
-        b"one\ntwo\n"
-    );
-    let mut failed = Command::new("sh");
-    failed.args(["-c", "echo half; exit 3"]);
-    assert_eq!(within(failed, Duration::from_secs(10)), None);
-    let mut stuck = Command::new("sh");
-    stuck.args(["-c", "exec sleep 30"]);
-    let asked = std::time::Instant::now();
-    assert_eq!(within(stuck, Duration::from_millis(200)), None);
-    assert!(
-        asked.elapsed() < Duration::from_secs(5),
-        "{:?}",
-        asked.elapsed()
-    );
-}
-
 #[test]
 fn of_many_matches_the_closest_are_offered_in_order() {
     let mut list: Vec<String> = (0..30)

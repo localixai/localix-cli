@@ -62,21 +62,7 @@ pub(crate) fn group(place: &str, root: &std::path::Path) -> String {
 
 impl tools::window::Windowed for Tabs {
     fn tabs(&self) -> Option<Vec<tools::window::WindowTab>> {
-        let listed = self.browser.listing()?;
-        Some(
-            listed
-                .into_iter()
-                .map(|tab| tools::window::WindowTab {
-                    id: tab.id,
-                    kind: tab.kind.to_string(),
-                    title: tab.title,
-                    detail: tab.detail,
-                    shown: tab.shown,
-                    acted_on: tab.acted_on,
-                    group: tab.group,
-                })
-                .collect(),
-        )
+        self.browser.listing()
     }
 
     fn act(&self, act: tools::window::Act, tab: &str) -> Result<(), String> {

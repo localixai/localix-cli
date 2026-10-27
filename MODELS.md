@@ -2,7 +2,7 @@
 
 How llx knows models: a Rust port of [models.dev](https://github.com/anomalyco/models.dev)
 (branch `dev`), studied from a clone of the repository (commit `b2ac700`, 2026-10). This is the
-reference for `packages/providers/models`; ARCHITECTURE.md rule 1 makes it the one source of
+reference for `packages/providers/models`; ARCHITECTURE.md A4 makes it the one source of
 model facts.
 
 ## models.dev, as it is built
@@ -86,7 +86,7 @@ long-context price band; the reason llx's default request ceiling is 272k);
 - **Build:** `build.rs` resolves the files as models.dev does (the rules above, in Rust) into one
   document in the shape of the v2 API, cut to the fields llx reads, built into the crate.
 - **Run:** `lib.rs` types that shape (unknown fields ignored; a model that does not parse is left
-  out, never the catalog). `source.rs` fetches the v2 API at most once a day with its ETag, keeps
+  out, never the catalog). `source.rs` fetches the v2 API at most once an hour with its ETag, keeps
   it cut down in `<config>/models.json`, and lays it over the built-in data: the next session
   sees it. Nothing waits on the network.
 - **What llx reads:** a model is usable when its `type` is `chat`, `tools.supported`, `text` is

@@ -15,6 +15,7 @@ mod clipboard;
 pub(crate) mod composer;
 mod drawing;
 pub(crate) mod event;
+mod farewell;
 mod here;
 pub(crate) mod keys;
 mod list;
@@ -37,9 +38,11 @@ pub(crate) mod style;
 mod terminal;
 #[cfg(test)]
 pub(crate) mod test_support;
+mod time;
 pub(crate) mod tool_cell;
 pub(crate) mod tree;
 pub(crate) mod views;
+mod within;
 pub(crate) mod wrap;
 
 use std::io::{self, Write};
@@ -57,7 +60,9 @@ pub(crate) use self::terminal::restore;
 pub(crate) struct Running {
     /// Where the interface's thread takes what comes: told here the session is over.
     inbox: Sender<Input>,
-    thread: Option<JoinHandle<()>>,
+    thread: Option<JoinHandle<Vec<ratatui::text::Line<'static>>>>,
+    /// What the interface said it will print once the terminal is given back.
+    farewell: Vec<ratatui::text::Line<'static>>,
 }
 
 /// Where the server's frames that are not answers go, until the server is gone.
@@ -161,6 +166,7 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
     Ok(Running {
         inbox,
         thread: Some(thread),
+        farewell: vec![],
     })
 }
 
@@ -184,23 +190,18 @@ impl Drop for Gone {
 /// environment (a variable that is not text is left out), and the command line it was started
 /// with, whose options the sessions take.
 fn here(root: &std::path::Path, theme: Option<protocol::Theme>) -> Place {
-    let env = std::env::vars_os()
-        .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)));
-    let dir = std::env::current_dir().unwrap_or_default();
-    Place {
-        cwd: root.display().to_string(),
-        env: env.collect(),
-        theme,
-        args: std::env::args().skip(1).collect(),
-        dir: dir.display().to_string(),
-    }
+    client::place::here(root, theme, std::env::args().skip(1).collect())
 }
 
 impl Running {
     /// Until the interface ends by itself: the server said the session is over, or is gone.
     pub(crate) fn wait(mut self) {
+        self.join();
+    }
+
+    fn join(&mut self) {
         if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
+            self.farewell = thread.join().unwrap_or_default();
         }
     }
 }
@@ -213,9 +214,8 @@ impl Drop for Running {
             event,
             seq: None,
         }));
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
+        self.join();
         restore();
+        terminal::say(&self.farewell);
     }
 }

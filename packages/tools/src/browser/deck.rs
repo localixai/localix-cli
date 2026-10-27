@@ -124,6 +124,7 @@ impl Deck {
                 let strip = strip_view(&frame.native, look, proxy.clone())?;
                 // Shows the window too, without making it the key window.
                 frame.show(&strip);
+                super::platform::fullscreen(&frame.native);
                 Some(strip)
             }
         };

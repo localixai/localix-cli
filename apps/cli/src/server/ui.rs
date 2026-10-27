@@ -7,14 +7,15 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError, sync_channel};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::Duration;
 
-use protocol::{Adjustment, Approval, Asked, Event, Reply, ToClient};
+use protocol::{Adjustment, Approval, Asked, Event, Group, Reply, ToClient};
 
 use super::hub::{ClientId, Hub};
 use super::inputs::{Inputs, Typed};
 use super::work::Work;
+use crate::sync::{Bell, lock};
 
 /// The client [`Peer::new`] attaches.
 pub(crate) const FIRST: ClientId = 0;
@@ -27,19 +28,12 @@ const STOP_FALLBACK: Duration = Duration::from_secs(1);
 /// something rings nothing, and the person is waiting on it.
 const DONE_POLL: Duration = Duration::from_millis(100);
 
-/// Rung, with [`BELL`], whenever a waiting question may be over: a reply, a withdrawal, a stop.
-#[expect(
-    clippy::mutex_integer,
-    reason = "the count is what the bell's Condvar waits on: it needs the Mutex"
-)]
-static RUNG: Mutex<u64> = Mutex::new(0);
-static BELL: Condvar = Condvar::new();
+/// Rung whenever a waiting question may be over: a reply, a withdrawal, a stop.
+static BELL: Bell = Bell::new();
 
 /// Wake every question waiting, to look again at its reply and its stop.
 pub(crate) fn ring() {
-    let mut rung = RUNG.lock().unwrap_or_else(PoisonError::into_inner);
-    *rung = rung.wrapping_add(1);
-    BELL.notify_all();
+    BELL.ring();
 }
 
 /// A question waiting: the session it is in, and where its reply goes.
@@ -100,6 +94,7 @@ impl Peer {
     }
 
     /// How many interfaces are attached.
+    #[cfg(test)]
     pub(crate) fn attached(&self) -> usize {
         self.hub.attached()
     }
@@ -144,7 +139,7 @@ impl Peer {
     }
 
     fn waiting(&self) -> MutexGuard<'_, HashMap<u64, Waiting>> {
-        self.asked.lock().unwrap_or_else(PoisonError::into_inner)
+        lock(&self.asked)
     }
 }
 
@@ -266,13 +261,15 @@ impl Ui {
         }
     }
 
-    /// A row and its inline value, starting on `marked`; `None` when cancelled.
+    /// A row and its inline value, starting on `marked`, the rows in `groups`; `None` when
+    /// cancelled.
     pub(crate) fn pick_adjustable(
         &self,
         title: &str,
         options: Vec<(String, String)>,
         marked: Option<usize>,
         adjustments: Vec<Adjustment>,
+        groups: Vec<Group>,
     ) -> Option<(usize, usize)> {
         let title = title.into();
         let asked = Asked::ChooseAdjustable {
@@ -280,6 +277,7 @@ impl Ui {
             options,
             marked,
             adjustments,
+            groups,
         };
         match self.ask(asked, None) {
             Some(Reply::Adjusted(picked)) => picked,
@@ -340,7 +338,7 @@ type Until<'a> = Option<(&'a dyn Fn() -> bool, Duration)>;
 fn wait(answer: &Receiver<Reply>, until: Until<'_>) -> Option<Reply> {
     loop {
         // Read before looking, so a ring between the look and the wait is not missed.
-        let rung = *RUNG.lock().unwrap_or_else(PoisonError::into_inner);
+        let rung = BELL.rung();
         match answer.try_recv() {
             Ok(reply) => return Some(reply),
             Err(TryRecvError::Disconnected) => return None,
@@ -349,13 +347,8 @@ fn wait(answer: &Receiver<Reply>, until: Until<'_>) -> Option<Reply> {
         if until.is_some_and(|(over, _)| over()) {
             return None;
         }
-        let quiet = |now: &mut u64| *now == rung;
-        let bell = RUNG.lock().unwrap_or_else(PoisonError::into_inner);
         // A poisoned bell still rings: the next look reads the state again.
-        match until {
-            Some((_, every)) => drop(BELL.wait_timeout_while(bell, every, quiet)),
-            None => drop(BELL.wait_while(bell, quiet)),
-        }
+        BELL.wait(rung, until.map(|(_, every)| every));
     }
 }
 

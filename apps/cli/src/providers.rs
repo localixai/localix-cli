@@ -16,6 +16,7 @@ use models::{CHAT_COMPLETIONS, Catalog, RESPONSES};
 use crate::compose::APP;
 
 mod kept;
+mod login;
 
 /// Where a key's variables are read: a session's environment (its client's, in the daemon),
 /// else, for `None`, this process's.
@@ -56,9 +57,10 @@ const DEFAULTS: [(&str, &str); 2] = [
 /// The browser's decision model llx starts with: a policy, by catalog id (OpenRouter's).
 pub(crate) const DECISION_DEFAULT: &str = "~typesafe/jev-latest";
 
-/// How often a long-lived process looks for a newer catalog (the refresh itself asks models.dev
-/// at most once a day).
-const LOOK: Duration = Duration::from_secs(3600);
+/// How often a long-lived process looks for a newer catalog: a file's time, and the refresh
+/// asked, which asks models.dev at most once an hour. A `/model` opened a minute after a
+/// refresh wrote one lists its models.
+const LOOK: Duration = Duration::from_secs(60);
 
 /// The catalog: the built-in files under the last fetched one, read again when a refresh wrote
 /// a newer one (unit tests see the built-in files only, the same on every machine).
@@ -378,7 +380,7 @@ fn sign_in_words(name: &str, variable: Option<&str>) -> String {
     }
 }
 
-/// Ask models.dev for a newer catalog, at most once a day, on a thread of its own: the next
+/// Ask models.dev for a newer catalog, at most once an hour, on a thread of its own: the next
 /// session reads what it keeps.
 pub(crate) fn refresh_catalog() {
     // `LLX_MODELS_REFRESH=0`: no network for it (tests, offline machines).

@@ -50,20 +50,6 @@ impl Effort {
         }
         Effort::ALL.into_iter().find(|effort| effort.name() == name)
     }
-
-    /// One line on what the level is for, for a picker.
-    pub fn describe(self) -> &'static str {
-        match self {
-            Effort::Off => "no reasoning: the fastest turns",
-            Effort::Minimal => "the least reasoning the model allows",
-            Effort::Low => "fast, light reasoning",
-            Effort::Medium => "balanced",
-            Effort::High => "deep reasoning",
-            Effort::XHigh => "deeper still, where the model has it",
-            Effort::Max => "the most the model offers",
-            Effort::Ultra => "beyond max, where the model has it",
-        }
-    }
 }
 
 /// One model a provider offers.

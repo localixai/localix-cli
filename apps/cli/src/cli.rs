@@ -392,7 +392,8 @@ pub(crate) struct RunOptions {
     /// Always show the browser window, and a window for each terminal session `bash` keeps. By
     /// default they show in a session, and stay hidden in exec and over SSH;
     /// the agent can show, hide or close the browser per call, and a terminal window where they
-    /// show. They are ordinary windows, never on top of others, and never take the keyboard.
+    /// show. On macOS the window opens full screen, in a Space of its own, never over the
+    /// terminal; elsewhere it is an ordinary window, never on top of others.
     #[arg(long, help_heading = "Browser")]
     pub show_browser: bool,
 

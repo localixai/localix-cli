@@ -37,6 +37,26 @@ fn model_offers_signed_in_models_and_confirms_without_a_second_menu() {
     assert_eq!(terminal.offered("Model").len(), openrouter_models);
 }
 
+#[test]
+fn each_providers_models_are_a_group_named_for_it() {
+    let current = openrouter();
+    let openai_too =
+        |provider: &Provider| (*provider == Provider::openai()).then(|| "a".to_string());
+    let mut terminal = Scripted::new(&[None]);
+    pick_model(&current, &mut terminal, &openai_too);
+    let groups = vec![
+        ("OpenAI".to_string(), Provider::openai().models().len()),
+        (
+            "OpenRouter".to_string(),
+            Provider::openrouter().models().len(),
+        ),
+    ];
+    assert_eq!(terminal.grouped, [groups]);
+    // The group names the provider: a row's note is the model's id, which search finds.
+    let (_, items) = &terminal.shown[0];
+    assert_eq!(items[0].detail, Provider::openai().models()[0].id);
+}
+
 fn level(efforts: Vec<Effort>, at: Effort) -> Selection {
     let model = ModelEntry {
         id: "lab/model".into(),

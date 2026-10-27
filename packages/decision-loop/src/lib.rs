@@ -4,10 +4,10 @@
 //! `contracts::hands::Hands`: it resumes [`goal::GoalRun`] until the task is done; [`ask`] builds
 //! each step's question.
 
-pub mod ask;
-pub mod choice;
+mod ask;
+mod choice;
 pub mod decision_loop;
-pub mod goal;
+mod goal;
 pub mod meter;
 mod offer;
 pub mod step;

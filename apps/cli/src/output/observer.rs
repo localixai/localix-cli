@@ -5,8 +5,9 @@ use contracts::chat::{ToolCall, Usage};
 use contracts::tool::{ToolError, ToolOutput};
 use ratatui::text::{Line, Span};
 
-use super::{Output, human, json, lock};
+use super::{Output, human, json};
 use crate::server::{label::label, wire};
+use crate::sync::lock;
 use crate::tui::tool_cell::{self, State};
 use crate::tui::{cells, style, wrap};
 use protocol::Event;

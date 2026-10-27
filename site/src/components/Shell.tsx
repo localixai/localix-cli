@@ -51,10 +51,20 @@ function workflow(line: string) {
 /** A terminal session: `$ ` lines are commands, coloured, and so are the lines a `\\` continues;
  *  the rest is their output, dimmed. With `yaml`, the rest is a workflow's YAML (a `#` line is a
  *  comment) and `= ` marks an output. */
-export function Terminal({ session, label, yaml = false }: { session: string; label: string; yaml?: boolean }) {
+export function Terminal({
+  session,
+  label,
+  yaml = false,
+  wrap = false,
+}: {
+  session: string;
+  label: string;
+  yaml?: boolean;
+  wrap?: boolean;
+}) {
   const lines = session.split('\n');
   return (
-    <pre className="term" aria-label={label}>
+    <pre className={wrap ? 'term term-wrap' : 'term'} aria-label={label}>
       {lines.map((line, at) => {
         const continued = at > 0 && (lines[at - 1] ?? '').endsWith('\\');
         if (yaml && !line.startsWith('$ ') && !continued) {

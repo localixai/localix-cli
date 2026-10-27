@@ -88,7 +88,7 @@ fn a_model_served_over_another_protocol_is_listed_for_that_protocol_alone() {
     let catalog = Catalog::parse(DOC).unwrap();
     let ids = |models: Vec<ModelEntry>| models.into_iter().map(|m| m.id).collect::<Vec<_>>();
     assert_eq!(ids(catalog.served("openai", RESPONSES)), ["gpt", "pro"]);
-    assert_eq!(ids(catalog.models("openai")), ["gpt"]);
+    assert_eq!(ids(catalog.served("openai", CHAT_COMPLETIONS)), ["gpt"]);
     assert!(catalog.serves("openai", "pro", RESPONSES));
     assert!(!catalog.serves("openai", "pro", CHAT_COMPLETIONS));
     assert!(
@@ -100,7 +100,7 @@ fn a_model_served_over_another_protocol_is_listed_for_that_protocol_alone() {
 #[test]
 fn models_are_the_usable_ones_newest_first_with_their_window() {
     let catalog = Catalog::parse(DOC).unwrap();
-    let models = catalog.models("acme");
+    let models = catalog.served("acme", CHAT_COMPLETIONS);
     let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
     assert_eq!(
         ids,
@@ -173,7 +173,7 @@ fn a_catalog_decodes_only_the_models_asked_for() {
     assert_eq!(catalog.ids().len(), 40);
     assert_eq!(decoded(), 2 + 39);
     // One provider's models listed: all of its own, and no other's.
-    assert_eq!(catalog.models("p9").len(), 25);
+    assert_eq!(catalog.served("p9", CHAT_COMPLETIONS).len(), 25);
     assert_eq!(decoded(), 41 + 24);
     // Whether a model is served: that model alone.
     assert!(catalog.serves("p3", "m5", CHAT_COMPLETIONS));

@@ -212,10 +212,12 @@ fn slash_offers_the_commands_and_enter_takes_the_marked_one() {
       /new        start over
       default mode · shift+tab to cycle
     ");
-    let opened = app.input(key(KeyCode::Enter), now);
+    assert_eq!(app.input(key(KeyCode::Enter), now), None);
     assert_eq!(
-        opened,
-        Some(Action::Open(protocol::Target::New)),
+        commands(&mut app),
+        vec![Command::Open {
+            target: protocol::Target::New
+        }],
         "the marked one"
     );
     assert!(
@@ -657,8 +659,13 @@ fn new_typed_while_a_task_works_opens_a_lane_at_once() {
     let mut app = lanes(now);
     app.frame(from("A", Event::TaskStarted("a's task".into())), now);
     typed(&mut app, "/new", now);
-    let opened = app.input(key(KeyCode::Enter), now);
-    assert_eq!(opened, Some(Action::Open(protocol::Target::New)));
+    assert_eq!(app.input(key(KeyCode::Enter), now), None);
+    assert_eq!(
+        commands(&mut app),
+        vec![Command::Open {
+            target: protocol::Target::New
+        }]
+    );
     assert!(sent(&mut app).is_empty(), "not kept for after the task");
 }
 
@@ -905,4 +912,58 @@ fn lanes_ending_as_the_person_quits_leave_the_screen_as_it_is() {
     app.frame(from("A", Event::LaneEnded), now);
     assert_eq!(app.lane_id(), "A", "no other lane drawn on the way out");
     assert!(!app.take_replay());
+}
+
+#[test]
+fn ctrl_c_on_a_line_typed_in_a_question_goes_back_to_its_options_then_stops() {
+    let now = Instant::now();
+    let mut app = app();
+    app.event(Event::TaskStarted("a task".into()), now);
+    app.asked(1, "", approve_asked("bash", "rm -rf build"), opened(now));
+    app.input(key(KeyCode::Char('3')), now);
+    typed(&mut app, "use make", now);
+    assert_eq!(app.input(ctrl('c'), now), None, "one step back");
+    assert_eq!(replies(&mut app), []);
+    let shown = render(&mut app, now);
+    assert!(!shown.contains("use make"), "{shown}");
+    assert!(shown.contains("❯ 3. No"), "back on the options: {shown}");
+    assert_eq!(app.input(ctrl('c'), now), Some(Action::Stop(String::new())));
+    assert_eq!(
+        replies(&mut app),
+        [(1, Reply::Approval(Approval::No(None)))]
+    );
+}
+
+#[test]
+fn an_approval_says_esc_answers_no_and_ctrl_c_stops() {
+    let now = Instant::now();
+    let mut app = app();
+    app.event(Event::TaskStarted("a task".into()), now);
+    app.asked(1, "", approve_asked("bash", "rm -rf build"), opened(now));
+    let shown = render(&mut app, now);
+    assert!(
+        shown.contains("enter select · esc no · ctrl-c stop"),
+        "{shown}"
+    );
+}
+
+#[test]
+fn a_stopping_task_says_a_second_ctrl_c_quits_at_once() {
+    let now = Instant::now();
+    let mut app = app();
+    app.event(Event::TaskStarted("x".into()), now);
+    assert_eq!(app.input(ctrl('c'), now), Some(Action::Stop(String::new())));
+    let shown = render(&mut app, now);
+    assert!(shown.contains("ctrl-c again to quit now"), "{shown}");
+}
+
+#[cfg(unix)]
+#[test]
+fn ctrl_z_suspends_and_keeps_the_draft() {
+    let now = Instant::now();
+    let mut app = app();
+    typed(&mut app, "half a thought", now);
+    assert_eq!(app.input(ctrl('z'), now), Some(Action::Suspend));
+    assert_eq!(app.composer.text(), "half a thought");
+    assert!(render(&mut app, now).contains("half a thought"));
 }

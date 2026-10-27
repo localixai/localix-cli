@@ -6,18 +6,17 @@
 use std::time::{Duration, Instant};
 
 use provider_kit::http::{Http, HttpError, Web};
+use provider_kit::retry::{Attempt, PAUSE, TRANSIENT, retried};
 use serde_json::Value;
 
 pub const BASE_URL: &str = "https://openrouter.ai/api/v1";
-const RETRY_STATUSES: [u16; 5] = [408, 429, 502, 503, 529];
-const ATTEMPTS: u32 = 3;
 /// A long reply with high reasoning is slow, and it is not streamed.
 const TIMEOUT: Duration = Duration::from_secs(600);
 /// A decision is short and cheap: one that hangs is given up on sooner, and asked once more.
 const DECIDING: Duration = Duration::from_secs(90);
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ApiError {
+pub(crate) enum ApiError {
     /// The key was refused: `/login` again, or fix the key's variable.
     Auth(String),
     /// The provider or the model answered with an error.
@@ -59,7 +58,7 @@ pub struct OpenRouter {
 
 /// What one call took, for the trace and the usage report.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Timing {
+pub(crate) struct Timing {
     pub millis: u64,
 }
 
@@ -104,12 +103,8 @@ impl OpenRouter {
         self.openrouter
     }
 
-    /// POST `body` to `path`, retrying overload answers with backoff.
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "a backoff between attempts, which no event ends sooner"
-    )]
-    pub fn post(&self, path: &str, body: &Value) -> Result<(Value, Timing), ApiError> {
+    /// POST `body` to `path`, asked again on an answer a moment's wait may mend.
+    pub(crate) fn post(&self, path: &str, body: &Value) -> Result<(Value, Timing), ApiError> {
         let started = Instant::now();
         let url = format!("{}{path}", self.base);
         let bearer = format!("Bearer {}", self.key);
@@ -119,30 +114,30 @@ impl OpenRouter {
             ("Content-Type", "application/json"),
         ];
         let body = body.to_string();
-        let mut last = ApiError::Network("no attempt".into());
         let mut timed_out = false;
-        for attempt in 0..ATTEMPTS {
-            if attempt > 0 {
-                std::thread::sleep(Duration::from_millis(400 << attempt));
-            }
+        retried(PAUSE, || {
             let (status, text) = match self.http.post(&url, &headers, &body) {
                 Ok(reply) => (reply.status, reply.body),
                 // A reply being written is billed: asking again would pay for it twice (a decision
                 // is asked once more). One that never got through is asked again.
                 Err(HttpError::Unanswered(why)) => {
-                    last = ApiError::Network(why);
                     if !self.retry_timeout || timed_out {
-                        return Err(last);
+                        return Attempt::Done(Err(ApiError::Network(why)));
                     }
                     timed_out = true;
-                    continue;
+                    return Attempt::Again(ApiError::Network(why));
                 }
-                Err(HttpError::Unsent(why)) => {
-                    last = ApiError::Network(why);
-                    continue;
-                }
+                Err(HttpError::Unsent(why)) => return Attempt::Again(ApiError::Network(why)),
             };
             let parsed: Option<Value> = serde_json::from_str(&text).ok();
+            let failed = |code: u16, message: String| {
+                let error = ApiError::Http(code, message);
+                if transient(code) {
+                    Attempt::Again(error)
+                } else {
+                    Attempt::Done(Err(error))
+                }
+            };
             if status == 200 {
                 // OpenRouter reports some upstream failures inside a 200 body.
                 if let Some(error) = parsed.as_ref().and_then(|value| value.get("error")) {
@@ -151,35 +146,32 @@ impl OpenRouter {
                         .and_then(Value::as_u64)
                         .and_then(|code| u16::try_from(code).ok())
                         .unwrap_or(502);
-                    last = ApiError::Http(code, message_of(error));
-                    if RETRY_STATUSES.contains(&code) {
-                        continue;
-                    }
-                    return Err(last);
+                    return failed(code, message_of(error));
                 }
-                let value = parsed.ok_or_else(|| ApiError::Invalid("not JSON".into()))?;
-                return Ok((
-                    value,
-                    Timing {
-                        millis: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
-                    },
-                ));
+                let millis = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+                return Attempt::Done(
+                    parsed
+                        .map(|value| (value, Timing { millis }))
+                        .ok_or_else(|| ApiError::Invalid("not JSON".into())),
+                );
             }
             let message = parsed
                 .as_ref()
                 .and_then(|value| value.get("error"))
                 .map(message_of)
                 .unwrap_or_else(|| text.chars().take(300).collect());
-            last = match status {
-                401 | 403 => return Err(ApiError::Auth(message)),
-                _ => ApiError::Http(status, message),
-            };
-            if !RETRY_STATUSES.contains(&status) {
-                return Err(last);
+            match status {
+                401 | 403 => Attempt::Done(Err(ApiError::Auth(message))),
+                _ => failed(status, message),
             }
-        }
-        Err(last)
+        })
     }
+}
+
+/// Whether a wait may mend `status`: a 429 here is a rate limit of a moment, as are the
+/// statuses every host means so.
+fn transient(status: u16) -> bool {
+    status == 429 || TRANSIENT.contains(&status)
 }
 
 fn message_of(error: &Value) -> String {

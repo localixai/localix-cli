@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use contracts::gate::{Effect, Gate, Verdict};
 
 use crate::interrupt;
-use crate::tui::printable::printable;
+use crate::printable::printable;
 use protocol::Approval;
 
 /// Times an unreadable answer is asked again before it counts as no.
@@ -40,7 +40,7 @@ static ASKING: Mutex<()> = Mutex::new(());
 
 /// Hold `person`'s attention for one question.
 pub(crate) fn one_question(person: &Mutex<()>) -> std::sync::MutexGuard<'_, ()> {
-    crate::output::lock(person)
+    crate::sync::lock(person)
 }
 
 impl Gate for Stoppable<'_> {

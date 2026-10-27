@@ -37,9 +37,11 @@ mod mode;
 mod modes;
 mod output;
 mod picker;
+mod printable;
 mod providers;
 mod rules;
 mod server;
+mod sync;
 #[cfg(test)]
 mod testing;
 mod tui;

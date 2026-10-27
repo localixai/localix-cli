@@ -1,12 +1,14 @@
 //! What the model providers share, so a new provider is mostly its wire format: an HTTP client on
 //! the OS's own TLS ([`http`]), the pieces of an OAuth sign-in ([`oauth`], [`loopback`], [`page`]),
-//! private credential files ([`store`]) and server-sent events ([`sse`]). It implements no port and
+//! private credential files ([`store`]), server-sent events ([`sse`]) and when a request is asked again
+//! ([`retry`]). It implements no port and
 //! knows no provider.
 
 pub mod http;
 pub mod loopback;
 pub mod oauth;
 pub mod page;
+pub mod retry;
 pub mod sse;
 pub mod store;
 

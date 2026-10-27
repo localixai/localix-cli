@@ -2,10 +2,10 @@ use std::time::Instant;
 
 use crossterm::event::KeyCode;
 
-use crate::tui::app::{Action, App};
+use crate::tui::app::App;
 use crate::tui::event::Event;
-use crate::tui::test_support::{Term, in_session as from, press, typed};
-use protocol::Target;
+use crate::tui::test_support::{Term, commands, in_session as from, press, typed};
+use protocol::{Command, Target};
 
 /// Lanes A (shown, idle, one task done), B (working) and C (a choice held for it).
 fn three(now: Instant) -> App {
@@ -55,7 +55,8 @@ fn saved() -> Event {
 fn left_on_empty_composer_asks_for_sessions() {
     let now = Instant::now();
     let mut app = three(now);
-    assert_eq!(press(&mut app, KeyCode::Left, now), Some(Action::Sessions));
+    assert_eq!(press(&mut app, KeyCode::Left, now), None);
+    assert_eq!(commands(&mut app), vec![Command::List]);
     press(&mut app, KeyCode::Esc, now);
     typed(&mut app, "ab", now);
     assert_eq!(
@@ -77,6 +78,7 @@ fn saved_rows_open_the_list_live_first() {
     let mut term = Term::new(&app);
     term.draw(&mut app, now);
     press(&mut app, KeyCode::Left, now);
+    commands(&mut app);
     app.event(saved(), now);
     let screen = term.draw(&mut app, now);
     let list = screen
@@ -94,7 +96,7 @@ fn saved_rows_open_the_list_live_first() {
       Earlier
         make the binary smaller  1 d ago · 1 task
 
-      ↑↓ choose · enter open · x stop · esc back
+      enter open · x stop · esc back
     ");
 }
 
@@ -123,12 +125,14 @@ fn choosing_a_saved_row_opens_it() {
     let now = Instant::now();
     let mut app = three(now);
     press(&mut app, KeyCode::Left, now);
+    commands(&mut app);
     app.event(saved(), now);
     for _ in 0..3 {
         press(&mut app, KeyCode::Down, now);
     }
-    let opened = press(&mut app, KeyCode::Right, now);
-    assert_eq!(opened, Some(Action::Open(Target::Saved("old".into()))));
+    assert_eq!(press(&mut app, KeyCode::Right, now), None);
+    let target = Target::Saved("old".into());
+    assert_eq!(commands(&mut app), vec![Command::Open { target }]);
 }
 
 #[test]
@@ -136,10 +140,12 @@ fn new_session_is_a_row() {
     let now = Instant::now();
     let mut app = three(now);
     press(&mut app, KeyCode::Left, now);
+    commands(&mut app);
     press(&mut app, KeyCode::Down, now);
     press(&mut app, KeyCode::Down, now);
-    let opened = press(&mut app, KeyCode::Enter, now);
-    assert_eq!(opened, Some(Action::Open(Target::New)));
+    assert_eq!(press(&mut app, KeyCode::Enter, now), None);
+    let target = Target::New;
+    assert_eq!(commands(&mut app), vec![Command::Open { target }]);
 }
 
 #[test]
@@ -147,11 +153,10 @@ fn x_on_a_row_stops_that_lane() {
     let now = Instant::now();
     let mut app = three(now);
     press(&mut app, KeyCode::Left, now);
+    commands(&mut app);
     press(&mut app, KeyCode::Up, now);
-    assert_eq!(
-        press(&mut app, KeyCode::Char('x'), now),
-        Some(Action::Halt("B".into()))
-    );
+    assert_eq!(press(&mut app, KeyCode::Char('x'), now), None);
+    assert_eq!(commands(&mut app), vec![Command::Halt { id: "B".into() }]);
     press(&mut app, KeyCode::Down, now);
     assert_eq!(
         press(&mut app, KeyCode::Char('x'), now),
@@ -218,12 +223,13 @@ fn opening_a_tree_row_returns_the_keys_to_input() {
         let screen = term.draw(&mut app, now);
         assert!(screen.contains("scout's own transcript"), "{screen}");
         assert!(
-            !screen.contains("↑↓ select"),
+            !screen.contains("x stop"),
             "focus stayed in the tree:\n{screen}"
         );
         // Left now opens the project list, rather than silently leaving tree focus.
         press(&mut app, KeyCode::Esc, now);
-        assert_eq!(press(&mut app, KeyCode::Left, now), Some(Action::Sessions));
+        assert_eq!(press(&mut app, KeyCode::Left, now), None);
+        assert_eq!(commands(&mut app), vec![Command::List]);
     }
 }
 

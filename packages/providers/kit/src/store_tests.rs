@@ -54,3 +54,16 @@ fn a_save_replaces_the_file_whole_and_leaves_nothing_behind() {
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_pasted_key_has_no_spaces_inside() {
+    assert_eq!(as_key("  sk-or-v1-abc \n"), Some("sk-or-v1-abc"));
+    assert_eq!(as_key("sk or"), None);
+    assert_eq!(as_key("\n"), None);
+}
+
+#[test]
+fn a_key_shows_only_its_ends() {
+    assert_eq!(masked("sk-or-v1-0123456789abcdef"), "sk-or-...cdef");
+    assert_eq!(masked("sk-or-abc"), "...");
+}

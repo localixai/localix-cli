@@ -5,7 +5,8 @@
 //! a paste keeps its lines. Left and right move by character, with Alt (or Ctrl) by word; Home,
 //! End, Ctrl+A and Ctrl+E go to the line's ends; Up and Down move between lines, and past the
 //! first or the last one walk the earlier entries. Ctrl+U, Ctrl+K and Ctrl+W delete to the
-//! start, to the end and the word before.
+//! start, to the end and the word before. Shift with Left, Right, Home or End selects; Backspace
+//! or Delete takes the selection away, and what is typed or pasted replaces it.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -32,6 +33,8 @@ pub(crate) struct Composer {
     text: Vec<char>,
     /// An index into `text`.
     at: usize,
+    /// The fixed end of a keyboard selection, in character indices.
+    anchor: Option<usize>,
     /// What was sent before, oldest first.
     earlier: Vec<String>,
     /// While walking `earlier`: which one is shown, and what was typed before the walk began.
@@ -77,6 +80,7 @@ impl Composer {
     pub(crate) fn set(&mut self, text: &str) {
         self.text = text.chars().collect();
         self.at = self.text.len();
+        self.anchor = None;
     }
 
     /// The `@` word the cursor is at the end of: where it starts, and what follows the `@`.
@@ -106,6 +110,24 @@ impl Composer {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let alt = key.modifiers.contains(KeyModifiers::ALT);
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+        if matches!(
+            key.code,
+            KeyCode::Left | KeyCode::Right | KeyCode::Home | KeyCode::End
+        ) {
+            if shift {
+                self.anchor.get_or_insert(self.at);
+            } else {
+                self.anchor = None;
+            }
+        } else if matches!(key.code, KeyCode::Up | KeyCode::Down)
+            || (ctrl && matches!(key.code, KeyCode::Char('a' | 'e')))
+            || (alt && matches!(key.code, KeyCode::Char('b' | 'f')))
+        {
+            self.anchor = None;
+        }
+        if matches!(key.code, KeyCode::Backspace | KeyCode::Delete) && self.delete_selection() {
+            return Edit::Changed;
+        }
         #[expect(
             clippy::wildcard_enum_match_arm,
             reason = "crossterm's keys, a foreign enum: the others edit nothing"
@@ -158,12 +180,32 @@ impl Composer {
         Edit::Sent(text)
     }
 
+    fn selection(&self) -> Option<std::ops::Range<usize>> {
+        self.anchor
+            .map(|anchor| anchor.min(self.text.len()))
+            .filter(|anchor| *anchor != self.at)
+            .map(|anchor| anchor.min(self.at)..anchor.max(self.at))
+    }
+
+    fn delete_selection(&mut self) -> bool {
+        let selection = self.selection();
+        self.anchor = None;
+        if let Some(range) = selection {
+            self.delete(range.start, range.end);
+            true
+        } else {
+            false
+        }
+    }
+
     fn insert(&mut self, c: char) {
+        self.delete_selection();
         self.text.insert(self.at, c);
         self.at += 1;
     }
 
     fn delete(&mut self, from: usize, to: usize) {
+        self.anchor = None;
         if from < to {
             self.text.drain(from..to);
             self.at = from;

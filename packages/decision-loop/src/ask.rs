@@ -10,9 +10,9 @@ use serde_json::{Map, Value, json};
 use contracts::model::{Answer, Question};
 
 use crate::choice::valid_choice;
-pub use crate::offer::in_scope;
+pub(crate) use crate::offer::in_scope;
 use crate::offer::{clickable, covered, criteria, dropdown, entries, operations_now};
-pub use crate::step::{GoalStep, OPERATIONS, Operation, Pick};
+pub(crate) use crate::step::{GoalStep, OPERATIONS, Operation, Pick};
 use contracts::view::{Element, Observation};
 
 const NEXT_ACTION: &str = "Advance the whole goal from the CURRENT view with one operation.
@@ -40,7 +40,7 @@ fn with_conventions(rules: &str, conventions: &str) -> String {
     }
 }
 
-pub struct AskInput<'a> {
+pub(crate) struct AskInput<'a> {
     pub goal: &'a str,
     /// How the view's world behaves (`View::conventions`).
     pub conventions: &'a str,
@@ -50,7 +50,7 @@ pub struct AskInput<'a> {
 }
 
 /// The request, plus what each head offered so the answer can be read back.
-pub struct Ask {
+pub(crate) struct Ask {
     pub(crate) state: Value,
     pub(crate) questions: BTreeMap<String, Question>,
     offered: BTreeMap<String, Map<String, Value>>,
@@ -63,7 +63,7 @@ const WAITS: [&str; 7] = ["1", "2", "3", "5", "10", "20", "30"];
 /// A WAIT whose length the model did not name.
 const DEFAULT_WAIT: &str = "2";
 
-pub fn ask(input: &AskInput) -> Ask {
+pub(crate) fn ask(input: &AskInput) -> Ask {
     let blocked = covered(input.history);
     let scope = in_scope(&input.view.elements);
     let dialog_open = scope.len() != input.view.elements.len();
@@ -247,7 +247,7 @@ fn state(input: &AskInput, elements: &[&Element]) -> Value {
 
 impl Ask {
     /// The step the answers name: only the chosen operation's head is read.
-    pub fn read(&self, answers: &BTreeMap<String, Answer>) -> Result<Pick, String> {
+    pub(crate) fn read(&self, answers: &BTreeMap<String, Answer>) -> Result<Pick, String> {
         let head = |key: &str| {
             self.offered
                 .get(key)

@@ -126,12 +126,8 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                 hidden: &hidden,
             };
             let ended = monitor::watch(&command, root, env, deadline, &stopped, &lines);
-            let listed = {
-                let mut state = jobs.lock();
-                let before = state.jobs.len();
-                state.jobs.retain(|job| job.id != id);
-                state.jobs.len() < before
-            };
+            // Keep it listed until its final arrival is posted: exec waits while it is listed.
+            let listed = jobs.lock().jobs.iter().any(|job| job.id == id);
             let why = match ended {
                 Ok(Ended::Exit(how)) => format!("its command ended ({how})"),
                 Ok(Ended::Deadline) => {
@@ -144,6 +140,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                 let ended = format!("The monitor ended: {why}.");
                 kit.queue.post(crate::arrivals::monitor(&label, &ended));
             }
+            jobs.lock().jobs.retain(|job| job.id != id);
             jobs.show(kit);
         });
         // The OS refused a thread: the monitor is not listed, and the model is told.

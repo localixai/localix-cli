@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::output::lock;
 use crate::server::Ui;
+use crate::sync::lock;
 use protocol::Event;
 
 /// How long "Exit and stop tasks" waits for the lanes it stopped.

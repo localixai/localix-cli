@@ -6,7 +6,7 @@ use serde_json::{Map, Value};
 
 /// The choice and its probability when the answer is one of `offered` and its distribution is
 /// sound: finite, summing to one, with the choice on top. Anything else executes nothing.
-pub fn valid_choice<'a>(
+pub(crate) fn valid_choice<'a>(
     answer: Option<&'a Answer>,
     offered: &Map<String, Value>,
 ) -> Option<(&'a str, f64)> {

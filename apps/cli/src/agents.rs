@@ -28,7 +28,7 @@ use queue::Queue;
 use self::inbox::Letters;
 pub(crate) use self::tool::AgentsTool;
 use crate::mode::Mode;
-use crate::output::lock;
+use crate::sync::lock;
 use protocol::Event;
 
 /// Agents open at once: each keeps its conversation.
@@ -137,12 +137,16 @@ impl Delegation for AgentsTool<'_, '_> {
     }
 
     fn forget(&self) {
-        let mut state = self.registry.lock();
-        let had = !state.children.is_empty();
-        for child in &state.children {
-            child.stop.store(true, Ordering::SeqCst);
-        }
-        state.children.clear();
+        let had = {
+            let mut state = self.registry.lock();
+            let had = !state.children.is_empty();
+            for child in &state.children {
+                child.stop.store(true, Ordering::SeqCst);
+            }
+            state.children.clear();
+            had
+        };
+        // The state is let go before the queue and the interface are touched (R6).
         (self.registry.queue).forget(|entry| entry.tag == crate::arrivals::AGENT_RESULT);
         if had && let Some(ui) = self.kit.output.ui() {
             ui.send(Event::AgentsCleared);

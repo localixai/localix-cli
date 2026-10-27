@@ -57,7 +57,7 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 | `--max-steps N` | Actions for one browser task of the decision model (40; 1 to 10000). |
 | `--timeout SECONDS` | Seconds one task may take (1800; at most 86400). It stops at the first model turn past them, or while the task waits on its monitors or agents. Time spent waiting on you (an approval, a question) does not count. |
 | `--no-daemon` | Run the session in this process instead of the daemon (`llx serve`). Env `LLX_NO_DAEMON=1`. `exec` always runs in process. |
-| `--show-browser` | Show the browser window, and a window for each terminal session `bash` keeps. By default they show in a session, and stay hidden in `exec` and over SSH (`SSH_CONNECTION` or `SSH_TTY` set; the browser then works without a window). The browser window opens only when the browser is first used. A shown window is an ordinary one: it comes to the front when it opens, without taking the keyboard, and goes behind other windows like any other. |
+| `--show-browser` | Show the browser window, and a window for each terminal session `bash` keeps. By default they show in a session, and stay hidden in `exec` and over SSH (`SSH_CONNECTION` or `SSH_TTY` set; the browser then works without a window). The browser window opens only when the browser is first used. On macOS the shared window opens in native full-screen mode; this may switch Spaces. Elsewhere it opens as an ordinary window. |
 
 ### Commands
 
@@ -78,7 +78,7 @@ interface cannot start) it is a usage error pointing to `llx exec`, which prints
 
 ### The screen
 
-- What finished goes into the terminal's own scrollback, so scrolling, selecting and copying are the terminal's. Only the bottom is redrawn: the call running, `Working (12s · esc to interrupt)`, the messages you queued meanwhile, and the prompt `❯`.
+- What finished goes into the terminal's own scrollback, so scrolling, selecting and copying are the terminal's. Only the bottom is redrawn: the call running, `Working (12s · esc stop)`, the messages you queued meanwhile, and the prompt `❯`.
 - Under the prompt, a list shows the session, the agents it started (as a branch) and the jobs running; with no agents it is gone. Time and tokens follow each row's status. The other sessions take one line, `← 2 other sessions (1 working, 1 waiting for you)`.
 - ↓ from an empty prompt gives the list the keys: ↑↓ choose, Enter or → shows an agent's transcript, `x` stops an agent or a job, Esc or ← go back.
 - Each session gets a short title from its first task, made in the background by the same model at its lowest reasoning level (the task never waits for it), shown in the list and saved with the session.
@@ -90,9 +90,16 @@ interface cannot start) it is a usage error pointing to `llx exec`, which prints
 
 - Enter sends. Shift+Enter, Ctrl-J or a line ending in `\` start a new line; a paste keeps its lines. Up and Down walk earlier entries.
 - While a task works, Enter sends what you type to it, read at its next step (`↳`); Tab keeps it for after the task (`⏎`).
-- Ctrl-R finds the last earlier entry with the words already typed (type them first; again for older ones). Ctrl-G writes the entry in `$EDITOR`.
+- Ctrl-R finds the last earlier entry with the words already typed (type them first; again for older ones). Ctrl-G writes the entry in `$EDITOR`. Ctrl-U clears the line before the cursor. Shift+Left and Shift+Right select (with Alt or Ctrl, by word; Shift+Home and Shift+End to the line's ends): Backspace or Delete deletes the selection, and typing or a paste replaces it. Ctrl-Z (unix) gives the terminal back and stops llx, as vim does; the shell's `fg` continues it with the screen drawn again, and the session's tasks go on meanwhile.
+- Leaving (Ctrl-C twice, Ctrl-D, `/exit`) prints, dim under the history, `Resume this session: llx resume <id>` for each session with a task, the one shown first; moving to the background says to run `llx` in this directory to come back.
 - Clipboard text shows as `[Paste]` (numbered for several) and is expanded when sent.
 - Shift+Tab goes round the modes (default → plan → bypass → your own → default) without Enter; while a task runs, the switch waits until it ends.
+
+### Stepping back: Esc and Ctrl-C
+
+Esc and Ctrl-C each undo the innermost thing open, one step at a time; Ctrl-C also stops work. In order: a line typed in a question goes back to its options; a search's query is cleared (Ctrl-U clears it too); a list or a question closes (an approval: Esc answers no, Ctrl-C answers no and stops the task); a step of `/login` goes back to the one before; in an agent's view Ctrl-C stops that agent alone, then goes back to the main view; a task running stops (while it stops, a second Ctrl-C quits at once, as the footer says); a draft is cleared (↑ brings it back); and on an empty prompt the first Ctrl-C says `ctrl-c again to quit`, the second quits (asked first while work runs). Ctrl-D on an empty prompt quits too.
+
+Each list's last line names only the keys that do something there, each with what it does: `tab provider · ←→ reasoning · enter select · esc cancel`.
 
 ### Attaching files
 
@@ -129,15 +136,15 @@ Typing `/` lists them. Tab completes the selected command (with a trailing space
 
 ## Signing in and choosing a model
 
-`/login` asks for a provider (every one of the catalog in one list: the popular first, then the current one and those signed in to, then the rest by name; `✓` marks those signed in to or with a key set; type to search by name or id), signs you in to it, then opens its model list (↑↓ choose the model, ←/→ change its reasoning level, Enter confirms).
+`/login` asks for a provider (every one of the catalog in one list: the popular first, then the current one and those signed in to, then the rest by name; `✓` marks those signed in to or with a key set; type to search by name or id), signs you in to it, then opens its model list (↑↓ choose the model, ←/→ change its reasoning level, Enter confirms). Each step is titled by its path (`Login › OpenAI › Model`), and Esc goes back one step, as you left it; at the providers it ends /login. Once a sign-in is saved, Esc at the model goes back to the providers, and ending there says you are signed in and which model is still in use.
 
 - **OpenAI**, with a ChatGPT sign-in: your browser opens OpenAI's sign-in page and comes back to llx on `127.0.0.1:1455` (or 1457), and llx goes on by itself, with nothing to paste; requests are billed to your ChatGPT plan, and `/login` and `/model` offer the models the ChatGPT backend serves, those it serves alone (the Codex and Pro models) too. On a machine without a browser, open the address shown elsewhere and paste the address the browser ends on.
 - **OpenRouter**, with a key: paste it (it is not shown), or sign in in the browser for a new one. `OPENROUTER_API_KEY` works too, and wins over a saved key.
 - **Any provider of the model catalog** (Anthropic, Google, xAI, DeepSeek, Mistral, Groq, Moonshot, Z.ai, Together, Fireworks… about 200), with a key: paste it, or set the variable models.dev names for it (`ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`…), which wins over a saved key. OpenAI takes an API key too. Each is called over OpenAI's chat completions at the address the catalog gives.
 
-The models, their context windows, reasoning levels and defaults come from one catalog, models.dev's ([MODELS.md](../MODELS.md)): its files for the popular providers are built in, and a session fetches its newest data in the background, at most once a day, for the next one. Each request's cost comes from the catalog's prices when the provider reports none (a ChatGPT plan's as its API-equivalent value).
+The models, their context windows, reasoning levels and defaults come from one catalog, models.dev's ([MODELS.md](../MODELS.md)): its files for the popular providers are built in, and a session fetches its newest data in the background, at most once an hour; what it fetches is listed a minute later. Each request's cost comes from the catalog's prices when the provider reports none (a ChatGPT plan's as its API-equivalent value).
 
-`/model` chooses among the models of every provider signed in to. ←/→ change the highlighted model's reasoning level inline, and Enter confirms both. The current model keeps its level, and other models start at their own defaults. A list longer than 12 is searched by typing (Backspace edits the query, Esc clears it, then cancels) and scrolls with ↑↓, PageUp, PageDown, Home and End. Shift+Up and Shift+Down move the level without a menu.
+`/model` chooses among the models of every provider signed in to, each provider a tab over the list (`OpenAI 36 · [OpenRouter 288]`, with how many models each lists): Tab and Shift+Tab switch, and the list opens on the current model's. ←/→ change the highlighted model's reasoning level inline, and Enter confirms both. The current model keeps its level, and other models start at their own defaults. A list longer than 12 is searched by typing (Backspace edits the query, Esc clears it, then cancels; `/model`'s search finds a model by its name or id in every tab, each tab counting its matches, and goes to the tab of the best one when the tab shown has none) and scrolls with ↑↓, PageUp, PageDown, Home and End. Shift+Up and Shift+Down move the level without a menu.
 
 The choice is put in at once, in the same conversation, and saved as the default for later sessions and for `exec`. The browser's decision model runs on OpenRouter, so `goal`s on window tabs need an OpenRouter key whichever provider the agent thinks with.
 

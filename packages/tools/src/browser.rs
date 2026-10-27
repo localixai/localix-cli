@@ -27,14 +27,12 @@ mod webview;
 
 use std::time::Duration;
 
+use contracts::view::{Action, Element, ViewResult};
 use serde::{Deserialize, Serialize};
 
 pub use args::{GUIDE, address};
 pub use capture::{Clip, Shot};
-pub use contracts::view::{
-    Action, Element, SelectOption, ViewError as BrowserError, ViewResult as BrowserResult,
-};
-pub use host::{Browser, Dressing, Heard, Listed, Tab, Window, host};
+pub use host::{Browser, Dressing, Heard, Tab, Window, host};
 pub use page::Page;
 pub use panel::Panel;
 pub use tabs::MAX_TABS;
@@ -70,9 +68,6 @@ pub struct Observation {
     pub viewport: Size,
     pub scroll: Scroll,
     pub elements: Vec<Element>,
-    /// Visible controls left out past the element cap.
-    #[serde(default)]
-    pub omitted: usize,
     /// The page says it is still working (parsing, fetching its own data, a progress bar).
     #[serde(default)]
     pub busy: bool,
@@ -99,7 +94,6 @@ impl From<Observation> for contracts::view::Observation {
             text: page.text,
             outline: page.outline,
             elements: page.elements,
-            omitted: page.omitted,
             busy: page.busy,
             scroll: page.scroll.y,
         }
@@ -108,25 +102,25 @@ impl From<Observation> for contracts::view::Observation {
 
 /// A browser driven one page at a time: observed and acted on in turn.
 pub trait Driver {
-    fn navigate(&self, url: &str) -> BrowserResult<()>;
+    fn navigate(&self, url: &str) -> ViewResult<()>;
     /// Wait until the document is usable (loaded, or parsed while images and frames still load),
     /// up to `timeout`.
-    fn wait_loaded(&self, timeout: Duration) -> BrowserResult<()>;
-    fn observe(&self) -> BrowserResult<Observation>;
+    fn wait_loaded(&self, timeout: Duration) -> ViewResult<()>;
+    fn observe(&self) -> ViewResult<Observation>;
     /// Perform `action` against the observation with `epoch`, then let the page settle.
-    fn act(&self, epoch: &str, action: &Action) -> BrowserResult<()>;
+    fn act(&self, epoch: &str, action: &Action) -> ViewResult<()>;
     /// Reframe the page to `width`×`height` (layout only: the user agent stays), then let it settle.
-    fn resize(&self, width: f64, height: f64) -> BrowserResult<()>;
+    fn resize(&self, width: f64, height: f64) -> ViewResult<()>;
     /// Press `keys` (chords such as "ArrowUp", "Ctrl+A") on the focused element, `delay_ms` apart,
     /// then let the page settle.
-    fn press(&self, keys: &[String], delay_ms: u64) -> BrowserResult<()>;
+    fn press(&self, keys: &[String], delay_ms: u64) -> ViewResult<()>;
     /// Run `source` (JavaScript) in the page and return its value as text, then let the page settle.
-    fn evaluate(&self, source: &str) -> BrowserResult<String>;
+    fn evaluate(&self, source: &str) -> ViewResult<String>;
     /// The document's readable text from `offset`, at most `limit` characters.
-    fn read(&self, offset: usize, limit: usize) -> BrowserResult<PageText>;
+    fn read(&self, offset: usize, limit: usize) -> ViewResult<PageText>;
     /// A picture of the viewport as drawn, or of the first element matching the CSS `selector`
     /// (scrolled into view first, with a little of its surroundings).
-    fn screenshot(&self, selector: Option<&str>) -> BrowserResult<Shot>;
+    fn screenshot(&self, selector: Option<&str>) -> ViewResult<Shot>;
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

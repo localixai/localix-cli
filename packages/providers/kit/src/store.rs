@@ -54,6 +54,25 @@ pub fn remove(path: &Path) -> std::io::Result<bool> {
     }
 }
 
+/// `text` as a key, trimmed; `None` when it cannot be one (empty, or with spaces inside).
+pub fn as_key(text: &str) -> Option<&str> {
+    let key = text.trim();
+    let bad = key.is_empty() || key.contains(|c: char| c.is_whitespace() || c.is_control());
+    (!bad).then_some(key)
+}
+
+/// `key` as it may be shown: its first six and last four characters, or nothing of a short one.
+#[must_use]
+pub fn masked(key: &str) -> String {
+    let chars: Vec<char> = key.chars().collect();
+    if chars.len() < 16 {
+        return "...".into();
+    }
+    let start: String = chars[..6].iter().collect();
+    let end: String = chars[chars.len() - 4..].iter().collect();
+    format!("{start}...{end}")
+}
+
 #[cfg(test)]
 #[path = "store_tests.rs"]
 mod tests;

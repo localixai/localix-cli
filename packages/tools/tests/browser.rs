@@ -19,7 +19,8 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::time::Duration;
 
 use contracts::tool::Tool;
-use tools::browser::{self, Action, BrowserError, Driver, Observation, WebviewDriver, Window};
+use contracts::view::{Action, ViewError};
+use tools::browser::{self, Driver, Observation, WebviewDriver, Window};
 
 #[path = "support/panel.rs"]
 mod panel;
@@ -113,10 +114,7 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
             reference: later.reference.clone(),
         },
     );
-    assert!(
-        matches!(refused, Err(BrowserError::Refused(_))),
-        "{refused:?}"
-    );
+    assert!(matches!(refused, Err(ViewError::Refused(_))), "{refused:?}");
     act(
         driver,
         &page,
@@ -168,10 +166,7 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
             text: "x".into(),
         },
     );
-    assert!(
-        matches!(unknown, Err(BrowserError::Stale(_))),
-        "{unknown:?}"
-    );
+    assert!(matches!(unknown, Err(ViewError::Stale(_))), "{unknown:?}");
     let veiled = find(&page, "button", "Under the veil").to_string();
     act(
         driver,
@@ -182,7 +177,7 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     );
     let covered = driver.act(&page.epoch, &Action::Click { reference: veiled });
     assert!(
-        matches!(&covered, Err(BrowserError::Refused(m)) if m.starts_with("covered")),
+        matches!(&covered, Err(ViewError::Refused(m)) if m.starts_with("covered")),
         "{covered:?}"
     );
     assert_ne!(driver.observe().unwrap().title, "veiled clicked");
@@ -295,7 +290,7 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     );
     let thrown = driver.evaluate("null.x");
     assert!(
-        matches!(&thrown, Err(BrowserError::Refused(m)) if m.starts_with("the script threw")),
+        matches!(&thrown, Err(ViewError::Refused(m)) if m.starts_with("the script threw")),
         "{thrown:?}"
     );
 
@@ -381,7 +376,7 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
         },
     );
     assert!(
-        matches!(&covered, Err(BrowserError::Refused(m)) if m.starts_with("covered")),
+        matches!(&covered, Err(ViewError::Refused(m)) if m.starts_with("covered")),
         "{covered:?}"
     );
     act(
@@ -415,7 +410,7 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
     assert_eq!(page.title, "Second");
     let back = find(&page, "link", "Back").to_string();
     let stale = driver.act(&old, &Action::Click { reference: back });
-    assert!(matches!(stale, Err(BrowserError::Stale(_))), "{stale:?}");
+    assert!(matches!(stale, Err(ViewError::Stale(_))), "{stale:?}");
 
     tabs(driver, origin);
     screenshots(driver, origin);
@@ -441,7 +436,7 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
         },
     );
     assert!(
-        matches!(&covered, Err(BrowserError::Refused(m))
+        matches!(&covered, Err(ViewError::Refused(m))
             if m.starts_with("covered: a dialog \"Consent to Cookies\"")),
         "{covered:?}"
     );
@@ -496,10 +491,7 @@ fn scenario(driver: &WebviewDriver, origin: &str) {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert!(!driver.is_open(), "the window closed");
-    assert!(matches!(
-        driver.observe(),
-        Err(BrowserError::Unavailable(_))
-    ));
+    assert!(matches!(driver.observe(), Err(ViewError::Unavailable(_))));
 }
 
 /// A second page on the one open window (another client of the daemon): it opens a tab of its own
@@ -537,7 +529,7 @@ fn answers_while_loading(browser: &browser::Browser, driver: &WebviewDriver, ori
             std::thread::sleep(Duration::from_millis(10));
         }
         let asked = std::time::Instant::now();
-        let _ = (page.is_open(), page.driver().is_ok(), page.hidden());
+        let _ = (page.is_open(), page.driver().is_ok());
         let _ = page.pinned(1);
         let waited = asked.elapsed();
         assert!(
@@ -768,10 +760,7 @@ fn tabs(driver: &WebviewDriver, origin: &str) {
     // Closing the tab acted on goes to the one before it; a closed id is refused.
     assert!(driver.close_tab(4).unwrap());
     assert_eq!(driver.observe().unwrap().title, "Second");
-    assert!(matches!(
-        driver.switch_tab(4),
-        Err(BrowserError::Refused(_))
-    ));
+    assert!(matches!(driver.switch_tab(4), Err(ViewError::Refused(_))));
     for id in [3, 2] {
         assert!(driver.close_tab(id).unwrap());
     }
@@ -782,7 +771,7 @@ fn tabs(driver: &WebviewDriver, origin: &str) {
     for gone in [2, 9] {
         let pinned = driver.on(gone);
         assert!(
-            matches!(pinned.observe(), Err(BrowserError::Unavailable(ref why)) if why.contains("closed")),
+            matches!(pinned.observe(), Err(ViewError::Unavailable(ref why)) if why.contains("closed")),
             "tab {gone}"
         );
         assert!(pinned.evaluate("document.title = 'moved'").is_err());
@@ -822,7 +811,7 @@ fn screenshots(driver: &WebviewDriver, origin: &str) {
     assert!(board.width < page.width && board.jpeg.len() < page.jpeg.len());
     let missing = driver.screenshot(Some("#nothing"));
     assert!(
-        matches!(&missing, Err(BrowserError::Refused(m)) if m.contains("nothing on the page matches")),
+        matches!(&missing, Err(ViewError::Refused(m)) if m.contains("nothing on the page matches")),
         "{missing:?}"
     );
 }
@@ -869,7 +858,7 @@ fn rerendered(driver: &WebviewDriver, origin: &str) {
             reference: adds[1].clone(),
         },
     );
-    assert!(matches!(gone, Err(BrowserError::Stale(_))), "{gone:?}");
+    assert!(matches!(gone, Err(ViewError::Stale(_))), "{gone:?}");
     assert_eq!(driver.observe().unwrap().title, "plums:0 apples:1 pears:1");
 }
 

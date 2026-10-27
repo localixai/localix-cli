@@ -31,7 +31,7 @@ export function Hero() {
         </a>
       </div>
       <figure className="hero-session">
-        <Terminal session={SESSION} label="Four llx calls from an agent's shell, and what they printed" />
+        <Terminal wrap session={SESSION} label="Four llx calls from an agent's shell, and what they printed" />
         <figcaption>From a real run on the repository&apos;s demo shop, outputs shortened.</figcaption>
       </figure>
     </section>

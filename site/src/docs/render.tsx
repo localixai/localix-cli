@@ -33,7 +33,7 @@ function Layout({ page }: { page?: DocPage | undefined }) {
         <aside className="docs-side">
           <Sidebar active={page?.slug} />
         </aside>
-        <main className="docs-main">{page ? <Article page={page} /> : <DocsIndex />}</main>
+        <main id="main" className="docs-main">{page ? <Article page={page} /> : <DocsIndex />}</main>
         {page && <Toc headings={page.headings} />}
       </div>
       <Footer />

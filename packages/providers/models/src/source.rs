@@ -1,7 +1,8 @@
 //! Where the catalog comes from: the files built in, and over them models.dev's published v2 API
 //! as last fetched (`<config>/models.json`, cut down to what llx reads). A refresh asks
-//! models.dev at most once a day, with the ETag it last had, so an unchanged catalog costs no
-//! body; a failed one changes nothing. Nothing waits on the network: a session refreshes in the
+//! models.dev at most once an hour, with the ETag it last had, so an unchanged catalog costs no
+//! body (a changed one is about 800 KB gzipped); a failed one changes nothing. A day was too
+//! long: a model released in the morning was missing until the next. Nothing waits on the network: a session refreshes in the
 //! background, and what it fetches is read by the next one.
 
 use std::path::{Path, PathBuf};
@@ -14,7 +15,7 @@ use crate::Catalog;
 /// The v2 API: resolved, with every model's APIs and reasoning defaults (MODELS.md).
 const URL: &str = "https://models.dev/experimental/v2.0/api.json";
 /// How old the fetched catalog may be before it is asked for again.
-const STALE: Duration = Duration::from_secs(24 * 3600);
+const STALE: Duration = Duration::from_secs(3600);
 const TIMEOUT: Duration = Duration::from_secs(30);
 
 fn paths(app: App) -> Option<(PathBuf, PathBuf)> {
@@ -44,7 +45,7 @@ pub fn written(app: App) -> Option<SystemTime> {
         .ok()
 }
 
-/// Ask models.dev for its catalog when the one fetched last is a day old; whether a new one
+/// Ask models.dev for its catalog when the one fetched last is an hour old; whether a new one
 /// was kept.
 pub fn refresh(app: App) -> Result<bool, String> {
     let (cache, etag_path) = paths(app).ok_or("no config directory")?;
@@ -89,7 +90,7 @@ fn settle(
     let whole = store::read(cache).is_some_and(|text| Catalog::parse(&text).is_ok());
     let etag = store::read(etag_path).filter(|_| whole);
     match fetch(etag.as_deref())? {
-        // Unchanged: the copy is as new as models.dev's, for another day.
+        // Unchanged: the copy is as new as models.dev's, for another hour.
         (304, _, _) => {
             let file = std::fs::File::options().append(true).open(cache);
             let renewed = file.and_then(|file| file.set_modified(SystemTime::now()));

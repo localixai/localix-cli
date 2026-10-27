@@ -57,7 +57,7 @@ fn each_session_is_a_row_the_shown_one_marked() {
             "  * go  Messaging agent tests · run them",
             "    ├ ✓ scout  done",
             "    └ * tests  Running cargo test",
-            "  ↓ to manage · ← sessions",
+            "  ↓ manage · ← sessions",
         ]
     );
     // ↓ from the empty prompt goes into the list on main, ↓↓ to tests, Enter shows it.
@@ -79,7 +79,7 @@ fn each_session_is_a_row_the_shown_one_marked() {
       * go  Messaging agent tests · run them
         ├ ✓ scout  done
         └ * tests  current · Running cargo test
-      ↓ to manage · esc back to go
+      ↓ manage · esc back to go
     ");
 }
 
@@ -180,7 +180,7 @@ fn tree_shows_lane_rows_with_time_and_tokens() {
     insta::assert_snapshot!(rows.join("\n"), @"
     * fix the flaky  working · 1m 12s · 54.1k tokens
       └ * scout  thinking · 1m 12s · 12.0k tokens
-    ↓ to manage · ← 1 other session (1 finished)
+    ↓ manage · ← 1 other session (1 finished)
     ");
 }
 
@@ -233,7 +233,7 @@ fn another_sessions_agents_are_not_listed() {
         [
             "  ● second  idle",
             "    └ ○ scout  starting",
-            "  ↓ to manage · ← 1 other session"
+            "  ↓ manage · ← 1 other session"
         ]
     );
 }

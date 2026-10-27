@@ -53,7 +53,6 @@ mod covered {
                 dialog: false,
                 options: vec![],
             }],
-            omitted: 0,
             busy: false,
         }
     }
@@ -143,7 +142,7 @@ mod covered {
             pause: &pause,
             max_actions: 5,
         }
-        .run("Click Next", &[]);
+        .resume("Click Next", &[], vec![]);
         assert_eq!(outcome.stop, Stop::Done { probability: 1.0 });
         assert!(
             outcome.steps[0]
@@ -202,7 +201,7 @@ mod covered {
             pause: &pause,
             max_actions: 5,
         }
-        .run("Answer three questions", &[]);
+        .resume("Answer three questions", &[], vec![]);
         assert_eq!(outcome.stop, Stop::Done { probability: 0.55 });
         assert_eq!(
             *model.asked.lock().unwrap(),
@@ -251,7 +250,6 @@ mod typing {
                     dialog: false,
                     options: vec![],
                 }],
-                omitted: 0,
                 busy: false,
             })
         }
@@ -307,9 +305,10 @@ mod typing {
             pause: &pause,
             max_actions: 40,
         }
-        .run(
+        .resume(
             "define a function sq, then call it with the given number",
             &["12".into()],
+            vec![],
         );
         assert_eq!(outcome.stop, Stop::Repeated);
         assert_eq!(*line.typed.lock().unwrap(), "12", "typed once");

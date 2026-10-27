@@ -3,7 +3,8 @@
 //! cancels (or, while typing, goes back to the options). No letter picks: words typed ahead as a
 //! choice opens must not answer it. A list longer than its window is searchable instead: letters
 //! go to a query that filters it (`search`), PageUp, PageDown, Home and End move too, and no
-//! number picks.
+//! number picks. A list in groups shows one at a time, as tabs (`tabs`): Tab and Shift+Tab
+//! switch, and a search looks in every one.
 //!
 //! ```text
 //! Run this command?
@@ -21,8 +22,10 @@ use ratatui::text::Line;
 
 use super::composer::{Composer, Edit};
 use super::search::{self, Search, Searched};
+use tabs::Tabs;
 
 mod render;
+mod tabs;
 
 /// Options shown at once; a longer list scrolls with the marked one.
 const WINDOW: usize = 12;
@@ -71,7 +74,8 @@ pub(crate) struct Select {
     choices: Vec<Choice>,
     at: usize,
     typing: Option<Composer>,
-    /// What Esc does, as the hint says it: `esc to cancel`, `esc to say no`.
+    /// What Esc does (and Ctrl-C, where it does more), as the hint says it: `esc cancel`,
+    /// `esc no · ctrl-c stop`.
     escape: String,
     /// What is typed is a secret: shown as dots.
     hidden: bool,
@@ -83,6 +87,8 @@ pub(crate) struct Select {
     /// Letters filter the list: a long one.
     search: Option<Search>,
     adjustments: Option<Vec<protocol::Adjustment>>,
+    /// The rows in groups, one listed at a time.
+    tabs: Option<Tabs>,
 }
 
 impl Select {
@@ -91,6 +97,7 @@ impl Select {
         Self {
             search: None,
             adjustments: None,
+            tabs: None,
             title,
             choices,
             at: 0,
@@ -114,6 +121,12 @@ impl Select {
         self
     }
 
+    /// The rows in `groups`, as tabs, shown on the marked row's: after [`Select::at`].
+    pub(crate) fn grouped(mut self, groups: &[protocol::Group]) -> Self {
+        self.tabs = Tabs::new(groups, self.choices.len(), self.at);
+        self
+    }
+
     /// Letters filter the list, and no number picks.
     pub(crate) fn searchable(mut self, on: bool) -> Self {
         let rows = self
@@ -124,11 +137,37 @@ impl Select {
         self
     }
 
-    /// The options listed, as positions in the whole list: those that match, best first.
-    fn rows(&self) -> Vec<usize> {
+    /// The options that match, as positions in the whole list, best first.
+    fn matching(&self) -> Vec<usize> {
         match &self.search {
             Some(search) => search.shown.clone(),
             None => (0..self.choices.len()).collect(),
+        }
+    }
+
+    /// The options listed: those that match, of the tab shown.
+    fn rows(&self) -> Vec<usize> {
+        let matching = self.matching();
+        match &self.tabs {
+            Some(tabs) => matching.into_iter().filter(|at| tabs.holds(*at)).collect(),
+            None => matching,
+        }
+    }
+
+    /// The marker on the best match of the query, in the tab shown when it has one, else in
+    /// the tab of the best.
+    fn follow(&mut self) {
+        let Some(search) = self.search.as_ref().filter(|search| !search.is_empty()) else {
+            return;
+        };
+        let shown = &search.shown;
+        let here = (self.tabs.as_ref()).and_then(|tabs| shown.iter().find(|at| tabs.holds(**at)));
+        let Some(&best) = here.or_else(|| shown.first()) else {
+            return;
+        };
+        self.at = best;
+        if let Some(tabs) = &mut self.tabs {
+            tabs.show(best);
         }
     }
 
@@ -172,9 +211,13 @@ impl Select {
     )]
     pub(crate) fn key(&mut self, key: KeyEvent) -> Option<Picked> {
         if let Some(composer) = &mut self.typing {
+            // Ctrl-C is a step back as Esc is: the options again, or a cancel with none.
+            let back = key.code == KeyCode::Esc
+                || (key.code == KeyCode::Char('c')
+                    && key.modifiers.contains(KeyModifiers::CONTROL));
             return match key.code {
-                KeyCode::Esc if self.direct => Some(Picked::Cancelled),
-                KeyCode::Esc => {
+                _ if back && self.direct => Some(Picked::Cancelled),
+                _ if back => {
                     self.typing = None;
                     None
                 }
@@ -188,14 +231,19 @@ impl Select {
         if let Some(search) = self.search.as_mut().filter(|_| !toggles) {
             match search.key(key) {
                 Searched::Changed => {
-                    if let Some(first) = search.shown.first().filter(|_| !search.is_empty()) {
-                        self.at = *first;
-                    }
+                    self.follow();
                     return None;
                 }
                 Searched::Cancel => return Some(Picked::Cancelled),
                 Searched::Ignored => {}
             }
+        }
+        if let (Some(tabs), KeyCode::Tab | KeyCode::BackTab) = (&mut self.tabs, key.code) {
+            let kept = tabs.step(key.code == KeyCode::Tab, self.at);
+            let rows = self.rows();
+            let first = rows.first().copied();
+            self.at = (kept.filter(|at| rows.contains(at)).or(first)).unwrap_or(self.at);
+            return None;
         }
         if matches!(key.code, KeyCode::Left | KeyCode::Right)
             && !self.rows().is_empty()
@@ -257,7 +305,7 @@ impl Select {
             composer.paste(text);
         } else if let Some(search) = &mut self.search {
             search.paste(text);
-            self.at = search.shown.first().copied().unwrap_or(self.at);
+            self.follow();
         }
     }
 

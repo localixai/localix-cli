@@ -305,6 +305,8 @@ pub(crate) fn users(rig: &Rig) -> Vec<String> {
 pub(crate) struct Scripted {
     picks: VecDeque<Option<usize>>,
     pub(crate) shown: Vec<(String, Vec<crate::picker::Item>)>,
+    /// The groups each adjustable list was in: a name and its rows.
+    pub(crate) grouped: Vec<Vec<(String, usize)>>,
 }
 
 impl Scripted {
@@ -312,6 +314,7 @@ impl Scripted {
         Self {
             picks: picks.iter().copied().collect(),
             shown: vec![],
+            grouped: vec![],
         }
     }
 
@@ -339,6 +342,19 @@ impl crate::picker::Picker for Scripted {
             panic!("no pick was scripted")
         };
         pick
+    }
+
+    fn pick_adjustable(
+        &mut self,
+        title: &str,
+        items: &[crate::picker::Item],
+        adjustments: &[crate::picker::Adjustment],
+        groups: &[crate::picker::Group],
+    ) -> Option<(usize, usize)> {
+        let named = groups.iter().map(|g| (g.name.clone(), g.rows)).collect();
+        self.grouped.push(named);
+        let at = self.pick(title, items)?;
+        Some((at, adjustments.get(at).map_or(0, |a| a.at)))
     }
 }
 

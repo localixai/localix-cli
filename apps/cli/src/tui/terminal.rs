@@ -201,6 +201,35 @@ fn next() -> io::Result<Option<Terminal>> {
 #[cfg(not(unix))]
 fn wake_reader() {}
 
+/// `during` with the terminal handed over: the reader reads no key meanwhile, the terminal is as
+/// it was before llx took it, and the interface's modes are set again after, with the keys given
+/// back. Its result.
+fn handed_over<T>(during: impl FnOnce() -> T) -> T {
+    KEYS.take(wake_reader);
+    restore();
+    let result = during();
+    let _ = crossterm::terminal::enable_raw_mode();
+    let mut out = io::stdout();
+    let _ = out.write_all(ENTER.as_bytes()).and_then(|()| out.flush());
+    KEYS.give_back();
+    result
+}
+
+/// Whether Ctrl+Z can stop llx here: elsewhere the key is read as any other.
+pub(super) const CAN_SUSPEND: bool = cfg!(unix);
+
+/// The terminal given back and the process stopped (Ctrl+Z), as vim and less do; it returns once
+/// the shell continues it (`fg`), the terminal the interface's again. SIGTSTP is raised on this
+/// thread and stops every thread of the process: the server's, in process, with it.
+#[cfg(unix)]
+pub(super) fn suspend() {
+    handed_over(|| {
+        // SAFETY: raise only sends this thread a signal; SIGTSTP is not handled here, so its
+        // default action stops the process, and the call returns after SIGCONT.
+        unsafe { libc::raise(libc::SIGTSTP) };
+    });
+}
+
 /// The composer's `text` written in `$VISUAL` or `$EDITOR` (else `vi`), the terminal handed over
 /// meanwhile; the text as saved, or as it was when the editor could not run.
 #[expect(
@@ -212,27 +241,36 @@ pub(super) fn editor(text: &str) -> String {
     if std::fs::write(&path, text).is_err() {
         return text.to_string();
     }
-    // The keys are the editor's until it ends: the reader reads none meanwhile.
-    KEYS.take(wake_reader);
-    restore();
-    let command = std::env::var("VISUAL")
-        .or_else(|_| std::env::var("EDITOR"))
-        .unwrap_or_else(|_| "vi".into());
-    let ran = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(format!("{command} \"$0\""))
-        .arg(&path)
-        .status();
-    let _ = crossterm::terminal::enable_raw_mode();
-    let mut out = io::stdout();
-    let _ = out.write_all(ENTER.as_bytes()).and_then(|()| out.flush());
-    KEYS.give_back();
+    let ran = handed_over(|| {
+        let command = std::env::var("VISUAL")
+            .or_else(|_| std::env::var("EDITOR"))
+            .unwrap_or_else(|_| "vi".into());
+        std::process::Command::new("sh")
+            .arg("-c")
+            .arg(format!("{command} \"$0\""))
+            .arg(&path)
+            .status()
+    });
     let edited = ran
         .ok()
         .filter(|status| status.success())
         .and_then(|_| std::fs::read_to_string(&path).ok());
     let _ = std::fs::remove_file(&path);
     edited.unwrap_or_else(|| text.to_string())
+}
+
+/// `lines` printed under the history, dim, once the terminal is given back.
+pub(crate) fn say(lines: &[ratatui::text::Line<'static>]) {
+    if lines.is_empty() {
+        return;
+    }
+    let colour = super::style::colour_stdout();
+    let text: String = lines
+        .iter()
+        .map(|line| super::style::ansi(line, colour) + "\n")
+        .collect();
+    let mut out = io::stdout();
+    let _ = out.write_all(text.as_bytes()).and_then(|()| out.flush());
 }
 
 #[cfg(test)]

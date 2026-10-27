@@ -4,21 +4,19 @@
 //! The access token is refreshed before it lapses, and once more when a request is refused.
 
 use std::sync::{Condvar, Mutex};
-use std::time::Duration;
 
 use contracts::catalog::{Effort, Selection};
 use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
 use contracts::tool::ToolSpec;
-use provider_kit::http::Http;
+use provider_kit::http::{Http, HttpError};
+use provider_kit::retry::{Attempt, PAUSE, TRANSIENT, retried};
 use provider_kit::{App, oauth, sse};
 use serde_json::{Value, json};
 
 use crate::auth;
 use crate::tokens::{self, Tokens};
 
-pub const BASE: &str = "https://chatgpt.com/backend-api/codex";
-const ATTEMPTS: u32 = 3;
-const RETRY_STATUSES: [u16; 4] = [500, 502, 503, 504];
+pub(crate) const BASE: &str = "https://chatgpt.com/backend-api/codex";
 
 /// Where refreshed tokens are kept, and read back from when another process refreshed first.
 pub trait Keep: Send + Sync {
@@ -128,23 +126,19 @@ impl ChatModel {
 }
 
 impl Chat for ChatModel {
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "a backoff between attempts, which no event ends sooner"
-    )]
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let body = body(&self.selection, &self.session, request).to_string();
         let address = format!("{}/responses", self.base);
         let started = std::time::Instant::now();
-        let (mut renewed, mut last) = (false, ChatError::Unavailable("no attempt".into()));
-        for attempt in 0..ATTEMPTS {
-            if attempt > 0 {
-                std::thread::sleep(Duration::from_millis(400 << attempt));
-            }
-            let tokens = self.tokens(false)?;
+        let mut renewed = false;
+        retried(PAUSE, || {
+            let tokens = match self.tokens(false) {
+                Ok(tokens) => tokens,
+                Err(error) => return Attempt::Done(Err(error)),
+            };
             let headers = [
                 ("Authorization", format!("Bearer {}", tokens.access)),
-                ("chatgpt-account-id", tokens.account.clone()),
+                ("chatgpt-account-id", tokens.account),
                 ("originator", self.app.slug.to_string()),
                 ("session_id", self.session.clone()),
                 ("Content-Type", "application/json".into()),
@@ -154,36 +148,45 @@ impl Chat for ChatModel {
                 headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
             let reply = match self.http.post(&address, &headers, &body) {
                 Ok(reply) => reply,
-                Err(error) => {
-                    last = ChatError::Unavailable(format!("ChatGPT is unreachable: {error}"));
-                    continue;
+                Err(HttpError::Unsent(why)) => {
+                    return Attempt::Again(ChatError::Unavailable(format!(
+                        "ChatGPT is unreachable: {why}"
+                    )));
+                }
+                // A reply being written is billed: asking again would pay for it twice.
+                Err(HttpError::Unanswered(why)) => {
+                    return Attempt::Done(Err(ChatError::Unavailable(format!(
+                        "ChatGPT did not answer: {why}"
+                    ))));
                 }
             };
             match reply.status {
-                200 => {
-                    let mut completion = read(&reply.body, self.selection.model().id.as_str())?;
-                    completion.usage.millis =
-                        u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-                    return Ok(completion);
-                }
+                200 => Attempt::Done(read(&reply.body, self.selection.model().id.as_str()).map(
+                    |mut completion| {
+                        completion.usage.millis =
+                            u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+                        completion
+                    },
+                )),
                 401 if !renewed => {
                     renewed = true;
-                    self.tokens(true)?;
-                }
-                status => {
-                    last = ChatError::Unavailable(refusal(status, &reply.body));
-                    if !RETRY_STATUSES.contains(&status) {
-                        return Err(last);
+                    match self.tokens(true) {
+                        Ok(_) => Attempt::Again(ChatError::Unavailable(refusal(401, &reply.body))),
+                        Err(error) => Attempt::Done(Err(error)),
                     }
                 }
+                // A 429 here is the plan's usage limit, hours away: not worth a second try.
+                status if TRANSIENT.contains(&status) => {
+                    Attempt::Again(ChatError::Unavailable(refusal(status, &reply.body)))
+                }
+                status => Attempt::Done(Err(ChatError::Unavailable(refusal(status, &reply.body)))),
             }
-        }
-        Err(last)
+        })
     }
 }
 
 /// The request body for `request`.
-pub fn body(selection: &Selection, session: &str, request: Request) -> Value {
+pub(crate) fn body(selection: &Selection, session: &str, request: Request) -> Value {
     let mut body = json!({
         "model": selection.model().id,
         "input": request.conversation.iter().flat_map(items).collect::<Vec<_>>(),
@@ -254,7 +257,7 @@ fn function(spec: &ToolSpec) -> Value {
 }
 
 /// The completion in a streamed reply: its finished output items and the usage it ended with.
-pub fn read(body: &str, model: &str) -> Result<Completion, ChatError> {
+pub(crate) fn read(body: &str, model: &str) -> Result<Completion, ChatError> {
     let mut completion = Completion::default();
     let mut said: Vec<String> = vec![];
     let mut ended = false;

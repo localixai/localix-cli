@@ -75,15 +75,6 @@ pub trait Stage: Send + Sync {
     fn run(&self, conversation: &mut Conversation, frame: &Frame) -> usize;
 }
 
-/// Sends the conversation as it is.
-pub struct Keep;
-
-impl Strategy for Keep {
-    fn prepare(&self, _: &mut Conversation, _: u64, _: f64) -> Report {
-        vec![]
-    }
-}
-
 /// Stages behind a gate, in order.
 pub struct Pipeline {
     pub stages: Vec<Box<dyn Stage>>,

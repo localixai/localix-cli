@@ -215,7 +215,7 @@ mod dialogue {
 
     use super::*;
     use crate::agent::Agent;
-    use crate::observer::Silent;
+    use crate::fakes::Silent;
 
     const TURNS: usize = 300;
     /// Real tokens per estimated one, as the model reports them.

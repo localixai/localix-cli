@@ -6,7 +6,7 @@ use super::*;
 use crate::tui::app::App;
 use protocol::{Asked, Reply};
 
-use crate::tui::test_support::{Term, key, replies, typed};
+use crate::tui::test_support::{Term, ctrl, key, replies, typed};
 
 /// A long list as `/login` shows it: a name, then the id and a note.
 fn providers() -> Vec<(String, String)> {
@@ -83,6 +83,7 @@ fn adjustable(
         options,
         marked,
         adjustments,
+        groups: vec![],
     };
     app.asked(1, "", asked, Instant::now());
     app
@@ -120,7 +121,13 @@ fn adjustable_rows_bound_arrows_and_remember_each_rows_value() {
     );
     let shown = screen(&mut app);
     assert!(shown.contains("← high →"), "{shown}");
-    assert!(shown.contains("← on →"), "{shown}");
+    // Off the marked row, its value without arrows: only the marked one adjusts.
+    let other = shown
+        .lines()
+        .find(|line| line.contains("Anthropic"))
+        .unwrap();
+    assert!(other.trim_end().ends_with(" on"), "{shown}");
+    assert!(!other.contains('←'), "{shown}");
     press(
         &mut app,
         &[KeyCode::Left, KeyCode::Left, KeyCode::Left, KeyCode::Enter],
@@ -215,11 +222,11 @@ fn typing_filters_the_list_by_name_and_id_prefix_first() {
 
       Search: OPEN▏  3 matches
 
-    ❯ OpenAI openai · not signed in
-      OpenRouter openrouter · not signed in
-      Hyperopen hyperopen · not signed in
+    ❯ OpenAI      openai · not signed in
+      OpenRouter  openrouter · not signed in
+      Hyperopen   hyperopen · not signed in
 
-      type to search · ↑↓ to choose · enter to confirm · esc to clear
+      enter select · esc clear
     ");
 }
 
@@ -296,4 +303,66 @@ fn a_row_is_found_by_its_label_and_the_lead_of_its_detail_only() {
     let row = [keys("DeepSeek", "deepseek · not signed in")];
     assert_eq!(ranked("deeps", &row), [0]);
     assert!(ranked("signed", &row).is_empty(), "a note is not searched");
+}
+
+#[test]
+fn ctrl_c_clears_a_query_before_it_closes_the_list() {
+    let mut app = choose("Provider", providers());
+    typed(&mut app, "open", Instant::now());
+    app.input(ctrl('c'), Instant::now());
+    assert_eq!(picked(&mut app), None, "the query went, not the list");
+    let shown = screen(&mut app);
+    assert!(shown.contains("30 in all"), "{shown}");
+    app.input(ctrl('c'), Instant::now());
+    assert_eq!(picked(&mut app), Some(None));
+}
+
+#[test]
+fn ctrl_u_clears_the_query() {
+    let mut app = choose("Provider", providers());
+    typed(&mut app, "open", Instant::now());
+    app.input(ctrl('u'), Instant::now());
+    let shown = screen(&mut app);
+    assert!(shown.contains("Search: ▏  30 in all"), "{shown}");
+    assert_eq!(picked(&mut app), None);
+}
+
+#[test]
+fn a_list_in_steps_says_what_it_holds_by_its_last_step() {
+    let mut app = choose("Login › Provider", providers());
+    typed(&mut app, "zzz", Instant::now());
+    let shown = screen(&mut app);
+    assert!(shown.contains("No provider matches 'zzz'"), "{shown}");
+}
+
+#[test]
+fn a_models_levels_line_up_even_when_an_id_is_long() {
+    let options = [
+        ("Claude Haiku 5.5", "anthropic/claude-haiku-5.5"),
+        ("Mistral Large 4", "mistralai/mistral-large-4-0"),
+        ("Gemini 4 Argon", "google/gemini-4-argon"),
+    ];
+    let options = options
+        .iter()
+        .map(|(name, id)| (name.to_string(), id.to_string()))
+        .collect();
+    let levels = vec![
+        levels(&["off", "low"], 0),
+        levels(&["off", "medium"], 1),
+        levels(&["off", "high"], 1),
+    ];
+    let mut app = adjustable(options, levels, Some(0));
+    app.input(key(KeyCode::Down), Instant::now());
+    let shown = screen(&mut app);
+    // Where each row's level starts: the same column, the marked row's arrows around it.
+    let column = |name: &str, level: &str| {
+        let line = shown.lines().find(|line| line.contains(name)).unwrap();
+        line.split(level).next().unwrap().chars().count()
+    };
+    assert_eq!(column("Claude", "off"), column("Gemini", "high"), "{shown}");
+    assert_eq!(
+        column("Claude", "off"),
+        column("Mistral", "medium"),
+        "{shown}"
+    );
 }

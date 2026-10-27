@@ -100,7 +100,7 @@ pub struct Emulator {
 /// The emulator page's own script, and its SHA-384: the page's policy runs it by that hash.
 pub(super) const GLUE: &str = include_str!("emulator.js");
 pub(super) const GLUE_SHA384: &str =
-    "vToWxmZHk9q/wazU7Pk5pO2OELsGJdZCJXYSFHvLkyofCRAivli5vXNq4jM8BpD6";
+    "AYHYwjMcpsisoH0rfpoht8s8cVPiy8HKg6v6ez23upJARWDTfsDTg2gnOUg7GZga";
 
 /// The page that shows a screen, titled `title`, in the person's colours, else the system's:
 /// drawn by `emulator` when there is one, else as a grid of rows. Its policy runs its own scripts

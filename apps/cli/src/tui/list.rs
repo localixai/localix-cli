@@ -10,6 +10,7 @@ use protocol::Command;
 
 use super::app::{Action, App};
 use super::event::Out;
+use super::search::stepped;
 
 impl App {
     /// The list's last row drawn: the jobs past the first few are only counted.
@@ -35,6 +36,23 @@ impl App {
         self.views.focus = Some(row.unwrap_or(0));
     }
 
+    /// Stop the task of the lane `id`, once, and never quit for it: a lane with no task (or
+    /// already stopping) is left as it is.
+    pub(super) fn halt_lane(&mut self, id: &str) {
+        let Some(at) = self.views.find(id) else {
+            return;
+        };
+        let view = &mut self.views.sessions[at];
+        let Some(lane) = view.lane.as_deref_mut() else {
+            return;
+        };
+        if view.busy.is_none() || lane.stopping {
+            return;
+        }
+        lane.stopping = true;
+        self.outbox.push(Out::Call(Command::Halt { id: id.into() }));
+    }
+
     /// A key while the list has the keys; anything that is not the list's goes to the composer.
     pub(super) fn list_key(&mut self, key: KeyEvent, row: usize, now: Instant) -> Option<Action> {
         let plain = key.modifiers.is_empty();
@@ -47,7 +65,7 @@ impl App {
         match key.code {
             KeyCode::Up if row == 0 => self.views.focus = None,
             KeyCode::Up => self.views.focus = Some(row - 1),
-            KeyCode::Down => self.views.focus = Some((row + 1).min(self.last_row())),
+            KeyCode::Down => self.views.focus = Some(stepped(row, self.last_row(), key.code)),
             KeyCode::Enter | KeyCode::Right => {
                 if let Some(id) = session.map(|view| view.id.clone()) {
                     self.views.focus = None;
@@ -69,16 +87,10 @@ impl App {
                     let id = agent.id.clone();
                     self.outbox.push(Out::Call(Command::Halt { id }));
                 }
-                Some(lane) if lane.busy.is_some() => {
+                Some(lane) => {
                     let id = lane.id.clone();
-                    let at = self.views.find(&id)?;
-                    let state = self.views.sessions[at].lane.as_deref_mut()?;
-                    if !state.stopping {
-                        state.stopping = true;
-                        return Some(Action::Halt(id));
-                    }
+                    self.halt_lane(&id);
                 }
-                Some(_) => {}
                 None => {
                     if let Some(job) = self.views.jobs.get(row - order.len()) {
                         let (lane, job) = (job.lane.clone(), job.id.clone());

@@ -4,17 +4,20 @@ Live tasks for the release binary: coding tasks on small fixtures, pages built o
 
 ```bash
 cargo build --release
-OPENROUTER_API_KEY=sk-or-... python3 evals/run.py           # every task once
+OPENROUTER_API_KEY=sk-or-... python3 evals/run.py           # every task once, on each model
+python3 evals/run.py --model '~openai/gpt-luna-latest'      # one of the models
 python3 evals/run.py --only code                           # one kind: code, build, browser or demo
 python3 evals/run.py --only fix-test,login --repeat 3      # some tasks, for stability
 python3 evals/run.py --jobs 6                              # more runs at once (default 3)
-LLX_MODEL=<id> LLX_DECISION_MODEL=<id> python3 evals/run.py   # other models
+python3 evals/run.py --repeat 2 --jobs 4 --record          # a benchmark: each model's run in benchmarks/
 python3 evals/run.py -- --max-turns 20                     # more llx arguments after --
 ```
 
+The models are fixed, so runs compare: every task runs on each of `MODELS` in `run.py`, through OpenRouter at medium reasoning: the newest Claude Haiku and the newest GPT Luna (`~anthropic/claude-haiku-latest`, `~openai/gpt-luna-latest`), two vendors' small models, so a change is judged on more than one model and on models weaker than the strongest. A run records the model that answered (the alias resolved), so the history names the version. The decision model is llx's default.
+
 ## How a run is judged
 
-Every run is `llx exec --json --yes -C <dir> --timeout 240 "<goal>"`, plus `--schema` when the task has one, then the task's `args`, then the arguments after `--`. A task whose `args` choose the mode (`--mode plan`) runs in that mode instead of `--yes` (llx refuses both), in a process session of its own: it has no terminal, so what the mode would ask is refused, as in CI, and the run never waits on you. Such a run does not stop on a Ctrl-C of `run.py`; it ends with its own timeout. `<dir>` is a new temporary directory that holds a copy of `evals/fixtures/<fixture>/`, or nothing when the task has no fixture. It is outside any git repository, so no AGENTS.md from this repository reaches the agent. A run passes when all of these hold:
+Every run is `llx exec --json --yes -C <dir> --timeout 240 "<goal>"`, plus `--schema` when the task has one, then the task's `args`, then the model (`--provider openrouter -m <model> --reasoning medium`), then the arguments after `--`. A task whose `args` choose the mode (`--mode plan`) runs in that mode instead of `--yes` (llx refuses both), in a process session of its own: it has no terminal, so what the mode would ask is refused, as in CI, and the run never waits on you. Such a run does not stop on a Ctrl-C of `run.py`; it ends with its own timeout. `<dir>` is a new temporary directory that holds a copy of `evals/fixtures/<fixture>/`, or nothing when the task has no fixture. It is outside any git repository, so no AGENTS.md from this repository reaches the agent. A run passes when all of these hold:
 
 - llx exits 0, and its last JSON line is a `run.completed` event.
 - With a `schema`: the event has `data`.

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Runs evals/tasks.json through llx and reports success, time and cost per task.
 
-Usage: OPENROUTER_API_KEY=... python3 evals/run.py [--only id,kind] [--repeat N] [--jobs N]
-       [--bin path] [--record] [-- extra llx args]
+Usage: OPENROUTER_API_KEY=... python3 evals/run.py [--only id,kind] [--model id] [--repeat N]
+       [--jobs N] [--bin path] [--record] [-- extra llx args]
 
-Each run is `llx exec --json --yes -C <dir> [task args] "<goal>"` in a fresh temporary directory
-(a copy of the task's fixture, or empty), outside any git repository so no AGENTS.md reaches the
-agent. A task whose `args` set a mode (`--mode plan`) runs in it instead of `--yes`, with no
+Every task runs once per model in MODELS (or each `--model`), through OpenRouter. Each run is
+`llx exec --json --yes -C <dir> [task args] --provider openrouter -m <model> "<goal>"` in a
+fresh temporary directory (a copy of the task's fixture, or empty), outside any git repository
+so no AGENTS.md reaches the agent. A task whose `args` set a mode (`--mode plan`) runs in it instead of `--yes`, with no
 terminal to ask on. A run passes when llx exits 0, the answer (and the data, with a schema) holds
 every `contains` string and `matches` pattern, every `uses` call was made and no `avoids` call
 was, and the task's `check` command exits 0 in that directory afterwards. The summary ends with
@@ -23,6 +24,12 @@ TIMEOUT_S = 240  # llx's own --timeout for one task
 HANG_S = TIMEOUT_S + 60  # past this the process is killed: a run that never ends is a failure
 CHECK_S = 60
 MODE_FLAGS = ("--mode", "--permission-mode")
+# The benchmark's agent models, each run on every task: the newest of each family OpenRouter
+# serves (its `~...-latest` aliases), a small model of two vendors, so a change is judged on more
+# than one model and on models weaker than the strongest.
+PROVIDER = "openrouter"
+MODELS = ["~anthropic/claude-haiku-latest", "~openai/gpt-luna-latest"]
+REASONING = "medium"
 
 
 def events(stdout):
@@ -168,6 +175,7 @@ def run(job, binary, extra, out_dir):
     for event in calls:
         tools[event.get("name")] = tools.get(event.get("name"), 0) + 1
     started_event = next((e for e in seen if e.get("type") == "run.started"), {})
+    served = next((e for e in seen if e.get("type") == "turn" and e.get("model")), {})
     usage = (done or {}).get("usage") or {}
     agent, decision = usage.get("agent") or {}, usage.get("decision") or {}
     ok = not reasons
@@ -184,8 +192,9 @@ def run(job, binary, extra, out_dir):
             "cached_tokens": agent.get("cached_tokens") or 0,
             "output_tokens": (agent.get("output_tokens") or 0) + (decision.get("output_tokens") or 0),
             "answer": ((done or {}).get("answer") or "")[:160].replace("\n", " "),
-            # What the run itself says it used: the flags, the environment and the defaults.
-            "model": started_event.get("model"), "decision_model": started_event.get("decision_model"),
+            # What the run itself says it used: the model that answered (an alias such as
+            # `~...-latest` resolved), else the one asked for.
+            "model": served.get("model") or started_event.get("model"), "decision_model": started_event.get("decision_model"),
             "reasons": reasons, "trace": trace, "work": None if ok else work}
 
 
@@ -241,24 +250,15 @@ def select(tasks, only):
     return chosen
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--only", help="comma-separated task ids or kinds (code, build, browser, demo)")
-    parser.add_argument("--repeat", type=int, default=1, help="runs per task")
-    parser.add_argument("--jobs", type=int, default=3, help="runs at once")
-    parser.add_argument("--bin", default=os.path.join(ROOT, "target/release/llx"))
-    parser.add_argument("--record", action="store_true", help="add this run to benchmarks/ (history, README metrics)")
-    parser.add_argument("extra", nargs="*", help="after --: more llx arguments, such as -m MODEL")
-    opts = parser.parse_args()
-    if not os.access(opts.bin, os.X_OK):
-        sys.exit(f"{opts.bin} is missing: cargo build --release, or pass --bin")
-    with open(os.path.join(ROOT, "evals/tasks.json")) as f:
-        tasks = select(json.load(f), opts.only)
+def bench(model, tasks, opts):
+    """Every task with `model`, printed, saved and recorded when asked; the count passed."""
+    agent = ["--provider", PROVIDER, "-m", model, "--reasoning", REASONING]
     out_dir = os.path.join(ROOT, "evals/results", time.strftime("%Y%m%d-%H%M%S"))
     os.makedirs(out_dir, exist_ok=True)
     jobs = list(enumerate(t for t in tasks for _ in range(opts.repeat)))
     with ThreadPoolExecutor(max(1, opts.jobs)) as pool:
-        results = list(pool.map(lambda job: run(job, opts.bin, opts.extra, out_dir), jobs))
+        results = list(pool.map(lambda job: run(job, opts.bin, agent + opts.extra, out_dir), jobs))
+    print(f"=== {model}")
     for r in results:
         mark = "PASS" if r["ok"] else "FAIL"
         print(f"{mark} {r['id']:<15} {r['wall']:>6}s [agent {r['agent_s']}s, hands {r['decision_s']}s] "
@@ -281,7 +281,26 @@ def main():
         import record
         models = {"agent": used(results, "model"), "decision": used(results, "decision_model")}
         print("recorded", record.record(results, opts.bin, models))
-    sys.exit(0 if passed == len(results) else 1)
+    return passed == len(results)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--only", help="comma-separated task ids or kinds (code, build, browser, demo)")
+    parser.add_argument("--model", choices=MODELS, action="append",
+                        help="one of the benchmark's models (again for another); all of them when not given")
+    parser.add_argument("--repeat", type=int, default=1, help="runs per task")
+    parser.add_argument("--jobs", type=int, default=3, help="runs at once")
+    parser.add_argument("--bin", default=os.path.join(ROOT, "target/release/llx"))
+    parser.add_argument("--record", action="store_true", help="add each model's run to benchmarks/ (history, README metrics)")
+    parser.add_argument("extra", nargs="*", help="after --: more llx arguments, such as --max-turns 20")
+    opts = parser.parse_args()
+    if not os.access(opts.bin, os.X_OK):
+        sys.exit(f"{opts.bin} is missing: cargo build --release, or pass --bin")
+    with open(os.path.join(ROOT, "evals/tasks.json")) as f:
+        tasks = select(json.load(f), opts.only)
+    passed = [bench(model, tasks, opts) for model in opts.model or MODELS]
+    sys.exit(0 if all(passed) else 1)
 
 
 if __name__ == "__main__":

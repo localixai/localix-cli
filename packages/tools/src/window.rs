@@ -34,7 +34,9 @@ the goal and the tab, and acts in it (clicks and types on a page, types and pres
 terminal): one screen's worth of progress, ending with how to tell it is done, as something the \
 tab will show (\"Answer yes to the trust question; done when the prompt shows\"). It does not \
 remember earlier screens and does not read for you: read the snapshot it returns. It types only \
-the exact strings in `values`. Check the snapshot yourself: its DONE is not proof.
+the exact strings in `values`. Check the snapshot yourself: its DONE is not proof. The tab's own \
+fields in the same call run first and the goal acts on what they leave: `url` and a `goal` \
+together go to a page and work in it, in one call.
 The kinds:";
 
 /// What can be done to a tab of the window as the person sees it.

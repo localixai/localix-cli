@@ -273,7 +273,10 @@ def main():
     print(f"\n{passed}/{len(results)} passed\nresults in {out_dir}")
     with open(os.path.join(out_dir, "summary.json"), "w") as f:
         json.dump(results, f, indent=2)
-    if opts.record:
+    if opts.record and not any(r["turns"] for r in results):
+        # The model never answered (a usage limit, no key): that is no benchmark of llx.
+        print("not recorded: no task got a turn from the model")
+    elif opts.record:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import record
         models = {"agent": used(results, "model"), "decision": used(results, "decision_model")}

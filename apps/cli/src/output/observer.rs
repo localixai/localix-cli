@@ -5,7 +5,7 @@ use contracts::chat::{ToolCall, Usage};
 use contracts::tool::{ToolError, ToolOutput};
 use ratatui::text::{Line, Span};
 
-use super::{Output, human, json};
+use super::{Output, human, json, logged};
 use crate::server::{label::label, wire};
 use crate::sync::lock;
 use crate::tui::tool_cell::{self, State};
@@ -14,6 +14,7 @@ use protocol::Event;
 
 impl Observer for Output {
     fn call(&self, call: &ToolCall) {
+        logged::call(&lock(&self.session), call);
         let step = contracts::history::Step {
             what: call.name.clone(),
             detail: wrap::cut(&tool_cell::doing(&label(&call.name, &call.arguments)), 120),
@@ -38,6 +39,7 @@ impl Observer for Output {
     }
 
     fn result(&self, call: &ToolCall, outcome: &Result<ToolOutput, ToolError>) {
+        logged::result(&lock(&self.session), call, outcome);
         let now = self.millis();
         let mut done = lock(&self.done);
         if let Some((_, step)) = done.iter_mut().rev().find(|(id, _)| *id == call.id) {
@@ -72,6 +74,7 @@ impl Observer for Output {
 
     // `--json` has no event for it: the events are a contract, changed only with the schema.
     fn said(&self, text: &str) {
+        logged::said(&lock(&self.session), text);
         if let Some(ui) = &self.ui {
             return ui.send(Event::Answer(text.to_string()));
         }
@@ -92,6 +95,7 @@ impl Observer for Output {
     }
 
     fn turn(&self, usage: &Usage) {
+        logged::turn(&lock(&self.session), usage);
         let spent = contracts::history::Spent {
             input_tokens: usage.input_tokens,
             cached_tokens: usage.cached_tokens,

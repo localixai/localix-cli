@@ -7,6 +7,7 @@
 
 pub(crate) mod human;
 mod json;
+pub(crate) mod logged;
 mod observer;
 mod spent;
 
@@ -101,6 +102,8 @@ pub(crate) struct Output {
     total: Mutex<contracts::history::Spent>,
     /// Where stderr is read: a CI runner may take a line of it as a command.
     runner: Runner,
+    /// The session of the task running, as the log names it.
+    session: Mutex<String>,
 }
 
 /// What reads the trace.
@@ -185,6 +188,7 @@ impl Output {
             answer_terminal: false,
             total: Mutex::default(),
             runner: Runner::Plain,
+            session: Mutex::default(),
         }
     }
 
@@ -203,6 +207,8 @@ impl Output {
     pub(crate) fn started(&self, start: &Start) {
         *lock(&self.started) = Instant::now();
         lock(&self.done).clear();
+        start.session.clone_into(&mut lock(&self.session));
+        logged::started(start);
         if let Some(ui) = &self.ui {
             ui.send(Event::TaskStarted(start.goal.to_string()));
             return;
@@ -243,6 +249,7 @@ impl Output {
 
     /// The task ended: the closing lines on stderr and the answer on stdout, or `run.completed`.
     pub(crate) fn completed(&self, summary: &Summary) {
+        logged::completed(summary);
         if let Some(ui) = &self.ui {
             if let Some(error) = summary.error {
                 ui.send(Event::Error(error.to_string()));

@@ -32,6 +32,7 @@ mod interrupt;
 mod jobs;
 mod kinds;
 mod live;
+mod logs;
 mod meta;
 mod mode;
 mod modes;
@@ -62,6 +63,9 @@ fn main() {
 
 /// The command line parsed and its command run; the process's exit code.
 fn run() -> i32 {
+    if let Some(config) = provider_kit::store::dir(compose::APP) {
+        logs::start(&config);
+    }
     let cli = match cli::Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
@@ -78,6 +82,7 @@ fn run() -> i32 {
     match commands::dispatch(cli, commands::run::At::Terminal) {
         Ok(code) => code,
         Err(failure) => {
+            log::warn!("ended with exit {}: {failure}", failure.code());
             if let Some(message) = failure.message() {
                 use std::io::Write;
                 let _ = writeln!(std::io::stderr(), "{message}");

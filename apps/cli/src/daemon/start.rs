@@ -30,15 +30,25 @@ pub(crate) fn reach(config: &Path) -> Result<PathBuf, String> {
         // One still in use is never stopped under a terminal, or under work kept for one.
         if !found.idle() {
             let (pid, other) = (found.pid, found.build);
+            log::warn!(
+                "the daemon (pid {pid}) is build {other}, not {}, and in use",
+                build()
+            );
             return Err(format!(
                 "the daemon (pid {pid}) is build {other} and in use"
             ));
         }
+        log::info!(
+            "replacing the idle daemon (pid {}) of build {}",
+            found.pid,
+            found.build
+        );
         if !stop(&path) {
             return Err(format!("the daemon (pid {}) did not stop", found.pid));
         }
     }
     spawn(config)?;
+    log::info!("daemon {} started", build());
     // The daemon that serves may have been started where `$TMPDIR` was another: its lock says.
     Ok(socket_path(config))
 }

@@ -10,6 +10,7 @@ pub(crate) mod exec;
 mod hardening;
 #[cfg(all(unix, not(feature = "browser")))]
 mod headless;
+mod logs;
 mod modes;
 mod pipes;
 mod repo;

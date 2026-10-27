@@ -16,6 +16,11 @@ pub(crate) fn exec(home: &Home, model: &Model, args: &[&str], stdin: &str) -> Ou
 }
 
 /// `command` run as [`exec`] runs it.
+pub(crate) fn run(home: &Home, command: std::process::Command, stdin: &str) -> Output {
+    exec_as(home, command, stdin)
+}
+
+/// `command` run as [`exec`] runs it.
 fn exec_as(home: &Home, mut command: std::process::Command, stdin: &str) -> Output {
     #[cfg(unix)]
     {

@@ -154,7 +154,7 @@ Every run is saved as a session in `~/.llx/sessions/<id>.json`; set `LLX_SESSION
 
 A session at the terminal runs in a daemon, `llx serve`:
 
-- One per config directory, found at a socket in `$TMPDIR/llx-<uid>/` (a directory only you may enter), started by the first `llx` (detached, in a session of its own, its errors in `daemon.log` beside the sign-ins) and attached to by every later one.
+- One per config directory, found at a socket in `$TMPDIR/llx-<uid>/` (a directory only you may enter), started by the first `llx` (detached, in a session of its own, its errors in `daemon.log` beside the sign-ins, what it did in `logs/llx.log`) and attached to by every later one.
 - It holds the sessions with their agents, jobs and terminal sessions, the models, and the one window; `llx` draws, reads the keys and speaks to it over the socket.
 - Each terminal's sessions work in its directory, with its environment, and with the options its command line gave. Each terminal has its own questions, and quitting one names only its own work.
 - A session is open at one terminal at a time: resuming one open at another says so.

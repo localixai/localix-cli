@@ -1,0 +1,71 @@
+//! The log: what a run did, in `<config>/llx/logs/llx.log`, as Rust's `log` facade says it, and
+//! `RUST_LOG` choosing what is kept.
+
+use serde_json::json;
+
+use crate::common::home::Home;
+use crate::common::model::{Model, Reply};
+use crate::suite::exec::exec;
+
+/// A task whose one call fails: `window` asked to open with no kind.
+fn a_failing_call() -> Model {
+    Model::start(vec![
+        Reply::call("window", json!({"action": "open"})),
+        Reply::text("It would not open.\nRESULT: not achieved"),
+    ])
+}
+
+fn log(home: &Home) -> Option<String> {
+    std::fs::read_to_string(home.path().join("config/llx/logs/llx.log")).ok()
+}
+
+#[test]
+fn a_task_leaves_each_call_with_its_arguments_its_failure_and_how_it_ended_in_the_log() {
+    let (home, model) = (Home::new(), a_failing_call());
+    let out = exec(&home, &model, &["exec", "-y", "open the demo"], "");
+    assert_eq!(out.status.code(), Some(1));
+    let log = log(&home).expect("the log is written");
+    // The call as the model made it: what a bug report needs, and what the screen leaves out.
+    assert!(log.contains(r#"window {"action":"open"}"#), "{log}");
+    let failed = log.lines().find(|line| line.contains("`kind` is one of"));
+    assert!(failed.is_some_and(|line| line.contains(" WARN ")), "{log}");
+    assert!(log.contains("not_achieved"), "{log}");
+    // One event a line, each with its time and level first, as env_logger writes them.
+    for line in log.lines() {
+        assert!(line.starts_with("[20") && line.contains("Z "), "{line}");
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let file = home.path().join("config/llx/logs/llx.log");
+        let mode = std::fs::metadata(file).unwrap().permissions().mode();
+        assert_eq!(
+            mode & 0o777,
+            0o600,
+            "the person's alone: it holds what the tools read"
+        );
+    }
+}
+
+#[test]
+fn rust_log_chooses_what_is_kept() {
+    let (home, model) = (Home::new(), a_failing_call());
+    let mut command = home.with_model(&model, &["exec", "-y", "open the demo"]);
+    command.env("RUST_LOG", "off");
+    let _ = crate::suite::exec::run(&home, command, "");
+    assert!(
+        log(&home).unwrap_or_default().is_empty(),
+        "off keeps nothing"
+    );
+
+    let (home, model) = (Home::new(), a_failing_call());
+    let mut command = home.with_model(&model, &["exec", "-y", "open the demo"]);
+    command.env("RUST_LOG", "llx=debug");
+    let _ = crate::suite::exec::run(&home, command, "");
+    let log = log(&home).expect("the log is written");
+    // Debug adds the model's turns and what it said.
+    assert!(
+        log.contains(" DEBUG ") && log.contains("It would not open."),
+        "{log}"
+    );
+}

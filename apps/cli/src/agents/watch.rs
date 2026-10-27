@@ -8,7 +8,7 @@ use contracts::chat::{ToolCall, Usage};
 use contracts::gate::{Effect, Gate, Verdict};
 use contracts::tool::{ToolError, ToolOutput};
 
-use crate::output::Output;
+use crate::output::{Output, logged};
 use crate::server::label::label;
 use protocol::Event;
 
@@ -31,6 +31,7 @@ impl Watch<'_> {
 
 impl Observer for Watch<'_> {
     fn call(&self, call: &ToolCall) {
+        logged::call(self.id, call);
         let label = label(&call.name, &call.arguments);
         let what = format!("{} {}", label.done, label.subject)
             .trim()
@@ -44,6 +45,7 @@ impl Observer for Watch<'_> {
     }
 
     fn result(&self, call: &ToolCall, outcome: &Result<ToolOutput, ToolError>) {
+        logged::result(self.id, call, outcome);
         self.show(Event::Result {
             call: call.id.clone(),
             name: call.name.clone(),
@@ -53,6 +55,7 @@ impl Observer for Watch<'_> {
     }
 
     fn said(&self, text: &str) {
+        logged::said(self.id, text);
         self.show(Event::Answer(text.to_string()));
     }
 

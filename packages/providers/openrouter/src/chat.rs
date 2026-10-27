@@ -31,6 +31,14 @@ impl Chat for ChatModel {
         let message = value
             .pointer("/choices/0/message")
             .ok_or_else(|| ChatError::Invalid("no message in the completion".into()))?;
+        // Who served it (OpenRouter routes a model to one of its hosts) and the calls as they
+        // came: what a call that reached a tool malformed is traced back to.
+        log::debug!(
+            "{} served {}: {}",
+            value["provider"].as_str().unwrap_or(&self.client.name),
+            value["model"].as_str().unwrap_or(model),
+            message.get("tool_calls").unwrap_or(&Value::Null)
+        );
         let calls = message
             .get("tool_calls")
             .and_then(Value::as_array)

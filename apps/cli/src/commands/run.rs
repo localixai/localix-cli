@@ -194,7 +194,10 @@ pub(crate) fn run(
             if !options.no_daemon {
                 match remote::run(&workspace, theme) {
                     Ok(code) => return Ok(code),
-                    Err(why) => crate::error::note(&format!("llx: {why}: {IN_PROCESS}\n")),
+                    Err(why) => {
+                        log::warn!("{why}: {IN_PROCESS}");
+                        crate::error::note(&format!("llx: {why}: {IN_PROCESS}\n"));
+                    }
                 }
             }
             let (attached, place) = interface::attach(&workspace, theme)?;

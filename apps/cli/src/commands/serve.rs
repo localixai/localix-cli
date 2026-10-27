@@ -76,6 +76,7 @@ fn host(config: &Path, path: PathBuf) -> Result<i32, Failure> {
     let host = Host::new(daemon::build());
     let pid = std::process::id();
     print(&format!("{} (pid {pid})\n", daemon::READY_LINE))?;
+    log::info!("daemon {} serving {}", host.build, path.display());
     daemon::quiet();
     interrupt::install();
     crate::providers::refresh_catalog();
@@ -88,6 +89,7 @@ fn host(config: &Path, path: PathBuf) -> Result<i32, Failure> {
             return exit::ENVIRONMENT;
         }
         host.wait();
+        log::info!("daemon ending: {} tasks working", interrupt::working());
         // Every task stops and is saved; the terminal sessions go with the process.
         let _ = interrupt::PROCESS.stop();
         let until = Instant::now() + ENDING;
@@ -147,6 +149,10 @@ fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, la
         return toolbox::serve(first, &incoming, &out, &hosted);
     }
     if let Some(kept) = rejoinable(&first, host) {
+        log::info!(
+            "client back to the sessions in the background at {}",
+            kept.cwd
+        );
         return rejoin(first, &incoming, out, kept, host);
     }
     // An interface is attached while its connection lasts; its desk may outlive it, kept.
@@ -184,6 +190,11 @@ fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, la
             Err(_gone) => return,
         }
     };
+    log::info!(
+        "client attached at {}: llx {}",
+        place.cwd,
+        place.args.join(" ")
+    );
     *crate::sync::lock(&at) = Some(place.cwd.clone());
     let _forgotten = Forget(Arc::clone(host), Arc::clone(&peer));
     let ui = Ui::new(peer);
@@ -198,6 +209,7 @@ fn attach(connection: Connection, host: &Arc<Host>, browser: Option<Browser>, la
         terminals,
     };
     if let Err(why) = session(served) {
+        log::warn!("client's session failed: {why}");
         told.send(Event::Error(format!("llx: {why}")));
         told.send(Event::Quit);
     }

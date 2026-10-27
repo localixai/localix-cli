@@ -13,6 +13,7 @@ license.workspace = true
 contracts.workspace = true
 provider-kit.workspace = true
 serde_json.workspace = true
+log.workspace = true
 
 [lints]
 workspace = true

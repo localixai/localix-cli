@@ -7,10 +7,10 @@
 use contracts::tool::ToolSpec;
 use serde_json::{Value, json};
 
-pub const TOOL: &str = "result";
+pub(crate) const TOOL: &str = "result";
 
 /// The `result` tool: the schema as `data`, plus whether the goal was reached.
-pub fn spec(schema: &Value) -> ToolSpec {
+pub(crate) fn spec(schema: &Value) -> ToolSpec {
     ToolSpec {
         name: TOOL.into(),
         description: "Finish the task: return what you found as `data`, matching its schema \
@@ -27,19 +27,19 @@ pub fn spec(schema: &Value) -> ToolSpec {
 }
 
 /// What the model is told in the first message (part of the cached prefix).
-pub const BRIEF: &str = "When you are done, call `result` with the data its schema asks for; \
+pub(crate) const BRIEF: &str = "When you are done, call `result` with the data its schema asks for; \
     gather every field it needs as you go.";
 
 /// A `result` call: the data, the summary, and whether the goal was reached.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Finished {
+pub(crate) struct Finished {
     pub data: Value,
     pub summary: String,
     pub achieved: bool,
 }
 
 /// A `result` call read, or what to fix.
-pub fn take(args: &Value, schema: &Value) -> Result<Finished, String> {
+pub(crate) fn take(args: &Value, schema: &Value) -> Result<Finished, String> {
     let achieved = args["achieved"].as_bool().unwrap_or(true);
     let Some(data) = args.get("data") else {
         return beside(args, schema, achieved);
@@ -87,7 +87,7 @@ fn check(schema: &Value, data: &Value) -> Result<(), String> {
 }
 
 /// Where `value` breaks `schema`: type, required properties, enum, items, nested objects.
-pub fn violations(schema: &Value, value: &Value, path: &str, out: &mut Vec<String>) {
+pub(crate) fn violations(schema: &Value, value: &Value, path: &str, out: &mut Vec<String>) {
     let at = if path.is_empty() { "the result" } else { path };
     if let Some(options) = schema.get("enum").and_then(Value::as_array)
         && !options.contains(value)

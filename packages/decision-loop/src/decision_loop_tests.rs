@@ -47,7 +47,6 @@ impl View for Quiz {
                 dialog: false,
                 options: vec![],
             }],
-            omitted: 0,
             busy: false,
         })
     }

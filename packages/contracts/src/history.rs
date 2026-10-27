@@ -96,7 +96,7 @@ impl Session {
 }
 
 /// Where sessions are kept.
-pub trait History {
+pub trait History: Send + Sync {
     /// A new, empty session with a fresh id.
     fn start(&self) -> Session;
     fn save(&self, session: &Session) -> Result<(), String>;

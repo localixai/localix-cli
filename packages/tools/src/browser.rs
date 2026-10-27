@@ -70,9 +70,6 @@ pub struct Observation {
     pub viewport: Size,
     pub scroll: Scroll,
     pub elements: Vec<Element>,
-    /// Visible controls left out past the element cap.
-    #[serde(default)]
-    pub omitted: usize,
     /// The page says it is still working (parsing, fetching its own data, a progress bar).
     #[serde(default)]
     pub busy: bool,
@@ -99,7 +96,6 @@ impl From<Observation> for contracts::view::Observation {
             text: page.text,
             outline: page.outline,
             elements: page.elements,
-            omitted: page.omitted,
             busy: page.busy,
             scroll: page.scroll.y,
         }

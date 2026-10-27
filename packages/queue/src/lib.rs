@@ -244,11 +244,6 @@ impl Queue {
         let _ = self.wake.wait_timeout(state, timeout);
     }
 
-    /// Wake whoever waits, for a change the queue does not hold (an agent's task ended).
-    pub fn poke(&self) {
-        self.wake.notify_all();
-    }
-
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }

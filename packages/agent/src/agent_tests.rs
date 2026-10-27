@@ -3,8 +3,8 @@ use contracts::tool::{Tool, ToolError};
 use serde_json::{Value, json};
 
 use super::*;
+use crate::fakes::Silent;
 use crate::fakes::{Echo, Recorder, Scripted, calls, ok, says};
-use crate::observer::Silent;
 
 fn agent<'a>(
     chat: &'a Scripted,
@@ -21,7 +21,7 @@ fn agent<'a>(
         schema,
         inbox: None,
         window: 0,
-        strategy: &crate::history::Keep,
+        strategy: &crate::fakes::Keep,
     }
 }
 

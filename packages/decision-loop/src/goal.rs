@@ -9,14 +9,14 @@
 use std::time::Duration;
 
 use crate::ask::{AskInput, GoalStep, Operation, Pick, ask};
-pub use crate::step::Stop;
+pub(crate) use crate::step::Stop;
 use crate::step::{action_of, actions_of, changed, cycling, fingerprint};
 use contracts::model::{DecideError, Decider};
 use contracts::view::{Observation, View, ViewError};
 
-pub const MAX_DECISIONS: usize = 40;
+pub(crate) const MAX_DECISIONS: usize = 40;
 /// Below this probability a DONE is reported as unsure.
-pub const DONE_CONFIDENCE: f64 = 0.6;
+pub(crate) const DONE_CONFIDENCE: f64 = 0.6;
 /// A WAIT looks again every `WAIT_POLL` until the view changes, for at most `WAIT_BUSY` while the
 /// view says it is working and `WAIT_IDLE` otherwise.
 const WAIT_POLL: Duration = Duration::from_millis(250);
@@ -48,7 +48,7 @@ impl GoalOutcome {
     }
 }
 
-pub struct GoalRun<'a> {
+pub(crate) struct GoalRun<'a> {
     pub view: &'a dyn View,
     pub decider: &'a dyn Decider,
     /// Each executed step as it happens (the live trace).
@@ -95,12 +95,13 @@ impl GoalRun<'_> {
         }
     }
 
-    pub fn run(&self, goal: &str, values: &[String]) -> GoalOutcome {
-        self.resume(goal, values, vec![])
-    }
-
     /// Carry on toward `goal` after the steps already taken: the model reads them as its history.
-    pub fn resume(&self, goal: &str, values: &[String], steps: Vec<GoalStep>) -> GoalOutcome {
+    pub(crate) fn resume(
+        &self,
+        goal: &str,
+        values: &[String],
+        steps: Vec<GoalStep>,
+    ) -> GoalOutcome {
         let before = actions_of(&steps);
         let mut walk = Walk {
             outcome: GoalOutcome {

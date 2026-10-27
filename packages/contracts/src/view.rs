@@ -32,9 +32,6 @@ pub struct Observation {
     #[serde(default)]
     pub outline: String,
     pub elements: Vec<Element>,
-    /// Visible controls left out past the element cap.
-    #[serde(default)]
-    pub omitted: usize,
     /// The view says it is still working (loading, fetching, a progress bar, "Loading…").
     #[serde(default)]
     pub busy: bool,

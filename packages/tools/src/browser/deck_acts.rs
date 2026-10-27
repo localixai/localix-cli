@@ -3,10 +3,11 @@
 
 use wry::WebView;
 
-use super::super::host::{Heard, Listed, STRIP, Shared};
+use super::super::host::{Heard, STRIP, Shared};
 use super::super::panel::Held;
 use super::super::strip::{self, Click, Key};
 use super::{Deck, Shown};
+use crate::window::WindowTab;
 
 /// What became of the window.
 #[derive(Debug, PartialEq, Eq)]
@@ -131,7 +132,7 @@ impl Deck {
 
     /// Every tab as the strip shows them: a project's together, the browser's first in each; its
     /// key, its kind, its title, what it holds and its group.
-    pub(crate) fn listing(&self, shared: &Shared) -> Vec<Listed> {
+    pub(crate) fn listing(&self, shared: &Shared) -> Vec<WindowTab> {
         let groups = crate::lock(&shared.groups).clone();
         let group = |key: Key| groups.get(&key.name()).cloned().unwrap_or_default();
         let mut out = vec![];
@@ -143,9 +144,9 @@ impl Deck {
                 let (title, url) = tab.map_or((String::new(), String::new()), |tab| {
                     (tab.title.trim().to_string(), tab.url.clone())
                 });
-                out.push(Listed {
+                out.push(WindowTab {
                     id: Key::Web(id).name(),
-                    kind: "browser",
+                    kind: "browser".into(),
                     title: if title.is_empty() { url.clone() } else { title },
                     detail: url,
                     shown: self.shown == Shown::Web && id == active,
@@ -156,9 +157,9 @@ impl Deck {
         }
         for open in self.terms.iter().filter(|open| open.held == Held::Live) {
             let title = open.title.strip_prefix("llx · ").unwrap_or(&open.title);
-            out.push(Listed {
+            out.push(WindowTab {
                 id: Key::Term(open.id).name(),
-                kind: "terminal",
+                kind: "terminal".into(),
                 title: title.to_string(),
                 detail: String::new(),
                 shown: self.shown == Shown::Term(open.id),

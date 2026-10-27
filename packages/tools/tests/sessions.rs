@@ -11,9 +11,7 @@ use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use tools::shell::{
-    Ending, Sessions, Until, Wait, kill_all_now, kill_with, running_anywhere, running_with,
-};
+use tools::shell::{Ending, Sessions, Until, Wait, kill_all_now, kill_with, running_with};
 
 /// The tests empty one table: one at a time.
 fn alone() -> MutexGuard<'static, ()> {
@@ -25,7 +23,9 @@ fn alone() -> MutexGuard<'static, ()> {
 fn kill_all_now_reaches_more_than_four() {
     let _alone = alone();
     // Two registries, as two sessions of the interface keep: more shells than one may hold.
-    let (one, two) = (Sessions::default(), Sessions::default());
+    let numbers = Arc::new(AtomicU32::new(0));
+    let one = Sessions::default().numbered(Arc::clone(&numbers));
+    let two = Sessions::default().numbered(Arc::clone(&numbers));
     let dir = std::env::temp_dir();
     let wait = Wait {
         needle: Some("started"),
@@ -46,7 +46,7 @@ fn kill_all_now_reaches_more_than_four() {
         assert_eq!(turn.until, Until::Matched, "{turn:?}");
         started.push((sessions, turn.id));
     }
-    let running = running_anywhere();
+    let running = running_with(&numbers);
     assert_eq!(running.len(), 5, "{running:?}");
     assert!(
         running
@@ -56,7 +56,7 @@ fn kill_all_now_reaches_more_than_four() {
 
     kill_all_now();
 
-    assert_eq!(running_anywhere(), Vec::<String>::new());
+    assert_eq!(running_with(&numbers), Vec::<String>::new());
     let poll = Wait {
         needle: None,
         yield_ms: Some(2_000),

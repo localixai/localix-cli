@@ -48,9 +48,15 @@ fn ask(gate: &dyn Gate, tool: &str, subject: &str, summary: &str) -> Result<(), 
 
 /// `mutex`, locked even if a holder panicked: what it guards is plain data, still usable, and a
 /// tool fails its call rather than the process.
-#[cfg(feature = "browser")]
 fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// A call's `arguments` read as the tool's own `T`; what does not fit is a failed call the model
+/// reads.
+fn args<T: serde::de::DeserializeOwned>(arguments: &serde_json::Value) -> Result<T, ToolError> {
+    serde_json::from_value(arguments.clone())
+        .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))
 }

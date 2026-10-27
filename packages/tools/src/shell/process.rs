@@ -9,7 +9,7 @@ use std::io::{self, Read};
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -277,10 +277,7 @@ fn drain(pipe: Option<impl Read + Send + 'static>, closed: SyncSender<()>) -> Ar
         loop {
             match pipe.read(&mut buffer) {
                 Ok(0) => break,
-                Ok(read) => shared
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .push(&buffer[..read]),
+                Ok(read) => crate::lock(&shared).push(&buffer[..read]),
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(_) => break,
             }
@@ -304,7 +301,7 @@ fn drained(readers: &Receiver<()>, count: usize) -> bool {
 }
 
 fn text(output: &Mutex<Output>) -> String {
-    output.lock().unwrap_or_else(PoisonError::into_inner).text()
+    crate::lock(output).text()
 }
 
 pub(super) fn ending(status: ExitStatus) -> Ending {

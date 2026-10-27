@@ -66,8 +66,7 @@ impl Tool for EditTool<'_> {
     }
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
-        let args: Args = serde_json::from_value(arguments.clone())
-            .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
+        let args: Args = crate::args(arguments)?;
         let path = self.workspace.writable(&args.path)?;
         let shown = self.workspace.shown(&path);
         if path.is_dir() {

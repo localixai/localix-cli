@@ -6,11 +6,12 @@ use std::sync::mpsc;
 use std::sync::{Arc, PoisonError};
 use std::time::{Duration, Instant};
 
+use contracts::view::{ViewError, ViewResult};
 use serde_json::Value;
 use tao::event_loop::EventLoopProxy;
 
+use super::Driver;
 use super::host::{Cmd, Loads, Reply, Shared, Tab, WINDOW_CLOSED, active_loads};
-use super::{BrowserError, BrowserResult, Driver};
 
 #[path = "webview_driver.rs"]
 mod driver;
@@ -60,7 +61,7 @@ impl WebviewDriver {
 
     /// The window is open, and so is the tab it is pinned to: a pinned call never goes to the tab
     /// shown instead, where a goal's clicks would land on another page.
-    fn open_or_closed(&self) -> BrowserResult<()> {
+    fn open_or_closed(&self) -> ViewResult<()> {
         if !self.is_open() {
             return Err(closed());
         }
@@ -70,7 +71,7 @@ impl WebviewDriver {
                     .iter()
                     .any(|tab| tab.id == id) =>
             {
-                Err(BrowserError::Unavailable(format!(
+                Err(ViewError::Unavailable(format!(
                     "tab {id} is closed: list shows the tabs open"
                 )))
             }
@@ -84,7 +85,7 @@ impl WebviewDriver {
         &self,
         form: impl FnOnce(u64) -> String,
         failed: &'static str,
-    ) -> BrowserResult<(u64, mpsc::Receiver<Reply>)> {
+    ) -> ViewResult<(u64, mpsc::Receiver<Reply>)> {
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = mpsc::sync_channel(1);
         crate::lock(&self.shared.pending).insert(id, sender);
@@ -103,7 +104,7 @@ impl WebviewDriver {
     }
 
     /// One probe call, answered over IPC or refused while the page has no probe.
-    fn call(&self, name: &'static str, args: &Value, timeout: Duration) -> BrowserResult<Value> {
+    fn call(&self, name: &'static str, args: &Value, timeout: Duration) -> ViewResult<Value> {
         self.open_or_closed()?;
         let call = |id| {
             format!("window.__dloop_call ? window.__dloop_call({id}, {name:?}, {args}) : false")
@@ -114,7 +115,7 @@ impl WebviewDriver {
         match reply {
             Ok(Ok(value)) => Ok(value),
             Ok(Err(error)) => Err(classify(&error)),
-            Err(_) => Err(BrowserError::Unavailable(format!(
+            Err(_) => Err(ViewError::Unavailable(format!(
                 "the page did not answer {name}"
             ))),
         }
@@ -125,17 +126,17 @@ impl WebviewDriver {
         clippy::disallowed_methods,
         reason = "a backoff: the page between documents says nothing when its probe is ready"
     )]
-    fn call_ready(&self, name: &'static str, args: &Value) -> BrowserResult<Value> {
+    fn call_ready(&self, name: &'static str, args: &Value) -> ViewResult<Value> {
         let deadline = Instant::now() + PROBE_READY;
         loop {
             match self.call(name, args, CALL_TIMEOUT) {
-                Ok(Value::Null) | Err(BrowserError::Unavailable(_))
+                Ok(Value::Null) | Err(ViewError::Unavailable(_))
                     if Instant::now() < deadline && self.is_open() =>
                 {
                     std::thread::sleep(Duration::from_millis(30));
                 }
                 Ok(Value::Null) => {
-                    return Err(BrowserError::Unavailable("the page has no document".into()));
+                    return Err(ViewError::Unavailable("the page has no document".into()));
                 }
                 other => return other,
             }
@@ -169,7 +170,7 @@ impl WebviewDriver {
     }
 
     /// Open `url` in a new tab, show it and act on it from now on; then wait for its document.
-    pub fn new_tab(&self, url: &str) -> BrowserResult<u32> {
+    pub fn new_tab(&self, url: &str) -> ViewResult<u32> {
         let id = self.add_tab(url)?;
         self.on(id).wait_new();
         Ok(id)
@@ -177,7 +178,7 @@ impl WebviewDriver {
 
     /// Open `url` in a new tab, shown, and say its id at once: its document is waited for by a
     /// driver pinned to it (`wait_new`), so several tabs load at the same time.
-    pub fn add_tab(&self, url: &str) -> BrowserResult<u32> {
+    pub fn add_tab(&self, url: &str) -> ViewResult<u32> {
         let url = loadable(url)?;
         self.open_or_closed()?;
         let (reply, opened) = mpsc::sync_channel(1);
@@ -195,7 +196,7 @@ impl WebviewDriver {
     }
 
     /// Show tab `id` and act on it from now on.
-    pub fn switch_tab(&self, id: u32) -> BrowserResult<()> {
+    pub fn switch_tab(&self, id: u32) -> ViewResult<()> {
         self.open_or_closed()?;
         let (reply, switched) = mpsc::sync_channel(1);
         self.send(Cmd::SwitchTab { id, reply })?;
@@ -203,49 +204,49 @@ impl WebviewDriver {
     }
 
     /// Close tab `id`; returns whether tabs are left (with none, the window is closed).
-    pub fn close_tab(&self, id: u32) -> BrowserResult<bool> {
+    pub fn close_tab(&self, id: u32) -> ViewResult<bool> {
         self.open_or_closed()?;
         let (reply, closed) = mpsc::sync_channel(1);
         self.send(Cmd::CloseTab { id, reply })?;
         answered(&closed)
     }
 
-    fn send(&self, command: Cmd) -> BrowserResult<()> {
-        self.proxy.send_event(command).map_err(|error| {
-            BrowserError::Unavailable(format!("the browser window is gone: {error}"))
-        })
+    fn send(&self, command: Cmd) -> ViewResult<()> {
+        self.proxy
+            .send_event(command)
+            .map_err(|error| ViewError::Unavailable(format!("the browser window is gone: {error}")))
     }
 }
 
 /// What the event loop answered a command with.
 /// `url` as the window can load it, else refused before it reaches the window (`guard`).
-pub(super) fn loadable(url: &str) -> BrowserResult<String> {
+pub(super) fn loadable(url: &str) -> ViewResult<String> {
     crate::browser::guard::loadable(url)
-        .ok_or_else(|| BrowserError::Refused(format!("`{url}` is not an address")))
+        .ok_or_else(|| ViewError::Refused(format!("`{url}` is not an address")))
 }
 
-fn answered<T>(answer: &mpsc::Receiver<Result<T, String>>) -> BrowserResult<T> {
+fn answered<T>(answer: &mpsc::Receiver<Result<T, String>>) -> ViewResult<T> {
     match answer.recv_timeout(CALL_TIMEOUT) {
         Ok(Ok(value)) => Ok(value),
-        Ok(Err(why)) => Err(BrowserError::Refused(why)),
+        Ok(Err(why)) => Err(ViewError::Refused(why)),
         Err(_) => Err(closed()),
     }
 }
 
 /// Why nothing can be done on the page: the person closed the window.
-fn closed() -> BrowserError {
-    BrowserError::Unavailable("the browser window was closed".into())
+fn closed() -> ViewError {
+    ViewError::Unavailable("the browser window was closed".into())
 }
 
-fn classify(error: &str) -> BrowserError {
+fn classify(error: &str) -> ViewError {
     if error == WINDOW_CLOSED {
         closed()
     } else if error.starts_with("probe_not_ready") {
-        BrowserError::Unavailable(error.to_string())
+        ViewError::Unavailable(error.to_string())
     } else if error.starts_with("stale") {
-        BrowserError::Stale(error.to_string())
+        ViewError::Stale(error.to_string())
     } else {
-        BrowserError::Refused(error.to_string())
+        ViewError::Refused(error.to_string())
     }
 }
 

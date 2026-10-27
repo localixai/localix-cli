@@ -3,7 +3,7 @@
 //! that quits at once can still kill them all (see [`kill_all_now`]).
 
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use super::process::{self, Ending};
@@ -214,11 +214,6 @@ fn kill_group(group: i32) {
     }
 }
 
-/// The commands of the sessions running, in every registry of the process.
-pub fn running_anywhere() -> Vec<String> {
-    running(|_| true)
-}
-
 /// The commands of the sessions running in the registries numbered from `numbers`.
 pub fn running_with(numbers: &Arc<AtomicU32>) -> Vec<String> {
     let owner = owner(Some(numbers));
@@ -237,7 +232,7 @@ fn running(of: impl Fn(usize) -> bool) -> Vec<String> {
 }
 
 fn commands() -> MutexGuard<'static, [Option<(usize, String)>; KILL_SLOTS]> {
-    COMMANDS.lock().unwrap_or_else(PoisonError::into_inner)
+    crate::lock(&COMMANDS)
 }
 
 /// Mirror `group` in a free slot of [`GROUPS`]; with none free, only the normal ending kills it.

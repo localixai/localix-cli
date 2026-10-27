@@ -1,4 +1,4 @@
-# llx as a daemon and a thin client (design, being built)
+# llx as a daemon and a thin client (design, built)
 
 One `llx serve` per user owns everything that works: sessions (lanes), agents, jobs, models and
 sign-ins, terminal sessions and the one window with its tabs. `llx` at a terminal is a client: it
@@ -185,9 +185,16 @@ process environment): commands run in the environment of the client that opened 
    shown group's, only when there are several; `window list` names a tab's group only then. The tool
    knows no project. Left for D3/D4: a daemon's lanes from several directories feed it.
 
-Estimated 2,500 to 3,500 lines; the budget has 5,000 left.
+6. **Tool clients.** Another agent calls llx's `window` from its own shell (ARCHITECTURE.md W9, K7).
+   Built: `llx window` (`call.rs`, `commands/window.rs`) is an interface of its own, one call per
+   process: its handshake's command line is `window`, then its owner (the project's directory, or
+   `--as`); the server gives it that owner's toolbox (`server/toolbox.rs`: the same `window` tool
+   the agent has, at the client's place, on the `bypass` rules, since the calling agent approves
+   each call) through `Command::Tools` and `Command::Tool`. The toolbox outlives the connection: an
+   owner's tabs stay between calls until `llx window --end`, the person closes them, or the daemon
+   stops, and while one is open the daemon is in use. It replaced `llx mcp`, an MCP server.
 
-## Built (all five steps)
+## Built (all six steps)
 
 `llx` at a terminal runs its sessions in one daemon per config directory (`llx serve`, found or
 started, replaced when of another build and idle); `--no-daemon` and `exec` run in process. The

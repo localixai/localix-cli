@@ -33,15 +33,15 @@ Results land in `evals/results/<timestamp>/`, which git ignores:
 - `<task>-<n>.jsonl`: the run's events.
 - `<task>-<n>.stderr`: whatever the run printed on stderr.
 - `summary.json`: the table, with the reasons and each run's tokens.
-- `sessions/`: the sessions the runs saved, kept here instead of your `~/.lx/sessions`.
+- `sessions/`: the sessions the runs saved, kept here instead of your `~/.llx/sessions`.
 
-`--record` also appends the run to `benchmarks/runs/<date>.json` (tracked in git). It then regenerates `benchmarks/HISTORY.md` (every run, plus per-task changes against the previous run) and the metrics block in the main README.
+`--record` also appends the run to `benchmarks/runs/<date>.json` (tracked in git). It then regenerates `benchmarks/HISTORY.md` (every run, plus per-task changes against the previous run) and the metrics block in the main README, when it has one (between `<!-- metrics:start -->` and `<!-- metrics:end -->`).
 
 Every task makes paid OpenRouter calls: a few tenths of a cent each with the default models.
 
 ## By hand
 
-Terminal tabs (a session, on a machine with a display): start one with a task like `run python3 -q in a terminal and compute 2+2 there`. It opens as a tab of the one window, shown, while the prompt keeps the keyboard; typing into it does nothing. Close its tab: the task and the session go on. Over SSH, in `exec` and in autonomous mode, no window opens; the terminal still works.
+Terminal tabs (a session, on a machine with a display): start one with a task like `run python3 -q in a terminal and compute 2+2 there`. It opens as a tab of the one window, shown, while the prompt keeps the keyboard; typing into it does nothing. Close its tab: the task and the session go on. Over SSH and in `exec`, no window opens; the terminal still works.
 
 ## Tasks
 

@@ -75,6 +75,17 @@ fn the_question_names_what_would_stop_and_offers_to_exit_or_stay() {
 }
 
 #[test]
+fn a_name_with_a_control_sequence_is_shown_escaped() {
+    let now = Instant::now();
+    let mut app = two(true, now);
+    app.work = Box::new(|| vec![running("monitor", "watch\u{1b}-ci")]);
+    app.input(ctrl('c'), now);
+    app.input(ctrl('c'), now);
+    let shown = render(&mut app, now);
+    assert!(shown.contains("monitor · watch\\u{1b}-ci"), "{shown}");
+}
+
+#[test]
 fn a_server_that_keeps_work_offers_the_background() {
     let now = Instant::now();
     let mut app = two(false, now);

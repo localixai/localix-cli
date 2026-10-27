@@ -78,10 +78,7 @@ impl Person {
 
     pub(crate) fn act(&mut self, action: Option<Action>, ended: bool) {
         let call = match action {
-            Some(Action::Open(target)) => Some(Command::Open { target }),
             Some(Action::Stop(session)) => Some(Command::Interrupt { session }),
-            Some(Action::Sessions) => Some(Command::List),
-            Some(Action::Halt(id)) => Some(Command::Halt { id }),
             Some(Action::QuitNow) => {
                 self.app.leave();
                 Some(Command::QuitAll)

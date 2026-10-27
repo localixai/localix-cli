@@ -18,6 +18,7 @@ use std::time::Instant;
 use ratatui::text::{Line, Span};
 
 use super::app::{Action, App, Open};
+use super::printable::printable;
 use super::queue::Asked;
 use super::select::{Choice, Picked, Select};
 use super::style;
@@ -41,7 +42,7 @@ impl App {
         ];
         let named = running
             .iter()
-            .map(|run| format!("    {} · {}", run.kind, run.name));
+            .map(|run| format!("    {} · {}", printable(&run.kind), printable(&run.name)));
         title.extend(named.map(|text| Line::from(Span::styled(text, style::dim()))));
         let mut choices = vec![Choice::new("Exit and stop tasks")];
         if self.background {

@@ -212,10 +212,12 @@ fn slash_offers_the_commands_and_enter_takes_the_marked_one() {
       /new        start over
       default mode · shift+tab to cycle
     ");
-    let opened = app.input(key(KeyCode::Enter), now);
+    assert_eq!(app.input(key(KeyCode::Enter), now), None);
     assert_eq!(
-        opened,
-        Some(Action::Open(protocol::Target::New)),
+        commands(&mut app),
+        vec![Command::Open {
+            target: protocol::Target::New
+        }],
         "the marked one"
     );
     assert!(
@@ -657,8 +659,13 @@ fn new_typed_while_a_task_works_opens_a_lane_at_once() {
     let mut app = lanes(now);
     app.frame(from("A", Event::TaskStarted("a's task".into())), now);
     typed(&mut app, "/new", now);
-    let opened = app.input(key(KeyCode::Enter), now);
-    assert_eq!(opened, Some(Action::Open(protocol::Target::New)));
+    assert_eq!(app.input(key(KeyCode::Enter), now), None);
+    assert_eq!(
+        commands(&mut app),
+        vec![Command::Open {
+            target: protocol::Target::New
+        }]
+    );
     assert!(sent(&mut app).is_empty(), "not kept for after the task");
 }
 

@@ -1,8 +1,13 @@
 //! The person's clipboard, the interface's own (K2): `/copy`'s text is written where the person
 //! is, by the system's tool, whichever server sent it.
 
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::time::Duration;
+
+use super::within::within;
+
+/// How long the system's tool may take to take the text (R10).
+const WAIT: Duration = Duration::from_secs(3);
 
 /// Write `text` to the system clipboard; what came of it, for the person.
 pub(super) fn copy(text: &str) -> String {
@@ -17,20 +22,9 @@ pub(super) fn copy(text: &str) -> String {
         &["xsel", "-ib"],
     ];
     for tool in tools {
-        let spawned = Command::new(tool[0])
-            .args(&tool[1..])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
-        let Ok(mut child) = spawned else {
-            continue;
-        };
-        let written = child
-            .stdin
-            .take()
-            .map(|mut stdin| stdin.write_all(text.as_bytes()));
-        if matches!(written, Some(Ok(()))) && child.wait().is_ok_and(|s| s.success()) {
+        let mut command = Command::new(tool[0]);
+        command.args(&tool[1..]);
+        if within(command, text.as_bytes().to_vec(), WAIT).is_some() {
             let count = text.chars().count();
             return format!("Copied the last answer ({count} characters).\n");
         }

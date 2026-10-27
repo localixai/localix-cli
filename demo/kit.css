@@ -1,49 +1,67 @@
-/* The demos' one look: quiet paper, pine ink, the system's own faces. Light or dark follows the
-   system; the header's button pins one (kit.js keeps it in localStorage). */
+/* The demos' one look: a near-black ground, quiet greys, warm off-white for what acts, hairline
+   borders, no gradients and no colour but neutral (a state that needs one gets a restrained red or
+   amber). Light is the same system inverted. Light or dark follows the system; the header's button
+   pins one (kit.js keeps it in localStorage). The pages take every colour, size and gap from the
+   tokens below and never bring their own. */
 
 :root {
   color-scheme: light dark;
-  --paper: #f6f7f5;
-  --panel: #ffffff;
-  --sunk: #eef1ee;
-  --ink: #1b2420;
-  --muted: #56625c;
-  --line: #d9dfdb;
-  --accent: #2f6b55;
-  --accent-ink: #ffffff;
-  --accent-soft: #e3efe9;
-  --danger: #b42318;
-  --danger-soft: #fdecea;
+  /* Light: warm paper, near-black ink. */
+  --paper: #f5f4f0;
+  --panel: #fbfaf8;
+  --sunk: #eceae5;
+  --ink: #0a0a0a;
+  --muted: #5c5a55;
+  --line: #dcdad4;
+  --accent: #141414;
+  --accent-ink: #f5f4f0;
+  --accent-soft: #e6e4de;
+  --danger: #b3261e;
+  --danger-soft: #f6e4e1;
   --warn: #8a5a00;
-  --focus: #2f6b55;
-  --shadow: 0 1px 2px rgb(27 36 32 / 0.06), 0 8px 24px rgb(27 36 32 / 0.08);
-  --radius-control: 8px;
-  --radius-panel: 14px;
-  --head: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --focus: #0a0a0a;
+  --scrim: rgb(10 10 10 / 0.4);
+  --shadow: 0 12px 32px rgb(0 0 0 / 0.14);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%235c5a55' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+  /* Radii: controls, panels. */
+  --radius-control: 6px;
+  --radius-panel: 10px;
+  /* Type: one family, a tight heavy display weight, a small scale. */
+  --head: system-ui, -apple-system, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --body: system-ui, -apple-system, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --step--1: 0.875rem;
   --step-0: 1rem;
   --step-1: 1.25rem;
-  --step-2: 1.6rem;
-  --step-3: 2.1rem;
+  --step-2: 1.75rem;
+  --step-3: 2.75rem;
+  /* Spacing: one scale, in rem. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.5rem;
+  --space-7: 4rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #141917;
-    --panel: #1c2320;
-    --sunk: #232b28;
-    --ink: #e5ebe7;
-    --muted: #9aa69f;
-    --line: #2f3834;
-    --accent: #7cc3a6;
-    --accent-ink: #0f1a15;
-    --accent-soft: #22362e;
-    --danger: #ff8a7a;
-    --danger-soft: #3a211d;
-    --warn: #f0c05a;
-    --focus: #7cc3a6;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.35);
+    --paper: #0a0a0a;
+    --panel: #121212;
+    --sunk: #1b1b1a;
+    --ink: #e8e6e1;
+    --muted: #9b9994;
+    --line: #2a2a28;
+    --accent: #e8e6e1;
+    --accent-ink: #0a0a0a;
+    --accent-soft: #232321;
+    --danger: #ea8f82;
+    --danger-soft: #2b1815;
+    --warn: #dcb56c;
+    --focus: #e8e6e1;
+    --scrim: rgb(0 0 0 / 0.6);
+    --shadow: 0 12px 32px rgb(0 0 0 / 0.6);
+    --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%239b9994' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
   }
 }
 
@@ -53,20 +71,22 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper: #141917;
-  --panel: #1c2320;
-  --sunk: #232b28;
-  --ink: #e5ebe7;
-  --muted: #9aa69f;
-  --line: #2f3834;
-  --accent: #7cc3a6;
-  --accent-ink: #0f1a15;
-  --accent-soft: #22362e;
-  --danger: #ff8a7a;
-  --danger-soft: #3a211d;
-  --warn: #f0c05a;
-  --focus: #7cc3a6;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.35);
+  --paper: #0a0a0a;
+  --panel: #121212;
+  --sunk: #1b1b1a;
+  --ink: #e8e6e1;
+  --muted: #9b9994;
+  --line: #2a2a28;
+  --accent: #e8e6e1;
+  --accent-ink: #0a0a0a;
+  --accent-soft: #232321;
+  --danger: #ea8f82;
+  --danger-soft: #2b1815;
+  --warn: #dcb56c;
+  --focus: #e8e6e1;
+  --scrim: rgb(0 0 0 / 0.6);
+  --shadow: 0 12px 32px rgb(0 0 0 / 0.6);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%239b9994' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
 }
 
 *,
@@ -90,25 +110,27 @@ body {
   color: var(--ink);
   font: 400 var(--step-0) / 1.55 var(--body);
   font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
 }
 
 h1,
 h2,
 h3 {
   font-family: var(--head);
-  line-height: 1.15;
-  letter-spacing: -0.015em;
-  margin: 0 0 0.5em;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  margin: 0 0 var(--space-3);
 }
 
 h1 {
   font-size: var(--step-3);
-  font-weight: 700;
+  font-weight: 750;
+  letter-spacing: -0.045em;
 }
 
 h2 {
   font-size: var(--step-2);
-  font-weight: 650;
+  font-weight: 700;
 }
 
 h3 {
@@ -122,8 +144,9 @@ p {
 }
 
 a {
-  color: var(--accent);
-  text-underline-offset: 0.18em;
+  color: var(--ink);
+  text-decoration-color: var(--muted);
+  text-underline-offset: 0.2em;
 }
 
 :focus-visible {
@@ -144,14 +167,15 @@ a {
 .top {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: var(--space-4);
   max-width: 64rem;
   margin: 0 auto;
-  padding: 1rem 1.25rem;
+  padding: var(--space-4) var(--space-5);
 }
 
 .top .brand {
-  font: 650 var(--step-1) / 1 var(--head);
+  font: 750 var(--step-1) / 1 var(--head);
+  letter-spacing: -0.04em;
   color: var(--ink);
   text-decoration: none;
   margin-right: auto;
@@ -176,7 +200,7 @@ a {
 main {
   max-width: 64rem;
   margin: 0 auto;
-  padding: 0.5rem 1.25rem 4rem;
+  padding: var(--space-2) var(--space-5) var(--space-7);
 }
 
 .lead {
@@ -189,7 +213,7 @@ main {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
-  padding: 1.25rem;
+  padding: var(--space-5);
 }
 
 .stack > * + * {
@@ -256,14 +280,13 @@ textarea {
   width: 100%;
 }
 
-/* A select drawn as the fields are, its arrow two strokes of the muted ink. */
+/* A select drawn as the fields are, its arrow a chevron in the muted ink. */
 select {
   appearance: none;
   padding-right: 2.25rem;
-  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
-    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-  background-position: calc(100% - 1.15rem) 52%, calc(100% - 0.8rem) 52%;
-  background-size: 0.35rem 0.35rem;
+  background-image: var(--chevron);
+  background-position: right 0.9rem center;
+  background-size: 0.75rem 0.5rem;
   background-repeat: no-repeat;
 }
 
@@ -322,7 +345,7 @@ button.primary,
 }
 
 button.primary:hover {
-  filter: brightness(1.08);
+  background: color-mix(in srgb, var(--accent) 86%, var(--paper));
 }
 
 button.danger {
@@ -358,8 +381,8 @@ button:disabled {
 }
 
 .pill.good {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 .pill.bad {
@@ -451,24 +474,22 @@ dialog {
   color: var(--ink);
   padding: 1.5rem;
   max-width: min(30rem, calc(100vw - 2rem));
-  box-shadow: var(--shadow);
 }
 
 dialog::backdrop {
-  background: rgb(10 15 13 / 0.45);
+  background: var(--scrim);
 }
 
 /* The one toast, bottom left. */
 .toast {
   position: fixed;
-  left: 1.25rem;
-  bottom: 1.25rem;
+  left: var(--space-5);
+  bottom: var(--space-5);
   background: var(--ink);
   color: var(--paper);
   padding: 0.75rem 1rem;
   border-radius: var(--radius-control);
-  box-shadow: var(--shadow);
-  font-weight: 500;
+  font-weight: 550;
   max-width: calc(100vw - 2.5rem);
 }
 
@@ -483,8 +504,8 @@ dialog::backdrop {
 
 @media (max-width: 40rem) {
   :root {
-    --step-3: 1.75rem;
-    --step-2: 1.4rem;
+    --step-3: 2.1rem;
+    --step-2: 1.5rem;
   }
 }
 

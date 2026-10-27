@@ -135,11 +135,6 @@ impl Catalog {
         self.provider(provider)?.model(id)
     }
 
-    /// `provider`'s models llx can call over chat completions, newest first.
-    pub fn models(&self, provider: &str) -> Vec<ModelEntry> {
-        self.served(provider, CHAT_COMPLETIONS)
-    }
-
     /// `provider`'s models llx can call over `protocol`, newest first.
     pub fn served(&self, provider: &str, protocol: &str) -> Vec<ModelEntry> {
         let Some(found) = self.provider(provider) else {

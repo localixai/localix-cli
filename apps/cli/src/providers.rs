@@ -16,6 +16,7 @@ use models::{CHAT_COMPLETIONS, Catalog, RESPONSES};
 use crate::compose::APP;
 
 mod kept;
+mod login;
 
 /// Where a key's variables are read: a session's environment (its client's, in the daemon),
 /// else, for `None`, this process's.
@@ -372,7 +373,7 @@ fn sign_in_words(name: &str, variable: Option<&str>) -> String {
     }
 }
 
-/// Ask models.dev for a newer catalog, at most once a day, on a thread of its own: the next
+/// Ask models.dev for a newer catalog, at most once an hour, on a thread of its own: the next
 /// session reads what it keeps.
 pub(crate) fn refresh_catalog() {
     // `LLX_MODELS_REFRESH=0`: no network for it (tests, offline machines).

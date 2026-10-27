@@ -13,9 +13,9 @@ use serde_json::{Value, json};
 
 use crate::tokens::Tokens;
 
-pub const ISSUER: &str = "https://auth.openai.com";
+pub(crate) const ISSUER: &str = "https://auth.openai.com";
 /// The public client the issuer knows terminal sign-ins by.
-pub const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
+pub(crate) const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 /// The callback ports the issuer accepts redirects to.
 const PORTS: [u16; 2] = [1455, 1457];
 const CALLBACK: &str = "/auth/callback";
@@ -92,7 +92,7 @@ impl Login {
 }
 
 /// The address the person signs in at.
-pub fn authorize(app: App, redirect: &str, challenge: &str, state: &str) -> String {
+pub(crate) fn authorize(app: App, redirect: &str, challenge: &str, state: &str) -> String {
     let query = form(&[
         ("response_type", "code"),
         ("client_id", CLIENT_ID),
@@ -109,7 +109,7 @@ pub fn authorize(app: App, redirect: &str, challenge: &str, state: &str) -> Stri
 }
 
 /// The authorization code for tokens (a form, as the token endpoint takes it).
-pub fn exchange(
+pub(crate) fn exchange(
     http: &dyn Http,
     code: &str,
     verifier: &str,
@@ -129,7 +129,7 @@ pub fn exchange(
 }
 
 /// Fresh tokens for `tokens` (JSON, as the token endpoint takes a refresh).
-pub fn refresh(http: &dyn Http, tokens: &Tokens, now: u64) -> Result<Tokens, String> {
+pub(crate) fn refresh(http: &dyn Http, tokens: &Tokens, now: u64) -> Result<Tokens, String> {
     let body = json!({
         "client_id": CLIENT_ID,
         "grant_type": "refresh_token",

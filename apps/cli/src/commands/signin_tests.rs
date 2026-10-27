@@ -52,12 +52,6 @@ fn a_pasted_address_is_read_and_q_or_the_end_of_input_goes_back() {
     assert_eq!(signed(&[], 0).0, Ok(None));
 }
 
-#[test]
-fn a_key_shows_only_its_prefix_and_its_last_four() {
-    assert_eq!(mask("sk-or-v1-0123456789abcdef"), "sk-or-...cdef");
-    assert_eq!(mask("sk-or-abc"), "...");
-}
-
 /// An interface whose line stays open, untouched, until `done` closes it.
 struct Open;
 

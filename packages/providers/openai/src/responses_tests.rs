@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use contracts::catalog::{Effort, ModelEntry, Selection};
+use provider_kit::http::Reply;
 use serde_json::json;
 
 use super::*;
@@ -54,12 +55,7 @@ impl Keep for Arc<Memory> {
 struct Shared(Arc<Scripted>);
 
 impl Http for Shared {
-    fn post(
-        &self,
-        a: &str,
-        h: &[(&str, &str)],
-        b: &str,
-    ) -> Result<provider_kit::http::Reply, provider_kit::http::HttpError> {
+    fn post(&self, a: &str, h: &[(&str, &str)], b: &str) -> Result<Reply, HttpError> {
         self.0.post(a, h, b)
     }
 }
@@ -77,7 +73,11 @@ fn tokens(expires: u64) -> Tokens {
 const LATER: u64 = 9_999_999_999;
 
 fn model(replies: Vec<(u16, String)>, held: Tokens) -> (ChatModel, Arc<Scripted>, Arc<Memory>) {
-    let http = Arc::new(Scripted::new(replies));
+    model_of(Scripted::new(replies), held)
+}
+
+fn model_of(http: Scripted, held: Tokens) -> (ChatModel, Arc<Scripted>, Arc<Memory>) {
+    let http = Arc::new(http);
     let memory = Arc::new(Memory::default());
     let selection = Selection::new(entry("gpt-6-sol"));
     let model = ChatModel::new(
@@ -339,4 +339,47 @@ fn a_picture_goes_in_as_a_user_message_with_an_input_image() {
         item["content"][1]["image_url"],
         "data:image/jpeg;base64,/9j/AA=="
     );
+}
+
+#[test]
+fn a_request_that_went_out_unanswered_is_not_sent_again() {
+    let (model, http, _) = model_of(
+        Scripted::answering(vec![
+            Err(HttpError::Unanswered("timed out".into())),
+            Ok(Reply {
+                status: 200,
+                body: streamed(&[completed()]),
+            }),
+        ]),
+        tokens(LATER),
+    );
+    let request = Request {
+        conversation: &[],
+        tools: &[],
+        may_call: false,
+    };
+    let failed = model.complete(request).unwrap_err().to_string();
+    assert!(failed.contains("timed out"), "{failed}");
+    assert_eq!(http.sent().len(), 1, "a reply may be billed: asked once");
+}
+
+#[test]
+fn a_request_that_never_went_out_is_sent_again() {
+    let (model, http, _) = model_of(
+        Scripted::answering(vec![
+            Err(HttpError::Unsent("connection refused".into())),
+            Ok(Reply {
+                status: 200,
+                body: streamed(&[completed()]),
+            }),
+        ]),
+        tokens(LATER),
+    );
+    let request = Request {
+        conversation: &[],
+        tools: &[],
+        may_call: false,
+    };
+    assert!(model.complete(request).is_ok());
+    assert_eq!(http.sent().len(), 2);
 }

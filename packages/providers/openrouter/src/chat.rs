@@ -99,7 +99,7 @@ fn body(openrouter: bool, selection: &Selection, request: &Request) -> Value {
 
 /// The level as OpenRouter's `reasoning` takes it. Off is no thinking at all: it costs seconds
 /// per turn, and the agent reasons in its tool calls instead.
-pub fn reasoning(effort: Effort) -> Value {
+pub(crate) fn reasoning(effort: Effort) -> Value {
     match effort {
         Effort::Off => json!({"enabled": false}),
         effort @ (Effort::Minimal

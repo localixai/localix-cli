@@ -89,6 +89,14 @@ def called(spec, calls):
     return any(c.get("name") == spec["name"] and fits(c.get("arguments") or {}) for c in calls)
 
 
+def described(spec):
+    """A `uses` or `avoids` entry as a failure names it: the tool and the rest of the entry, or
+    each of an `any`'s entries."""
+    if "any" in spec:
+        return " or ".join(described(one) for one in spec["any"])
+    return f"{spec['name']} as {json.dumps({k: v for k, v in spec.items() if k != 'name'})}"
+
+
 def judge(task, code, done, work, calls=()):
     """Every reason the run failed; empty when it passed."""
     reasons = []
@@ -110,10 +118,10 @@ def judge(task, code, done, work, calls=()):
             reasons.append(f"answer does not match /{pattern}/")
     for spec in task.get("uses", []):
         if not called(spec, calls):
-            reasons.append(f"never called {spec['name']} as {json.dumps({k: v for k, v in spec.items() if k != 'name'})}")
+            reasons.append(f"never called {described(spec)}")
     for spec in task.get("avoids", []):
         if called(spec, calls):
-            reasons.append(f"called {spec['name']} as it must not: {json.dumps({k: v for k, v in spec.items() if k != 'name'})}")
+            reasons.append(f"called {described(spec)}, as it must not")
     failed_check = check(task, work)
     if failed_check:
         reasons.append(failed_check)

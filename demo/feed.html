@@ -26,6 +26,8 @@
     gap: 0.25rem 0.85rem;
   }
   .face {
+    background: var(--sunk);
+    border: 1px solid var(--line);
     grid-row: span 3;
     width: 2.5rem;
     height: 2.5rem;
@@ -158,14 +160,13 @@
   let loading = false;
   const $ = (id) => document.getElementById(id);
 
-  const hue = (name) => [...name].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
   const ago = (h) => (h < 1 ? "just now" : h < 24 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`);
   const initials = (name) => name.split(" ").map((w) => w[0]).join("");
 
   function post(p) {
     const likes = p.likes + (liked.has(p.id) ? 1 : 0);
     return `<li class="post" data-id="${p.id}">
-      <span class="face" style="background: hsl(${hue(p.by)} 45% 60% / 0.3)" aria-hidden="true">${initials(p.by)}</span>
+      <span class="face" aria-hidden="true">${initials(p.by)}</span>
       <div class="who"><strong>${esc(p.by)}</strong><span>${ago(p.hours)}</span></div>
       <p>${esc(p.text)}</p>
       <div class="acts"><button type="button" data-like aria-pressed="${liked.has(p.id)}" aria-label="Like, ${likes} likes">♥ ${likes}</button></div>

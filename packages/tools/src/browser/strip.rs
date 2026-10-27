@@ -59,10 +59,12 @@ pub(super) enum Click {
     /// The strip's empty part is the titlebar: a press moves the window, a double click zooms it.
     Drag,
     Zoom,
+    /// The expanded window goes back to the mini.
+    Collapse,
 }
 
 /// A message from the strip's page: `show w3`, `close t1`, `back`, `forward`, `history`,
-/// `visit 2`, `comment`, `send`, `drag`, `zoom`. Anything else is nothing.
+/// `visit 2`, `comment`, `send`, `drag`, `zoom`, `collapse`. Anything else is nothing.
 pub(super) fn click(body: &str) -> Option<Click> {
     let (verb, rest) = match body.split_once(' ') {
         Some((verb, rest)) => (verb, Some(rest)),
@@ -76,6 +78,7 @@ pub(super) fn click(body: &str) -> Option<Click> {
         ("send", None) => Some(Click::Send),
         ("drag", None) => Some(Click::Drag),
         ("zoom", None) => Some(Click::Zoom),
+        ("collapse", None) => Some(Click::Collapse),
         ("visit", Some(at)) if at.bytes().all(|b| b.is_ascii_digit()) => {
             at.parse().ok().map(Click::Visit)
         }

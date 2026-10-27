@@ -135,6 +135,10 @@ pub(super) fn on_browser(
         | Cmd::Listing(_)
         | Cmd::Sized(..)
         | Cmd::Act(..)
+        | Cmd::Presence(_)
+        | Cmd::MiniDrag
+        | Cmd::Pictured(_)
+        | Cmd::Presented(_)
         | Cmd::Exit(_) => return,
     }
     open.refresh(shared);

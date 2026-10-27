@@ -36,6 +36,8 @@ impl Deck {
                 let _ = self.frame.native.drag_window();
                 return Ok(After::Kept);
             }
+            // The host's: it is the window's presence, not a tab's.
+            Click::Collapse => return Ok(After::Kept),
             Click::Zoom => {
                 let native = &self.frame.native;
                 native.set_maximized(!native.is_maximized());
@@ -76,6 +78,7 @@ impl Deck {
             | Click::Comment
             | Click::Send
             | Click::Drag
+            | Click::Collapse
             | Click::Zoom => After::Kept,
             Click::Show(Key::Web(id)) => {
                 if let Some(web) = self.web.as_mut() {

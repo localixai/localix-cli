@@ -143,6 +143,16 @@ every new file already goes where its target crate will be.
   made, `has_display` false), so the app compiles the same code with no `cfg` of its own and
   links no engine: the headless build, for CI and servers, where `window` has terminal tabs only.
   The Linux release ships both builds; an installer takes the headless one where no WebKitGTK is.
+- **A9**: the native window has three states on macOS, the owner's decision (`presence.rs`, a pure
+  module the AppKit side applies). Hidden: no tab; the app is a background one. Mini, the default
+  whenever a tab is open: a small floating panel in a screen corner over every Space, a full-screen
+  app's too, never taking focus, with a live picture of the tab shown; the agent's `show` makes it
+  blink and never expands it. Expanded: the deck as a non-activating panel over the Space the person
+  is on, not full screen, opened only by the person's click on the mini and closed to it by the
+  strip's collapse button; it becomes key only when the person clicks into a text field. llx never
+  activates the app. The window keeps its size and keeps rendering in every state (collapsed, it is
+  invisible and click-through, as a headless one is), so nothing the agent reads depends on the
+  state. Elsewhere there is no mini: an ordinary window that does not take focus.
 
 ## Composition rules (the apps)
 

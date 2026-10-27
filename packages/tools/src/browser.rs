@@ -12,9 +12,14 @@ mod frame;
 mod guard;
 mod history;
 mod host;
+mod mini;
+#[cfg(target_os = "macos")]
+mod nspanel;
 mod page;
 mod panel;
+mod placement;
 mod platform;
+mod presence;
 mod script;
 mod strip;
 mod tab_view;

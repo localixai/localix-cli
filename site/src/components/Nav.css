@@ -5,18 +5,25 @@
   height: 4.5rem;
 }
 .wordmark {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
   font: 800 1.5rem/1 var(--display);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.06em;
 }
 .nav-links {
   justify-self: end;
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  gap: 0.25rem;
 }
 .nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-inline: 0.75rem;
   color: var(--soft);
-  font: 500 0.875rem/1 var(--text);
+  font: 500 0.9375rem/1 var(--text);
   transition: color 160ms ease;
 }
 .nav-link:hover,
@@ -26,9 +33,9 @@
 .gh {
   display: inline-grid;
   place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  margin-right: -0.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-right: -0.6rem;
   color: var(--soft);
   transition: color 160ms ease;
 }

@@ -24,8 +24,14 @@ const BLOCKS: [string, string, string][] = [
 /** The commands another agent composes, and the plugin that teaches them to Claude Code. */
 export function Blocks() {
   return (
-    <section className="blocks wrap" aria-labelledby="blocks-title">
-      <h2 id="blocks-title">Three commands. Your agent composes them.</h2>
+    <section className="section blocks wrap" aria-labelledby="blocks-title">
+      <div className="sec-head">
+        <h2 id="blocks-title">Three commands. Your agent composes them.</h2>
+        <p>
+          Each is one call from a shell, so anything that runs a shell can use them: Claude Code, Codex, a script, a
+          job.
+        </p>
+      </div>
       <dl className="blocks-list">
         {BLOCKS.map(([command, what, more]) => (
           <div key={command}>
@@ -38,13 +44,16 @@ export function Blocks() {
           </div>
         ))}
       </dl>
-      <p className="section-lede">
-        In Claude Code, the plugin teaches Claude these commands and brings your comments from the window as a turn
-        of their own: <code>/plugin install llx --marketplace rsaryev/llx</code>.{' '}
+      <div className="plugin">
+        <p>
+          In Claude Code, the plugin teaches Claude these commands and brings your comments from the window as a turn
+          of their own.
+        </p>
+        <code>/plugin install llx --marketplace rsaryev/llx</code>
         <a className="more" href={AGENTS_DOCS}>
           llx in other agents
         </a>
-      </p>
+      </div>
     </section>
   );
 }
@@ -60,13 +69,15 @@ const CODES: [string, string][] = [
 /** llx as a step of a pipeline: the action's workflows, and the exit codes. */
 export function Pipeline() {
   return (
-    <section id="ci" className="pipeline wrap" aria-labelledby="ci-title">
-      <h2 id="ci-title">A step in any pipeline.</h2>
-      <p className="section-lede">
-        In CI llx works through the shell, with <code>gh</code>, <code>git</code> and your project&apos;s tools. Your
-        workflow owns the prompt and the posting: the job with the model holds a read-only token, and a second job
-        posts what it answered.
-      </p>
+    <section id="ci" className="section pipeline wrap" aria-labelledby="ci-title">
+      <div className="sec-head">
+        <h2 id="ci-title">A step in any pipeline.</h2>
+        <p>
+          In CI llx works through the shell, with <code>gh</code>, <code>git</code> and your project&apos;s tools. Your
+          workflow owns the prompt and the posting: the job with the model holds a read-only token, and a second job
+          posts what it answered.
+        </p>
+      </div>
       <Recipes />
       <dl className="pipeline-codes" aria-label="Exit codes">
         {CODES.map(([code, meaning]) => (
@@ -98,14 +109,16 @@ const FACTS: [string, string][] = [
 /** llx's own agent at the terminal, recorded, and what it costs to carry. */
 export function Own() {
   return (
-    <section className="own wrap" aria-labelledby="own-title">
-      <div className="own-copy">
+    <section className="section own wrap" aria-labelledby="own-title">
+      <div className="sec-head">
         <h2 id="own-title">And an agent of its own.</h2>
-        <p className="section-lede">
+        <p>
           Type <code>llx</code> for a minimal agent at your terminal: seven tools (read, edit, bash, window, ask,
           agents, jobs), and modes that say what runs without asking. A ChatGPT sign-in, OpenRouter, or a key for
           any provider of the models.dev catalog.
         </p>
+      </div>
+      <div className="own-body">
         <dl className="own-facts">
           {FACTS.map(([value, what]) => (
             <div key={value}>
@@ -114,13 +127,13 @@ export function Own() {
             </div>
           ))}
         </dl>
+        <figure className="own-film">
+          <Film src="/demo-llx.cast" label="A real llx session, recorded with asciinema" />
+          <figcaption>
+            <code>/login</code>, the modes and a task, recorded live
+          </figcaption>
+        </figure>
       </div>
-      <figure className="own-film">
-        <Film src="/demo-llx.cast" label="A real llx session, recorded with asciinema" />
-        <figcaption>
-          <code>/login</code>, the modes and a task, recorded live
-        </figcaption>
-      </figure>
     </section>
   );
 }

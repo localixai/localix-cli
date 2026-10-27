@@ -948,6 +948,8 @@ fn a_stopping_task_says_a_second_ctrl_c_quits_at_once() {
     assert_eq!(app.input(ctrl('c'), now), Some(Action::Stop(String::new())));
     let shown = render(&mut app, now);
     assert!(shown.contains("ctrl-c again to quit now"), "{shown}");
+}
+
 #[cfg(unix)]
 #[test]
 fn ctrl_z_suspends_and_keeps_the_draft() {

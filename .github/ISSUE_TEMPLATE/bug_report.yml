@@ -7,7 +7,7 @@ body:
     attributes:
       label: Version
       description: The output of `llx --version`.
-      placeholder: llx 0.1.0
+      placeholder: llx 0.2.0
     validations:
       required: true
   - type: input
@@ -37,6 +37,6 @@ body:
     attributes:
       label: Output
       description: >-
-        The terminal output, ideally with `--trace` or `DECISION_LOOP_DEBUG=1` (and `BROWSER_DEBUG=1`
+        The terminal output, ideally with `-v` (each result and model turn) or `DECISION_LOOP_DEBUG=1` (and `BROWSER_DEBUG=1`
         for page timing). `llx doctor` helps with setup problems.
       render: text

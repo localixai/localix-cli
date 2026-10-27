@@ -284,6 +284,25 @@ fn a_token_about_to_lapse_is_refreshed_and_kept_first() {
 }
 
 #[test]
+fn threads_that_find_the_token_stale_refresh_it_once() {
+    let refreshed = json!({"access_token": access("acct-1", LATER), "refresh_token": "r2"});
+    let (model, http, _) = model(vec![(200, refreshed.to_string())], tokens(1));
+    let got: Vec<Tokens> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..4)
+            .map(|i| {
+                std::thread::Builder::new()
+                    .name(format!("refresh-{i}"))
+                    .spawn_scoped(scope, || model.tokens(false).unwrap())
+                    .unwrap()
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    assert_eq!(http.sent().len(), 1, "one refresh for all of them");
+    assert!(got.iter().all(|t| t.refresh == "r2"));
+}
+
+#[test]
 fn a_refused_token_is_refreshed_once_then_the_refusal_is_said() {
     let refreshed = json!({"access_token": access("acct-1", LATER), "refresh_token": "r2"});
     let replies = vec![

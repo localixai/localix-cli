@@ -3,7 +3,7 @@
 //! carries the whole conversation; the standing instructions go first as a developer message.
 //! The access token is refreshed before it lapses, and once more when a request is refused.
 
-use std::sync::Mutex;
+use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
 use contracts::catalog::{Effort, Selection};
@@ -39,12 +39,20 @@ impl Keep for Saved {
     }
 }
 
+/// The tokens in use, and whether a thread is refreshing them.
+struct Held {
+    tokens: Tokens,
+    refreshing: bool,
+}
+
 pub struct ChatModel {
     http: Box<dyn Http>,
     keep: Box<dyn Keep>,
     app: App,
     selection: Selection,
-    tokens: Mutex<Tokens>,
+    tokens: Mutex<Held>,
+    /// Rung when a refresh ends.
+    renewed: Condvar,
     /// One per process: the backend keys its prompt cache on it.
     session: String,
     base: String,
@@ -63,37 +71,59 @@ impl ChatModel {
             keep,
             app,
             selection,
-            tokens: Mutex::new(tokens),
+            tokens: Mutex::new(Held {
+                tokens,
+                refreshing: false,
+            }),
+            renewed: Condvar::new(),
             // Only the prompt cache's key: without randomness, the time is unique enough.
             session: oauth::random(16).unwrap_or_else(|_| format!("llx-{}", tokens::now())),
             base: BASE.into(),
         }
     }
 
-    /// The tokens to send, refreshed first when they are about to lapse (or `force`d).
+    /// The tokens to send, refreshed first when they are about to lapse (or `force`d). One thread
+    /// refreshes while the others wait on the condvar: the lock is never held across the
+    /// request (R6), and no two refresh at once (R7).
     fn tokens(&self, force: bool) -> Result<Tokens, ChatError> {
-        let mut held = self
-            .tokens
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
-        let now = tokens::now();
-        if !force && !held.stale(now) {
-            return Ok(held.clone());
+        let mut state = self.tokens.lock().unwrap_or_else(|p| p.into_inner());
+        let mut waited = false;
+        while state.refreshing {
+            state = self.renewed.wait(state).unwrap_or_else(|p| p.into_inner());
+            waited = true;
         }
-        // Another llx may have refreshed them already: its tokens are good, and ours were spent.
+        let now = tokens::now();
+        // A refresh that ended while this thread waited did what it came to do.
+        if (waited || !force) && !state.tokens.stale(now) {
+            return Ok(state.tokens.clone());
+        }
+        state.refreshing = true;
+        let held = state.tokens.clone();
+        drop(state);
+        let outcome = self.renew(&held, now);
+        let mut state = self.tokens.lock().unwrap_or_else(|p| p.into_inner());
+        state.refreshing = false;
+        if let Ok(fresh) = &outcome {
+            state.tokens.clone_from(fresh);
+        }
+        drop(state);
+        self.renewed.notify_all();
+        outcome
+    }
+
+    /// Fresh tokens for `held`: another llx's, when it refreshed first (ours were spent), else
+    /// the issuer's, kept before they are used.
+    fn renew(&self, held: &Tokens, now: u64) -> Result<Tokens, ChatError> {
         if let Some(kept) = self
             .keep
             .load()
-            .filter(|kept| *kept != *held && !kept.stale(now))
+            .filter(|kept| kept != held && !kept.stale(now))
         {
-            *held = kept;
-            return Ok(held.clone());
+            return Ok(kept);
         }
-        let fresh =
-            auth::refresh(self.http.as_ref(), &held, now).map_err(ChatError::Unavailable)?;
+        let fresh = auth::refresh(self.http.as_ref(), held, now).map_err(ChatError::Unavailable)?;
         self.keep.save(&fresh);
-        *held = fresh;
-        Ok(held.clone())
+        Ok(fresh)
     }
 }
 

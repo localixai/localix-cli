@@ -24,6 +24,7 @@ pub(crate) mod key {
     pub(crate) const LEFT: &str = "\x1b[D";
     pub(crate) const CTRL_C: &str = "\x03";
     pub(crate) const CTRL_D: &str = "\x04";
+    pub(crate) const CTRL_Z: &str = "\x1a";
 }
 
 /// A session of `llx` at a terminal.
@@ -109,7 +110,33 @@ impl Term {
         (said, output.status.code().unwrap_or(-1))
     }
 
+    /// An interactive shell with job control, at its `$ ` prompt: what suspends and continues
+    /// `llx`. (The child of `Term::start` leads a session of its own, an orphaned process group,
+    /// where a stop signal is discarded.) `llx` is in `$LLX`.
+    pub(crate) fn in_shell(model: &Model) -> Self {
+        let (home, workspace) = place();
+        let env = [
+            ("PS1", "$ "),
+            ("HISTFILE", "/dev/null"),
+            ("LLX", env!("CARGO_BIN_EXE_llx")),
+        ];
+        let term = Self::spawn_program("sh", home, workspace, model, &["-i"], &env);
+        term.wait_for("$ ", Duration::from_secs(10));
+        term
+    }
+
     fn spawn_at(
+        home: PathBuf,
+        workspace: PathBuf,
+        model: &Model,
+        args: &[&str],
+        env: &[(&str, &str)],
+    ) -> Self {
+        Self::spawn_program(env!("CARGO_BIN_EXE_llx"), home, workspace, model, args, env)
+    }
+
+    fn spawn_program(
+        program: &str,
         home: PathBuf,
         workspace: PathBuf,
         model: &Model,
@@ -132,7 +159,7 @@ impl Term {
             )
         };
         let file = |fd: &OwnedFd| Stdio::from(fd.try_clone().unwrap());
-        let mut command = Command::new(env!("CARGO_BIN_EXE_llx"));
+        let mut command = Command::new(program);
         // The child leads a session of its own with the pseudo-terminal as its terminal, so
         // `/dev/tty` is this one and never the terminal the tests run in.
         let lead = || {

@@ -15,6 +15,7 @@ mod clipboard;
 pub(crate) mod composer;
 mod drawing;
 pub(crate) mod event;
+mod farewell;
 mod here;
 pub(crate) mod keys;
 mod list;
@@ -57,7 +58,9 @@ pub(crate) use self::terminal::restore;
 pub(crate) struct Running {
     /// Where the interface's thread takes what comes: told here the session is over.
     inbox: Sender<Input>,
-    thread: Option<JoinHandle<()>>,
+    thread: Option<JoinHandle<Vec<ratatui::text::Line<'static>>>>,
+    /// What the interface said it will print once the terminal is given back.
+    farewell: Vec<ratatui::text::Line<'static>>,
 }
 
 /// Where the server's frames that are not answers go, until the server is gone.
@@ -161,6 +164,7 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
     Ok(Running {
         inbox,
         thread: Some(thread),
+        farewell: vec![],
     })
 }
 
@@ -199,8 +203,12 @@ fn here(root: &std::path::Path, theme: Option<protocol::Theme>) -> Place {
 impl Running {
     /// Until the interface ends by itself: the server said the session is over, or is gone.
     pub(crate) fn wait(mut self) {
+        self.join();
+    }
+
+    fn join(&mut self) {
         if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
+            self.farewell = thread.join().unwrap_or_default();
         }
     }
 }
@@ -213,9 +221,8 @@ impl Drop for Running {
             event,
             seq: None,
         }));
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
+        self.join();
         restore();
+        terminal::say(&self.farewell);
     }
 }

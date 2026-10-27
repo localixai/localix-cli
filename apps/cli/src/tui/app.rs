@@ -31,6 +31,8 @@ pub(crate) enum Action {
     Copy(String),
     /// Write the composer's text in `$EDITOR`.
     Editor,
+    /// Give the terminal back and stop the process (Ctrl+Z), until the shell continues it.
+    Suspend,
     /// Open a lane (`/new`), whatever the lane shown is doing.
     Open(protocol::Target),
     /// The list of sessions opened: the saved ones are asked for.

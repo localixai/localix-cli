@@ -9,6 +9,7 @@ use protocol::Command;
 use super::app::{Action, App, QUIT_WINDOW_MS, SHIFT_TAB};
 use super::composer::Edit;
 use super::event::{Out, Typed};
+use super::terminal::CAN_SUSPEND;
 
 impl App {
     pub(super) fn key(&mut self, key: KeyEvent, now: Instant) -> Option<Action> {
@@ -35,6 +36,8 @@ impl App {
             KeyCode::Char('c') if ctrl => return self.ctrl_c(now),
             // Ctrl-D at an empty prompt quits, asked first while work runs.
             KeyCode::Char('d') if ctrl && self.composer.is_empty() => return self.quit(),
+            // Ctrl-Z gives the terminal back and stops llx until the shell's `fg`.
+            KeyCode::Char('z') if ctrl && CAN_SUSPEND => return Some(Action::Suspend),
             // In an agent's view Esc goes back to the main one; Ctrl-C still stops the task.
             KeyCode::Esc if self.shown().parent.is_some() => {
                 let lane = self.lane_id().to_string();

@@ -109,3 +109,75 @@ fn a_window_call_says_what_it_opens_and_which_tab_it_acts_in() {
         "Sizing the window to 1100×760"
     );
 }
+
+#[test]
+fn an_interact_reads_as_what_it_does_in_the_tab() {
+    let said = |args: Value| doing("window", &args);
+    let done = |args: Value| did("window", &args);
+    // Code run in the page is not a read.
+    assert_eq!(
+        done(json!({"action": "interact", "tab": "w1", "script": "game.state()"})),
+        "Ran a script in w1"
+    );
+    assert_eq!(
+        said(json!({"action": "interact", "tab": "w1", "script": "1"})),
+        "Running a script in w1"
+    );
+    // Keys are pressed, not typed.
+    assert_eq!(
+        done(json!({"action": "interact", "tab": "w1", "keys": ["ArrowUp"]})),
+        "Pressed ArrowUp in w1"
+    );
+    assert_eq!(
+        said(json!({"action": "interact", "tab": "w1", "keys": ["ArrowUp", "ArrowLeft"]})),
+        "Pressing ArrowUp ArrowLeft in w1"
+    );
+    let many: Vec<&str> = vec!["ArrowDown"; 40];
+    let long = done(json!({"action": "interact", "tab": "w1", "keys": many}));
+    assert!(
+        long.starts_with("Pressed ArrowDown ArrowDown") && long.contains("40 keys"),
+        "{long}"
+    );
+    assert!(long.len() < 100, "{long}");
+    // Keys and a script: the keys are what the person sees happen.
+    assert_eq!(
+        done(json!({"action": "interact", "tab": "w1", "keys": ["Enter"], "script": "x"})),
+        "Pressed Enter in w1, then ran a script"
+    );
+    assert_eq!(
+        done(json!({"action": "interact", "tab": "w1", "url": "example.org/a"})),
+        "Went to example.org/a in w1"
+    );
+    assert_eq!(
+        done(json!({"action": "interact", "tab": "t1", "wait_for": "ready"})),
+        "Waited in t1 for \"ready\""
+    );
+    assert_eq!(
+        done(json!({"action": "interact", "tab": "w1", "size": "mobile"})),
+        "Reframed w1 as mobile"
+    );
+    assert_eq!(
+        done(json!({"action": "interact", "tab": "w1", "read": true})),
+        "Read w1"
+    );
+    assert_eq!(done(json!({"action": "interact", "tab": "w1"})), "Read w1");
+    assert_eq!(
+        done(json!({"action": "interact", "tab": "w1", "screenshot": true})),
+        "Read w1"
+    );
+    // A tab left out is the one the window acts in.
+    assert_eq!(
+        done(json!({"action": "interact", "script": "1"})),
+        "Ran a script in the current tab"
+    );
+    assert_eq!(
+        done(json!({"action": "open", "kind": "browser"})),
+        "Opened a browser tab"
+    );
+    assert_eq!(
+        done(
+            json!({"action": "open", "tabs": [{"kind": "terminal"}, {"kind": "browser", "url": "a.org"}]})
+        ),
+        "Opened a terminal tab, a.org"
+    );
+}

@@ -76,7 +76,9 @@ def called(spec, calls):
     """Whether one of `calls` (tool.call events) is to `spec["name"]` with every argument in
     `spec["arguments"]`, a non-empty value for every name in `spec["has"]`, and a value matching
     every pattern in `spec["like"]` (a Python regex): how a task requires the way it is solved, or
-    in `avoids`, a way it must not be."""
+    in `avoids`, a way it must not be. `{"any": [spec, ...]}` holds when one of its specs does."""
+    if "any" in spec:
+        return any(called(one, calls) for one in spec["any"])
     want, has, like = spec.get("arguments", {}), spec.get("has", []), spec.get("like", {})
 
     def fits(args):

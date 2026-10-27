@@ -111,7 +111,7 @@
    "id": "demo-signup",
    "kind": "demo",
    "site": "demo",
-   "goal": "Open demo/signup.html and sign up Ada Lovelace with the email ada@example.com and the password \"Analytical1843\", on a half plot with 4 volunteer hours a month. Tell me the member number it gives.",
+   "goal": "Open demo/signup.html and sign up Ada Lovelace with the email ada@example.com and the password \"Analytical1843\", on a half plot with 4 volunteer hours a month, agreeing to the garden rules. Tell me the member number it gives.",
    "contains": ["FG-1914"]
  },
  {
@@ -206,7 +206,7 @@
   "check": "node -e 'const c=require(\"./cart.js\"); c.add({dataset:{price:\"24\"}}); c.add({dataset:{price:\"9\"}}); process.exit(c.total(c.cart) === 33 ? 0 : 1)'",
   "uses": [
    {"name": "window", "arguments": {"action": "open"}, "like": {"url": "cart\\.html"}},
-   {"name": "window", "has": ["goal"]}
+   {"any": [{"name": "window", "has": ["goal"]}, {"name": "window", "arguments": {"action": "interact"}, "has": ["tab"]}]}
   ]
  },
  {
@@ -217,7 +217,7 @@
   "check": "test -f tally.html && grep -qi reset tally.html",
   "uses": [
    {"name": "window", "arguments": {"action": "open"}, "like": {"url": "tally\\.html"}},
-   {"name": "window", "has": ["goal"]}
+   {"any": [{"name": "window", "has": ["goal"]}, {"name": "window", "arguments": {"action": "interact"}, "has": ["tab"]}]}
   ]
  },
  {

@@ -20,7 +20,7 @@ Every run is `llx exec --json --yes -C <dir> --timeout 240 "<goal>"`, plus `--sc
 - With a `schema`: the event has `data`.
 - Every `contains` string appears in the answer, ignoring case. With a schema, the data counts as part of the answer.
 - Every `matches` pattern is found in the answer: a Python regex, ignoring case. It is used for numbers, where a plain substring would match by accident.
-- Every `uses` entry, `{"name": <tool>, "arguments": {...}, "has": [...], "like": {...}}`, matches at least one `tool.call` event: that tool, called with each of those `arguments`, a non-empty value for each name in `has`, and a value matching each `like` pattern (a Python regex). It holds a task to the way it must be solved (`window` opening a `terminal` tab, then an `interact` call on it), not only to its result.
+- Every `uses` entry, `{"name": <tool>, "arguments": {...}, "has": [...], "like": {...}}` (or `{"any": [entry, ...]}`, any one of them), matches at least one `tool.call` event: that tool, called with each of those `arguments`, a non-empty value for each name in `has`, and a value matching each `like` pattern (a Python regex). It holds a task to the way it must be solved (`window` opening a `terminal` tab, then an `interact` call on it), not only to its result.
 - No `avoids` entry, written the same way, matches any `tool.call` event: a way the task must not be solved, such as writing the file a program should have written.
 - The `check` command (`sh -c`, 60 s at most) exits 0 in the directory afterwards. `$FIXTURE` is the untouched fixture, so a check can make sure a file was left alone.
 

@@ -3,9 +3,12 @@
 use std::fmt::Write as _;
 
 use contracts::tool::{ToolError, ToolOutput};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{Kind, Opened, WindowTab, WindowTool, failed};
+
+/// What a goal given with `open` did in the tab it opened.
+type Worked = Result<ToolOutput, ToolError>;
 
 impl WindowTool<'_> {
     /// Open each tab asked for; one that fails says why, and the others still open.
@@ -26,32 +29,48 @@ impl WindowTool<'_> {
             };
             kinds.push(*kind);
         }
-        // Every tab of the call opens at once; the reports keep the order they were asked in.
-        let opened: Vec<Result<Opened, ToolError>> = std::thread::scope(|scope| {
-            let opening: Vec<_> = (kinds.iter().zip(&asked))
-                .map(|(kind, spec)| {
-                    let thread = std::thread::Builder::new().name("llx-tab-open".into());
-                    thread.spawn_scoped(scope, move || kind.open(spec))
-                })
-                .collect();
-            let joined = opening.into_iter().map(|started| match started {
-                Ok(thread) => thread
-                    .join()
-                    .unwrap_or_else(|_| Err(failed("opening it failed"))),
-                Err(why) => Err(failed(&format!("it could not start (no thread: {why})"))),
+        // Every tab of the call opens at once, and its goal, if it has one, works in it as soon
+        // as it is open; the reports keep the order they were asked in.
+        let opened: Vec<Result<(Opened, Option<Worked>), ToolError>> =
+            std::thread::scope(|scope| {
+                let opening: Vec<_> = (kinds.iter().zip(&asked))
+                    .map(|(kind, spec)| {
+                        let thread = std::thread::Builder::new().name("llx-tab-open".into());
+                        thread.spawn_scoped(scope, move || {
+                            let opened = kind.open(spec)?;
+                            let tab = format!("{}{}", kind.letter(), opened.id);
+                            let worked = self.goal_in_opened(&tab, spec);
+                            Ok((opened, worked))
+                        })
+                    })
+                    .collect();
+                let joined = opening.into_iter().map(|started| match started {
+                    Ok(thread) => thread
+                        .join()
+                        .unwrap_or_else(|_| Err(failed("opening it failed"))),
+                    Err(why) => Err(failed(&format!("it could not start (no thread: {why})"))),
+                });
+                joined.collect()
             });
-            joined.collect()
-        });
         let (mut reports, mut states, mut image) = (vec![], vec![], None);
         for (kind, opened) in kinds.into_iter().zip(opened) {
             match opened {
-                Ok(opened) => {
+                Ok((opened, worked)) => {
                     let tab = format!("{}{}", kind.letter(), opened.id);
                     if let Some(window) = self.window {
                         window.opened(&tab);
                     }
                     reports.push(format!("{tab} ({}): {}", kind.name(), opened.output.report));
-                    if let Some(state) = opened.output.state {
+                    let mut state = opened.output.state;
+                    match worked {
+                        Some(Ok(worked)) => {
+                            reports.push(worked.report);
+                            state = worked.state.or(state);
+                        }
+                        Some(Err(why)) => reports.push(format!("{tab}: the goal failed: {why}")),
+                        None => {}
+                    }
+                    if let Some(state) = state {
                         states.push(format!("### {tab}\n{state}"));
                     }
                     image = opened.output.image.or(image);
@@ -67,6 +86,14 @@ impl WindowTool<'_> {
             state: (!states.is_empty()).then(|| states.join("\n\n")),
             image,
         })
+    }
+
+    /// The goal `spec` gives a tab just opened as `tab`, carried out in it; None without one.
+    fn goal_in_opened(&self, tab: &str, spec: &Value) -> Option<Worked> {
+        let goal =
+            (spec.get("goal").and_then(Value::as_str)).filter(|goal| !goal.trim().is_empty())?;
+        let values = spec.get("values").cloned().unwrap_or(Value::Null);
+        Some(self.interact(&json!({"tab": tab, "goal": goal, "values": values})))
     }
 
     pub(super) fn close(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {

@@ -29,14 +29,15 @@ acts on; `show` puts a tab in front of them and returns its snapshot (it changes
 `resize` sizes the whole window (`width`, `height`). Without a window, `list` names the tabs open. \
 A tab's snapshot is its newest state: read it before acting again. Calls in one turn run at \
 once, each tab on its own: when several tabs each need a step, make those calls together.
-- `goal` (with `interact`, any kind of tab) hands one short goal to a fast helper that sees only \
+- `goal` (with `open` or `interact`, any kind of tab) hands one short goal to a fast helper that sees only \
 the goal and the tab, and acts in it (clicks and types on a page, types and presses keys in a \
 terminal): one screen's worth of progress, ending with how to tell it is done, as something the \
 tab will show (\"Answer yes to the trust question; done when the prompt shows\"). It does not \
 remember earlier screens and does not read for you: read the snapshot it returns. It types only \
 the exact strings in `values`. Check the snapshot yourself: its DONE is not proof. The tab's own \
-fields in the same call run first and the goal acts on what they leave: `url` and a `goal` \
-together go to a page and work in it, in one call.
+fields in the same call run first and the goal acts on what they leave: a tab opened with a \
+`goal`, or `url` and a `goal` in `interact`, go to a page and work in it, in one call; several \
+tabs opened with a goal each work at once.
 The kinds:";
 
 /// What can be done to a tab of the window as the person sees it.
@@ -168,8 +169,8 @@ impl Tool for WindowTool<'_> {
         properties.insert(
             "tabs".into(),
             json!({"type": "array", "description":
-            "open: several tabs at once, each an object with `kind` and its fields; close: \
-             several tab ids.", "items": {}}),
+            "open: several tabs at once, each an object with `kind` and its fields, and a \
+             `goal` with its `values` if it has one; close: several tab ids.", "items": {}}),
         );
         properties.insert(
             "tab".into(),
@@ -179,13 +180,13 @@ impl Tool for WindowTool<'_> {
         properties.insert(
             "goal".into(),
             json!({"type": "string", "description":
-            "interact: actions only, one screen's worth, ending with how to tell they are done. \
+            "open, interact: actions only, one screen's worth, ending with how to tell they are done. \
              Never 'find' or 'report': the helper cannot read for you."}),
         );
         properties.insert(
             "values".into(),
             json!({"type": "array", "items": {"type": "string"},
-            "description": "interact: the exact strings the helper may type."}),
+            "description": "open, interact: the exact strings the helper may type."}),
         );
         properties.insert("width".into(), json!({"type": "integer", "minimum": 400}));
         properties.insert("height".into(), json!({"type": "integer", "minimum": 300}));

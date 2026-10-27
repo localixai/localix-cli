@@ -669,3 +669,42 @@ fn a_tabs_own_fields_come_before_its_goal_and_the_tab_is_read_after() {
         ["open \"sh\"", "interact 1 \"go there\"", "interact 1 null"]
     );
 }
+
+#[test]
+fn a_goal_given_with_open_works_in_each_tab_it_opened_in_the_same_call() {
+    let term = Fake::new("terminal", 't');
+    let (hands, gate) = (Helper::default(), Recorder::default());
+    let tool = WindowTool {
+        kinds: vec![&term],
+        window: None,
+        hands: Some(&hands),
+        gate: &gate,
+    };
+    let done = call(
+        &tool,
+        json!({"action": "open", "tabs": [
+            {"kind": "terminal", "thing": "sh", "goal": "Say hi", "values": ["hi"]},
+            {"kind": "terminal", "thing": "top"}]}),
+    )
+    .unwrap();
+    // Opened, then the goal on what opened, then a read; the tab with no goal is only opened.
+    let mut did = term.done.lock().unwrap().clone();
+    did.sort_unstable();
+    assert_eq!(did, ["interact 1 null", "open \"sh\"", "open \"top\""]);
+    assert_eq!(*hands.saw.lock().unwrap(), ["terminal 1: Say hi"]);
+    assert!(
+        done.report
+            .starts_with("t1 (terminal): opened \"sh\"\nt1: ### Helper: done"),
+        "{}",
+        done.report
+    );
+    assert!(
+        done.report.ends_with("t2 (terminal): opened \"top\""),
+        "{}",
+        done.report
+    );
+    // What the tab shows after its goal, not what it showed when it opened.
+    let state = done.state.unwrap_or_default();
+    assert!(state.contains("### t1\nsnapshot of 1 after"), "{state}");
+    assert!(state.contains("### t2\nsnapshot of 2"), "{state}");
+}

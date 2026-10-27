@@ -1,6 +1,6 @@
 use super::*;
 
-const HEAD: &str = "### Page changes since the last snapshot\n";
+const HEAD: &str = "### Page changes since you last read it whole\n";
 
 fn page(lines: &[&str]) -> String {
     lines.join("\n")
@@ -28,7 +28,7 @@ fn a_page_that_moved_a_little_reads_as_its_changes_after_the_line_above() {
     );
     assert_eq!(
         changes(&after, &after).as_deref(),
-        Some(&*format!("{HEAD}(no visible change)"))
+        Some(&*format!("{HEAD}(none: it is as you read it)"))
     );
 }
 
@@ -71,7 +71,7 @@ fn a_line_gone_that_another_equal_one_still_shows_is_seen_gone() {
     let (before, after) = (list(&items), list(&[&items[..3], &items[4..]].concat()));
     let told = changes(&before, &after).unwrap_or_default();
     assert!(told.contains("-   - listitem \"Milk\""), "{told}");
-    assert!(!told.contains("no visible change"), "{told}");
+    assert!(!told.contains("(none"), "{told}");
 }
 
 #[test]
@@ -106,4 +106,32 @@ fn many_changes_or_a_new_page_are_read_whole() {
         .collect();
     let short = page(&["Other — https://x/#b", "- heading \"Other\""]);
     assert_eq!(changes(&long.join("\n"), &short), None);
+}
+
+#[test]
+fn a_call_that_changed_nothing_says_so_though_the_page_moved_since_it_was_read_whole() {
+    let cart = |items: &str| {
+        page(&[
+            "Cart — https://x/",
+            "- heading 1 \"Cart\"",
+            "- listitem \"Lamp, $24\"",
+            "  - button \"Add\"",
+            "- listitem \"Mug, $9\"",
+            "  - button \"Add\"",
+            items,
+        ])
+    };
+    let (read, added) = (cart("- text \"Items: 0\""), cart("- text \"Items: 2\""));
+    let mut seen = Seen::read(&read);
+    let first = seen.after(&added).unwrap_or_default();
+    assert!(first.contains("+ - text \"Items: 2\""), "{first}");
+    // A key the page did not take: nothing moved since the call before, which the page's changes
+    // since its whole read would not tell.
+    assert_eq!(seen.after(&added).as_deref(), Some(UNCHANGED));
+    // Reloaded: back to what was read whole, a change from the call before.
+    assert_eq!(
+        seen.after(&read).as_deref(),
+        Some(&*format!("{HEAD}(none: it is as you read it)"))
+    );
+    assert_eq!(seen.after(&read).as_deref(), Some(UNCHANGED));
 }

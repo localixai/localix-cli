@@ -21,7 +21,7 @@ use serde_json::{Map, Value, json};
 use tools::browser::{BrowserTool, Page};
 use tools::window::{Kind, Opened};
 
-use changes::changes;
+use changes::Seen;
 
 /// Where a browser tab opens when no address is given.
 const SEARCH_PAGE: &str = "https://duckduckgo.com/";
@@ -32,8 +32,8 @@ const SEARCH_PAGE: &str = "https://duckduckgo.com/";
 pub(crate) struct BrowserLocks {
     tabs_change: Mutex<()>,
     tabs: [Mutex<()>; tools::browser::MAX_TABS + 1],
-    /// Each tab's page as the model last read it whole.
-    seen: Mutex<std::collections::HashMap<u32, String>>,
+    /// Each tab's page as the model last read it whole, and as the latest call left it.
+    seen: Mutex<std::collections::HashMap<u32, Seen>>,
     served: tools::served::Served,
 }
 
@@ -95,10 +95,10 @@ impl Browser<'_> {
             return done;
         };
         let mut seen = crate::sync::lock(&self.locks.seen);
-        match seen.get(&id).and_then(|before| changes(before, &page)) {
+        match seen.get_mut(&id).and_then(|before| before.after(&page)) {
             Some(changed) => done.report = format!("{}\n\n{changed}", done.report),
             None => {
-                seen.insert(id, page.clone());
+                seen.insert(id, Seen::read(&page));
                 done.state = Some(page);
             }
         }
@@ -108,7 +108,7 @@ impl Browser<'_> {
     /// Tab `id` read whole: what later changes are told against.
     fn read_whole(&self, id: u32, done: ToolOutput) -> ToolOutput {
         if let Some(page) = &done.state {
-            crate::sync::lock(&self.locks.seen).insert(id, page.clone());
+            crate::sync::lock(&self.locks.seen).insert(id, Seen::read(page));
         }
         done
     }

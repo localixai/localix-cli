@@ -1,6 +1,7 @@
 //! What acting in a tab changed on its page, told against the page the model last read whole: a
 //! line diff, each change after the line above it, so that of several equal lines (a game's
-//! zeros, a list's repeated items) the one that changed is known by its place.
+//! zeros, a list's repeated items) the one that changed is known by its place. A call that moved
+//! nothing says so: the changes since the whole read would read as new ones.
 
 /// Lines of a page's changes at most; past them, the page is read whole.
 const CHANGES: usize = 30;
@@ -8,6 +9,36 @@ const CHANGES: usize = 30;
 /// The most line pairs the diff compares (an outline is at most a few hundred lines); past it,
 /// the page is read whole.
 const PAIRS: usize = 4_000_000;
+
+const HEAD: &str = "### Page changes since you last read it whole";
+/// What a call that changed nothing on the page is told.
+pub(super) const UNCHANGED: &str = "### Page: no visible change since the call before";
+
+/// A tab's page as the model knows it: as it last read it whole, and as the latest call left it.
+pub(super) struct Seen {
+    whole: String,
+    last: String,
+}
+
+impl Seen {
+    /// The page read whole: what later changes are told against.
+    pub(super) fn read(page: &str) -> Self {
+        Self {
+            whole: page.to_string(),
+            last: page.to_string(),
+        }
+    }
+
+    /// What the call that left `page` changed; None when the page is to be read whole again.
+    pub(super) fn after(&mut self, page: &str) -> Option<String> {
+        if self.last == page {
+            return Some(UNCHANGED.to_string());
+        }
+        let told = changes(&self.whole, page)?;
+        page.clone_into(&mut self.last);
+        Some(told)
+    }
+}
 
 /// One line of the diff.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -31,11 +62,10 @@ pub(super) fn changes(before: &str, after: &str) -> Option<String> {
         return None;
     }
     let told = match changed {
-        0 => "(no visible change)".to_string(),
+        0 => "(none: it is as you read it)".to_string(),
         _ => told(&lines).join("\n"),
     };
-    (told.len() <= after.len() || changed == 0)
-        .then(|| format!("### Page changes since the last snapshot\n{told}"))
+    (told.len() <= after.len() || changed == 0).then(|| format!("{HEAD}\n{told}"))
 }
 
 /// The lines that tell the changes: each change, the kept line above it, a mark over a gap.

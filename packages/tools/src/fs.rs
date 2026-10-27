@@ -5,6 +5,7 @@
 mod atomic;
 mod diff;
 mod edit;
+pub mod picture;
 mod read;
 mod text;
 

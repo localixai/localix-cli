@@ -88,41 +88,6 @@ fn monitor_remains_expected_until_completion_is_posted() {
     assert!(!jobs.expecting(&kit));
 }
 
-#[cfg(unix)]
-#[test]
-fn background_command_wakes_exec_with_both_streams_and_exit() {
-    let replies = vec![
-        call(
-            json!({"action":"command", "command":"printf out; printf err >&2; exit 7", "name":"build"}),
-        ),
-        says("Waiting."),
-        says("Done."),
-    ];
-    composed(crate::modes::built("bypass"), false, replies, |rig| {
-        rig.task("run it");
-        let all = users(rig).join("\n");
-        assert!(all.contains("<job_result job=\"build\">"), "{all}");
-        assert!(
-            all.contains("exit 7")
-                && all.contains("### stdout\nout")
-                && all.contains("### stderr\nerr"),
-            "{all}"
-        );
-        0
-    });
-}
-
-#[test]
-fn background_command_requires_bash_approval() {
-    let mut replies = vec![call(json!({"action":"command", "command":"echo test"}))];
-    replies.extend(answers(1));
-    composed(crate::modes::built("default"), false, replies, |rig| {
-        rig.task("run it");
-        assert!(results(rig)[0].0 && results(rig)[0].1.contains("no one is at a terminal"));
-        0
-    });
-}
-
 #[test]
 fn schedules_need_a_session_and_are_listed_and_stopped_there() {
     let schedule = json!({"action": "schedule", "prompt": "check the deploy", "in": "45m",

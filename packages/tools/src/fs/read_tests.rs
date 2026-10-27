@@ -217,7 +217,7 @@ fn denied_image_paths_are_refused() {
 
 #[test]
 fn image_size_limit_includes_the_boundary_and_catches_a_growing_reader() {
-    let limit = 5 * 1024 * 1024;
+    let limit = usize::try_from(crate::fs::picture::MAX_BYTES).unwrap();
     let mut bytes = vec![0; limit];
     bytes[..10].copy_from_slice(b"GIF89a\x01\0\x01\0");
     let dir = Scratch::new();
@@ -241,15 +241,8 @@ fn image_size_limit_includes_the_boundary_and_catches_a_growing_reader() {
         limit: None,
     };
     let mut reader = io::Cursor::new(bytes);
-    let error = image::read(
-        &mut reader,
-        "growing.gif",
-        limit as u64,
-        image::Format::Gif,
-        &args,
-    )
-    .unwrap_err();
-    assert!(matches!(error, ToolError::Failed(message) if message.contains("5 MiB")));
+    let error = image::read(&mut reader, "growing.gif", limit as u64, &args).unwrap_err();
+    assert!(matches!(error, ToolError::Failed(message) if message.contains("8 MB")));
     assert_eq!(reader.position(), limit as u64 + 1);
 }
 
@@ -265,10 +258,10 @@ fn images_reject_line_arguments_bad_headers_and_excess_size() {
     }
     dir.file("pic", b"GIF89a");
     assert!(failed(read(&dir, json!({"path":"pic"}))).contains("invalid or incomplete"));
-    let mut large = vec![0; 5 * 1024 * 1024 + 1];
+    let mut large = vec![0; 8 * 1024 * 1024 + 1];
     large[..6].copy_from_slice(b"GIF89a");
     dir.file("pic", large);
-    assert!(failed(read(&dir, json!({"path":"pic"}))).contains("5 MiB"));
+    assert!(failed(read(&dir, json!({"path":"pic"}))).contains("8 MB"));
 }
 
 #[test]

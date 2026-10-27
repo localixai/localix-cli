@@ -1,5 +1,5 @@
-//! `read`: a file's lines, numbered, a window at a time; or a directory's entries. The file is
-//! streamed, so a huge log costs only the window shown (and a count of its lines).
+//! `read`: a file's lines, numbered, a window at a time; a picture; or a directory's entries. The
+//! file is streamed, so a huge log costs only the window shown (and a count of its lines).
 
 use std::fmt::Write as _;
 use std::fs::File;
@@ -13,7 +13,6 @@ use serde_json::{Value, json};
 use super::text::{LINE_CHARS, cut};
 use crate::workspace::Workspace;
 
-#[path = "read/image.rs"]
 mod image;
 
 const NAME: &str = "read";
@@ -27,14 +26,13 @@ const MAX_ENTRIES: usize = 500;
 /// Bytes at the start of a file searched for a NUL, as git does, to tell a binary file.
 const BINARY_PROBE: usize = 8192;
 
-const DESCRIPTION: &str = "Read a text file, an image (PNG, JPEG, GIF or WebP, at most 5 MiB), \
-or list a directory. Images are returned as pictures; offset and limit apply only to text. \
-A text file comes back as numbered \
-lines like `cat -n` (the number, a tab, the line); the numbers are not part of the file. One call \
-returns up to 2000 lines from `offset` (1-based, default 1) and about 20 KB; for a longer file, \
-call again with the `offset` it gives. Lines over 2000 characters are cut. Paths are relative to \
-the workspace root; absolute paths work too. Other binary files are refused. Read a file before editing \
-it, and prefer this to `cat`, `head` or `sed` in bash.";
+const DESCRIPTION: &str = "Read a text file, a picture (PNG, JPEG, GIF or WebP, at most 8 MB) \
+or a directory's entries. A text file comes back as numbered lines like `cat -n` (the number, a \
+tab, the line); the numbers are not part of the file. One call returns up to 2000 lines from \
+`offset` (1-based, default 1) and about 20 KB; for a longer file, call again with the `offset` it \
+gives. Lines over 2000 characters are cut. A picture comes back as one; `offset` and `limit` are \
+for text only. Paths are relative to the workspace root; absolute paths work too. Other binary \
+files are refused. Read a file before editing it, and prefer this to `cat`, `head` or `sed` in bash.";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -54,24 +52,6 @@ trait FileStrategy {
         size: u64,
         args: &Args,
     ) -> Result<Option<ToolOutput>, ToolError>;
-}
-
-struct Images;
-
-impl FileStrategy for Images {
-    fn read(
-        &self,
-        reader: &mut BufReader<File>,
-        shown: &str,
-        size: u64,
-        args: &Args,
-    ) -> Result<Option<ToolOutput>, ToolError> {
-        let header = reader.fill_buf().map_err(|error| failure(shown, &error))?;
-        match image::Format::detect(header) {
-            Some(format) => image::read(reader, shown, size, format, args).map(Some),
-            None => Ok(None),
-        }
-    }
 }
 
 pub struct ReadTool<'a> {
@@ -122,7 +102,7 @@ impl Tool for ReadTool<'_> {
         }
         let file = File::open(&path).map_err(unreadable)?;
         let mut reader = BufReader::new(file);
-        for strategy in [&Images as &dyn FileStrategy] {
+        for strategy in [&image::Images as &dyn FileStrategy] {
             if let Some(output) = strategy.read(&mut reader, &shown, meta.len(), &args)? {
                 return Ok(output);
             }

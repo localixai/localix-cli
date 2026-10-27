@@ -57,8 +57,9 @@ pub(super) fn conceal(builder: WindowBuilder) -> WindowBuilder {
 
 /// WebKit stops animation frames and timers in a window it considers hidden, and a driven window
 /// usually sits behind the terminal that started it. So occlusion detection, a WKWebView switch,
-/// is off. A shown window is ordered behind other windows without taking focus; macOS places it
-/// in an ordinary Space rather than moving it onto a full-screen app. A headless window is fully
+/// is off. A shown window is ordered behind other windows without taking focus, in an ordinary
+/// Space rather than over a full-screen app; the deck then takes a Space of its own
+/// ([`fullscreen`]), so a terminal the person keeps full screen is never covered. A headless window is fully
 /// transparent, passes clicks through, and goes behind every window, as Bun's and WebKit's own
 /// test windows do: on screen, so WebKit sees it shown and the display it is on stays awake,
 /// under whatever the person watches. Only where the switch is missing does it float, so that

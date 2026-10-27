@@ -27,9 +27,9 @@ const RESTART: &str = "start it again with a filter that prints only the lines y
 const EXEC_WATCH: Duration = Duration::from_secs(600);
 
 pub(crate) struct JobsTool<'scope, 'env> {
-    pub(super) kit: &'env Kit<'env>,
-    pub(super) jobs: &'env Jobs,
-    pub(super) scope: &'scope Scope<'scope, 'env>,
+    kit: &'env Kit<'env>,
+    jobs: &'env Jobs,
+    scope: &'scope Scope<'scope, 'env>,
 }
 
 impl<'scope, 'env> JobsTool<'scope, 'env> {
@@ -260,12 +260,6 @@ impl Tool for JobsTool<'_, '_> {
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
         match spec::action(arguments).map_err(ToolError::Failed)? {
-            Action::Command {
-                command,
-                workdir,
-                timeout_ms,
-                name,
-            } => self.command(command, workdir.as_deref(), timeout_ms, name),
             Action::Monitor {
                 command,
                 name,
@@ -284,7 +278,7 @@ impl Tool for JobsTool<'_, '_> {
 }
 
 /// A new job's id and name (the name given, else its id).
-pub(super) fn new_job(state: &mut State, name: Option<String>) -> (String, String) {
+fn new_job(state: &mut State, name: Option<String>) -> (String, String) {
     state.made += 1;
     let id = format!("job-{}", state.made);
     let name = name

@@ -22,6 +22,7 @@ Keys
   Ctrl-R            the last earlier entry with the words typed before it; again for older
   Ctrl-G            write the entry in $EDITOR
   Ctrl-U            clear the line before the cursor
+  Shift+Left, Right select (with Alt by word, Shift+Home/End to the line's ends)
   Ctrl-Z            suspend llx (unix): `fg` in the shell comes back to it
   Shift+Tab         the next mode (after the task if working)
   Shift+Up, Down    more or less reasoning, as far as the model takes it

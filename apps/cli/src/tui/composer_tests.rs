@@ -263,3 +263,29 @@ fn selection_deletion_reset_and_rendering() {
     typed(&mut c, "> ");
     assert_eq!(c.text(), "> new!");
 }
+
+#[test]
+fn a_paste_mark_replaces_the_selection_with_one_space_around_it() {
+    let mut c = Composer::default();
+    c.set("foobar baz");
+    c.key(key(KeyCode::Home));
+    for _ in 0..3 {
+        c.key(key(KeyCode::Right));
+    }
+    for _ in 0..4 {
+        c.key(with(KeyCode::Right, KeyModifiers::SHIFT));
+    }
+    c.paste_marked("long text");
+    assert_eq!(c.text(), "foo [Paste] baz");
+}
+
+#[test]
+fn a_path_turned_into_its_mark_ends_the_selection() {
+    let mut c = Composer::default();
+    c.set("see /tmp/a.txt");
+    c.key(with(KeyCode::Left, KeyModifiers::SHIFT));
+    let resolve = |word: &str| Some(Dropped::File(word.into()));
+    c.adopt(&resolve, &|path| path.to_path_buf());
+    c.key(key(KeyCode::Backspace));
+    assert_eq!(c.text(), "see [file: a.txt");
+}

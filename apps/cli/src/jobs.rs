@@ -4,7 +4,6 @@
 //! queued. Both live as long as the session (a monitor until its deadline); in `exec` a task waits
 //! for its monitors, and schedules are refused: the process ends with the task.
 
-mod command;
 pub(crate) mod cron;
 mod monitor;
 pub(crate) mod spec;
@@ -97,10 +96,6 @@ struct Job {
 }
 
 enum What {
-    Command {
-        command: String,
-        until: Instant,
-    },
     Monitor {
         command: String,
         until: Instant,
@@ -154,7 +149,7 @@ impl Jobs {
                 .lock()
                 .jobs
                 .iter()
-                .any(|job| matches!(job.what, What::Monitor { .. } | What::Command { .. }))
+                .any(|job| matches!(job.what, What::Monitor { .. }))
     }
 
     /// The session is over: every job ends.
@@ -230,15 +225,6 @@ impl Jobs {
 /// A job as the model lists it.
 fn line(job: &Job) -> String {
     match &job.what {
-        What::Command { command, until } => format!(
-            "- command `{}` ({}): `{command}`, {} min left",
-            job.name,
-            job.id,
-            until
-                .saturating_duration_since(Instant::now())
-                .as_secs()
-                .div_ceil(60)
-        ),
         What::Monitor { command, until } => format!(
             "- monitor `{}` ({}): `{command}`, {} batches so far, {} min left",
             job.name,
@@ -274,7 +260,7 @@ fn epoch_ms(until: Instant) -> u64 {
 /// A job as the interface lists it.
 fn row(job: &Job) -> JobRow {
     match &job.what {
-        What::Monitor { command, until } | What::Command { command, until } => JobRow {
+        What::Monitor { command, until } => JobRow {
             id: job.id.clone(),
             name: job.name.clone(),
             detail: command.clone(),

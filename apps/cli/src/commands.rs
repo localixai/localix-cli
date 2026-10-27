@@ -1,6 +1,5 @@
 //! What each command does. Every command returns its exit code, or a [`Failure`] that `main`
-//! reports; a run that hosts the browser never returns (its event loop owns the main thread and
-//! exits the process with the run's code, which nothing else decides).
+//! reports.
 
 pub(crate) mod decide;
 pub(crate) mod doctor;
@@ -17,8 +16,6 @@ pub(crate) mod serve;
 pub(crate) mod sessions;
 pub(crate) mod signin;
 #[cfg(unix)]
-pub(crate) mod window;
-
 use crate::cli::{Cli, Command, ExecCommand, joined};
 use crate::error::Failure;
 use run::{At, Kind};
@@ -51,8 +48,6 @@ pub(crate) fn dispatch(cli: Cli, at: At) -> Result<i32, Failure> {
         Some(Command::Doctor(models)) => doctor::doctor(&models),
         #[cfg(unix)]
         Some(Command::Serve(serve)) => serve::serve(serve.action.as_ref()),
-        #[cfg(unix)]
-        Some(Command::Window(args)) => window::window(&args),
     }
 }
 

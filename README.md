@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  One binary under 4 MB that Claude Code, Codex, a script or CI calls from its shell: real browser pages and terminals in one native window you watch it work in, helpers on any model, and a choice made in a second. With a minimal agent of its own.
+  One binary under 4 MB that Claude Code, Codex, a script or CI calls from its shell: helpers on any model, one task for CI, and a choice made in a second. With a minimal agent of its own.
 </p>
 
 <p align="center">
@@ -33,32 +33,15 @@
   </a>
 </p>
 
-llx is the part of an agent that touches the world. It opens real browser pages and real terminal sessions as tabs of one native window, grouped by project, where you can watch them work. A short `goal` on a tab goes to a small, fast decision model that clicks and types step by step. It runs three ways, from the same binary:
+llx is a minimal agent runtime: a model in a loop over a few plain tools, on any provider. llx runs three ways, from the same binary:
 
 | Who calls | Command | What they get |
 | --- | --- | --- |
-| **You** | `llx` | A minimal agent at your terminal, with seven tools: `read`, `edit`, `bash`, `window`, `ask`, `agents`, `jobs` |
+| **You** | `llx` | A minimal agent at your terminal, with six tools: `read`, `edit`, `bash`, `ask`, `agents`, `jobs` |
 | **Your scripts and CI** | `llx exec --json --schema …` | One task, then exit: JSON events, an answer in the shape you define, exit codes to branch on |
-| **Your other agents** | `llx window` · `llx exec` · `llx decide` | Commands they run from their shell: the same window, helpers on any model, quick decisions. They extend Claude Code or Codex, never replace them |
+| **Your other agents** | `llx exec` · `llx decide` | Commands they run from their shell: helpers on any model, quick decisions. They extend Claude Code or Codex, never replace them |
 
 <table>
-  <tr>
-    <td width="33%" valign="top">
-      <strong>Real pages, real shells</strong><br>
-      The system's WebView and PTY terminals as tabs of one window, grouped by project. The window never takes your keyboard.<br>
-      <a href="docs/tools.md">The window →</a>
-    </td>
-    <td width="33%" valign="top">
-      <strong>Say the goal</strong><br>
-      "Book the cheapest flight on Friday": a small model does the clicking. Median task 11.5 s and $0.002 across the 26 tasks of our latest evals.<br>
-      <a href="benchmarks/HISTORY.md">Benchmarks →</a>
-    </td>
-    <td width="33%" valign="top">
-      <strong>Point at the problem</strong><br>
-      Click an element on a page, write a note, Send. The agent gets its selector, source file, styles and a picture.<br>
-      <a href="docs/agents.md">Comments →</a>
-    </td>
-  </tr>
   <tr>
     <td valign="top">
       <strong>A step in your pipeline</strong><br>
@@ -72,7 +55,7 @@ llx is the part of an agent that touches the world. It opens real browser pages 
     </td>
     <td valign="top">
       <strong>Reading never asks</strong><br>
-      Every command, file change and page action asks first, unless a rule allows it: <code>--allow 'bash(cargo test *)'</code>, or a mode of your own.<br>
+      Every command and file change asks first, unless a rule allows it: <code>--allow 'bash(cargo test *)'</code>, or a mode of your own.<br>
       <a href="docs/modes.md">Modes →</a>
     </td>
   </tr>
@@ -84,23 +67,17 @@ llx is the part of an agent that touches the world. It opens real browser pages 
 npm install -g @localixai/llx
 ```
 
-Or `curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh` (macOS and Linux x86_64, checked against `SHA256SUMS`), or `cargo install --locked --path apps/cli` from a clone. The browser is the system's WebView: WKWebView on macOS, WebKitGTK (`libwebkit2gtk-4.1-0`) on Linux. Where WebKitGTK is missing (a CI runner, a server), the installer and npm take the headless Linux build: the same agent, with terminal tabs only and no browser.
+Or `curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh` (macOS and Linux x86_64, checked against `SHA256SUMS`), or `cargo install --locked --path apps/cli` from a clone.
 
 ```bash
 cd your-project
 llx                                    # a session: /login first, then a task
-llx doctor                             # sign-ins, models, the WebView, the shell
+llx doctor                             # sign-ins, models, the shell
 ```
 
 ## In other agents
 
-llx extends the agent you already use: it calls llx from its shell, block by block, as its task needs. `llx window '{"action": "open", "kind": "browser", "url": "…"}'` opens a tab of the window the person watches (`llx window` alone prints every action and argument), and the tabs stay between calls until `llx window --end`; `llx exec` hands a task to a helper on any provider and model, so the agent's own tokens go where they matter; `llx decide` answers a yes or no about some text in a second. A page you are building opens by its path (`"url": "demo/index.html"`), with no server to start; [`demo/`](demo/index.html) holds eight small sites to try it on. A `goal` on a tab needs an OpenRouter key (`/login` in llx once, or `OPENROUTER_API_KEY`); everything else works without one. See [docs/agents.md](docs/agents.md).
-
-In Claude Code, the plugin teaches Claude all of this and brings your comments from the window as a turn of their own:
-
-```
-/plugin install llx --marketplace rsaryev/llx
-```
+llx extends the agent you already use: it calls llx from its shell, as its task needs. `llx exec` hands a task to a helper on any provider and model, so the agent's own tokens go where they matter; `llx decide` answers a yes or no about some text in a second. See [docs/agents.md](docs/agents.md).
 
 ## In CI and scripts
 

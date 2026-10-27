@@ -19,13 +19,11 @@ run_check() {
 describe() {
   case $1 in
     fmt) echo "cargo fmt --all --check" ;;
-    clippy) echo "cargo clippy --all-targets -D warnings, then unused dependencies; default features" ;;
-    clippy-headless) echo "the same without default features: the headless build (A8)" ;;
+    clippy) echo "cargo clippy --all-targets -D warnings, then unused dependencies" ;;
     repo) echo "the repository's rules: cargo test -p $REPO_CRATE --test all -- suite::repo::" ;;
-    test) echo "cargo test, default features (Linux with no display: under xvfb-run)" ;;
-    test-headless) echo "cargo test --no-default-features" ;;
+    test) echo "cargo test" ;;
     coverage) echo "scripts/coverage.sh: line coverage, at least 85% (needs cargo-llvm-cov)" ;;
-    size) echo "release builds: the default llx fails above 5 MiB, warns above 4 MB; headless reported" ;;
+    size) echo "the release build: llx fails above 5 MiB, warns above 4 MB" ;;
     site) echo "npm run build in site/: types, build, prerender (skipped without node_modules)" ;;
     action) echo "action/test.sh: the GitHub Action's script on a stub llx" ;;
     check-test) echo "scripts/checks/check_test.sh: the plan's examples, the link checker's" ;;
@@ -41,57 +39,35 @@ note() {
   printf '%s\n' "$*" >>"${check_notes:?}"
 }
 
-# Tests that open a WebView window need a display; on Linux with none, a virtual one, 1920x1080
-# (xvfb-run's own 640x480 is smaller than the pages the tests open).
-with_display() {
-  if [ "$(uname -s)" = Linux ] && [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] &&
-    command -v xvfb-run >/dev/null 2>&1; then
-    xvfb-run -a -s "-screen 0 1920x1080x24" "$@"
-  else
-    "$@"
-  fi
-}
-
 check_fmt() { cargo fmt --all --check -- --color "${CARGO_TERM_COLOR:-auto}"; }
-# A dependency no library or binary uses, in either build: test targets are left out, as each
+# A dependency no library or binary uses: test targets are left out, as each
 # uses only some of its crate's dependencies and would name the rest. Workspace-wide: `--lib`
 # on a scope of the binary alone finds no library, and the whole is quick once checked.
 unused_dependencies() {
-  cargo clippy --locked --workspace --lib --bins "$@" -- -D warnings -D unused_crate_dependencies
+  cargo clippy --locked --workspace --lib --bins -- -D warnings -D unused_crate_dependencies
 }
 # shellcheck disable=SC2086 # a scope is cargo's words: `-p a -p b` or `--workspace`
 check_clippy() {
   cargo clippy --locked --all-targets $run_scope -- -D warnings && unused_dependencies
 }
-# shellcheck disable=SC2086
-check_clippy_headless() {
-  cargo clippy --locked --all-targets --no-default-features $run_scope -- -D warnings &&
-    unused_dependencies --no-default-features
-}
 check_repo() { cargo test --locked -p "$REPO_CRATE" --test all -- suite::repo::; }
 # shellcheck disable=SC2086
-check_test() { with_display cargo test --locked $run_scope; }
-# shellcheck disable=SC2086
-check_test_headless() { cargo test --locked --no-default-features $run_scope; }
+check_test() { cargo test --locked $run_scope; }
 
 check_coverage() {
   if ! cargo llvm-cov --version >/dev/null 2>&1 || ! cargo nextest --version >/dev/null 2>&1; then
     echo "coverage needs cargo-llvm-cov and cargo-nextest: cargo install cargo-llvm-cov cargo-nextest"
     return 1
   fi
-  with_display scripts/coverage.sh
+  scripts/coverage.sh
 }
 
-# The release binary of both builds: the headless one's size is reported, the default one's is
-# gated. Headless first, so target/release/llx is the default build afterwards (cargo puts a
-# fresh build back in place).
+# The release binary's size, gated.
 check_size() {
   size_bin="${CARGO_TARGET_DIR:-target}/release/llx"
-  cargo build --release --locked --no-default-features -p "$REPO_CRATE" || return 1
-  size_headless=$(wc -c <"$size_bin" | tr -d ' ')
   cargo build --release --locked -p "$REPO_CRATE" || return 1
   size_default=$(wc -c <"$size_bin" | tr -d ' ')
-  note "release llx on $(tool_platform): default $size_default B (fails above $SIZE_LIMIT, warns above $SIZE_GOAL); headless $size_headless B"
+  note "release llx on $(tool_platform): default $size_default B (fails above $SIZE_LIMIT, warns above $SIZE_GOAL)"
   if [ "$size_default" -gt "$SIZE_LIMIT" ]; then
     echo "the release binary is $size_default B, over its cap of $SIZE_LIMIT B (5 MiB):"
     echo "a dependency has to earn its size (AGENTS.md)"

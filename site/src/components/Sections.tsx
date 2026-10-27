@@ -5,11 +5,6 @@ import './Sections.css';
 
 const BLOCKS: [string, string, string][] = [
   [
-    'llx window',
-    'Pages and terminals you watch it work in.',
-    'Tabs of one native window, kept between calls. A goal hands a screen of clicks to a fast model; your comment on an element comes back with its next call.',
-  ],
-  [
     'llx exec',
     'A task done by a helper, on any model.',
     'It reads, edits and runs what you allow, and prints the answer alone, in your JSON shape if you give one. Run several in the background.',
@@ -21,12 +16,12 @@ const BLOCKS: [string, string, string][] = [
   ],
 ];
 
-/** The commands another agent composes, and the plugin that teaches them to Claude Code. */
+/** The commands another agent composes. */
 export function Blocks() {
   return (
     <section className="section blocks wrap" aria-labelledby="blocks-title">
       <div className="sec-head">
-        <h2 id="blocks-title">Three commands. Your agent composes them.</h2>
+        <h2 id="blocks-title">Two commands. Your agent composes them.</h2>
         <p>
           Each is one call from a shell, so anything that runs a shell can use them: Claude Code, Codex, a script, a
           job.
@@ -44,16 +39,11 @@ export function Blocks() {
           </div>
         ))}
       </dl>
-      <div className="plugin">
-        <p>
-          In Claude Code, the plugin teaches Claude these commands and brings your comments from the window as a turn
-          of their own.
-        </p>
-        <code>/plugin install llx --marketplace rsaryev/llx</code>
+      <p className="section-more">
         <a className="more" href={AGENTS_DOCS}>
           llx in other agents
         </a>
-      </div>
+      </p>
     </section>
   );
 }
@@ -113,8 +103,8 @@ export function Own() {
       <div className="sec-head">
         <h2 id="own-title">And an agent of its own.</h2>
         <p>
-          Type <code>llx</code> for a minimal agent at your terminal: seven tools (read, edit, bash, window, ask,
-          agents, jobs), and modes that say what runs without asking. A ChatGPT sign-in, OpenRouter, or a key for
+          Type <code>llx</code> for a minimal agent at your terminal: six tools (read, edit, bash, ask, agents,
+          jobs), and modes that say what runs without asking. A ChatGPT sign-in, OpenRouter, or a key for
           any provider of the models.dev catalog.
         </p>
       </div>

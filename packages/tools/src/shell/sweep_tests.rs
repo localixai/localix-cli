@@ -6,8 +6,6 @@ use std::process::{Child, Stdio};
 
 use super::*;
 use crate::shell::process;
-use crate::shell::{Sessions, Until, Wait};
-use crate::testing::Scratch;
 
 /// Whether `pid` is gone within two seconds (a killed orphan is reaped by init).
 #[expect(
@@ -86,58 +84,6 @@ fn a_job_in_a_group_of_its_own_dies_with_its_command() {
     }
     assert!(process::kill(&mut shell), "the kill was not complete");
     assert!(gone(sleep), "the job outlived its command");
-}
-
-/// The finding this module fixes: an interactive bash in a session, a job started in the
-/// background, then the session closed.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "a test's fixture: the command ends by itself"
-)]
-#[test]
-fn a_background_job_of_an_interactive_shell_dies_with_its_session() {
-    let bash = process::shell("command -v bash")
-        .stdout(Stdio::null())
-        .status();
-    if !bash.is_ok_and(|status| status.success()) {
-        eprintln!("bash is missing: skipped");
-        return;
-    }
-    let dir = Scratch::new();
-    let sessions = Sessions::default();
-    let never = || false;
-    let ready = Wait {
-        needle: None,
-        yield_ms: Some(1_000),
-    };
-    let start = "bash --noprofile --norc -i";
-    let turn = sessions
-        .start(start, dir.path(), Default::default(), ready, None, &never)
-        .unwrap();
-    // The echo of what is typed reads `jo''b=$!`: only bash's own output reads `job=<pid>`. The
-    // `!` ends the line, where history expansion leaves it alone.
-    let input = b"sleep 307 & echo jo''b=$!\n";
-    let wait = Wait {
-        needle: Some("job="),
-        yield_ms: Some(10_000),
-    };
-    let typed = sessions
-        .send(turn.id, input, &[], wait, None, &never)
-        .unwrap();
-    assert_eq!(typed.until, Until::Matched, "{typed:?}");
-    let output = typed.output.unwrap_or_default();
-    let pid: libc::pid_t = output
-        .split("job=")
-        .nth(1)
-        .and_then(|rest| rest.split_whitespace().next())
-        .and_then(|pid| pid.parse().ok())
-        .unwrap_or_else(|| panic!("{output}"));
-    // SAFETY: getsid only reads which session a process is in.
-    let session = unsafe { libc::getsid(pid) };
-    assert_ne!(group(pid), session, "bash put the job in its own group");
-    let closed = sessions.close(turn.id).unwrap();
-    assert_eq!(closed.until, Until::Closed { killed: true });
-    assert!(gone(pid), "the job outlived its session");
 }
 
 /// How many processes the host runs is not the test's to fix, so the table's size is not checked

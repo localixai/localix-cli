@@ -27,7 +27,7 @@ pub enum Event {
         label: Label,
         outcome: Outcome,
     },
-    /// One action of the hands, under the call that runs them. Live only: never replayed (W6).
+    /// One step under the call running (what an agent it started does). Live only: never replayed (W6).
     Step(String),
     /// The model's answer.
     Answer(String),
@@ -62,7 +62,7 @@ pub enum Event {
     Closed,
     /// Tokens a model turn of an agent used.
     Spent(u64),
-    /// What the session spent in all so far, its agents and the hands included: sent whole,
+    /// What the session spent in all so far, its agents included: sent whole,
     /// never as a change, so a client that missed one is right at the next.
     Total(Total),
     /// The lane's conversation went back or began again: its agents are gone.

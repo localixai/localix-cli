@@ -11,12 +11,12 @@
 # the toolchain).
 
 # Every check, in the order they run.
-CHECKS="fmt clippy clippy-headless repo test test-headless coverage size site action check-test shellcheck actionlint examples mdlinks"
+CHECKS="fmt clippy repo test coverage size site action check-test shellcheck actionlint examples mdlinks"
 
 # The crate whose integration tests hold the repository's rules (apps/cli/tests/suite/repo).
 REPO_CRATE=llx
 
-# `dir<TAB>name<TAB>features|-<TAB>workspace deps` per crate, sorted by name. The deps are every
+# `dir<TAB>name<TAB>workspace deps` per crate, sorted by name. The deps are every
 # workspace crate it depends on: normal, build and dev edges alike.
 plan_crates() {
   plan_jq=$(tool jq) || return 1
@@ -24,7 +24,6 @@ plan_crates() {
   cargo metadata --no-deps --format-version 1 --offline 2>/dev/null |
     "$plan_jq" -r '.workspace_root as $root | .packages[]
       | [(.manifest_path | ltrimstr($root + "/") | rtrimstr("/Cargo.toml")), .name,
-         (if (.features | length) > 0 then "features" else "-" end),
          ([.dependencies[] | select(.path != null) | .name] | unique | join(" "))]
       | @tsv' | sort -t "$(printf '\t')" -k2,2
 }

@@ -54,7 +54,7 @@ const DEFAULTS: [(&str, &str); 2] = [
     ("openrouter", "anthropic/claude-haiku-5.5"),
 ];
 
-/// The browser's decision model llx starts with: a policy, by catalog id (OpenRouter's).
+/// The decision model `llx decide` and `llx doctor` start with: a policy, by catalog id (OpenRouter's).
 pub(crate) const DECISION_DEFAULT: &str = "~typesafe/jev-latest";
 
 /// How often a long-lived process looks for a newer catalog: a file's time, and the refresh
@@ -324,7 +324,7 @@ impl Chat for Priced {
     }
 }
 
-/// The browser's decision model: OpenRouter's, the one provider that serves decision models,
+/// The decision model: OpenRouter's, the one provider that serves decision models,
 /// so it needs an OpenRouter key whichever provider the agent thinks with.
 pub(crate) fn decider(model: &str) -> Option<Box<dyn Decider>> {
     decider_in(model, None)

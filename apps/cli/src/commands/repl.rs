@@ -1,5 +1,5 @@
 //! A session's prompt, in the interface: `llx` at a terminal, after its first message when one was
-//! given. Each entry is the next task, in the same conversation, workspace, browser window and
+//! given. Each entry is the next task, in the same conversation, workspace and
 //! session. `/login` chooses the provider, model and reasoning level, `/new`
 //! starts over, `/status` says where things stand, `/mode` shows or switches the mode, and
 //! Ctrl-D or `/exit` quits. The time limit is per task, so waiting for the person to type never
@@ -105,20 +105,16 @@ fn attempt(rig: &mut Rig, task: &str) -> bool {
     !rig.output.closed()
 }
 
-/// `/status`: what the next task runs with, and the terminal sessions `bash` keeps (each task
-/// closes its own as it ends, so this shows one only when something was left behind).
+/// `/status`: what the next task runs with.
 pub(crate) fn status(rig: &Rig) -> String {
     format!(
-        "model      {} ({})\ndecision   {}\nworkspace  {}\nmode       {}\nsession    {} ({} tasks)\n\
-         terminals  {}\n",
+        "model      {} ({})\nworkspace  {}\nmode       {}\nsession    {} ({} tasks)\n",
         rig.choice.label(),
         login::signed(&rig.choice, rig.workspace.env()),
-        rig.options.models.decision_model,
         rig.workspace.root().display(),
         rig.mode.get().name(),
         rig.session.id,
         rig.session.turns.len(),
-        rig.sessions.running(),
     )
 }
 

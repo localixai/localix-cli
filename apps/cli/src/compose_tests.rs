@@ -36,15 +36,12 @@ fn ask_is_offered_in_a_session_only() {
     composed(crate::modes::built("default"), true, vec![], |rig| {
         assert_eq!(
             names(rig),
-            ["read", "edit", "bash", "window", "ask", "agents", "jobs"]
+            ["read", "edit", "bash", "ask", "agents", "jobs"]
         );
         0
     });
     composed(crate::modes::built("bypass"), false, vec![], |rig| {
-        assert_eq!(
-            names(rig),
-            ["read", "edit", "bash", "window", "agents", "jobs"]
-        );
+        assert_eq!(names(rig), ["read", "edit", "bash", "agents", "jobs"]);
         0
     });
 }
@@ -79,102 +76,11 @@ fn plan_mode_changes_no_file() {
     });
 }
 
-/// A task that starts `sleep 30` in a terminal of its own.
-#[cfg(unix)]
-fn a_terminal_started() -> Vec<Completion> {
-    let start = ToolCall {
-        id: "c1".into(),
-        name: "window".into(),
-        arguments: json!({"action": "open", "kind": "terminal", "command": "sleep 30",
-            "yield_ms": 100}),
-    };
-    let mut replies = vec![Completion {
-        calls: vec![start],
-        ..Completion::default()
-    }];
-    replies.extend(answers(1));
-    replies
-}
-
-#[cfg(unix)]
 #[test]
-fn a_terminal_session_outlives_its_task_in_a_session() {
-    let mut replies = a_terminal_started();
-    // The next task reads it, by the id the first was given.
-    let read = ToolCall {
-        id: "c2".into(),
-        name: "window".into(),
-        arguments: json!({"action": "interact", "tab": "t1", "yield_ms": 50}),
-    };
-    replies.push(Completion {
-        calls: vec![read],
-        ..Completion::default()
-    });
-    replies.extend(answers(1));
-    composed(crate::modes::built("bypass"), true, replies, |rig| {
-        rig.task("start a sleep in a terminal");
-        assert!(
-            rig.sessions.running().contains("sleep 30"),
-            "{}",
-            rig.sessions.running()
-        );
-        rig.task("look at it again");
-        let read = rig.conversation.as_ref().unwrap().messages().iter().any(|message| {
-            matches!(message, Message::ToolResult { id, failed: false, .. } if id == "c2")
-        });
-        assert!(read, "{:?}", rig.conversation.as_ref().unwrap().messages());
-        0
-    });
-}
-
-#[cfg(unix)]
-#[test]
-fn a_terminal_session_ends_with_an_exec_task() {
-    composed(
-        crate::modes::built("bypass"),
-        false,
-        a_terminal_started(),
-        |rig| {
-            rig.task("start a sleep in a terminal");
-            let started = rig
-                .conversation
-                .as_ref()
-                .unwrap()
-                .messages()
-                .iter()
-                .any(|message| {
-                    matches!(message, Message::ToolResult { content, failed: false, .. }
-                if content.starts_with("t1 (terminal): session 1 running (`sleep 30`)"))
-                });
-            assert!(
-                started,
-                "{:?}",
-                rig.conversation.as_ref().unwrap().messages()
-            );
-            assert_eq!(rig.sessions.running(), "none");
-            0
-        },
-    );
-}
-
-#[cfg(unix)]
-#[test]
-fn status_shows_the_mode_and_the_terminals() {
+fn status_shows_the_mode() {
     composed(crate::modes::built("plan"), true, vec![], |rig| {
-        let wait = tools::shell::Wait {
-            needle: None,
-            yield_ms: Some(100),
-        };
-        let root = rig.workspace.root().to_path_buf();
-        let turn = rig
-            .sessions
-            .start("sleep 30", &root, Default::default(), wait, None, &|| false)
-            .unwrap();
-        assert_eq!(turn.id, 1);
         let status = crate::commands::repl::status(rig);
         assert!(status.contains("mode       plan\n"), "{status}");
-        assert!(status.contains("terminals  1 (`sleep 30`)\n"), "{status}");
-        rig.sessions.close_all();
         0
     });
 }
@@ -193,7 +99,7 @@ fn a_session_that_panics_ends_its_background_work_and_does_not_hang() {
 
 #[test]
 fn commands_never_see_the_key_of_the_provider_in_use() {
-    use crate::testing::{Captured, NoDecider, Scratch, ScriptedChat};
+    use crate::testing::{Captured, Scratch, ScriptedChat};
     let scratch = Scratch::new();
     let history = session::Sessions {
         dir: scratch.path().join("sessions"),
@@ -217,14 +123,10 @@ fn commands_never_see_the_key_of_the_provider_in_use() {
         history,
         session,
         ui: None,
-        shown: false,
-        #[cfg(unix)]
-        theme: None,
     };
     let chat = ScriptedChat::new(vec![]);
     let models = Models {
         chat: &chat,
-        decider: &NoDecider,
         live: None,
     };
     let output = Output::with(
@@ -233,7 +135,7 @@ fn commands_never_see_the_key_of_the_provider_in_use() {
         Box::new(Captured::default()),
         Box::new(Captured::default()),
     );
-    let (shared, seat) = setup.split(None);
+    let (shared, seat) = setup.split();
     assemble(&shared, seat, models, &output, &Interrupt::new(), |rig| {
         let hidden = (rig.jobs_kit.hidden)();
         assert!(hidden.contains(&"DEEPSEEK_API_KEY".into()), "{hidden:?}");
@@ -315,15 +217,14 @@ fn a_provider_chosen_later_has_its_key_kept_from_commands_too() {
 }
 
 #[test]
-fn two_lanes_over_one_shared_share_the_workspace_and_browser_but_keep_their_own() {
-    use crate::testing::{NoDecider, Scratch, ScriptedChat, quiet, setup};
+fn two_lanes_over_one_shared_share_the_workspace_but_keep_their_own() {
+    use crate::testing::{Scratch, ScriptedChat, quiet, setup};
     let scratch = Scratch::new();
-    let (shared, seat) = setup(&scratch, crate::modes::built("bypass"), true).split(None);
+    let (shared, seat) = setup(&scratch, crate::modes::built("bypass"), true).split();
     let other = shared.seat(shared.history.start(), None);
     let chat = ScriptedChat::new(vec![]);
     let models = || Models {
         chat: &chat,
-        decider: &NoDecider,
         live: None,
     };
     let output = quiet();
@@ -331,17 +232,10 @@ fn two_lanes_over_one_shared_share_the_workspace_and_browser_but_keep_their_own(
         |rig: &Rig| -> Vec<String> { rig.agent.tools.iter().map(|t| t.spec().name).collect() };
     assemble(&shared, seat, models(), &output, &Interrupt::new(), |a| {
         assemble(&shared, other, models(), &output, &Interrupt::new(), |b| {
-            assert!(
-                std::ptr::eq(a.shared, b.shared),
-                "one page, one browser lock"
-            );
+            assert!(std::ptr::eq(a.shared, b.shared));
             assert!(std::ptr::eq(a.workspace, b.workspace));
             assert!(std::ptr::eq(a.history, b.history));
             assert!(!std::ptr::eq(a.checkpoints, b.checkpoints));
-            assert!(
-                !std::ptr::eq(a.sessions, b.sessions),
-                "shells are a lane's own"
-            );
             assert!(
                 !std::ptr::addr_eq(a.agents, b.agents),
                 "agents are a lane's own"
@@ -349,10 +243,7 @@ fn two_lanes_over_one_shared_share_the_workspace_and_browser_but_keep_their_own(
             assert!(!std::ptr::eq(a.jobs, b.jobs));
             assert_ne!(a.session.id, b.session.id);
             assert_eq!(names(a), names(b));
-            assert_eq!(
-                names(b),
-                ["read", "edit", "bash", "window", "ask", "agents", "jobs"]
-            );
+            assert_eq!(names(b), ["read", "edit", "bash", "ask", "agents", "jobs"]);
             0
         })
     });

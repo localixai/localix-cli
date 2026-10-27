@@ -3,11 +3,6 @@ use serde_json::json;
 use super::*;
 use crate::testing::{Recorder, Scratch};
 
-fn bash(dir: &Scratch, gate: &dyn Gate, arguments: Value) -> Result<String, ToolError> {
-    in_session(&Sessions::default(), dir, gate, arguments)
-}
-
-/// A call with the sessions of earlier calls.
 #[expect(
     clippy::unwrap_in_result,
     clippy::panic_in_result_fn,
@@ -17,19 +12,13 @@ fn bash(dir: &Scratch, gate: &dyn Gate, arguments: Value) -> Result<String, Tool
     clippy::needless_pass_by_value,
     reason = "a test helper takes its arguments as the tests write them, by value"
 )]
-fn in_session(
-    sessions: &Sessions,
-    dir: &Scratch,
-    gate: &dyn Gate,
-    arguments: Value,
-) -> Result<String, ToolError> {
+fn bash(dir: &Scratch, gate: &dyn Gate, arguments: Value) -> Result<String, ToolError> {
     let workspace = Workspace::new(dir.path()).unwrap();
     let tool = BashTool {
         workspace: &workspace,
         gate,
         hidden: &Vec::new,
         stop: &|| false,
-        sessions,
     };
     tool.call(&arguments).map(|output| {
         assert_eq!(output.state, None);
@@ -268,26 +257,21 @@ fn without_tty_there_is_still_no_terminal() {
 }
 
 #[test]
-fn a_command_runs_to_its_end_and_a_terminal_session_is_the_windows() {
+fn a_command_runs_to_its_end_with_no_terminal() {
     let workspace = Workspace::new(Scratch::new().path()).unwrap();
     let tool = BashTool {
         workspace: &workspace,
         gate: &Recorder::default(),
         hidden: &Vec::new,
         stop: &|| false,
-        sessions: &Sessions::default(),
     };
     let spec = tool.spec();
     let properties = &spec.parameters["properties"];
     assert!(properties.get("session").is_none() && properties.get("tty").is_none());
     assert_eq!(spec.parameters["required"], serde_json::json!(["command"]));
-    assert_eq!(
-        spec.description.contains("terminal tab of the window"),
-        cfg!(unix)
-    );
     assert!(!spec.description.contains("{terminal}"));
     let session = tool.call(&serde_json::json!({"command": "python3", "tty": true}));
-    assert!(matches!(session, Err(ToolError::Failed(why)) if why.contains("tabs of the window")));
+    assert!(matches!(session, Err(ToolError::Failed(_))));
 }
 
 #[cfg(unix)]
@@ -309,7 +293,6 @@ fn a_command_runs_with_the_workspaces_environment_and_never_its_hidden_variables
         gate: &Recorder::default(),
         hidden: &|| vec!["SECRET_KEY".to_string()],
         stop: &|| false,
-        sessions: &Sessions::default(),
     };
     let command = r#"echo "$LLX_ONLY_THE_CLIENT_HAS|${SECRET_KEY-none}|${HOME-none}""#;
     let report = tool.call(&json!({"command": command})).unwrap().report;

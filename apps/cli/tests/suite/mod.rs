@@ -8,8 +8,7 @@ mod doctor;
 pub(crate) mod exec;
 #[cfg(target_os = "linux")]
 mod hardening;
-#[cfg(all(unix, not(feature = "browser")))]
-mod headless;
+#[cfg(unix)]
 mod logs;
 mod modes;
 mod pipes;
@@ -21,5 +20,3 @@ mod sign_in;
 mod startup;
 mod tui;
 mod usage;
-#[cfg(unix)]
-mod window;

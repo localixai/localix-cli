@@ -46,8 +46,8 @@ fn packages() -> BTreeMap<(String, String), Vec<String>> {
         .collect()
 }
 
-/// The packages that speak only in contracts: the agent's loop and the hands' loop.
-const CORES: [&str; 2] = ["agent", "decision-loop"];
+/// The packages that speak only in contracts: the agent's loop.
+const CORES: [&str; 1] = ["agent"];
 
 #[test]
 fn l1_the_contracts_depend_on_nothing_in_the_workspace() {
@@ -57,7 +57,7 @@ fn l1_the_contracts_depend_on_nothing_in_the_workspace() {
 }
 
 #[test]
-fn l2_the_agent_and_the_hands_know_only_the_contracts() {
+fn l2_the_agent_knows_only_the_contracts() {
     let packages = packages();
     for core in CORES {
         let uses = &packages[&("packages".into(), core.into())];
@@ -120,11 +120,7 @@ fn l6_the_protocol_is_a_leaf() {
             external.push(name.trim().to_string());
         }
     }
-    assert_eq!(
-        external,
-        ["serde", "serde_json"],
-        "the protocol uses {external:?}"
-    );
+    assert_eq!(external, ["serde"], "the protocol uses {external:?}");
 }
 
 /// The interface's side of the seam.
@@ -145,7 +141,6 @@ const BEYOND_THE_INTERFACE: &[&str] = &[
     "contracts::",
     "tools::",
     "agent::",
-    "decision_loop::",
     "session::",
     "queue::",
     "provider_kit::",
@@ -154,10 +149,10 @@ const BEYOND_THE_INTERFACE: &[&str] = &[
     "openrouter::",
 ];
 
-/// The interfaces (L7): the terminal's, and the tool clients' (`llx window`, W9).
-const INTERFACES: [&str; 2] = ["tui", "call"];
+/// The interfaces (L7): the terminal's.
+const INTERFACES: [&str; 1] = ["tui"];
 
-/// L7: each interface (`apps/cli/src/tui.rs` and `tui/`, `call.rs`, their tests too) speaks only
+/// L7: each interface (`apps/cli/src/tui.rs` and `tui/`, its tests too) speaks only
 /// through the protocol and the client: what it shows and what it may do, the server says.
 #[test]
 fn l7_the_interface_knows_only_the_protocol_and_the_client() {
@@ -228,8 +223,8 @@ fn l4_only_apps_compose_packages() {
     assert!(packages.contains_key(&("apps".into(), "llx".into())));
 }
 
-/// Words that name a particular tool or provider: the contracts, the agent and the hands must not
-/// say them.
+/// Words that name a particular tool or provider: the contracts and the agent must not say
+/// them.
 const TOOL_WORDS: &[&str] = &[
     "browser",
     "webview",
@@ -252,8 +247,8 @@ const TOOL_WORDS: &[&str] = &[
 ];
 
 #[test]
-fn l5_the_contracts_the_agent_and_the_hands_name_no_tool_or_provider() {
-    for package in ["contracts", "agent", "decision-loop"] {
+fn l5_the_contracts_and_the_agent_name_no_tool_or_provider() {
+    for package in ["contracts", "agent"] {
         let dir = root().join("packages").join(package).join("src");
         let files = sources_in(&dir);
         assert!(!files.is_empty(), "no sources in {}", dir.display());

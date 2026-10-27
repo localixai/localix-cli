@@ -1,74 +1,23 @@
 [package]
 name = "tools"
-description = "The agent's tools: files read and edited, shell commands, a native browser window, questions to the person"
+description = "The agent's tools: files read and edited, shell commands, questions to the person"
 publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-[features]
-default = ["browser"]
-# The native browser window on the system WebView, and the terminal sessions' window beside it.
-# Off, `tools::browser` keeps its names with nothing behind them and none of these is linked: the
-# headless build, for CI and servers (ARCHITECTURE.md A8).
-browser = [
-    "dep:tao",
-    "dep:wry",
-    "dep:url",
-    "dep:gtk",
-    "dep:webkit2gtk",
-    "dep:objc2",
-    "dep:objc2-web-kit",
-    "dep:block2",
-]
-
-[[test]]
-name = "browser"
-harness = false
-required-features = ["browser"]
-
-[[example]]
-name = "inspect"
-required-features = ["browser"]
-
 # The tool protocol only (rule L3): a tool knows nothing of the loop or the model.
 [dependencies]
-# Images go to the model as base64, including in the headless build.
+# Images go to the model as base64.
 base64.workspace = true
 contracts.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tao = { workspace = true, optional = true }
-wry = { workspace = true, optional = true }
-# Already in the tree through tao and wry: an address is checked as the system will read it.
-url = { version = "2.5.8", optional = true }
 
-# A command's own session and the kill of its process group (setsid, kill), and a terminal of its
-# own for a session (openpty, TIOCSCTTY, poll, waitid).
+# A command's own session and the kill of its process group (setsid, kill).
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
-# A terminal session's screen, for its window: cursor moves and erases applied as a terminal would.
-vt100.workspace = true
-
-# Already in the tree through wry: messages to the WKWebView behind the window, and the block its
-# screenshot answers through.
-[target.'cfg(target_os = "macos")'.dependencies]
-block2 = { workspace = true, optional = true }
-objc2 = { workspace = true, optional = true }
-objc2-web-kit = { workspace = true, optional = true }
-
-# Already in the tree through tao and wry: a page's place in the window's GTK box, and the
-# WebView's own snapshot for a screenshot.
-[target.'cfg(target_os = "linux")'.dependencies]
-gtk = { workspace = true, optional = true }
-webkit2gtk = { workspace = true, optional = true }
-
-[dev-dependencies]
-# The terminal page's own script is allowed by its hash: a test checks the one written down
-# (SHA-384, in base64), in the headless build too.
-base64.workspace = true
-sha2.workspace = true
 
 [lints]
 workspace = true

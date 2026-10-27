@@ -1,19 +1,15 @@
-//! Stopping a task between model turns: when its time is up, when the person stopped it (Ctrl-C,
-//! the browser window closed), or when no one reads its output any more (noticed on a write: with
+//! Stopping a task between model turns: when its time is up, when the person stopped it (Ctrl-C),
+//! or when no one reads its output any more (noticed on a write: with
 //! `--json`, every event). The chat model is
 //! wrapped, so the agent's loop ends the way it ends on any unreachable model, after the tool call
 //! in flight has finished; nothing exits the process from another thread. (A stopped task's
 //! running command is killed by the shell tool itself, and the gate approves nothing more.)
 
-use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use contracts::chat::{Chat, ChatError, Completion, Request};
-use contracts::model::{DecideError, Decider, Decision, Question};
-use serde_json::Value;
 
-use crate::interrupt::Interrupt;
 use crate::sync::lock;
 
 /// Why a task was stopped.
@@ -78,8 +74,8 @@ impl<'a> Brake<'a> {
         due
     }
 
-    /// Why the last task was stopped, if it was: a stop that came after its last turn (the window
-    /// closed during the final tool call) still counts.
+    /// Why the last task was stopped, if it was: a stop that came after its last turn (Ctrl-C
+    /// during the final tool call) still counts.
     pub(crate) fn halted(&self) -> Option<Halt> {
         lock(&self.halt).or_else(|| (self.stopped)().then_some(Halt::Interrupted))
     }
@@ -107,29 +103,6 @@ impl Chat for Brake<'_> {
             }
             None => self.chat.complete(request),
         }
-    }
-}
-
-/// The decision model behind the browser's hands, stopped with the task: the hands end their goal
-/// at the next decision instead of acting on for dozens more steps.
-pub(crate) struct BrakedDecider<'a> {
-    pub inner: &'a dyn Decider,
-    /// Shared with the hands' threads, so the interrupt itself rather than a closure over it.
-    pub interrupt: &'a Interrupt,
-}
-
-impl Decider for BrakedDecider<'_> {
-    fn decide(
-        &self,
-        state: &Value,
-        questions: &BTreeMap<String, Question>,
-    ) -> Result<Decision, DecideError> {
-        if self.interrupt.stopped() {
-            return Err(DecideError::Unavailable(
-                "the person stopped the task".into(),
-            ));
-        }
-        self.inner.decide(state, questions)
     }
 }
 

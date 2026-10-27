@@ -20,7 +20,6 @@ mod sessions;
 mod steering;
 mod stop;
 mod suspend;
-mod windows;
 
 /// How long a flow waits for what the screen should show.
 const LONG: Duration = Duration::from_secs(20);

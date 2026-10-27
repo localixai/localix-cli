@@ -82,13 +82,11 @@ impl Work {
         self.lock().retain(|known| known.id != lane);
     }
 
-    /// The lanes working, by title, the terminal sessions' `shells`, then the lanes' monitors
-    /// and schedules, by name.
-    pub(crate) fn running(&self, shells: Vec<String>) -> Vec<Running> {
+    /// The lanes working, by title, then the lanes' monitors and schedules, by name.
+    pub(crate) fn running(&self) -> Vec<Running> {
         let lanes = self.lock();
         let working = lanes.iter().filter(|lane| lane.busy);
         let working = working.map(|lane| ("session", lane.title.clone()));
-        let working = working.chain(shells.into_iter().map(|shell| ("shell", shell)));
         let jobs = lanes.iter().flat_map(|lane| &lane.jobs).map(|job| {
             let kind = if job.until_at.is_some() {
                 "monitor"

@@ -1,7 +1,6 @@
 //! What an agent's tools are built from, and the tools built: the main session's, and each
 //! agent's own, on a gate that names it and a stop of its own (the task's, or the person's `x` on
-//! its row); each learns a subtree's instructions on its own. The browser is one window for
-//! everyone: one action at a time, whoever asks.
+//! its row); each learns a subtree's instructions on its own.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -9,14 +8,11 @@ use std::sync::Mutex;
 
 use contracts::chat::Chat;
 use contracts::gate::Gate;
-use contracts::hands::Hands;
 use contracts::history::History;
 use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
-use tools::browser::Page;
 use tools::fs::{EditTool, ReadTool};
 use tools::shell::BashTool;
-use tools::window::Windowed;
 use tools::workspace::Workspace;
 
 use crate::instructions::Instructed;
@@ -33,14 +29,6 @@ pub(crate) struct Kit<'a> {
     pub hidden: &'a (dyn Fn() -> Vec<String> + Sync),
     /// Whether the task was stopped.
     pub stopped: &'a (dyn Fn() -> bool + Sync),
-    pub sessions: &'a tools::shell::Sessions,
-    pub browser: Option<&'a Page>,
-    /// Who carries out a goal on any tab of the window.
-    pub hands: &'a dyn Hands,
-    /// The window the person watches, where it shows.
-    pub windowed: Option<&'a dyn Windowed>,
-    /// One browser action at a time, the main session's and every agent's.
-    pub browser_lock: &'a crate::kinds::BrowserLocks,
     /// The context with no earlier session: an agent knows nothing of the parent's history.
     pub context: &'a str,
     pub max_turns: usize,
@@ -77,8 +65,7 @@ pub(crate) struct Own<'a> {
     pub seen: Mutex<HashSet<PathBuf>>,
 }
 
-/// A session's tools: `read`, `edit`, `bash` (commands run to their end), and `window`, whose
-/// tabs are terminal sessions and the browser's pages where there is one.
+/// A session's tools: `read`, `edit` and `bash` (commands run to their end).
 pub(crate) struct Tools<'a> {
     kit: &'a Kit<'a>,
     own: &'a Own<'a>,
@@ -104,7 +91,6 @@ impl<'a> Tools<'a> {
                 gate: own.gate,
                 hidden: kit.hidden,
                 stop: own.stop,
-                sessions: kit.sessions,
             },
         }
     }
@@ -127,23 +113,8 @@ impl<'a> Tools<'a> {
             root: kit.root(),
             seen: &own.seen,
         };
-        let parts = crate::kinds::Parts {
-            bash: &self.bash,
-            sessions: kit.sessions,
-            stop: own.stop,
-            page: kit.browser,
-            locks: kit.browser_lock,
-            windowed: kit.windowed,
-            hands: kit.hands,
-            gate: own.gate,
-        };
-        crate::kinds::window(&parts, |window| {
-            let mut tools: Vec<&dyn Tool> = vec![&read, &edit, &self.bash];
-            if let Some(window) = window {
-                tools.push(window);
-            }
-            work(&tools)
-        })
+        let tools: [&dyn Tool; 3] = [&read, &edit, &self.bash];
+        work(&tools)
     }
 
     /// Run `work` with the tools as the main session offers them, in its order: an agent's own
@@ -187,7 +158,7 @@ impl Tool for Withheld {
 
     fn call(&self, _: &Value) -> Result<ToolOutput, ToolError> {
         Err(ToolError::Failed(format!(
-            "`{}` is the main session's alone: an agent works with read, edit, bash and window, \
+            "`{}` is the main session's alone: an agent works with read, edit and bash, \
              and decides on its best assumption where it would ask",
             self.0.name
         )))

@@ -2,14 +2,13 @@
 //! sessions moved to the background waiting for the next, and its end when one asks for it. In
 //! process there is none: `serve` refuses what only a daemon does.
 
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Condvar, Mutex};
 
 use protocol::Done;
 
 use super::Peer;
-use super::toolbox::Owners;
 use crate::desk::Request;
 use crate::sync::lock;
 
@@ -18,8 +17,6 @@ pub(crate) struct Kept {
     pub cwd: String,
     pub peer: Arc<Peer>,
     pub desk: Sender<Request>,
-    /// The numbering of its terminal sessions, which quitting them would stop.
-    pub terminals: Arc<AtomicU32>,
 }
 
 #[cfg_attr(not(unix), expect(dead_code, reason = "the daemon is unix only"))]
@@ -27,8 +24,6 @@ pub(crate) struct Host {
     pub(crate) build: String,
     attached: AtomicUsize,
     kept: Mutex<Vec<Kept>>,
-    /// The tool clients' toolboxes, by owner, kept between their calls (W9).
-    owners: Arc<Owners>,
     ended: Mutex<bool>,
     ending: Condvar,
 }
@@ -50,7 +45,6 @@ impl Host {
             build,
             attached: AtomicUsize::new(0),
             kept: Mutex::default(),
-            owners: Arc::default(),
             ended: Mutex::new(false),
             ending: Condvar::new(),
         })
@@ -59,10 +53,6 @@ impl Host {
     pub(crate) fn attach(self: &Arc<Self>) -> Attached {
         self.attached.fetch_add(1, Ordering::SeqCst);
         Attached(Arc::clone(self))
-    }
-
-    pub(crate) fn owners(&self) -> Arc<Owners> {
-        Arc::clone(&self.owners)
     }
 
     /// Sessions moved to the background, for the next interface in their directory.
@@ -90,8 +80,7 @@ impl Host {
             attached: self.attached.load(Ordering::SeqCst),
             lanes: crate::desk::open_anywhere(),
             working: crate::interrupt::working(),
-            // An owner's tabs wait for its next call as sessions moved there wait for theirs.
-            kept: lock(&self.kept).len() + self.owners.holding(),
+            kept: lock(&self.kept).len(),
             jobs: crate::interrupt::jobs(),
         })
     }

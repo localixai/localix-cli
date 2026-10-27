@@ -56,27 +56,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/linux-deps
-        with:
-          extra: xvfb
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # the stable branch, 2026-10-01
         with:
           toolchain: stable
           components: clippy
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test
-        if: runner.os != 'Linux'
         run: cargo test --workspace --locked
-      # packages/tools/tests/browser.rs opens a real WebView window, which needs a display.
-      - name: Test (virtual display)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a -s "-screen 0 1920x1080x24" cargo test --workspace --locked
-      # The headless build ships too (ARCHITECTURE.md A8): its lints and tests, with no browser.
-      - name: Test (headless)
-        if: runner.os == 'Linux'
-        run: |
-          cargo clippy --workspace --all-targets --locked --no-default-features -- -D warnings
-          cargo test --workspace --locked --no-default-features
 
   build:
     name: build (${{ matrix.name }})
@@ -100,7 +86,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/linux-deps
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # the stable branch, 2026-10-01
         with:
           toolchain: stable
@@ -113,21 +98,11 @@ jobs:
         run: |
           "${{ matrix.smoke }}" --version
           if [ "$RUNNER_OS" = Linux ]; then
-            # The full build links WebKitGTK; the headless archive, as a user unpacks it, must
-            # link none and run in a plain distribution that has none (this runner has it, for
-            # the full build: a container does not).
-            # (Captured first: `grep -q` ends a pipe early, which pipefail reports as a failure.)
-            full=$(ldd "${{ matrix.smoke }}")
-            case "$full" in *libwebkit2gtk-4.1*) ;; *)
-              echo "::error::the full build does not link WebKitGTK"; exit 1 ;; esac
-            headless="$RUNNER_TEMP/headless"
-            mkdir "$headless"
-            tar -xzf dist/llx-x86_64-unknown-linux-gnu-headless.tar.gz -C "$headless" llx
-            links=$(ldd "$headless/llx")
-            case "$links" in *webkit* | *gtk* | *soup* | *javascriptcore*)
-              echo "::error::the headless build links the WebView"; exit 1 ;; esac
-            docker run --rm --network none -v "$headless:/headless:ro" ubuntu:22.04 sh -c \
-              '/headless/llx --version && LLX_MODELS_REFRESH=0 /headless/llx doctor | grep "this build has no browser"'
+            # The archive, as a user unpacks it, runs in a plain distribution.
+            unpacked="$RUNNER_TEMP/unpacked"
+            mkdir "$unpacked"
+            tar -xzf dist/llx-x86_64-unknown-linux-gnu.tar.gz -C "$unpacked" llx
+            docker run --rm --network none -v "$unpacked:/unpacked:ro" ubuntu:22.04 /unpacked/llx --version
           fi
           if [ "$RUNNER_OS" = macOS ]; then
             # The universal download runs as it was packaged and holds both architectures.

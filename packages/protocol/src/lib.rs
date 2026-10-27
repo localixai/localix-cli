@@ -9,7 +9,7 @@ mod event;
 mod frame;
 
 pub use asked::{Adjustment, Answer, Approval, Asked, Choice, Group, Question, Reply};
-pub use command::{Command, Done, Input, Picture, Place, Running, Status, Target, Theme, ToolInfo};
+pub use command::{Command, Done, Input, Place, Running, Status, Target};
 pub use event::{Event, JobRow, Label, Outcome, Saved, Total, Turn, Update};
 pub use frame::{ToClient, ToServer};
 

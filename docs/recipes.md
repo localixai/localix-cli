@@ -119,22 +119,6 @@ git log v1.2.0..HEAD --oneline | llx exec --mode plan "Release notes in markdown
 git diff --staged | llx exec --mode plan "Describe what this diff does as a one-line conventional commit message. The message alone." | git commit -F -
 ```
 
-## After a deploy
-
-The agent opens the page in a real browser and checks it:
-
-```bash
-llx exec -y --schema '{"type":"object","properties":{"ok":{"type":"boolean"},"seen":{"type":"string"}},"required":["ok","seen"]}' \
-  "Open https://staging.example.com, sign up with test@example.com, and check that the page welcomes you."
-```
-
-```text
-{"ok":true,"seen":"Welcome!"}
-```
-
-On a Linux runner it needs the full build, which needs WebKitGTK 4.1 installed before llx, and a
-display: `xvfb-run -a llx exec …`. The headless build has no browser ([docs/ci.md](ci.md#without-the-action)).
-
 ## On a schedule
 
 ```bash

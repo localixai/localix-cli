@@ -51,17 +51,6 @@ pub enum Command {
     Status,
     /// The daemon ends: every lane is stopped first.
     Shutdown,
-    /// The tools a tool client may call (W9), each as a model reads it.
-    Tools,
-    /// Tool `name` called with `arguments`; `call` is the client's own id for it, which `Halt`
-    /// stops (W9).
-    Tool {
-        call: String,
-        name: String,
-        arguments: serde_json::Value,
-    },
-    /// A tool client's owner is done (W9): its tabs close and its terminal sessions end.
-    Release,
 }
 
 /// What the person sent: the text, and the pictures attached to it.
@@ -75,26 +64,16 @@ pub struct Input {
 }
 
 /// Where a client is: its directory, the environment its commands run with (its `PATH`, an
-/// activated virtualenv, its keys), and its terminal's colours.
+/// activated virtualenv, its keys).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Place {
     pub cwd: String,
     pub env: Vec<(String, String)>,
-    #[serde(default)]
-    pub theme: Option<Theme>,
     /// The command line it started with, the session's options; its relative paths are of `dir`.
     #[serde(default)]
     pub args: Vec<String>,
     #[serde(default)]
     pub dir: String,
-}
-
-/// A terminal's colours, each red, green and blue.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Theme {
-    pub fg: [u8; 3],
-    pub bg: [u8; 3],
-    pub cursor: [u8; 3],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -164,10 +143,8 @@ pub enum Done {
     Interrupted {
         again: bool,
     },
-    /// What quitting would stop: the terminal sessions running, in every lane, and each thing
-    /// running by name.
+    /// What quitting would stop: each thing running, by name.
     Work {
-        shells: usize,
         #[serde(default)]
         running: Vec<Running>,
     },
@@ -178,36 +155,8 @@ pub enum Done {
     /// The daemon: its build and process, the interfaces attached, the lanes open and working,
     /// the desks moved to the background, and the monitors and schedules running.
     Status(Status),
-    /// The tools a tool client may call.
-    Tools {
-        tools: Vec<ToolInfo>,
-    },
-    /// What a tool's call did: what happened, the state it left (a tab's text), and a picture of
-    /// it. A call that failed is `Failed`, with why.
-    Tool {
-        report: String,
-        #[serde(default)]
-        state: Option<String>,
-        #[serde(default)]
-        image: Option<Picture>,
-    },
     /// The command could not be done, and why.
     Failed {
         why: String,
     },
-}
-
-/// A tool as a model reads it: its name, what it does, and its arguments as a JSON Schema.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ToolInfo {
-    pub name: String,
-    pub description: String,
-    pub parameters: serde_json::Value,
-}
-
-/// An encoded picture: its media type (`image/jpeg`) and its bytes in base64.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Picture {
-    pub media_type: String,
-    pub data: String,
 }

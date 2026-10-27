@@ -41,8 +41,8 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 | --- | --- |
 | `-C, --cd DIR` | The workspace: paths resolve in it and files change only inside it. Default: the current directory. |
 | `--mode MODE` | A named set of rules: `default`, `plan`, `bypass`, or your own from `settings.json` (see [Modes and approvals](modes.md)). Also `--permission-mode`. Default: `default`. |
-| `--allow RULE`, `--deny RULE` | Add a rule to the mode's for this run: `bash(cargo test *)`, `edit(docs/**)`, `browser` ([the syntax](modes.md#rules)). Repeat them. A deny refuses in every mode, `-y` included. |
-| `-y, --yes` | `--mode bypass`: allow commands, file changes and browser actions without asking. Also `--yolo` and `--dangerously-skip-permissions`. Giving it with `--mode` is a usage error. |
+| `--allow RULE`, `--deny RULE` | Add a rule to the mode's for this run: `bash(cargo test *)`, `edit(docs/**)`, `jobs` ([the syntax](modes.md#rules)). Repeat them. A deny refuses in every mode, `-y` included. |
+| `-y, --yes` | `--mode bypass`: allow commands and file changes without asking. Also `--yolo` and `--dangerously-skip-permissions`. Giving it with `--mode` is a usage error. |
 | `-p, --print` | Run the prompt as one task and exit, as `exec` does. |
 | `-c, --continue` | Go on with the newest session of this directory, as `resume --last` does. |
 | `--json` | With `exec` or `-p`: one JSON event per line on stdout (see [`--json`](reference.md#json-events)). |
@@ -52,12 +52,10 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 | `--provider PROVIDER` | Where the agent's chat model comes from: a provider of the model catalog by id: `openai` (a ChatGPT sign-in or a key), `openrouter`, `anthropic`, `deepseek`, `xai`… Env `LLX_PROVIDER`. Default: the one `/login` saved, else the one signed in to. |
 | `-m, --model MODEL` | The agent's chat model, a model id of the provider's (any OpenRouter id works). Env `LLX_MODEL`. Default: the one `/login` saved, else `gpt-6-luna` on OpenAI and `anthropic/claude-haiku-5.5` on OpenRouter. |
 | `--reasoning LEVEL` | How much the chat model reasons: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` or `ultra`, as far as the model takes it (a level it does not take is a usage error; `/login` lists its levels). Env `LLX_REASONING`. Default: the one `/login` saved for that model, else the model's own. |
-| `--decision-model MODEL` | The browser's decision model. Env `LLX_DECISION_MODEL`, default `~typesafe/jev-latest`. |
+| `--decision-model MODEL` | The decision model `llx doctor` checks. Env `LLX_DECISION_MODEL`, default `~typesafe/jev-latest`. |
 | `--max-turns N` | Model turns for one task (50; 1 to 10000). |
-| `--max-steps N` | Actions for one browser task of the decision model (40; 1 to 10000). |
 | `--timeout SECONDS` | Seconds one task may take (1800; at most 86400). It stops at the first model turn past them, or while the task waits on its monitors or agents. Time spent waiting on you (an approval, a question) does not count. |
 | `--no-daemon` | Run the session in this process instead of the daemon (`llx serve`). Env `LLX_NO_DAEMON=1`. `exec` always runs in process. |
-| `--show-browser` | Show the browser window, and a window for each terminal session `bash` keeps. By default they show in a session, and stay hidden in `exec` and over SSH (`SSH_CONNECTION` or `SSH_TTY` set; the browser then works without a window). The browser window opens only when the browser is first used. On macOS it first shows as a small floating preview in a screen corner, over every Space and never taking your keyboard; a click on it opens the window, and the strip's collapse button (–) returns to the preview. Elsewhere it opens as an ordinary window that does not take focus. |
 
 ### Commands
 
@@ -67,7 +65,6 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 - `decide QUESTION`: ask the decision model one question about stdin (`--choices a,b,…` instead of yes or no, `--expect CHOICE` to exit 1 on any other, `--json` for the probabilities and the cost) and print the option it picked. No agent, no tools; it needs an OpenRouter key. The [reference](reference.md#llx-decide) has its options and exit codes.
 - `resume [ID | --last] [PROMPT]`: go on with a session at the terminal. `--last` is the newest session that ran in this workspace (else the newest of all, with a note).
 - `doctor`: check that everything a run needs is in place.
-- `window`: one call of `window` from another agent's shell, its tabs kept for their owner between calls (unix; see [In other agents](agents.md)).
 - `serve`: the daemon the sessions run in (unix). `serve status` says whether it runs (its pid, its build, the terminals attached, the sessions open and working, those moved to the background, the jobs; exit 1 when none runs), `serve stop` ends it, stopping every session's task first.
 
 ## In a session
@@ -118,7 +115,7 @@ Typing `/` lists them. Tab completes the selected command (with a trailing space
 | `/model` | Chooses the model and its reasoning level. |
 | `/mode [name]` (also `/permissions`) | Lists the [modes](modes.md) or switches to one. |
 | `/new` (also `/clear`) | Opens a new session and shows it, even while a task works; the old one goes on in the background. |
-| `/status` | The models, the workspace, the mode, the session and any terminal session still running. |
+| `/status` | The models, the workspace, the mode, the session |
 | `/rewind` (also `/undo`, or Esc Esc on an empty prompt) | Goes back to before one of the conversation's tasks: the files `edit` changed (the agents' too; not what commands changed), the conversation (the task's words back in the prompt; the session's agents are let go), or both. |
 | `/diff` | The changes since the last commit, new files too. |
 | `/init` | Writes an `AGENTS.md` for the project. |
@@ -146,19 +143,19 @@ The models, their context windows, reasoning levels and defaults come from one c
 
 `/model` chooses among the models of every provider signed in to, each provider a tab over the list (`OpenAI 36 · [OpenRouter 288]`, with how many models each lists): Tab and Shift+Tab switch, and the list opens on the current model's. ←/→ change the highlighted model's reasoning level inline, and Enter confirms both. The current model keeps its level, and other models start at their own defaults. A list longer than 12 is searched by typing (Backspace edits the query, Esc clears it, then cancels; `/model`'s search finds a model by its name or id in every tab, each tab counting its matches, and goes to the tab of the best one when the tab shown has none) and scrolls with ↑↓, PageUp, PageDown, Home and End. Shift+Up and Shift+Down move the level without a menu.
 
-The choice is put in at once, in the same conversation, and saved as the default for later sessions and for `exec`. The browser's decision model runs on OpenRouter, so `goal`s on window tabs need an OpenRouter key whichever provider the agent thinks with.
+The choice is put in at once, in the same conversation, and saved as the default for later sessions and for `exec`.
 
 ## Sessions and the daemon
 
-Every run is saved as a session in `~/.llx/sessions/<id>.json`; set `LLX_SESSIONS` to keep them elsewhere. A session records each task and how it ended, but not the conversation itself. `resume` therefore starts a new conversation that is told the earlier tasks, the directory they ran in, and where the browser was; at the terminal, the earlier tasks and their answers are drawn first (the last 20). In a session, each task continues the same conversation.
+Every run is saved as a session in `~/.llx/sessions/<id>.json`; set `LLX_SESSIONS` to keep them elsewhere. A session records each task and how it ended, but not the conversation itself. `resume` therefore starts a new conversation that is told the earlier tasks, and the directory they ran in; at the terminal, the earlier tasks and their answers are drawn first (the last 20). In a session, each task continues the same conversation.
 
 A session at the terminal runs in a daemon, `llx serve`:
 
 - One per config directory, found at a socket in `$TMPDIR/llx-<uid>/` (a directory only you may enter), started by the first `llx` (detached, in a session of its own, its errors in `daemon.log` beside the sign-ins, what it did in `logs/llx.log`) and attached to by every later one.
-- It holds the sessions with their agents, jobs and terminal sessions, the models, and the one window; `llx` draws, reads the keys and speaks to it over the socket.
+- It holds the sessions with their agents and jobs, and the models; `llx` draws, reads the keys and speaks to it over the socket.
 - Each terminal's sessions work in its directory, with its environment, and with the options its command line gave. Each terminal has its own questions, and quitting one names only its own work.
 - A session is open at one terminal at a time: resuming one open at another says so.
-- Closing a terminal stops its sessions' work; the daemon lives on until `llx serve stop`. Closing the window there stops nothing: the tasks working in it are told, and it opens again when next used.
+- Closing a terminal stops its sessions' work; the daemon lives on until `llx serve stop`.
 - A plain `llx` in a directory where sessions were moved to the background comes back to them; `llx` with a task, `resume` or any option opens new sessions beside them, which wait for the next plain `llx`.
 - A daemon of another build is stopped and replaced only when nothing needs it (no terminal attached, no session open or moved to the background, no task, monitor or schedule); otherwise the session runs in this process, and llx says so, as it does when the daemon cannot be reached.
 - `--no-daemon` (or `LLX_NO_DAEMON=1`) always runs in process, and so does `exec`.

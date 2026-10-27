@@ -1,6 +1,6 @@
 //! The desk: the lanes of a session at the terminal. Each lane is a whole session of its own
-//! (its conversation, agents, jobs, shells and stop) on a thread of its own, over what they all
-//! share (the workspace, the browser's page, the session store). The person opens one with `/new`
+//! (its conversation, agents, jobs and stop) on a thread of its own, over what they all
+//! share (the workspace, the session store). The person opens one with `/new`
 //! and the others go on in the background. The desk ends when the last lane does, and when one
 //! panics the others are stopped, so a scope never waits for ever on a lane at its prompt.
 

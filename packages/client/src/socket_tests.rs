@@ -54,10 +54,7 @@ fn a_command_goes_as_one_line_and_waits_for_its_line_back() {
             };
             let done = ToClient::Done {
                 id,
-                done: Done::Work {
-                    shells: 1,
-                    running: vec![],
-                },
+                done: Done::Work { running: vec![] },
             };
             (&server).write_all(&line(&done)).unwrap();
             command
@@ -65,10 +62,7 @@ fn a_command_goes_as_one_line_and_waits_for_its_line_back() {
         .unwrap();
     assert_eq!(
         client.call(Command::Work, WAIT),
-        Ok(Done::Work {
-            shells: 1,
-            running: vec![],
-        })
+        Ok(Done::Work { running: vec![] })
     );
     assert_eq!(answering.join().unwrap(), Command::Work);
 }

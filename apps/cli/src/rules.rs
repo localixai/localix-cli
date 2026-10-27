@@ -1,5 +1,5 @@
 //! `--allow` and `--deny`: rules on what runs without asking, read as Claude Code writes them
-//! (`bash(cargo test *)`, `edit(docs/**)`, `browser`). A deny rule refuses what it names in every
+//! (`bash(cargo test *)`, `edit(docs/**)`, `jobs`). A deny rule refuses what it names in every
 //! mode; an allow rule lets what it names run where the mode would ask or, with no one to ask,
 //! refuse. Plan mode stays read-only whatever is allowed. They come from the command line only:
 //! a rule read from the repository would let a pull request allow itself.
@@ -10,13 +10,7 @@ mod path;
 
 /// The tools a rule can name, and whether a pattern can narrow it: a command's text for `bash`,
 /// a path for `edit`. The others are named whole.
-const TOOLS: [(&str, bool); 5] = [
-    ("bash", true),
-    ("edit", true),
-    ("browser", false),
-    ("terminal", false),
-    ("jobs", false),
-];
+const TOOLS: [(&str, bool); 3] = [("bash", true), ("edit", true), ("jobs", false)];
 
 /// What the rules say of an effect before the mode does.
 #[derive(Debug, Clone, PartialEq, Eq)]

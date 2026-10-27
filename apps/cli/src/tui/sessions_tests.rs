@@ -17,7 +17,7 @@ fn three(now: Instant) -> App {
         let (id, name) = (id.to_string(), name.to_string());
         app.event(Event::LaneStarted { id, name }, now);
     }
-    let (id, name) = ("C".to_string(), "add tabs to the browser".to_string());
+    let (id, name) = ("C".to_string(), "add tabs to the printer".to_string());
     app.event(Event::LaneStarted { id, name }, now);
     app.frame(from("A", Event::Note("A's own transcript".into())), now);
     app.frame(from("A", Event::TaskStarted("refactor it".into())), now);
@@ -89,7 +89,7 @@ fn saved_rows_open_the_list_live_first() {
     • Sessions in this project
 
       * fix the flaky jobs test  running
-    ❯ ? add tabs to the browser  waiting for you
+    ❯ ? add tabs to the printer  waiting for you
       ✓ refactor the picker      current · done · Ns · 1 task
       + New session
 

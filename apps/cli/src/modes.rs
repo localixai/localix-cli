@@ -17,7 +17,7 @@ const DEFAULT: &str = "default";
 const BUILT_IN: [(&str, &str, &[&str], &[&str]); 3] = [
     (
         DEFAULT,
-        "Each command, file change and browser action is asked; with no one to ask, refused.",
+        "Each command and file change is asked; with no one to ask, refused.",
         &[],
         &[],
     ),
@@ -26,14 +26,14 @@ const BUILT_IN: [(&str, &str, &[&str], &[&str]); 3] = [
         "Read-only: file changes are refused, so a goal to change something is reached by a \
          plan of the change, not by making it: what would change and where, step by step, then \
          the assumptions it rests on. Such a plan achieves the goal, unrun and unchecked as it \
-         is; commands and browser actions are asked.",
+         is; commands are asked.",
         &[],
         &["edit"],
     ),
     (
         BYPASS,
         "Everything runs without asking (-y).",
-        &["bash", "edit", "browser", "terminal", "jobs"],
+        &["bash", "edit", "jobs"],
         &[],
     ),
 ];

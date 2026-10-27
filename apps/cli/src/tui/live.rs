@@ -1,4 +1,4 @@
-//! The live area under the history: the call running, with the hands' latest actions under it;
+//! The live area under the history: the call running, with the latest steps under it;
 //! how long the task has worked and how to stop it; what is queued; then the question open, or
 //! the composer with the commands `/` offers and the mode.
 //!
@@ -123,7 +123,7 @@ pub(crate) fn render(app: &App, now: Instant) -> (Vec<Line<'static>>, Option<Cur
     (out, Some(cursor))
 }
 
-/// The calls running in the view shown, a spinner each, the hands' steps under the last; and
+/// The calls running in the view shown, a spinner each, the steps under the last; and
 /// when its task started.
 fn running_rows(
     app: &App,
@@ -145,7 +145,7 @@ fn running_rows(
             first.spans.insert(1, Span::raw(" "));
         }
         out.extend(rows);
-        // The hands' steps belong to the main session's last call.
+        // The steps belong to the main session's last call.
         let last = at + 1 == running.len();
         let steps = match (&app.shown().lane, last) {
             (Some(lane), true) => &lane.steps[..],

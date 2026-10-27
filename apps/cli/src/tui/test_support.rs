@@ -124,10 +124,7 @@ pub(crate) fn replies(app: &mut App) -> Vec<(u64, protocol::Reply)> {
 /// The modes, each with what it does, as the server says them.
 pub(crate) fn modes() -> Vec<(String, String)> {
     [
-        (
-            "default",
-            "Each command, file change and browser action asks first",
-        ),
+        ("default", "Each command and file change asks first"),
         ("plan", "Read-only: file changes are refused"),
         ("bypass", "Everything runs without asking (-y)"),
         ("review", "The person's own mode."),

@@ -6,12 +6,8 @@ use std::path::{Path, PathBuf};
 
 use super::{root, walk};
 
-/// The crates that only decide: the ports, the agent's loop, the hands' loop.
-const CORE: [&str; 3] = [
-    "packages/contracts",
-    "packages/agent",
-    "packages/decision-loop",
-];
+/// The crates that only decide: the ports and the agent's loop.
+const CORE: [&str; 2] = ["packages/contracts", "packages/agent"];
 
 /// What reaches the OS, as the source says it: each is the shell's, never the core's.
 const EFFECTS: [&str; 13] = [

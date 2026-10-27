@@ -12,7 +12,7 @@ use contracts::catalog::{ModelEntry, Selection};
 use crate::choice::{self, Choice};
 use crate::compose::Rig;
 use crate::picker::{Adjustment, Group, Item, Terminal};
-use crate::providers::{self, Provider};
+use crate::providers::Provider;
 use crate::server::Ui;
 use crate::server::asking::UiTerminal;
 
@@ -154,10 +154,6 @@ fn adopt(rig: &mut Rig, choice: Choice) -> Result<std::io::Result<PathBuf>, Stri
     rig.hide_for(&choice.provider);
     if let Some(live) = rig.live {
         live.chat.set(chat);
-        live.decider.set(providers::decider_in(
-            &rig.options.models.decision_model,
-            vars,
-        ));
     }
     let saved = choice::save(&choice);
     rig.choice = choice;

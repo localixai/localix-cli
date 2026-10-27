@@ -1,18 +1,15 @@
 //! `--json`: the run as JSON lines, one event each, in the order they happen. `ms` is the time
 //! since the task started. Every event has a `type`:
-//! - `run.started`: `schema`, `goal`, `session`, `model`, `decision_model`, `workspace`
+//! - `run.started`: `schema`, `goal`, `session`, `model`, `workspace`
 //! - `tool.call`: `id`, `name`, `arguments`
 //! - `tool.result`: `id`, `name`, `failed`, `fatal`, `output`, and `state` when the tool left one
-//! - `step`: one action of the browser hands: `operation`, `target`, `value`, `probability`,
-//!   `changed`, `failed`, `line`
 //! - `turn`: one model turn: `model`, tokens, `cost_usd`
 //! - `run.completed`: `status`, `exit_code`, `answer`, `data` or `data_error`, `error`,
-//!   `session`, `usage` {`agent`, `decision`, `cost_usd`}, `duration_ms`
+//!   `session`, `usage` {`agent`, `cost_usd`}, `duration_ms`
 
 use contracts::chat::Spend;
 use contracts::chat::{ToolCall, Usage};
 use contracts::tool::{ToolError, ToolOutput};
-use decision_loop::step::GoalStep;
 use serde_json::{Value, json};
 
 use super::{SCHEMA, Start, Summary};
@@ -24,7 +21,6 @@ pub(super) fn started(start: &Start) -> Value {
         "goal": start.goal,
         "session": start.session,
         "model": start.model,
-        "decision_model": start.decision_model,
         "workspace": start.workspace,
     })
 }
@@ -60,20 +56,6 @@ pub(super) fn result(call: &ToolCall, outcome: &Result<ToolOutput, ToolError>, m
     event
 }
 
-pub(super) fn step(step: &GoalStep, ms: u64) -> Value {
-    json!({
-        "type": "step",
-        "operation": step.operation.key(),
-        "target": step.element,
-        "value": step.value,
-        "probability": step.probability,
-        "changed": step.changed,
-        "failed": step.failed,
-        "line": step.trace_line(),
-        "ms": ms,
-    })
-}
-
 pub(super) fn turn(usage: &Usage, ms: u64) -> Value {
     json!({
         "type": "turn",
@@ -97,8 +79,7 @@ pub(super) fn completed(summary: &Summary) -> Value {
         "session": summary.session,
         "usage": {
             "agent": agent(summary.agent),
-            "decision": decision(summary.decision),
-            "cost_usd": summary.agent.cost + summary.decision.cost,
+            "cost_usd": summary.agent.cost,
         },
         "duration_ms": summary.millis,
     });
@@ -116,19 +97,6 @@ fn agent(spend: &Spend) -> Value {
         "calls": spend.calls,
         "input_tokens": spend.input_tokens,
         "cached_tokens": spend.cached_tokens,
-        "output_tokens": spend.output_tokens,
-        "cost_usd": spend.cost,
-        "ms": spend.millis,
-    })
-}
-
-/// The decision model's spend: defined here, with the rest of the event schema, so the hands'
-/// package can change its own types without changing the contract.
-fn decision(spend: &Spend) -> Value {
-    json!({
-        "model": spend.model,
-        "calls": spend.calls,
-        "input_tokens": spend.input_tokens,
         "output_tokens": spend.output_tokens,
         "cost_usd": spend.cost,
         "ms": spend.millis,

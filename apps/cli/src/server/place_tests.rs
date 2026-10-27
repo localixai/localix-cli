@@ -4,7 +4,7 @@ use serde_json::json;
 use super::*;
 use crate::compose::{Models, assemble};
 use crate::interrupt::Interrupt;
-use crate::testing::{NoDecider, Scratch, ScriptedChat, quiet, says};
+use crate::testing::{Scratch, ScriptedChat, quiet, says};
 
 /// A session opened from a client elsewhere: its commands run there, with what the client has
 /// and this process lacks.
@@ -38,10 +38,9 @@ fn a_session_works_in_the_clients_directory_with_the_clients_environment() {
     ]);
     let models = Models {
         chat: &chat,
-        decider: &NoDecider,
         live: None,
     };
-    let (shared, seat) = setup.split(None);
+    let (shared, seat) = setup.split();
     let root = std::fs::canonicalize(there.path()).unwrap();
     assemble(&shared, seat, models, &quiet(), &Interrupt::new(), |rig| {
         assert_eq!(rig.workspace.root(), root);

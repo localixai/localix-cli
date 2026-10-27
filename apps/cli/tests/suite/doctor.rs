@@ -10,7 +10,6 @@ fn doctor_without_a_key_checks_the_rest_then_exits_three() {
     assert_eq!(out.status.code(), Some(3), "{}", text(&out.stderr));
     let shown = text(&out.stdout);
     assert!(shown.contains("shell: "), "{shown}");
-    assert!(shown.contains("browser: "), "{shown}");
     assert!(shown.contains("OpenRouter: not signed in"), "{shown}");
     assert!(shown.contains("decision model: "), "{shown}");
 }

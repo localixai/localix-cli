@@ -10,12 +10,12 @@ use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use super::SHELL;
 use super::process::{self, Ending, Env, Finished, Job};
-use super::{SHELL, Sessions, interactive};
 use crate::ask;
 use crate::workspace::Workspace;
 
-pub(super) const NAME: &str = "bash";
+const NAME: &str = "bash";
 const DEFAULT_TIMEOUT_MS: u64 = 120_000;
 const MAX_TIMEOUT_MS: u64 = 600_000;
 
@@ -28,47 +28,16 @@ chain with `&&`. {terminal} The command is killed, with everything it started, a
 background with its output sent to a file. Each stream keeps about 10000 characters, its start \
 and its end. A non-zero exit is reported as output, not as a failure.";
 
-/// Where terminal sessions are the window's tabs, and a command here only runs to its end.
-#[cfg(unix)]
-const TERMINAL: &str = "Input is closed and there is no terminal; prefer flags like `--yes` or \
-`--no-pager`. A program that must ask (a REPL, an installer's questions, a login, another agent's \
-interface) runs in a terminal tab of the window instead.";
-
-/// Where there is no terminal to give a command.
-#[cfg(not(unix))]
+/// A command here only runs to its end, with no terminal.
 const TERMINAL: &str = "Input is closed and there is no terminal: never start an interactive \
 program (an editor, a pager, a prompt); pass flags like `--yes` or `--no-pager`.";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Args {
-    pub command: Option<String>,
-    pub timeout_ms: Option<u64>,
-    pub workdir: Option<String>,
-    #[serde(default)]
-    pub tty: bool,
-    pub session: Option<u32>,
-    pub input: Option<String>,
-    pub keys: Option<Vec<String>>,
-    pub wait_for: Option<String>,
-    pub yield_ms: Option<u64>,
-    #[serde(default)]
-    pub close: bool,
-    pub show: Option<bool>,
-}
-
-impl Args {
-    /// Whether the call is about a terminal session: everything else runs a command to its end.
-    fn interactive(&self) -> bool {
-        self.tty
-            || self.close
-            || self.session.is_some()
-            || self.input.is_some()
-            || self.keys.is_some()
-            || self.wait_for.is_some()
-            || self.yield_ms.is_some()
-            || self.show.is_some()
-    }
+struct Args {
+    command: Option<String>,
+    timeout_ms: Option<u64>,
+    workdir: Option<String>,
 }
 
 pub struct BashTool<'a> {
@@ -79,20 +48,8 @@ pub struct BashTool<'a> {
     /// -E`, `/proc/$PPID/environ`) or wherever the app keeps them, so approving a command is
     /// what keeps them from it. Read at each command: the app's secrets can change meanwhile.
     pub hidden: &'a (dyn Fn() -> Vec<String> + Sync),
-    /// Whether the person stopped the task: a running command is killed when it says so, and a
-    /// stop during a session's wait kills that session.
+    /// Whether the person stopped the task: a running command is killed when it says so.
     pub stop: &'a (dyn Fn() -> bool + Sync),
-    /// The terminal sessions that stay open between calls (and between tasks, in a session).
-    pub sessions: &'a Sessions,
-}
-
-impl BashTool<'_> {
-    /// A terminal session's call, for the window's terminal tabs: what it did, and the id of a
-    /// session it started while that session runs.
-    pub fn terminal(&self, arguments: &Value) -> Result<(ToolOutput, Option<u32>), ToolError> {
-        let args: Args = crate::args(arguments)?;
-        interactive::run(self, &args)
-    }
 }
 
 impl Tool for BashTool<'_> {
@@ -114,12 +71,6 @@ impl Tool for BashTool<'_> {
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
         let args: Args = crate::args(arguments)?;
-        // Terminal sessions are reached through `terminal`: the window's tabs.
-        if args.interactive() {
-            return Err(ToolError::Failed(
-                "terminal sessions are tabs of the window: open one there".into(),
-            ));
-        }
         let command = args.command.as_deref().unwrap_or_default();
         if command.trim().is_empty() {
             return Err(ToolError::Failed(EMPTY.into()));
@@ -156,7 +107,7 @@ impl BashTool<'_> {
     /// Where a command runs: the root, or `workdir` in it; and, for a workdir, how the person is
     /// shown it. The person judges where it runs as much as what runs: `rm -rf *` in `~` is not
     /// the same command as in the workspace.
-    pub(super) fn dir(
+    fn dir(
         &self,
         workdir: Option<&str>,
     ) -> Result<(std::path::PathBuf, Option<String>), ToolError> {
@@ -191,9 +142,8 @@ impl BashTool<'_> {
     }
 }
 
-pub(super) const EMPTY: &str = "the command is empty";
+const EMPTY: &str = "the command is empty";
 
-/// The arguments' schema; where there is a terminal, with the fields of a session.
 /// The arguments of a command run to its end.
 fn parameters() -> Value {
     json!({
@@ -212,7 +162,7 @@ fn parameters() -> Value {
 
 /// The whole command as the gate shows it, on one line: each line break becomes a return sign,
 /// and nothing else is left out, so what is approved is what runs.
-pub(super) fn summary(command: &str) -> String {
+fn summary(command: &str) -> String {
     command
         .trim_end_matches(['\n', '\r'])
         .replace("\r\n", "\n")

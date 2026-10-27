@@ -6,10 +6,6 @@
 # platform packages first, so the wrapper never points at a package that does not exist yet);
 # a version with a suffix (1.0.0-rc.1) goes out under the `next` tag, so `latest` skips it.
 #
-# The Linux package carries two binaries: bin/llx, which links WebKitGTK, and bin/llx-headless,
-# the build without a browser (ARCHITECTURE.md A8), which runs where none is installed;
-# npm/llx/bin/llx.js picks one.
-#
 #   scripts/npm-pack.sh             # dist/npm/*.tgz, nothing published
 #   scripts/npm-pack.sh --publish   # needs NODE_AUTH_TOKEN, or an npm login
 set -eu
@@ -24,8 +20,6 @@ publish=no
 
 # npm's os-cpu name, then the release target whose archive holds that binary.
 platforms="darwin-arm64:aarch64-apple-darwin darwin-x64:x86_64-apple-darwin linux-x64:x86_64-unknown-linux-gnu"
-# The platforms whose archive of the headless build (llx-<target>-headless.tar.gz) goes along.
-headless="linux-x64"
 
 rm -rf "$out"
 mkdir -p "$out"
@@ -58,17 +52,6 @@ for entry in $platforms; do
   mkdir -p "$pkg/bin"
   tar -xzf "$archive" -C "$pkg/bin" llx
   chmod 755 "$pkg/bin/llx"
-  case " $headless " in
-    *" $key "*)
-      archive="$dist/llx-$target-headless.tar.gz"
-      [ -f "$archive" ] || { echo "npm-pack: $archive is missing (scripts/dist.sh $target)" >&2; exit 1; }
-      only=$(mktemp -d)
-      tar -xzf "$archive" -C "$only" llx
-      mv "$only/llx" "$pkg/bin/llx-headless"
-      rmdir "$only"
-      chmod 755 "$pkg/bin/llx-headless"
-      ;;
-  esac
   cp LICENSE "$pkg/"
   cat >"$pkg/package.json" <<JSON
 {

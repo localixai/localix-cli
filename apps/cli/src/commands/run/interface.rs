@@ -1,9 +1,7 @@
-//! A session's interface and its server: the terminal's colours asked first, then in this
-//! process the interface over channels to a server on a thread; the daemon serves each socket's
+//! A session's interface and its server: in this process the interface over channels to a server on a thread; the daemon serves each socket's
 //! client with the same server (`serving`).
 
 use std::sync::Arc;
-use std::sync::atomic::AtomicU32;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use client::Client;
@@ -20,29 +18,10 @@ use crate::server::host::Host;
 use crate::server::{Peer, Ui, serve};
 use crate::tui;
 
-/// The terminal's colours, asked before the interface reads the keys (which would take the
-/// terminal's answers), only where terminal windows will show them (`windowed`); and xterm.js for
-/// those windows, once: until it is kept they show a grid.
-#[cfg(unix)]
-pub(super) fn colours(windowed: bool) -> Option<protocol::Theme> {
-    if crate::xterm::wanted(true, windowed, |name| std::env::var(name).ok()) {
-        crate::xterm::prefetch();
-    }
-    windowed.then(crate::colours::ask).flatten()
-}
-
-#[cfg(not(unix))]
-pub(super) fn colours(_windowed: bool) -> Option<protocol::Theme> {
-    None
-}
-
 /// A session takes the terminal for its interface, its server in this process; one that cannot
 /// draw there (no size to draw at) is a usage error, as having no terminal is. The place the
 /// interface attached from comes with it.
-pub(super) fn attach(
-    root: &Workspace,
-    theme: Option<protocol::Theme>,
-) -> Result<(Attached, Place), Failure> {
+pub(super) fn attach(root: &Workspace) -> Result<(Attached, Place), Failure> {
     let why = |error| Failure::Usage(format!("{NO_INTERFACE} ({error}): {RUN_EXEC}"));
     #[expect(
         clippy::disallowed_methods,
@@ -51,16 +30,14 @@ pub(super) fn attach(
     )]
     let ((to_server, incoming), (out, from_server)) = (channel(), channel());
     // In process the desk ends with the interface: its requests' end stops the work.
-    let terminals = Arc::default();
     let ended = Box::new(|_, _, _| {});
-    let served = serving(None, incoming, out, None, Arc::clone(&terminals), ended);
+    let served = serving(None, incoming, out, None, ended);
     let (peer, requests) = served.map_err(why)?;
     let connect: tui::Connect =
         Box::new(move |deliver| Client::in_process(to_server, from_server, deliver));
     let running = tui::start(tui::Start {
         connect,
         root: root.root(),
-        theme,
         build: String::new(),
         quit_now: interrupt::quit_now,
     });
@@ -75,8 +52,6 @@ pub(super) fn attach(
         running: Some(running),
         ui: Ui::new(peer),
         requests,
-        arrivals: None,
-        terminals,
     };
     Ok((attached, place))
 }
@@ -87,14 +62,12 @@ pub(crate) type Left = Box<dyn FnOnce(bool, Arc<Peer>, Sender<desk::Request>) + 
 
 /// A server for one interface, on a thread of its own, from `first` (a frame already read):
 /// what it serves the sessions, and what the interface asks of the desk; `ended` once the
-/// connection is gone. `host`: the daemon it is part of, when it is one. `terminals`: the
-/// numbering of its desk's terminal sessions, the ones quitting it would stop.
+/// connection is gone. `host`: the daemon it is part of, when it is one.
 pub(crate) fn serving(
     first: Option<ToServer>,
     incoming: Receiver<ToServer>,
     out: Sender<ToClient>,
     host: Option<Arc<Host>>,
-    terminals: Arc<AtomicU32>,
     ended: Left,
 ) -> std::io::Result<(Arc<Peer>, Receiver<desk::Request>)> {
     #[expect(
@@ -104,7 +77,7 @@ pub(crate) fn serving(
     let (desk, requests) = channel();
     let peer = Peer::new(out);
     let served = Arc::clone(&peer);
-    let info = info(host, terminals);
+    let info = info(host);
     let server = std::thread::Builder::new().name("llx-serve".into());
     server.spawn(move || {
         let kept = match first {
@@ -116,12 +89,10 @@ pub(crate) fn serving(
     Ok((peer, requests))
 }
 
-/// What a server says of itself: what it offers, what it can do (a daemon keeps work), and its
-/// desk's terminal sessions, numbered from `terminals` (the daemon's other desks have their own).
-pub(crate) fn info(host: Option<Arc<Host>>, terminals: Arc<AtomicU32>) -> serve::Info {
+/// What a server says of itself: what it offers, and what it can do (a daemon keeps work).
+pub(crate) fn info(host: Option<Arc<Host>>) -> serve::Info {
     serve::Info {
         max_lanes: desk::MAX_LANES,
-        shells: Arc::new(move || tools::shell::running_with(&terminals)),
         commands: repl::commands(),
         // A server's settings that cannot be read refused its run already; here the list is all.
         modes: (Modes::load()

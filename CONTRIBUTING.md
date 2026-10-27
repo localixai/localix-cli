@@ -1,7 +1,7 @@
 # Contributing
 
-Thanks for helping. llx is meant to stay small and fast: seven tools (`read`, `edit`, `bash`,
-`window`, `ask`, `agents`, `jobs`), synchronous code, no async runtime, and a release binary under
+Thanks for helping. llx is meant to stay small and fast: six tools (`read`, `edit`, `bash`,
+`ask`, `agents`, `jobs`), synchronous code, no async runtime, and a release binary under
 4 MB. A change that adds a dependency has to earn its size.
 
 ## Before you start
@@ -18,12 +18,7 @@ For a larger change, open an issue first to agree on the shape.
 ## Setup
 
 The toolchain is the latest stable Rust (`rust-toolchain.toml` installs it with rustfmt and
-clippy); the code also builds on the workspace's `rust-version`. Linux needs WebKitGTK and, for
-the browser tests, a display:
-
-```bash
-sudo apt-get install libwebkit2gtk-4.1-dev xvfb   # Debian, Ubuntu
-```
+clippy); the code also builds on the workspace's `rust-version`.
 
 ## Checks
 
@@ -70,9 +65,7 @@ For changes to the loop, the page probe or the instructions, run the live evals 
   ```
 
   and the tests are in `x_tests.rs` next to it. The architecture test enforces it.
-- Tests use fake ports, never the network. A driver or probe fix comes with a fixture under
-  `packages/tools/tests/fixtures/` and an assertion in `packages/tools/tests/browser.rs` that
-  fails without the fix.
+- Tests use fake ports, never the network.
 - Exit codes and the `--json` schema are a public contract: change them only with a schema bump
   and a CHANGELOG entry.
 - When behaviour changes, update together the `--help` text (the clap doc comments in

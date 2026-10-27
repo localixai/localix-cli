@@ -1,20 +1,16 @@
 //! llx: an ultrafast, lightweight agent runtime. It reads, edits and runs commands in a
-//! workspace, and drives a native browser window whose clicks and typing a decision model does.
-//! This binary parses the command line and runs a command. It exits here, or in the browser host
-//! once that owns the main thread (its event loop never returns): there, with the code the run
-//! returns. Nothing else exits.
+//! workspace. This binary parses the command line, runs a command and exits here, with the code
+//! the run returns. Nothing else exits.
 
 mod agents;
 mod arrivals;
 mod attach;
 mod brake;
 #[cfg(unix)]
-mod call;
 mod checkpoints;
 mod choice;
 mod cli;
 #[cfg(unix)]
-mod colours;
 mod commands;
 mod compose;
 mod context;
@@ -24,13 +20,11 @@ mod desk;
 mod error;
 mod exit;
 mod gate;
-mod hands;
 mod hardening;
 mod input;
 mod instructions;
 mod interrupt;
 mod jobs;
-mod kinds;
 mod live;
 mod logs;
 mod meta;
@@ -46,10 +40,7 @@ mod sync;
 #[cfg(test)]
 mod testing;
 mod tui;
-mod windows;
 #[cfg(unix)]
-mod xterm;
-
 use clap::Parser;
 
 #[expect(

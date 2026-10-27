@@ -12,7 +12,7 @@ pub(crate) const HELP: &str = "Type a task and press Enter; each one goes on fro
   /copy             copy the last answer
   /usage            what the session spent (also /cost)
   /new              open a new session; this one goes on in the background (also /clear)
-  /status           the model, the workspace, the mode, the session and its terminals
+  /status           the model, the workspace, the mode, the session
   /help             this help
   /exit             quit (also /quit, or Ctrl-D)
 Keys

@@ -1,6 +1,6 @@
 [package]
 name = "llx"
-description = "The agent runtime other agents build on: a window of browser pages and terminals any agent can work in, helpers on any model, decisions for scripts and CI, and a minimal agent for the terminal"
+description = "A minimal agent runtime: a coding agent for the terminal, helpers on any model, and decisions for scripts and CI"
 homepage = "https://llx.sh"
 repository = "https://github.com/rsaryev/llx"
 keywords = ["agent", "agent-runtime", "coding-agent", "cli", "llm"]
@@ -15,21 +15,13 @@ publish = false
 name = "llx"
 path = "src/main.rs"
 
-[features]
-default = ["browser"]
-# The browser window and its engine; off, the headless build (for CI and servers) has terminal
-# tabs only and links no WebView (ARCHITECTURE.md A8).
-browser = ["tools/browser"]
-
 # The composition root (rule L4): the only package that depends on tools, providers and stores.
 [dependencies]
-base64.workspace = true
 agent.workspace = true
 contracts.workspace = true
 protocol.workspace = true
 client.workspace = true
 queue.workspace = true
-decision-loop.workspace = true
 openai.workspace = true
 models.workspace = true
 openrouter.workspace = true
@@ -39,8 +31,6 @@ tools.workspace = true
 clap.workspace = true
 serde_json.workspace = true
 log.workspace = true
-# xterm.js, fetched once for the terminal windows, is checked against its pinned SHA-384.
-sha2.workspace = true
 crossterm.workspace = true
 pulldown-cmark.workspace = true
 ratatui.workspace = true

@@ -98,7 +98,7 @@ pub struct Api {
 }
 
 impl Model {
-    /// A decision model (typed answers, no text), as the browser's hands use: kept for them.
+    /// A decision model (typed answers, no text), as `llx decide` uses.
     pub fn decides(&self) -> bool {
         self.kind.as_deref() == Some("decision") && self.status.as_deref() != Some("deprecated")
     }

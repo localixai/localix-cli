@@ -263,9 +263,9 @@ fn deny_comes_before_allow() {
 
 #[test]
 fn a_bare_tool_name_matches_every_call_of_it_and_only_of_it() {
-    let any = rules(&["bash", "browser"], &[]);
+    let any = rules(&["bash", "jobs"], &[]);
     assert_eq!(any.judge("bash", "rm -rf $(pwd)"), Ruling::Allowed);
-    assert_eq!(any.judge("browser", ""), Ruling::Allowed);
+    assert_eq!(any.judge("jobs", ""), Ruling::Allowed);
     assert_eq!(any.judge("edit", "a.md"), Ruling::Unsettled);
     assert_eq!(
         rules(&["Bash(echo *)"], &[]).judge("bash", "echo hi"),

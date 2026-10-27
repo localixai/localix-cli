@@ -37,6 +37,5 @@ body:
     attributes:
       label: Output
       description: >-
-        The terminal output, ideally with `-v` (each result and model turn) or `DECISION_LOOP_DEBUG=1` (and `BROWSER_DEBUG=1`
-        for page timing). `llx doctor` helps with setup problems.
+        The terminal output, ideally with `-v` (each result and model turn). `llx doctor` helps with setup problems.
       render: text

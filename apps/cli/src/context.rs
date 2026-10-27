@@ -3,7 +3,6 @@
 //! [`crate::instructions`]). It is the same for every task and session in a workspace on a day,
 //! so the prompt cache keeps it: nothing in it changes by the minute.
 
-use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use contracts::history::Session;
@@ -23,8 +22,6 @@ pub(crate) struct Environment<'a> {
     pub root: &'a Path,
     /// The mode: what runs without asking, what is refused, whether questions are answered.
     pub mode: &'a str,
-    /// Whether the browser tool is offered.
-    pub browser: bool,
     /// Unix seconds now.
     pub now: u64,
 }
@@ -54,15 +51,9 @@ pub(crate) fn resumed(fresh: &str, session: &Session, root: &Path) -> String {
 
 /// The shell is not said here: the `bash` tool's own description names it.
 fn describe(environment: &Environment) -> String {
-    let browser = if environment.browser {
-        "available (a window opens on its first use)".to_string()
-    } else {
-        format!("not available here ({})", tools::browser::NO_WINDOW)
-    };
     format!(
         "<environment>\nWorking directory: {} (the workspace root: files change only inside it)\n\
-         System: {} {}\nDate: {} (UTC)\nMode: {}\nBrowser: {browser}\n\
-         </environment>",
+         System: {} {}\nDate: {} (UTC)\nMode: {}\n</environment>",
         environment.root.display(),
         std::env::consts::OS,
         std::env::consts::ARCH,
@@ -125,9 +116,6 @@ fn earlier(session: &Session, root: &Path) -> String {
         session.id,
         turns.join("\n")
     );
-    if !session.location.is_empty() {
-        let _ = write!(out, "\nThe browser was last at: {}", session.location);
-    }
     out.push_str("\n</previous_session>");
     out
 }

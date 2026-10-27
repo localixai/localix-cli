@@ -1,5 +1,4 @@
 use contracts::chat::Spend;
-use decision_loop::step::Operation;
 
 use super::*;
 
@@ -38,36 +37,11 @@ fn a_call_and_its_result_share_an_id() {
 }
 
 #[test]
-fn a_step_carries_what_the_hands_did() {
-    let step = GoalStep {
-        operation: Operation::Click,
-        reference: Some("e7".into()),
-        element: Some("button \"Search\"".into()),
-        value: None,
-        probability: 0.91,
-        changed: Some(true),
-        failed: None,
-        new_view: false,
-    };
-    let event = super::step(&step, 3);
-    assert_eq!(event["type"], "step");
-    assert_eq!(event["operation"], "CLICK");
-    assert_eq!(event["target"], "button \"Search\"");
-    assert_eq!(event["line"], step.trace_line());
-}
-
-#[test]
 fn the_run_completes_with_its_status_usage_and_data() {
     let agent = Spend {
         calls: 2,
         cost: 0.5,
         millis: 1200,
-        ..Spend::default()
-    };
-    let decision = Spend {
-        calls: 7,
-        cost: 0.25,
-        millis: 3400,
         ..Spend::default()
     };
     let data = Ok(json!({"n": 1}));
@@ -78,7 +52,6 @@ fn the_run_completes_with_its_status_usage_and_data() {
         data: Some(&data),
         error: None,
         agent: &agent,
-        decision: &decision,
         millis: 42,
         session: "1-ab",
     };
@@ -90,10 +63,7 @@ fn the_run_completes_with_its_status_usage_and_data() {
     // evals/run.py reads these: a rename must fail here, not report zeros there.
     assert_eq!(event["usage"]["agent"]["calls"], 2);
     assert_eq!(event["usage"]["agent"]["ms"], 1200);
-    assert_eq!(event["usage"]["decision"]["calls"], 7);
-    assert_eq!(event["usage"]["decision"]["ms"], 3400);
-    assert_eq!(event["usage"]["decision"]["cost_usd"], 0.25);
-    assert_eq!(event["usage"]["cost_usd"], 0.75);
+    assert_eq!(event["usage"]["cost_usd"], 0.5);
     assert_eq!(event["duration_ms"], 42);
     assert!(event["error"].is_null());
 }
@@ -104,7 +74,6 @@ fn the_run_starts_with_the_schema_version() {
         goal: "fix it",
         session: "1-ab",
         model: "m",
-        decision_model: "d",
         workspace: "/w",
     };
     let event = started(&start);

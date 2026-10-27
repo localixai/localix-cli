@@ -1,16 +1,13 @@
 # llx
 
-> llx is the agent runtime other agents build on, one binary under 4 MB. It opens real browser pages (the system's WebView) and
-> real terminal sessions as tabs of one native window, grouped by project, where a small decision
-> model carries out a tab's goal and the person can comment on a page. It runs three ways from one
-> binary: `llx`, a minimal agent at the terminal with seven tools; `llx exec`, one task for scripts
-> and CI (JSON events, `--schema` answers, exit codes as a contract); and `llx window`, the same window
-> for Claude Code, Codex or a script, called from their shell. It works with any model of the models.dev catalog and runs on
-> macOS and Linux.
+> llx is the agent runtime other agents build on, one binary under 4 MB. It runs three ways from one
+> binary: `llx`, a minimal agent at the terminal with six tools; `llx exec`, one task for scripts
+> and CI (JSON events, `--schema` answers, exit codes as a contract); and `llx decide`, a quick
+> choice about stdin. It works with any model of the models.dev catalog and runs on macOS and Linux.
 
 ## Install
 
-- `npm install -g @localixai/llx`, or `curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh` (macOS and Linux x86_64, checked against `SHA256SUMS`; on Linux where WebKitGTK is missing it installs the headless build, which has no browser).
+- `npm install -g @localixai/llx`, or `curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh` (macOS and Linux x86_64, checked against `SHA256SUMS`).
 - Sign in with `/login` in a session (`llx`), or set the provider's key (for example `OPENROUTER_API_KEY`).
 
 ## Use
@@ -30,7 +27,6 @@
 
 ## From another agent
 
-- `llx window '<json>'` is one call of llx's `window` (browser pages and terminal sessions as tabs, with a `goal` carried out by llx's decision model) from another agent's shell; `llx window` alone prints its actions and arguments. Tabs stay for their owner (the project, or `--as`) until `llx window --end`.
 - `llx exec` hands a task to a helper on any provider and model; `llx decide` answers a quick choice about stdin.
 - Guide: https://llx.sh/docs/agents.
 

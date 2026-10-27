@@ -4,7 +4,7 @@ import { escapeHtml } from './highlight';
 /** The card every link preview shows, as on the landing (index.html). */
 const IMAGE = `${SITE}/og.png`;
 const IMAGE_ALT =
-  'llx at work: a step list beside a browser window that has just searched flights from Zurich to London, the cheapest highlighted';
+  'llx at a shell: an exec task answered with a path, and a decide that picked minor';
 
 export type Meta = { title: string; headline: string; description: string; route: string };
 

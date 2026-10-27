@@ -10,6 +10,8 @@ license.workspace = true
 # No workspace package: the wire is a leaf (ARCHITECTURE.md L6).
 [dependencies]
 serde = { workspace = true }
+
+[dev-dependencies]
 serde_json = { workspace = true }
 
 [lints]

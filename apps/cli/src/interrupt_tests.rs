@@ -121,12 +121,3 @@ fn a_job_is_known_by_its_lane() {
         "the other lane's job-1 goes on"
     );
 }
-
-#[test]
-fn closing_the_daemon_s_window_stops_no_terminal_s_task() {
-    let task = Interrupt::new();
-    task.begin();
-    window_closed_served();
-    assert!(!task.stopped(), "a window closed is not a session stopped");
-    task.end();
-}

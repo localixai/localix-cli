@@ -73,7 +73,7 @@ fn a_failed_or_empty_answer_names_nothing() {
 fn an_answer_is_cleaned_to_one_short_line() {
     for (said, title) in [
         ("\"Fix the parser.\"", "Fix the parser"),
-        ("  Add   tabs\tto the browser!  ", "Add tabs to the browser"),
+        ("  Add   tabs\tto the printer!  ", "Add tabs to the printer"),
         ("«Διόρθωση δοκιμών»", "Διόρθωση δοκιμών"),
         (
             "Title: Speed up the build\nbecause it is slow",

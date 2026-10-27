@@ -1,4 +1,4 @@
-//! How a command, a file change or a browser action is approved at the terminal, and nothing once
+//! How a command or a file change is approved at the terminal, and nothing once
 //! the task is stopped. Which effects are asked at all is the mode's (`mode::ModeGate`). The
 //! question goes to the terminal itself (`/dev/tty`), so it works while stdin is a pipe, stdout
 //! carries JSON and stderr goes to a file. What the question shows came from the model: its

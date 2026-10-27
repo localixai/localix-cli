@@ -1,12 +1,9 @@
 //! What a session is built from ([`Setup`]), what its lanes share ([`Shared`]), and what one
 //! lane is built from beside it ([`Seat`]).
 
-use std::sync::Arc;
-
 use contracts::history::Session;
 use serde_json::Value;
 use session::Sessions;
-use tools::browser::{Browser, Page};
 use tools::workspace::Workspace;
 
 use crate::choice::Choice;
@@ -16,8 +13,8 @@ use crate::modes::Modes;
 use crate::rules::Rules;
 use crate::server::Ui;
 
-/// Everything a session is built from, decided before the browser's event loop takes the main
-/// thread (so a bad argument still fails fast, with no window machinery started).
+/// Everything a session is built from, decided before any lane starts (so a bad argument
+/// still fails fast).
 pub(crate) struct Setup {
     pub options: RunOptions,
     /// The provider, model and reasoning level the agent thinks with.
@@ -43,29 +40,13 @@ pub(crate) struct Setup {
     pub session: Session,
     /// The interface a session at a terminal is shown in.
     pub ui: Option<Ui>,
-    /// Whether the browser and terminal windows show by themselves (`windows::shown`).
-    pub shown: bool,
-    /// The person's terminal colours, which terminal windows take.
-    #[cfg(unix)]
-    pub theme: Option<tools::shell::Theme>,
 }
 
-/// What every lane of a session shares: the options, the workspace, the browser's page (one
-/// action at a time), the session store, and the fresh context, the same bytes for each lane so
+/// What every lane of a session shares: the options, the workspace, the session store, and the fresh context, the same bytes for each lane so
 /// the prompt cache is shared too.
 pub(crate) struct Shared {
     pub options: RunOptions,
     pub workspace: Workspace,
-    pub page: Option<Page>,
-    /// The browser the terminal windows open in, beside the page.
-    pub browser: Option<Browser>,
-    /// Whether the windows show by themselves (`windows::shown`).
-    pub shown: bool,
-    /// The person's terminal colours, which terminal windows take.
-    #[cfg(unix)]
-    pub theme: Option<tools::shell::Theme>,
-    /// One browser action at a time, every lane's and every agent's.
-    pub browser_lock: crate::kinds::BrowserLocks,
     pub history: Sessions,
     /// The context with no earlier session: what a new lane starts with.
     pub fresh: String,
@@ -78,10 +59,6 @@ pub(crate) struct Shared {
     pub asks: bool,
     /// How many lanes are in a task now.
     pub working: std::sync::atomic::AtomicUsize,
-    /// Every lane's queue, for what the window says.
-    pub lanes: Arc<crate::arrivals::Lanes>,
-    /// Terminal sessions' ids, shared by the lanes: an id names one session in the one window.
-    pub terminal_ids: Arc<std::sync::atomic::AtomicU32>,
     /// The person at this interface, asked one question at a time (`gate::one_question`): each
     /// terminal of the daemon is a person of its own.
     pub asking: std::sync::Mutex<()>,
@@ -98,27 +75,9 @@ pub(crate) struct Seat {
 }
 
 impl Setup {
-    /// What the lanes share, with the page on `browser`, and the first lane's seat.
-    pub(crate) fn split(self, browser: Option<Browser>) -> (Shared, Seat) {
-        let lanes = crate::arrivals::listening(browser.as_ref());
-        self.split_into(browser, lanes)
-    }
-
-    /// [`Setup::split`], with `lanes` told what the person does in the window: a daemon's, which
-    /// every client's lanes join.
-    pub(crate) fn split_into(
-        self,
-        browser: Option<Browser>,
-        lanes: Arc<crate::arrivals::Lanes>,
-    ) -> (Shared, Seat) {
-        let shown = self.shown;
+    /// What the lanes share, and the first lane's seat.
+    pub(crate) fn split(self) -> (Shared, Seat) {
         let shared = Shared {
-            page: browser.clone().map(|browser| Page::new(browser, !shown)),
-            browser,
-            shown,
-            #[cfg(unix)]
-            theme: self.theme,
-            browser_lock: Default::default(),
             options: self.options,
             workspace: self.workspace,
             history: self.history,
@@ -130,8 +89,6 @@ impl Setup {
             terminal: self.terminal,
             asks: self.asks,
             working: Default::default(),
-            lanes,
-            terminal_ids: Arc::default(),
             asking: Default::default(),
         };
         let seat = Seat {

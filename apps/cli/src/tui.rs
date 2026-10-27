@@ -78,7 +78,6 @@ pub(crate) type Connect<'a> = Box<dyn FnOnce(Deliver) -> io::Result<Client> + 'a
 pub(crate) struct Start<'a> {
     pub connect: Connect<'a>,
     pub root: &'a std::path::Path,
-    pub theme: Option<protocol::Theme>,
     pub build: String,
     pub quit_now: fn() -> !,
 }
@@ -129,7 +128,7 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
     }))?;
     let hello = Command::Initialize {
         version: protocol::VERSION,
-        place: Some(here(start.root, start.theme)),
+        place: Some(here(start.root)),
         build: start.build,
     };
     let Ok(Done::Initialized {
@@ -189,8 +188,8 @@ impl Drop for Gone {
 /// Where this interface is: the sessions it opens work there, and their commands run with its
 /// environment (a variable that is not text is left out), and the command line it was started
 /// with, whose options the sessions take.
-fn here(root: &std::path::Path, theme: Option<protocol::Theme>) -> Place {
-    client::place::here(root, theme, std::env::args().skip(1).collect())
+fn here(root: &std::path::Path) -> Place {
+    client::place::here(root, std::env::args().skip(1).collect())
 }
 
 impl Running {

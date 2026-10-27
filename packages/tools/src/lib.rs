@@ -1,33 +1,20 @@
 //! The tools, one module each. A tool implements the agent's tool protocol
-//! (`contracts::tool::Tool`) and, for what the hands drive, the view protocol
-//! (`contracts::view::View`); it knows nothing of the agent, the hands or the models. A tool with
+//! (`contracts::tool::Tool`); it knows nothing of the agent or the models. A tool with
 //! an effect outside the conversation (a changed file, a command) asks a `contracts::gate::Gate`
 //! first.
 //! - [`workspace`]: the directory the coding tools work in: where paths resolve, where files may
 //!   change.
 //! - [`fs`]: `read` (a file's numbered lines, a directory's entries) and `edit` (exact replacement,
 //!   or a new file).
-//! - [`shell`]: `bash`: a command run in the workspace, its exit code and its output; on unix,
-//!   also a program that must ask, kept open in a terminal session between calls.
-//! - [`browser`]: a native browser window on the system WebView (the `browser` feature; without
-//!   it, the same names with nothing behind them).
-//! - [`served`]: a page on disk opened as a site: its directory served on the loopback.
+//! - [`shell`]: `bash`: a command run in the workspace, its exit code and its output.
 //! - [`ask`]: questions to the person (`contracts::person::Person`), who answers in the app.
 
 use contracts::gate::{Effect, Gate, Verdict};
 use contracts::tool::ToolError;
 
 pub mod ask;
-#[cfg(feature = "browser")]
-pub mod browser;
-// The headless build's `browser` (A8): the same names, nothing behind them.
-#[cfg(not(feature = "browser"))]
-#[path = "headless.rs"]
-pub mod browser;
 pub mod fs;
-pub mod served;
 pub mod shell;
-pub mod window;
 pub mod workspace;
 
 #[cfg(test)]

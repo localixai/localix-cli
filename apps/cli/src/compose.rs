@@ -1,10 +1,7 @@
 //! The composition root: the one place that builds the packages and hands them to the agent
-//! through its ports. [`compose`] builds the providers (the chat model, and the decision model
-//! behind the browser's hands); [`assemble`] builds the rest around any models: the brake, the
-//! hands, the workspace, the mode's gate, the person, and the tools: `read`, `edit`, `bash`,
-//! `browser` where a window can be shown, and `ask` in a session. The window itself opens only
-//! when the browser is first used. The terminal sessions `bash` keeps are made here too, so they
-//! are closed when `assemble` returns, before `main` exits (which would skip their `Drop`).
+//! through its ports. [`compose`] builds the chat model; [`assemble`] builds the rest around any
+//! model: the brake, the workspace, the mode's gate, the person, and the tools: `read`, `edit`,
+//! `bash` and `ask` in a session.//! are closed when `assemble` returns, before `main` exits (which would skip their `Drop`).
 
 mod lane;
 mod rig;
@@ -20,18 +17,14 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
 use contracts::gate::Gate;
-use contracts::hands::Hands;
 use contracts::person::{Person, Question, Reply};
-use decision_loop::decision_loop::DecisionLoop;
-use decision_loop::meter::{Meter, MeteredDecider};
-use decision_loop::step::GoalStep;
 use provider_kit::App;
 use tools::ask::AskTool;
 
 use crate::agents::Registry;
 use crate::agents::inbox::MainInbox;
 use crate::agents::kit::{Kit, Own, Tools};
-use crate::brake::{Brake, BrakedDecider};
+use crate::brake::Brake;
 use crate::checkpoints::Checkpoints;
 use crate::gate::{Stoppable, Tty};
 use crate::instructions;
@@ -42,7 +35,6 @@ use crate::mode::{ModeCell, ModeGate};
 use crate::output::Output;
 use crate::server::asking::{UiGate, UiPerson};
 use crate::sync::lock;
-use crate::windows;
 
 /// Who calls the providers: attribution, the sign-in pages, the folder sign-ins are saved in.
 pub(crate) const APP: App = App {
@@ -52,8 +44,8 @@ pub(crate) const APP: App = App {
 };
 
 /// Build a lane's agent from `seat` over `shared`, around `models`, reporting on `output` and
-/// stopped by `interrupt`, and run `work` with it: here the brake, the hands, the mode's gate and
-/// the person; [`equip`] the rest.
+/// stopped by `interrupt`, and run `work` with it: here the brake, the mode's gate and the
+/// person; [`equip`] the rest.
 pub(crate) fn assemble(
     shared: &Shared,
     seat: Seat,
@@ -65,23 +57,6 @@ pub(crate) fn assemble(
     let closed = || output.closed();
     let stopped = || interrupt.stopped();
     let brake = Brake::new(models.chat, &closed, &stopped);
-    let meter = Meter::default();
-    let braked = BrakedDecider {
-        inner: models.decider,
-        interrupt,
-    };
-    let traced = crate::hands::Traced::new(&braked);
-    let decider = MeteredDecider {
-        inner: &traced,
-        meter: &meter,
-    };
-    let on_step = |step: &GoalStep| output.step(step);
-    let hands = DecisionLoop {
-        decider: &decider,
-        on_step: &on_step,
-        pause: &crate::hands::pause,
-        max_actions: shared.options.max_steps,
-    };
     let mode = ModeCell::new(seat.mode.clone());
     let waited = |took| brake.extend(took);
     let approver = match &seat.ui {
@@ -118,8 +93,6 @@ pub(crate) fn assemble(
         output,
         interrupt,
         brake: &brake,
-        meter: &meter,
-        hands: &hands,
         mode: &mode,
         gate: &gate,
         ask: &ask,
@@ -136,39 +109,18 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
     let Shared {
         options,
         workspace,
-        page,
-        browser_lock,
         history,
         fresh,
         terminal,
         asks,
         ..
     } = shared;
-    // The one window as its tabs, where it shows; the lane's are of its directory.
-    let group = windows::group(&seat.session.workspace, workspace.root());
     // What commands never see: the variables of the key the models are called with, and of a
     // provider chosen later with `/login` (hiding is no barrier anyway).
     let hidden_names = Mutex::new(seat.choice.provider.hidden());
     let hidden = || lock(&hidden_names).clone();
     // The lane's queue: what reaches its run from outside its calls.
     let lane_queue = Arc::new(crate::arrivals::queue(output.ui().cloned()));
-    shared.lanes.join(&lane_queue);
-    let tabs = (shared.browser.clone())
-        .filter(|_| shared.shown)
-        .map(|browser| windows::Tabs::of(browser, &group).owned(&shared.lanes, &lane_queue));
-    // Terminal windows open only where windows show; a call can still show or hide one.
-    #[cfg(unix)]
-    let sessions = windows::terminals(
-        (shared.browser.clone()).map(|b| {
-            let owner = (Arc::clone(&shared.lanes), Arc::downgrade(&lane_queue));
-            let owner = (owner.0, owner.1, group.clone());
-            windows::panels(b, shared.theme, owner)
-        }),
-        shared.shown,
-    )
-    .numbered(Arc::clone(&shared.terminal_ids));
-    #[cfg(not(unix))]
-    let sessions = tools::shell::Sessions::default();
     let checkpoints = Checkpoints::default();
     let window = AtomicU64::new(seat.choice.selection.model().context);
     // Each participant keeps its own conversation; one pipeline prepares them all.
@@ -181,13 +133,6 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
         gate: base.gate,
         hidden: &hidden,
         stopped: base.stopped,
-        sessions: &sessions,
-        browser: page.as_ref(),
-        hands: base.hands,
-        windowed: tabs
-            .as_ref()
-            .map(|tabs| tabs as &dyn tools::window::Windowed),
-        browser_lock,
         context: fresh,
         max_turns: options.max_turns,
         window: &window,
@@ -237,7 +182,6 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
         jobs: &jobs,
         jobs_kit: &jobs_kit,
         inbox: &inbox,
-        sessions: &sessions,
         checkpoints: &checkpoints,
         window: &window,
         strategy: &strategy,
@@ -252,8 +196,6 @@ struct Base<'a> {
     output: &'a Output,
     interrupt: &'a Interrupt,
     brake: &'a Brake<'a>,
-    meter: &'a Meter,
-    hands: &'a dyn Hands,
     mode: &'a ModeCell,
     gate: &'a dyn Gate,
     ask: &'a AskTool<'a>,
@@ -269,7 +211,6 @@ struct Lane<'a> {
     jobs: &'a Jobs,
     jobs_kit: &'a jobs::Kit<'a>,
     inbox: &'a MainInbox<'a>,
-    sessions: &'a tools::shell::Sessions,
     checkpoints: &'a Checkpoints,
     window: &'a AtomicU64,
     strategy: &'a agent::history::Pipeline,

@@ -43,7 +43,6 @@ pub(crate) fn daemon(path: &Path) -> Daemon {
         let _ = peers.send(Arc::clone(&peer));
         let info = Info {
             max_lanes: 3,
-            shells: Arc::new(Vec::new),
             commands: vec![],
             modes: vec![],
             background: false,
@@ -151,10 +150,7 @@ fn a_line_that_is_not_a_frame_is_dropped_and_said() {
         matches!(&frames[0], ToClient::Event { event: Event::Note(note), .. } if note.contains("dropped")),
         "{frames:?}"
     );
-    let done = Done::Work {
-        shells: 0,
-        running: vec![],
-    };
+    let done = Done::Work { running: vec![] };
     assert_eq!(frames[1], ToClient::Done { id: 7, done });
 }
 

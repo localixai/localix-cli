@@ -88,7 +88,7 @@ impl OpenRouter {
         }
     }
 
-    /// This client for the browser's decisions: a decision is short and cheap, so one that hangs
+    /// This client for decisions: a decision is short and cheap, so one that hangs
     /// is given up on sooner and asked once more.
     #[must_use]
     pub fn deciding(self) -> Self {

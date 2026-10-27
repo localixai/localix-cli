@@ -88,15 +88,13 @@ def summarize(results, binary, models, measured=None):
         "cli": cli_metrics(binary),
         "tasks": {
             task: {
-                "kind": rs[0].get("kind", "browser"),
+                "kind": rs[0].get("kind", "code"),
                 "runs": len(rs),
                 "passed": sum(r["ok"] for r in rs),
                 "median_s": round(st.median(r["wall"] for r in rs), 1),
                 "agent_s": round(st.median(r.get("agent_s") or 0 for r in rs), 1),
-                "jev_s": round(st.median(r.get("decision_s") or 0 for r in rs), 1),
                 "turns": round(st.median(r.get("turns") or 0 for r in rs), 1),
                 "tool_calls": round(st.median(r.get("tool_calls") or 0 for r in rs), 1),
-                "decisions": round(st.median(r.get("decisions") or 0 for r in rs), 1),
                 "cost": round(st.median(r["cost"] for r in rs), 5),
             }
             for task, rs in tasks.items()
@@ -112,7 +110,7 @@ def load_runs():
 
 def render_history(runs):
     """Every run, newest first, then the latest run's tasks against the run before it. Runs from
-    before 0.2 (the browser-only CLI) lack some columns; they show as `-`."""
+    before 0.2 lack some columns; they show as `-`."""
     show = lambda value, unit="": "-" if value is None else f"{value}{unit}"
     lines = [
         "# Benchmark history",
@@ -138,7 +136,7 @@ def render_history(runs):
         tasks = {}
         for run in models.values():
             for task, t in run["tasks"].items():
-                tasks.setdefault(task, t.get("kind", "browser"))
+                tasks.setdefault(task, t.get("kind", "code"))
         for task, kind in tasks.items():
             cells = []
             for run in models.values():
@@ -151,14 +149,14 @@ def render_history(runs):
         same = [run for run in runs[:-1] if agent(run) == agent(latest)]
         previous = same[-1] if same else None
         lines += ["", f"## Tasks, {latest['date']}" + (f" (vs {previous['date']})" if previous else ""), "",
-                  "| Task | Kind | Passed | Median | Agent | Hands | Turns | Tool calls | Decisions | Cost |",
-                  "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+                  "| Task | Kind | Passed | Median | Agent | Turns | Tool calls | Cost |",
+                  "| --- | --- | --- | --- | --- | --- | --- | --- |"]
         for task, t in latest["tasks"].items():
             before = (previous or {}).get("tasks", {}).get(task)
             was = f" (was {before['median_s']} s)" if before and before["median_s"] != t["median_s"] else ""
-            lines.append(f"| {task} | {t.get('kind', 'browser')} | {t['passed']}/{t['runs']} | {t['median_s']} s{was} | "
-                         f"{show(t.get('agent_s'), ' s')} | {show(t.get('jev_s'), ' s')} | {show(t.get('turns'))} | "
-                         f"{show(t.get('tool_calls'))} | {show(t.get('decisions'))} | ${t['cost']:.4f} |")
+            lines.append(f"| {task} | {t.get('kind', 'code')} | {t['passed']}/{t['runs']} | {t['median_s']} s{was} | "
+                         f"{show(t.get('agent_s'), ' s')} | {show(t.get('turns'))} | "
+                         f"{show(t.get('tool_calls'))} | ${t['cost']:.4f} |")
     return "\n".join(lines) + "\n"
 
 
@@ -181,14 +179,14 @@ def render_readme_block(run, runs=()):
     models = run.get("models", {})
     kinds = {}
     for t in run["tasks"].values():
-        kind = kinds.setdefault(t.get("kind", "browser"), [0, 0])
+        kind = kinds.setdefault(t.get("kind", "code"), [0, 0])
         kind[0] += t["passed"]
         kind[1] += t["runs"]
     by_kind = ", ".join(f"{kind} {p}/{n}" for kind, (p, n) in sorted(kinds.items()))
     return "\n".join([
         README_START,
-        f"Latest run, {run['date']} on {run['host']}: the agent on {models.get('agent')}, the browser's hands on "
-        f"{models.get('decision')}, from [benchmarks/HISTORY.md](benchmarks/HISTORY.md):",
+        f"Latest run, {run['date']} on {run['host']}: the agent on {models.get('agent')}, from "
+        f"[benchmarks/HISTORY.md](benchmarks/HISTORY.md):",
         "",
         "| Metric | Value |",
         "| --- | --- |",

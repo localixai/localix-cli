@@ -29,14 +29,13 @@ fn a_prompt_runs_with_its_options() {
         "last.txt",
         "--max-turns",
         "7",
-        "--show-browser",
         "fix the tests",
     ])
     .unwrap();
     assert_eq!(joined(&cli.prompt).as_deref(), Some("fix the tests"));
     assert!(cli.command.is_none());
     let run = cli.run;
-    assert!(run.yes && run.json && run.show_browser);
+    assert!(run.yes && run.json);
     assert_eq!(run.cd, Some(PathBuf::from("/tmp")));
     assert_eq!(run.models.provider.as_deref(), Some("openai"));
     assert_eq!(run.models.model.as_deref(), Some("openai/gpt-5-mini"));

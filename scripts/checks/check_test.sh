@@ -38,13 +38,11 @@ expect() {
   fi
 }
 
-core="-p agent -p contracts -p decision-loop -p llx -p models -p openai -p openrouter -p session -p tools"
+core="-p agent -p contracts -p llx -p models -p openai -p openrouter -p session -p tools"
 
-expect "a core crate: it and every dependent, both builds, tested" "" "fmt
+expect "a core crate: it and every dependent, tested" "" "fmt
 clippy $core
-clippy-headless $core
-test $core
-test-headless -p llx -p tools" packages/contracts/src/tool.rs
+test $core" packages/contracts/src/tool.rs
 
 expect "fast: fmt, clippy on the crate changed, the repository's rules" --fast "fmt
 clippy -p contracts
@@ -52,28 +50,20 @@ repo" packages/contracts/src/tool.rs
 
 expect "the app: itself; its tests hold the rules" "" "fmt
 clippy -p llx
-clippy-headless -p llx
-test -p llx
-test-headless -p llx" apps/cli/src/main.rs
+test -p llx" apps/cli/src/main.rs
 
-expect "a leaf crate with no features: headless tests only where features are" "" "fmt
+expect "a leaf crate: it and its dependents" "" "fmt
 clippy -p llx -p queue
-clippy-headless -p llx -p queue
-test -p llx -p queue
-test-headless -p llx" packages/queue/src/lib.rs
+test -p llx -p queue" packages/queue/src/lib.rs
 
 expect "a file a crate includes is the crate's (and Markdown has links)" "" "fmt
 clippy -p agent -p llx
-clippy-headless -p agent -p llx
 test -p agent -p llx
-test-headless -p llx
 mdlinks" packages/agent/src/prompt.md
 
 expect "the lock: the whole workspace, and the binary's size" "" "fmt
 clippy --workspace
-clippy-headless --workspace
 test --workspace
-test-headless --workspace
 size" Cargo.lock
 
 expect "clippy.toml: the whole workspace, no size" --fast "fmt
@@ -82,9 +72,7 @@ repo" clippy.toml
 
 expect "a crate's manifest: its crates, and the size" "" "fmt
 clippy -p llx -p tools
-clippy-headless -p llx -p tools
 test -p llx -p tools
-test-headless -p llx -p tools
 size" packages/tools/Cargo.toml
 
 expect "a doc: the rules, the site, the links" "" "repo
@@ -126,18 +114,14 @@ shellcheck" scripts/hooks/pre-commit
 
 expect "a file gone: its crate, and the links that may name it" "" "fmt
 clippy -p llx -p tools
-clippy-headless -p llx -p tools
 test -p llx -p tools
-test-headless -p llx -p tools
 mdlinks" packages/tools/src/no-such-file.rs
 
 expect "nothing changed: nothing to check" "" ""
 
 expect "every check: the workspace, the rules inside its tests" --all "fmt
 clippy --workspace
-clippy-headless --workspace
 test --workspace
-test-headless --workspace
 size
 site
 action

@@ -3,32 +3,24 @@
 use std::sync::Arc;
 
 use contracts::chat::Chat;
-use contracts::model::Decider;
-use tools::browser::Browser;
 
 use super::{Rig, Seat, Setup, Shared, assemble};
 use crate::interrupt::{self, Interrupt};
 use crate::live::Live;
 use crate::output::Output;
 
-/// The two models a session thinks with.
+/// The model a session thinks with.
 #[derive(Clone, Copy)]
 pub(crate) struct Models<'a> {
     pub chat: &'a dyn Chat,
-    /// Behind the browser's hands.
-    pub decider: &'a dyn Decider,
     /// Where `/login` puts the models it chose; `None` when they cannot change.
     pub live: Option<&'a Live>,
 }
 
-/// Build the agent from `setup` on the chosen provider's chat model and OpenRouter's decision
-/// model, with the browser when `browser` is given, and run `work` with it; its exit code.
-pub(crate) fn compose(
-    setup: Setup,
-    browser: Option<Browser>,
-    work: impl FnOnce(&mut Rig) -> i32,
-) -> i32 {
-    let (shared, seat) = setup.split(browser);
+/// Build the agent from `setup` on the chosen provider's chat model, and run `work` with it; its
+/// exit code.
+pub(crate) fn compose(setup: Setup, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
+    let (shared, seat) = setup.split();
     lane(&shared, seat, work)
 }
 
@@ -37,10 +29,9 @@ pub(crate) fn compose(
 pub(crate) fn lane(shared: &Shared, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
     // The session's environment: in the daemon, its client's, whose keys it thinks with.
     let vars = shared.workspace.env();
-    let live = Live::of(&seat.choice, &shared.options.models.decision_model, vars);
+    let live = Live::of(&seat.choice, vars);
     let models = Models {
         chat: &live.chat,
-        decider: &live.decider,
         live: Some(&live),
     };
     lane_with(shared, seat, models, work)

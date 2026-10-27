@@ -1,201 +1,60 @@
 [
- {
-  "id": "sum-csv",
-  "kind": "code",
-  "fixture": "sum-csv",
-  "goal": "Write a Python script total.py (standard library only) that prints the sum of the amount column in sales.csv. Run it and tell me the total.",
-  "contains": ["599.95"],
-  "check": "python3 total.py | grep -q '599\\.95'"
- },
- {
-  "id": "fix-test",
-  "kind": "code",
-  "fixture": "fix-test",
-  "goal": "The unit tests in this directory fail (python3 -m unittest). Find the bug and fix it in the code, not in the tests, then run the tests again.",
-  "check": "python3 -m unittest -q && cmp -s test_stats.py \"$FIXTURE/test_stats.py\""
- },
- {
-  "id": "rename",
-  "kind": "code",
-  "fixture": "rename",
-  "goal": "Rename the function area_of_circle to circle_area everywhere in this project, then run python3 report.py to make sure it still works.",
-  "check": "! grep -rq --include='*.py' area_of_circle . && grep -q 'def circle_area' geometry.py && python3 report.py | grep -q 'circle: 78.54'"
- },
- {
-  "id": "explain",
-  "kind": "code",
-  "fixture": "explain",
-  "goal": "Without changing any file: which port does server.py use when APP_PORT is not set, and how many times does connect() retry after its first failed attempt? Answer with both numbers.",
-  "contains": ["8417"],
-  "matches": ["\\b(6|six)\\b"],
-  "check": "diff -r -x __pycache__ \"$FIXTURE\" ."
- },
- {
-  "id": "answer-prompts",
-  "kind": "code",
-  "fixture": "answer-prompts",
-  "goal": "Run python3 setup.py and answer its questions: the project name is orbit and the port is 8123. Then tell me what it wrote.",
-  "contains": ["8123"],
-  "check": "grep -qx 'name = orbit' config.ini && grep -qx 'port = 8123' config.ini && cmp -s setup.py \"$FIXTURE/setup.py\"",
-  "uses": [{"name": "window", "arguments": {"action": "open", "kind": "terminal"}}, {"name": "window", "arguments": {"action": "interact"}, "has": ["tab"]}],
-  "avoids": [{"name": "edit", "like": {"path": "config\\.ini$"}}, {"name": "bash", "like": {"command": "(>>?\\s*\\S*config\\.ini|\\btee\\s+(-a\\s+)?\\S*config\\.ini|\\b(cp|mv)\\b[^;&|\\n]*config\\.ini|\\bsed\\s+-i[^;&|\\n]*config\\.ini|open\\([^)]*config\\.ini)"}}, {"name": "window", "like": {"input": "(>>?\\s*\\S*config\\.ini|\\btee\\s+(-a\\s+)?\\S*config\\.ini|\\b(cp|mv)\\b[^;&|\\n]*config\\.ini|\\bsed\\s+-i[^;&|\\n]*config\\.ini|open\\([^)]*config\\.ini)"}}]
- },
- {
-  "id": "plan-csv",
-  "kind": "code",
-  "fixture": "plan-csv",
-  "args": ["--mode", "plan"],
-  "goal": "Add a --csv option to report.py that prints the same rows as CSV, with a header line, instead of the table, and a unit test for it.",
-  "contains": ["report.py", "--csv", "test_report.py"],
-  "matches": ["\\bitem\\W+qty\\W+price\\W+value\\b", "\\bassum", "(^|\\n)\\s*([-*]|\\d+[.)])\\s.*\\n\\s*([-*]|\\d+[.)])\\s"],
-  "check": "diff -r -x __pycache__ \"$FIXTURE\" ."
- },
- {
-  "id": "login",
-  "kind": "browser",
-  "goal": "Open https://the-internet.herokuapp.com/login and log in with username \"tomsmith\" and password \"SuperSecretPassword!\". Tell me the message the page shows after logging in.",
-  "contains": ["secure area"]
- },
- {
-  "id": "dynamic",
-  "kind": "browser",
-  "goal": "Open https://the-internet.herokuapp.com/dynamic_loading/1, start the loading and wait until it finishes. What text appears?",
-  "contains": ["Hello World"]
- },
- {
-  "id": "todomvc",
-  "kind": "browser",
-  "goal": "Open https://todomvc.com/examples/react/dist/ and add three todos: \"buy milk\", \"walk the dog\", \"write code\". Then mark walk the dog as completed and tell me how many items are left.",
-  "matches": ["\\b(2|two)\\b"]
- },
- {
-  "id": "pizza-form",
-  "kind": "browser",
-  "goal": "Open https://httpbin.org/forms/post and order a large pizza with bacon and extra cheese for customer \"Ada Lovelace\", phone \"555-0100\", email \"ada@example.com\", preferred delivery time \"19:30\", then submit the order. Report the customer name, size and toppings the server received.",
-  "contains": ["Ada Lovelace", "large", "bacon", "cheese"]
- },
- {
-  "id": "wiki-search",
-  "kind": "browser",
-  "goal": "Open https://en.wikipedia.org/wiki/Main_Page, search Wikipedia for \"Rust programming language\" and open its article. Who designed the language, according to the article?",
-  "contains": ["Graydon Hoare"]
- },
- {
-  "id": "hn-top",
-  "kind": "browser",
-  "goal": "Open https://news.ycombinator.com and open the comments page of the top story. Give its title and the address of the comments page.",
-  "schema": {
-   "type": "object",
-   "properties": {"title": {"type": "string"}, "comments_url": {"type": "string"}},
-   "required": ["title", "comments_url"]
+  {
+    "id": "sum-csv",
+    "kind": "code",
+    "fixture": "sum-csv",
+    "goal": "Write a Python script total.py (standard library only) that prints the sum of the amount column in sales.csv. Run it and tell me the total.",
+    "contains": [
+      "599.95"
+    ],
+    "check": "python3 total.py | grep -q '599\\.95'"
   },
-  "contains": ["news.ycombinator.com/item?id="]
- },
- {
-  "id": "quiz-choose",
-  "kind": "browser",
-  "goal": "Open https://www.w3schools.com/quiztest/quiztest.asp?qtest=JS, accept the cookie banner, choose the answer \"<script>\" and click Next. Which question does the quiz show now?",
-  "matches": ["\\b2 of 25\\b|question (no\\.? ?|number |#)?2\\b"]
- },
- {
-  "id": "flights-search",
-  "kind": "browser",
-  "goal": "Open https://www.google.com/travel/flights?hl=en and search one-way flights from \"Zurich\" to \"London\" on \"Nov 20\". Give the cheapest price shown and its airline.",
-  "schema": {
-   "type": "object",
-   "properties": {"price": {"type": "string"}, "airline": {"type": "string"}},
-   "required": ["price", "airline"]
+  {
+    "id": "fix-test",
+    "kind": "code",
+    "fixture": "fix-test",
+    "goal": "The unit tests in this directory fail (python3 -m unittest). Find the bug and fix it in the code, not in the tests, then run the tests again.",
+    "check": "python3 -m unittest -q && cmp -s test_stats.py \"$FIXTURE/test_stats.py\""
+  },
+  {
+    "id": "rename",
+    "kind": "code",
+    "fixture": "rename",
+    "goal": "Rename the function area_of_circle to circle_area everywhere in this project, then run python3 report.py to make sure it still works.",
+    "check": "! grep -rq --include='*.py' area_of_circle . && grep -q 'def circle_area' geometry.py && python3 report.py | grep -q 'circle: 78.54'"
+  },
+  {
+    "id": "explain",
+    "kind": "code",
+    "fixture": "explain",
+    "goal": "Without changing any file: which port does server.py use when APP_PORT is not set, and how many times does connect() retry after its first failed attempt? Answer with both numbers.",
+    "contains": [
+      "8417"
+    ],
+    "matches": [
+      "\\b(6|six)\\b"
+    ],
+    "check": "diff -r -x __pycache__ \"$FIXTURE\" ."
+  },
+  {
+    "id": "plan-csv",
+    "kind": "code",
+    "fixture": "plan-csv",
+    "args": [
+      "--mode",
+      "plan"
+    ],
+    "goal": "Add a --csv option to report.py that prints the same rows as CSV, with a header line, instead of the table, and a unit test for it.",
+    "contains": [
+      "report.py",
+      "--csv",
+      "test_report.py"
+    ],
+    "matches": [
+      "\\bitem\\W+qty\\W+price\\W+value\\b",
+      "\\bassum",
+      "(^|\\n)\\s*([-*]|\\d+[.)])\\s.*\\n\\s*([-*]|\\d+[.)])\\s"
+    ],
+    "check": "diff -r -x __pycache__ \"$FIXTURE\" ."
   }
- },
- {
-   "id": "demo-shop",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/shop.html. Put two of the cheapest fern and one olive tree in the cart, apply the promo code SAVE10, and tell me the total.",
-   "matches": ["\\$?91\\.80"]
- },
- {
-   "id": "demo-todos",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/todos.html. Add \"Water the ferns\", rename \"Repot the basil\" to \"Repot the basil and mint\", mark the plumber task done, then clear the done tasks. How many tasks are left, and which?",
-   "matches": ["\\b4\\b"],
-   "contains": ["Repot the basil and mint", "Water the ferns"]
- },
- {
-   "id": "demo-orders",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/orders.html. Which refunded order has the largest total? Give its number, its customer and its total.",
-   "contains": ["1052", "Tess Costa"],
-   "matches": ["186(\\.00)?"]
- },
- {
-   "id": "demo-booking",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/booking.html and book Kessel Hut for 3 guests, arriving on 12 December and leaving on the morning of 15 December. Tell me the total and the booking reference.",
-   "contains": ["KH-261212-33"],
-   "matches": ["435(\\.00)?"]
- },
- {
-   "id": "demo-onboarding",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/onboarding.html and set up a workspace for a team called Trail crew of 6 to 20 people, at the address trail-crew, keeping the other answers as they are. Tell me the reference it gives at the end.",
-   "contains": ["WS-TRAIL-CREW-52"]
- },
- {
-   "id": "demo-feed",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/feed.html and find the report by Mira Okafor about the waterfall. How many likes does it have?",
-   "matches": ["\\b87\\b"]
- },
- {
-   "id": "demo-settings",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/settings.html. Set the language to Português, turn off the email digest, set the text size to 120%, and save. Tell me what the page says it saved.",
-   "contains": ["Português", "120%"],
-   "matches": ["Saved:[^\\n]*Mentions"]
- },
- {
-   "id": "demo-2048",
-   "kind": "demo",
-   "site": "demo",
-   "goal": "Open demo/2048.html and play until the board has a tile of 256 or more. Give the best tile and the score.",
-   "schema": {"type": "object", "properties": {"best_tile": {"type": "integer"}, "score": {"type": "integer"}}, "required": ["best_tile", "score"]},
-   "matches": ["\"best_tile\": (256|512|1024|2048|4096)\\b"]
- },
- {
-  "id": "fix-page",
-  "kind": "build",
-  "fixture": "fix-page",
-  "goal": "Adding items in cart.html gives a wrong total. Open it in the window, find out why, fix it, then check it there: add the Lamp and the Mug and tell me the total it shows.",
-  "matches": ["\\$?\\b33\\b"],
-  "check": "node -e 'const c=require(\"./cart.js\"); c.add({dataset:{price:\"24\"}}); c.add({dataset:{price:\"9\"}}); process.exit(c.total(c.cart) === 33 ? 0 : 1)'",
-  "uses": [
-   {"name": "window", "arguments": {"action": "open"}, "like": {"url": "cart\\.html"}},
-   {"any": [{"name": "window", "has": ["goal"]}, {"name": "window", "arguments": {"action": "interact"}, "has": ["tab"]}]}
-  ]
- },
- {
-  "id": "build-tally",
-  "kind": "build",
-  "goal": "Make tally.html: a page that shows a number starting at 0, a + button that adds one, and a Reset button. Open it in the window, press + four times, then Reset, then + twice, and tell me the number it shows.",
-  "matches": ["(^|\\D)2(\\D|$)"],
-  "check": "test -f tally.html && grep -qi reset tally.html",
-  "uses": [
-   {"name": "window", "arguments": {"action": "open"}, "like": {"url": "tally\\.html"}},
-   {"any": [{"name": "window", "has": ["goal"]}, {"name": "window", "arguments": {"action": "interact"}, "has": ["tab"]}]}
-  ]
- },
- {
-  "id": "demo-tour",
-  "kind": "demo",
-  "site": "demo",
-  "goal": "In one tab, go through these pages one after another, not at once: on demo/todos.html add \"Water the ferns\" and tell me how many tasks are left; then on demo/shop.html put one olive tree in the cart and tell me the cart's total; then on demo/booking.html tell me what a Saturday night costs.",
-  "matches": ["\\b5 tasks\\b|\\b5\\b[^\\n]*left|left[^\\n]*\\b5\\b", "\\$64\\b", "\\$140\\b"]
- }
 ]

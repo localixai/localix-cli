@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, Instant};
 
-use contracts::chat::{Completion, Message, ToolCall};
+use contracts::chat::{Completion, ToolCall};
 use crossterm::event::KeyCode;
 use protocol::{Command, Event, ToClient, ToServer};
 use serde_json::Value;
@@ -16,7 +16,7 @@ use super::{Seat, Shared, Work, run};
 use crate::compose::{Models, lane_with};
 use crate::server::serve::{Info, serve};
 use crate::server::{Peer, Ui};
-use crate::testing::{Gated, NoDecider, Scratch, setup};
+use crate::testing::{Gated, Scratch, setup};
 use crate::tui::app::{Action, App};
 use crate::tui::event::{Input, Out};
 use crate::tui::test_support::{key, typed};
@@ -211,7 +211,7 @@ pub(crate) fn connected(
     person: impl FnOnce(Person, &Arc<Peer>),
 ) -> Scratch {
     let scratch = Scratch::new();
-    let (shared, seat) = setup(&scratch, crate::modes::built("bypass"), true).split(None);
+    let (shared, seat) = setup(&scratch, crate::modes::built("bypass"), true).split();
     #[expect(
         clippy::disallowed_methods,
         reason = "the in-process transport and the desk's requests, as the binary makes them"
@@ -228,11 +228,7 @@ pub(crate) fn connected(
     let start = |shared: &Shared, seat: Seat, work: Work| {
         let n = next.fetch_add(1, Ordering::SeqCst);
         let chat = *chats.get(n).expect("a lane the test meant to panic");
-        let models = Models {
-            chat,
-            decider: &NoDecider,
-            live: None,
-        };
+        let models = Models { chat, live: None };
         lane_with(shared, seat, models, work)
     };
     std::thread::scope(|scope| {
@@ -240,7 +236,6 @@ pub(crate) fn connected(
         let desk = scope.spawn(|| run(&shared, &ui, asked, seat, task, &start, quit));
         let info = Info {
             max_lanes: super::MAX_LANES,
-            shells: Arc::new(Vec::new),
             commands: vec![],
             modes: vec![],
             background: false,
@@ -267,20 +262,4 @@ pub(crate) fn connected(
         assert_eq!(desk.join().unwrap(), crate::exit::OK);
     });
     scratch
-}
-
-/// The text of the last call's result in a conversation.
-#[expect(
-    clippy::wildcard_enum_match_arm,
-    reason = "a test picks out the variant it checks"
-)]
-pub(crate) fn last_result(conversation: &[Message]) -> String {
-    let mut results = conversation
-        .iter()
-        .rev()
-        .filter_map(|message| match message {
-            Message::ToolResult { content, .. } => Some(content.clone()),
-            _ => None,
-        });
-    results.next().unwrap_or_default()
 }

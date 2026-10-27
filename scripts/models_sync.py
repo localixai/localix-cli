@@ -8,7 +8,7 @@ The files are models.dev's own, copied verbatim with their source comments: for 
 llx lists first (POPULAR, in step with packages/providers/models/src/lib.rs), its
 `provider.toml`, its newest `PER_PROVIDER` models llx can work with (type chat, tools supported,
 text out, not deprecated: read after the base model as models.dev resolves it), every decision
-model it serves that is not deprecated (the browser's hands are one), and the lab files those
+model it serves that is not deprecated (`llx decide` takes one), and the lab files those
 name. Nothing in data/ is edited by hand: run this again, review the diff, commit.
 """
 import pathlib

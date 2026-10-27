@@ -1,8 +1,8 @@
 #!/bin/sh
 # CI's jobs in Docker, as the runner runs them: `scripts/ci-docker [JOB...]` (every job of
 # .github/workflows/ci.yml when none is named, in its order). Each job's `run` steps are read from
-# ci.yml itself, so this cannot drift from CI; the `uses` steps (WebKitGTK, xvfb, Rust, Node) are
-# the image's (scripts/docker/Dockerfile), and the headless job runs in an image with no WebKitGTK.
+# ci.yml itself, so this cannot drift from CI; the `uses` steps (Rust, Node) are
+# the image's (scripts/docker/Dockerfile).
 #
 # It checks the working tree, copied into the container (tracked and untracked files git does not
 # ignore, and .git): CI checks a clean checkout of a commit. Nothing in the tree is written.
@@ -24,11 +24,8 @@ fi
 command -v docker >/dev/null 2>&1 || { echo "ci-docker: docker is not installed" >&2; exit 2; }
 docker info >/dev/null 2>&1 || { echo "ci-docker: the Docker daemon is not running" >&2; exit 2; }
 
-for webkit in 1 0; do
-  echo "ci-docker: the image llx-ci-$arch-webkit$webkit ($platform)"
-  docker build -q --platform "$platform" --build-arg WEBKIT=$webkit \
-    -t "llx-ci-$arch-webkit$webkit" scripts/docker >/dev/null || exit 1
-done
+echo "ci-docker: the image llx-ci-$arch ($platform)"
+docker build -q --platform "$platform" -t "llx-ci-$arch" scripts/docker >/dev/null || exit 1
 
 # What runs in the container: the tree copied in, then the job's `run` steps from ci.yml, each in
 # GitHub's shell (bash -e -o pipefail) and its working directory, stopping at the first failure.
@@ -55,18 +52,16 @@ done </tmp/steps
 
 failed=''
 for job in $jobs_wanted; do
-  webkit=1
-  [ "$job" = headless ] && webkit=0
   echo
   echo "ci-docker: job $job"
   if docker run --rm --platform "$platform" \
     -e JOB="$job" -e CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}" \
     --mount "type=bind,src=$root,dst=/src,readonly" \
-    -v "llx-ci-target-$arch-webkit$webkit:/llx/target" \
+    -v "llx-ci-target-$arch:/llx/target" \
     -v "llx-ci-cargo-$arch:/root/.cargo/registry" \
     -v "llx-ci-tools-$arch:/root/.cache/llx/tools" \
     -v "llx-ci-npm-$arch:/root/.npm" \
-    "llx-ci-$arch-webkit$webkit" bash -c "$inner"; then
+    "llx-ci-$arch" bash -c "$inner"; then
     echo "ci-docker: job $job passed"
   else
     echo "ci-docker: job $job FAILED"

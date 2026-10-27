@@ -1,7 +1,7 @@
 //! Where a client is, as the sessions it opens take it (docs/daemon.md, step 2): the workspace at
 //! its directory, whose commands run with its environment (its `PATH`, a virtualenv, its keys,
-//! less the app's hidden ones), and its terminal's colours for the windows. In process the place
-//! is the process's own; over a socket, each client's.
+//! less the app's hidden ones). In process the place is the process's own; over a socket,
+//! each client's.
 
 use std::path::Path;
 
@@ -26,17 +26,6 @@ pub(crate) fn at(dir: &Path) -> Result<Workspace, String> {
 pub(crate) fn workspace(place: &Place) -> Result<Workspace, String> {
     let workspace = at(Path::new(&place.cwd)).map_err(|why| format!("{}: {why}", place.cwd))?;
     Ok(workspace.with_env(place.env.clone()))
-}
-
-/// The client's colours, which its terminal windows take.
-#[cfg(unix)]
-pub(crate) fn theme(place: &Place) -> Option<tools::shell::Theme> {
-    let theme = place.theme?;
-    Some(tools::shell::Theme {
-        fg: theme.fg,
-        bg: theme.bg,
-        cursor: theme.cursor,
-    })
 }
 
 /// The variables that name a session's model, each with the option it stands for (its short

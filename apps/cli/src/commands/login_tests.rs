@@ -181,7 +181,7 @@ fn the_popular_come_first_then_the_current_and_signed_in_then_the_rest_by_name()
 #[test]
 fn cancelling_a_step_goes_back_to_the_one_before_it_as_it_was() {
     // OpenAI, not signed in: cancel "Sign in with", the providers again with OpenAI marked,
-    // then OpenAI, the browser, a model.
+    // then OpenAI, its sign-in, a model.
     let mut terminal = Scripted::new(&[Some(0), None, Some(0), Some(0), Some(0)]);
     let (chosen, asked) = steps(&openrouter(), false, &mut terminal);
     assert!(matches!(chosen, Ok(Ended::Chose(_))), "{chosen:?}");

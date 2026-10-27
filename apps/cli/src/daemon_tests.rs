@@ -84,7 +84,6 @@ fn a_daemon_says_its_build_and_who_is_attached() {
         let peer = crate::server::Peer::new(c.out);
         let info = crate::server::serve::Info {
             max_lanes: 1,
-            shells: std::sync::Arc::new(Vec::new),
             commands: vec![],
             modes: vec![],
             background: true,

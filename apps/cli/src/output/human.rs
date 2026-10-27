@@ -21,7 +21,7 @@ pub(crate) fn turn(usage: &Usage) -> String {
 
 /// Under the closing rule: each model's calls, tokens, money and time, and the session.
 pub(crate) fn spend(summary: &Summary) -> String {
-    let (agent, decision) = (summary.agent, summary.decision);
+    let agent = summary.agent;
     let seconds = |ms: u64| ms as f64 / 1000.0;
     let mut out = String::new();
     if agent.calls > 0 {
@@ -33,18 +33,6 @@ pub(crate) fn spend(summary: &Summary) -> String {
             thousands(agent.output_tokens),
             agent.cost,
             seconds(agent.millis)
-        );
-    }
-    if decision.calls > 0 {
-        let _ = writeln!(
-            out,
-            "hands    {} · {} calls · {} in · {} out · ${:.4} · {:.1}s",
-            decision.model,
-            decision.calls,
-            thousands(decision.input_tokens),
-            thousands(decision.output_tokens),
-            decision.cost,
-            seconds(decision.millis)
         );
     }
     if !summary.session.is_empty() {

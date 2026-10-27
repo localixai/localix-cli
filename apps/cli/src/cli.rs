@@ -10,17 +10,13 @@ const USAGE: &str = "llx [OPTIONS] [PROMPT]\n       \
     llx exec [OPTIONS] [PROMPT | -]\n       \
     llx <COMMAND>";
 
-const ABOUT: &str = "llx: an ultrafast, lightweight agent runtime: a native window of browser pages and terminals for any agent, a decision step for scripts and CI, a minimal agent for the terminal";
+const ABOUT: &str = "llx: an ultrafast, lightweight agent runtime: a minimal agent for the terminal, helpers on any model, and a decision step for scripts and CI";
 
-const LONG_ABOUT: &str = "llx: an ultrafast, lightweight agent runtime. A native window of browser pages and terminals \
-any agent can work in (llx window, from its shell), a decision step for \
-scripts and CI (llx decide), and a minimal agent for the terminal (llx).
+const LONG_ABOUT: &str = "llx: an ultrafast, lightweight agent runtime. A minimal agent for the \
+terminal (llx), one task for scripts and CI (llx exec), and a decision step (llx decide).
 
-It works in a directory (the current one, or -C DIR) with seven tools: read, edit, bash (on \
-unix it can keep a program that asks, such as a REPL, open in a terminal session until the task \
-ends), a browser whose clicks and typing are done by a fast decision model (the agent also reads \
-the page, runs scripts in it, sees it in screenshots and keeps several tabs), ask, a question to you (in a \
-session only), agents: other agents it starts in parallel, each a session of its own (in a \
+It works in a directory (the current one, or -C DIR) with six tools: read, edit, bash (commands \
+run to their end), ask, a question to you (in a session only), agents: other agents it starts in parallel, each a session of its own (in a \
 session, a list under the prompt shows them: down arrow, then enter to see one), and jobs: \
 monitors (a background command whose lines come back) and schedules (a prompt at a time).
 
@@ -31,16 +27,15 @@ and exits, with the answer alone on stdout: for scripts, CI and pipes.
 To sign in, type /login in a session: choose a provider (OpenAI, signed in with ChatGPT in \
 your browser, or OpenRouter, with a key), then one of its models and a reasoning level that \
 model takes (left/right in the model list, Enter confirms both). The choice is saved as the \
-default for later sessions and for exec. The browser \
-tool's decision model runs on OpenRouter, so it needs an OpenRouter key whichever provider the \
-agent thinks with.
+default for later sessions and for exec. `llx decide`'s decision model runs on OpenRouter, so it \
+needs an OpenRouter key.
 
 Rules decide what runs without asking: a deny refuses, an allow runs it, and anything else is \
 asked at the terminal (1 yes, 2 always for this tool, 3 no; outside a session y, a or n), or \
 refused with no one to ask. A mode (--mode) is a named set of rules: default (none), plan \
 (file changes refused), bypass (-y, everything allowed), or your own from `modes` in \
 ~/.config/llx/settings.json. --allow and --deny add rules for one run: bash(cargo test *), \
-edit(docs/**), browser. In a session, /mode switches it and Shift+Tab goes round the modes \
+edit(docs/**). In a session, /mode switches it and Shift+Tab goes round the modes \
 (after the task if working); the mode is always shown under the prompt, and /status shows it \
 too. Markdown tables wrap their cells \
 to the terminal width; completed edits show numbered diffs with red/green background bands. Tab completes a slash command \
@@ -53,11 +48,11 @@ new one, then the saved ones): Enter opens one, x stops its task, Esc closes the
 from a session not shown names it. Quitting while a session works or a shell, monitor or \
 schedule runs asks first, naming them: Exit and stop tasks stops them all.
 
-Ctrl-C stops the task of the session shown (the command running and every terminal session are \
+Ctrl-C stops the task of the session shown (the command running is \
 killed, and an open question or approval ends); a second Ctrl-C quits.
 
 On unix a session runs in a daemon, `llx serve`, which the first `llx` starts and later ones \
-attach to: it keeps the sessions and the window, and lives on when a terminal closes (whose \
+attach to: it keeps the sessions, and lives on when a terminal closes (whose \
 sessions' work then stops) until `llx serve stop`. --no-daemon runs the session in this process; \
 exec always does.";
 
@@ -136,49 +131,15 @@ pub(crate) enum Command {
     Sessions,
     /// Forget every saved sign-in: the ChatGPT tokens and the OpenRouter key.
     Logout,
-    /// Check the sign-ins, both models, the browser's WebView and the shell.
+    /// Check the sign-ins, both models and the shell.
     Doctor(ModelOptions),
     /// The daemon that runs the sessions: `llx` at a terminal starts it, and attaches to it.
     ///
     /// One per config directory. It holds every session, with its agents, jobs and terminal
-    /// sessions, and the one window; a closed terminal stops its sessions' work, and the daemon
+    /// sessions; a closed terminal stops its sessions' work, and the daemon
     /// lives on until `llx serve stop`.
     #[cfg(unix)]
     Serve(ServeArgs),
-    /// One call of llx's `window` from your shell: browser pages and terminals as tabs of one
-    /// window the person watches.
-    ///
-    /// For another agent (Claude Code, Codex, a script) that works in llx's window: it opens a page
-    /// or a terminal, acts in it (clicks, keys, a script, or a `goal` the decision model carries out,
-    /// which needs an OpenRouter key), reads it, and takes screenshots. The agent's own model thinks:
-    /// no chat model is used. CALL is the `window` tool's arguments as one JSON object (`-` reads
-    /// them from stdin); `llx window` alone prints the tool's description and arguments. The report
-    /// is printed, and a screenshot is saved to a file whose path is printed. It runs in the daemon,
-    /// started if none runs, and the tabs stay for their owner between calls until `--end`.
-    /// Comments the person sends from them (Comment, then Send, in the window's strip) come back
-    /// with the owner's next call. Exit 0 when done, 1 when the call failed (the output says why),
-    /// 3 when llx could not be reached or CALL is not a JSON object.
-    ///
-    ///     llx window '{"action": "open", "kind": "browser", "url": "https://example.com"}'
-    ///     llx window '{"action": "interact", "tab": "w1", "goal": "accept only the needed cookies"}'
-    ///     llx window '{"action": "open", "kind": "terminal", "command": "python3 -q"}'
-    ///     llx window --end
-    #[cfg(unix)]
-    #[command(verbatim_doc_comment)]
-    Window(WindowArgs),
-}
-
-#[derive(Args, Debug)]
-pub(crate) struct WindowArgs {
-    /// Whose tabs: the calls of one owner share them, another's are apart. Default: the project
-    /// (the nearest directory at or above this one with a `.git`, else this one)
-    #[arg(long = "as", value_name = "OWNER")]
-    pub owner: Option<String>,
-    /// Close the owner's tabs and end its terminal sessions
-    #[arg(long, conflicts_with = "call")]
-    pub end: bool,
-    /// The call: the `window` tool's arguments as a JSON object; `-` reads them from stdin
-    pub call: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -294,7 +255,7 @@ pub(crate) struct ModelOptions {
     /// as far as the model takes it (/login lists its levels). Default: the model's own.
     #[arg(long, value_name = "LEVEL", env = "LLX_REASONING")]
     pub reasoning: Option<String>,
-    /// The decision model that clicks and types in the browser.
+    /// The decision model `llx doctor` checks.
     #[arg(long, value_name = "MODEL", env = "LLX_DECISION_MODEL", default_value = crate::providers::DECISION_DEFAULT)]
     pub decision_model: String,
 }
@@ -333,7 +294,7 @@ pub(crate) struct RunOptions {
     )]
     pub images: Vec<PathBuf>,
 
-    /// Allow commands, file changes and browser actions without asking: --mode bypass. Also
+    /// Allow commands and file changes without asking: --mode bypass. Also
     /// accepted as --yolo and --dangerously-skip-permissions.
     #[arg(short = 'y', long, help_heading = "Approvals",
         aliases = ["yolo", "dangerously-skip-permissions"])]
@@ -350,8 +311,8 @@ pub(crate) struct RunOptions {
     )]
     pub mode: Option<String>,
     /// Run what RULE names without asking, where the mode would ask or, with no one to ask,
-    /// refuse: `bash(cargo test *)` (every part of the command must match), `edit(docs/**)`,
-    /// `browser`. Repeat it. Plan mode stays read-only. The syntax is Claude Code's; what a
+    /// refuse: `bash(cargo test *)` (every part of the command must match), `edit(docs/**)`.
+    /// Repeat it. Plan mode stays read-only. The syntax is Claude Code's; what a
     /// pattern covers, and what it never does, is in docs/modes.md#rules.
     #[arg(long, value_name = "RULE", help_heading = "Approvals")]
     pub allow: Vec<String>,
@@ -379,23 +340,11 @@ pub(crate) struct RunOptions {
     #[arg(long, value_name = "N", default_value_t = 50, help_heading = "Limits",
         value_parser = RangedU64ValueParser::<usize>::new().range(1..=10_000))]
     pub max_turns: usize,
-    /// Actions for one browser task of the decision model (1 to 10000).
-    #[arg(long, value_name = "N", default_value_t = 40, help_heading = "Limits",
-        value_parser = RangedU64ValueParser::<usize>::new().range(1..=10_000))]
-    pub max_steps: usize,
     /// Seconds one task may take, up to a day; it stops at the first model turn past them, or
     /// while it waits on its monitors or agents.
     #[arg(long, value_name = "SECONDS", default_value_t = 1800, help_heading = "Limits",
         value_parser = RangedU64ValueParser::<u64>::new().range(1..=86_400))]
     pub timeout: u64,
-
-    /// Always show the browser window, and a window for each terminal session `bash` keeps. By
-    /// default they show in a session, and stay hidden in exec and over SSH;
-    /// the agent can show, hide or close the browser per call, and a terminal window where they
-    /// show. On macOS the window opens full screen, in a Space of its own, never over the
-    /// terminal; elsewhere it is an ordinary window, never on top of others.
-    #[arg(long, help_heading = "Browser")]
-    pub show_browser: bool,
 
     /// Run the session in this process, not in the daemon (`llx serve`) that a session at the
     /// terminal otherwise starts or attaches to. `exec` always runs in this process.

@@ -1,16 +1,12 @@
 # CI's Linux runner, as near as a container gets (scripts/ci-docker): Ubuntu 24.04, which is
-# ubuntu-latest; the packages .github/actions/linux-deps installs; stable Rust with the jobs'
-# components; Node 22 for the site job; CI's cargo settings. `--build-arg WEBKIT=0` leaves
-# WebKitGTK out, as the headless job's runner has none.
+# ubuntu-latest; stable Rust with the jobs' components; Node 22 for the site job; CI's cargo
+# settings.
 FROM ubuntu:24.04
 
-ARG WEBKIT=1
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -q \
   && apt-get install -y -q --no-install-recommends \
     build-essential ca-certificates curl git jq libssl-dev perl pkg-config python3 sudo xz-utils \
-  && if [ "$WEBKIT" = 1 ]; then \
-    apt-get install -y -q --no-install-recommends libwebkit2gtk-4.1-dev xvfb; fi \
   && rm -rf /var/lib/apt/lists/*
 
 # The release's own checksum, from nodejs.org/dist/v22.20.0/SHASUMS256.txt.

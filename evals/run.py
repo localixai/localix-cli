@@ -13,7 +13,7 @@ every `contains` string and `matches` pattern, every `uses` call was made and no
 was, and the task's `check` command exits 0 in that directory afterwards. The summary ends with
 totals per kind.
 
-Live: every task makes paid OpenRouter calls; browser tasks open real sites.
+Live: every task makes paid OpenRouter calls.
 """
 import argparse, json, math, os, re, shutil, statistics, subprocess, sys, tempfile, time
 from concurrent.futures import ThreadPoolExecutor
@@ -49,13 +49,10 @@ def events(stdout):
 
 
 def workdir(task):
-    """A fresh directory for one run: the fixture copied in, or nothing; with `site`, that
-    directory of the repository beside it under its own name (`demo/`), opened by its path."""
+    """A fresh directory for one run: the fixture copied in, or nothing."""
     path = tempfile.mkdtemp(prefix=f"llx-eval-{task['id']}-")
     if task.get("fixture"):
         shutil.copytree(os.path.join(FIXTURES, task["fixture"]), path, dirs_exist_ok=True)
-    if task.get("site"):
-        shutil.copytree(os.path.join(ROOT, task["site"]), os.path.join(path, task["site"]))
     return path
 
 
@@ -180,24 +177,22 @@ def run(job, binary, extra, out_dir):
     started_event = next((e for e in seen if e.get("type") == "run.started"), {})
     served = next((e for e in seen if e.get("type") == "turn" and e.get("model")), {})
     usage = (done or {}).get("usage") or {}
-    agent, decision = usage.get("agent") or {}, usage.get("decision") or {}
+    agent = usage.get("agent") or {}
     ok = not reasons
     if ok:
         shutil.rmtree(work, ignore_errors=True)
-    return {"id": task["id"], "kind": task.get("kind", "browser"), "ok": ok, "exit": code,
+    return {"id": task["id"], "kind": task.get("kind", "code"), "ok": ok, "exit": code,
             "status": (done or {}).get("status"), "wall": round(wall, 1),
             "turns": agent.get("calls"), "tool_calls": sum(tools.values()), "tools": tools,
-            "decisions": decision.get("calls"),
             "agent_s": round((agent.get("ms") or 0) / 1000, 1),
-            "decision_s": round((decision.get("ms") or 0) / 1000, 1),
             "cost": round(usage.get("cost_usd") or 0, 4),
-            "input_tokens": (agent.get("input_tokens") or 0) + (decision.get("input_tokens") or 0),
+            "input_tokens": agent.get("input_tokens") or 0,
             "cached_tokens": agent.get("cached_tokens") or 0,
-            "output_tokens": (agent.get("output_tokens") or 0) + (decision.get("output_tokens") or 0),
+            "output_tokens": agent.get("output_tokens") or 0,
             "answer": ((done or {}).get("answer") or "")[:160].replace("\n", " "),
             # What the run itself says it used: the model that answered (an alias such as
             # `~...-latest` resolved), else the one asked for.
-            "model": served.get("model") or started_event.get("model"), "decision_model": started_event.get("decision_model"),
+            "model": served.get("model") or started_event.get("model"),
             "reasons": reasons, "trace": trace, "work": None if ok else work}
 
 
@@ -246,8 +241,8 @@ def select(tasks, only):
     if not only:
         return tasks
     keep = set(only.split(","))
-    chosen = [t for t in tasks if t["id"] in keep or t.get("kind", "browser") in keep]
-    unknown = keep - {t["id"] for t in tasks} - {t.get("kind", "browser") for t in tasks}
+    chosen = [t for t in tasks if t["id"] in keep or t.get("kind", "code") in keep]
+    unknown = keep - {t["id"] for t in tasks} - {t.get("kind", "code") for t in tasks}
     if unknown:
         sys.exit(f"unknown task or kind: {', '.join(sorted(unknown))}")
     return chosen
@@ -264,8 +259,8 @@ def bench(model, tasks, opts, measured):
     print(f"=== {model}")
     for r in results:
         mark = "PASS" if r["ok"] else "FAIL"
-        print(f"{mark} {r['id']:<15} {r['wall']:>6}s [agent {r['agent_s']}s, hands {r['decision_s']}s] "
-              f"turns={r['turns']} tools={r['tool_calls']} dec={r['decisions']} ${r['cost']:<7} {r['answer'][:60]}")
+        print(f"{mark} {r['id']:<15} {r['wall']:>6}s [agent {r['agent_s']}s] "
+              f"turns={r['turns']} tools={r['tool_calls']} ${r['cost']:<7} {r['answer'][:60]}")
         for reason in r["reasons"]:
             print(f"     - {reason}")
         if r["work"]:
@@ -280,14 +275,14 @@ def bench(model, tasks, opts, measured):
         # The model never answered (a usage limit, no key): that is no benchmark of llx.
         print("not recorded: no task got a turn from the model")
     elif opts.record:
-        models = {"agent": used(results, "model"), "decision": used(results, "decision_model")}
+        models = {"agent": used(results, "model")}
         print("recorded", record.record(results, opts.bin, models, measured))
     return passed == len(results)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--only", help="comma-separated task ids or kinds (code, build, browser, demo)")
+    parser.add_argument("--only", help="comma-separated task ids or kinds (code)")
     parser.add_argument("--model", choices=MODELS, action="append",
                         help="one of the benchmark's models (again for another); all of them when not given")
     parser.add_argument("--repeat", type=int, default=1, help="runs per task")

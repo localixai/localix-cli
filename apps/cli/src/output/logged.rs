@@ -13,8 +13,8 @@ const TARGET: &str = "llx::session";
 pub(super) fn started(start: &Start) {
     info!(
         target: TARGET,
-        "{} task started: model={} decision={} workspace={} goal={:?}",
-        start.session, start.model, start.decision_model, start.workspace, start.goal
+        "{} task started: model={} workspace={} goal={:?}",
+        start.session, start.model, start.workspace, start.goal
     );
 }
 
@@ -54,7 +54,7 @@ pub(crate) fn turn(who: &str, usage: &Usage) {
 }
 
 pub(super) fn completed(summary: &Summary) {
-    let spent = summary.agent.cost + summary.decision.cost;
+    let spent = summary.agent.cost;
     info!(
         target: TARGET,
         "{} task ended: {} (exit {}) in {} ms, {} turns, ${spent:.4}",

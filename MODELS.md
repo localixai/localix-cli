@@ -81,7 +81,7 @@ long-context price band; the reason llx's default request ceiling is 272k);
   providers llx lists first and the lab files they name: `data/providers/<id>/provider.toml`,
   `data/providers/<id>/models/...`, `data/models/<lab>/...`. `scripts/models_sync.py <clone>`
   copies them from a models.dev clone (`git clone -b dev`), keeping per provider the newest models
-  llx can work with, and every decision model it serves (the browser's hands are one); nothing in
+  llx can work with, and every decision model it serves (`llx decide` takes one); nothing in
   `data/` is edited by hand.
 - **Build:** `build.rs` resolves the files as models.dev does (the rules above, in Rust) into one
   document in the shape of the v2 API, cut to the fields llx reads, built into the crate.
@@ -95,8 +95,8 @@ long-context price band; the reason llx's default request ceiling is 272k);
   on, budget → low, medium, high, and off when its `min` allows) and its default from `default`,
   else medium or the nearest below. A provider is called through the first API llx speaks:
   `chat-completions` (any host), `responses` (OpenAI with a ChatGPT sign-in, which offers the
-  models served over it alone too). A `decision` model that is not `deprecated` is kept for the
-  browser's hands: the app's default one (`DECISION_DEFAULT`) must be among them.
+  models served over it alone too). A `decision` model that is not `deprecated` is kept for
+  `llx decide`: the app's default one (`DECISION_DEFAULT`) must be among them.
 - **Kept for later strategies:** `cache` and the `*_updates` flags (whether a mode or level
   change keeps the prompt cache), the long-context price band.
 

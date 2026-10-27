@@ -64,7 +64,6 @@ fn serving(peer: &Arc<Peer>) -> Sender<ToServer> {
         .spawn(move || {
             let info = super::super::serve::Info {
                 max_lanes: 3,
-                shells: Arc::new(Vec::new),
                 commands: vec![],
                 modes: vec![],
                 background: true,

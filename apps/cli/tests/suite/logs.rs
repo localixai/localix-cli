@@ -7,11 +7,11 @@ use crate::common::home::Home;
 use crate::common::model::{Model, Reply};
 use crate::suite::exec::exec;
 
-/// A task whose one call fails: `window` asked to open with no kind.
+/// A task whose one call fails: `bash` with no command.
 fn a_failing_call() -> Model {
     Model::start(vec![
-        Reply::call("window", json!({"action": "open"})),
-        Reply::text("It would not open.\nRESULT: not achieved"),
+        Reply::call("bash", json!({"command": ""})),
+        Reply::text("Nothing ran.\nRESULT: not achieved"),
     ])
 }
 
@@ -22,12 +22,14 @@ fn log(home: &Home) -> Option<String> {
 #[test]
 fn a_task_leaves_each_call_with_its_arguments_its_failure_and_how_it_ended_in_the_log() {
     let (home, model) = (Home::new(), a_failing_call());
-    let out = exec(&home, &model, &["exec", "-y", "open the demo"], "");
+    let out = exec(&home, &model, &["exec", "-y", "run nothing"], "");
     assert_eq!(out.status.code(), Some(1));
     let log = log(&home).expect("the log is written");
     // The call as the model made it: what a bug report needs, and what the screen leaves out.
-    assert!(log.contains(r#"window {"action":"open"}"#), "{log}");
-    let failed = log.lines().find(|line| line.contains("`kind` is one of"));
+    assert!(log.contains(r#"bash {"command":""}"#), "{log}");
+    let failed = log
+        .lines()
+        .find(|line| line.contains("the command is empty"));
     assert!(failed.is_some_and(|line| line.contains(" WARN ")), "{log}");
     assert!(log.contains("not_achieved"), "{log}");
     // One event a line, each with its time and level first, as env_logger writes them.
@@ -50,7 +52,7 @@ fn a_task_leaves_each_call_with_its_arguments_its_failure_and_how_it_ended_in_th
 #[test]
 fn rust_log_chooses_what_is_kept() {
     let (home, model) = (Home::new(), a_failing_call());
-    let mut command = home.with_model(&model, &["exec", "-y", "open the demo"]);
+    let mut command = home.with_model(&model, &["exec", "-y", "run nothing"]);
     command.env("RUST_LOG", "off");
     let _ = crate::suite::exec::run(&home, command, "");
     assert!(
@@ -59,13 +61,13 @@ fn rust_log_chooses_what_is_kept() {
     );
 
     let (home, model) = (Home::new(), a_failing_call());
-    let mut command = home.with_model(&model, &["exec", "-y", "open the demo"]);
+    let mut command = home.with_model(&model, &["exec", "-y", "run nothing"]);
     command.env("RUST_LOG", "llx=debug");
     let _ = crate::suite::exec::run(&home, command, "");
     let log = log(&home).expect("the log is written");
     // Debug adds the model's turns and what it said.
     assert!(
-        log.contains(" DEBUG ") && log.contains("It would not open."),
+        log.contains(" DEBUG ") && log.contains("Nothing ran."),
         "{log}"
     );
 }

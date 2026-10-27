@@ -9,7 +9,7 @@
 //! • Sessions in this project
 //!
 //! ❯ ⠹ fix the flaky jobs test   running · 1m 12s · 54.1k tokens · 2 agents
-//!   ? add tabs to the browser   waiting for you
+//!   ? add tabs to the printer   waiting for you
 //!   ● refactor the picker       current · idle · 3 tasks
 //!   + New session
 //!

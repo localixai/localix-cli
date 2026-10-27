@@ -260,7 +260,7 @@ fn command_drill_down_shows_modes_and_preserves_argument_entry() {
     insta::assert_snapshot!(render(&mut app, now), @"
     ❯ /mode
       mode  ›  current: default · ↑↓ choose · tab complete · en…
-      default      Each command, file change and browser action…
+      default      Each command and file change asks first
       plan         Read-only: file changes are refused
       bypass       Everything runs without asking (-y)
       review       The person's own mode.

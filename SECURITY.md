@@ -20,19 +20,14 @@ commands yourself.
   file and its changed lines), and it runs only when allowed. A denied effect is reported back to
   the model, which can try another way. Allowing everything up front (`--yes`) skips the gate:
   use it only in a sandbox, a container or a throwaway checkout.
-- **Browse** in a native WebView window, which can submit forms and run page scripts the model
-  asks for, with that window's own cookies, not your browser's.
 
-What the agent reads (files, command output, web pages) is untrusted data. It is passed to the
+What the agent reads (files, command output) is untrusted data. It is passed to the
 model as content, never as instructions, but a model can still be misled by what it reads (prompt
-injection), so the gate is the line of defence for anything that changes your machine. Typed text
-and click targets come from the goal and the page's own controls; model output never becomes a
-selector, coordinates or code for the browser's hands.
+injection), so the gate is the line of defence for anything that changes your machine.
 
 On Unix a session runs in a daemon (`llx serve`), reached over a socket in a directory only you
 may enter (`$TMPDIR/llx-<uid>/`, mode 0700, the socket 0600), with no token: it serves the user
-who runs it. Another agent can call llx's `window` through it (`llx window`); that agent approves
-each call itself, as it would any command, and llx asks nothing more for them.
+who runs it.
 
 ## Keys
 

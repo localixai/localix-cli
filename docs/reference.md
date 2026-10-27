@@ -10,7 +10,7 @@ Exit codes, the `--json` events and `llx decide`. Both the exit codes and the ev
 | 1 | The agent answered that the task was not achieved, or the data did not match `--schema` |
 | 2 | Turns or the time limit ran out before an answer |
 | 3 | The environment or the command line is not ready: no key, no network, a model error, a bad argument |
-| 130 | Interrupted: Ctrl-C (or SIGTERM), or the browser window was closed |
+| 130 | Interrupted: Ctrl-C (or SIGTERM) |
 
 With `--json`, a closed stdout (`llx --json ... | head -1`) ends the run quietly at its next turn, with exit 0. Without it nothing is written to stdout until the answer, so the run goes on to its end and then exits 0.
 
@@ -20,12 +20,11 @@ With `--json`, a closed stdout (`llx --json ... | head -1`) ends the run quietly
 
 | Event | Fields |
 | --- | --- |
-| `run.started` | `schema` (4), `goal`, `session`, `model`, `decision_model`, `workspace` |
+| `run.started` | `schema` (5), `goal`, `session`, `model`, `workspace` |
 | `tool.call` | `id`, `name`, `arguments` |
 | `tool.result` | `id`, `name`, `failed`, `fatal`, `output`, and `state` when the tool left one |
-| `step` | One browser action: `operation`, `target`, `value`, `probability`, `changed`, `failed`, `line` |
 | `turn` | One model turn: `model`, `input_tokens`, `cached_tokens`, `output_tokens`, `cost_usd`, `model_ms` |
-| `run.completed` | `status` (`achieved`, `not_achieved`, `unstated`, `exhausted`, `error`, `interrupted`), `exit_code`, `answer`, `data` or `data_error`, `error`, `session`, `usage` {`agent`, `decision`, `cost_usd`}, `duration_ms` |
+| `run.completed` | `status` (`achieved`, `not_achieved`, `unstated`, `exhausted`, `error`, `interrupted`), `exit_code`, `answer`, `data` or `data_error`, `error`, `session`, `usage` {`agent`, `cost_usd`}, `duration_ms` |
 
 The exit codes and these events are a public contract. A breaking change bumps `schema` and is listed in [CHANGELOG.md](../CHANGELOG.md).
 

@@ -45,20 +45,10 @@ fn answering(at_server: Receiver<ToServer>, from_server: Sender<ToClient>, done:
 #[test]
 fn a_command_waits_for_what_is_done_with_it() {
     let (client, at_server, from_server, _seen) = connected();
-    answering(
-        at_server,
-        from_server,
-        Done::Work {
-            shells: 2,
-            running: vec![],
-        },
-    );
+    answering(at_server, from_server, Done::Work { running: vec![] });
     assert_eq!(
         client.call(Command::Work, WAIT),
-        Ok(Done::Work {
-            shells: 2,
-            running: vec![],
-        })
+        Ok(Done::Work { running: vec![] })
     );
 }
 
@@ -124,15 +114,15 @@ fn a_reply_reaches_the_server_under_its_question() {
 #[test]
 fn a_command_begun_is_sent_at_once_and_its_answer_waited_for_later() {
     let (client, at_server, from_server, _seen) = connected();
-    let begun = client.begin(Command::Tools).unwrap();
+    let begun = client.begin(Command::Work).unwrap();
     // Sent before anyone waits: what the client sends next comes after it.
     client.send(Command::Halt { id: "c1".into() }).unwrap();
     let first = at_server.recv_timeout(WAIT).unwrap();
     let ToServer::Call { id, command } = first else {
         panic!("not a call: {first:?}");
     };
-    assert_eq!(command, Command::Tools);
-    let tools = Done::Tools { tools: vec![] };
+    assert_eq!(command, Command::Work);
+    let tools = Done::Work { running: vec![] };
     from_server
         .send(ToClient::Done {
             id,

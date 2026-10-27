@@ -1,9 +1,0 @@
-{
-  "name": "llx",
-  "version": "0.3.0",
-  "description": "llx's blocks for Claude Code: its window of browser pages and terminals, helpers on any model, quick decisions, from Claude's own shell",
-  "author": {
-    "name": "rsaryev"
-  },
-  "license": "MIT"
-}

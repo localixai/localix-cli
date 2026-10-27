@@ -2,7 +2,7 @@
 //! reads back, fakes of the models (no network), a person typing at the terminal, and a whole run
 //! composed around them.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -11,8 +11,6 @@ use std::sync::{Arc, Mutex};
 use clap::Parser;
 use contracts::chat::{Chat, ChatError, Completion, Message, Request};
 use contracts::history::History;
-use contracts::model::{DecideError, Decider, Decision, Question};
-use serde_json::Value;
 use tools::workspace::Workspace;
 
 use crate::cli::Cli;
@@ -144,17 +142,6 @@ impl Chat for ScriptedChat {
     }
 }
 
-/// A decision model that is never there: the tests run without a browser.
-pub(crate) struct NoDecider;
-
-impl Decider for NoDecider {
-    fn decide(&self, _: &Value, _: &BTreeMap<String, Question>) -> Result<Decision, DecideError> {
-        Err(DecideError::Unavailable(
-            "no decision model in tests".into(),
-        ))
-    }
-}
-
 /// The terminal, with a person who types lines from a script, then nothing (a closed terminal);
 /// it remembers each question shown.
 #[derive(Default)]
@@ -208,12 +195,8 @@ pub(crate) fn composed_with(
     work: impl FnOnce(&mut Rig) -> i32,
 ) {
     let scratch = Scratch::new();
-    let (shared, seat) = setup(&scratch, mode, asks).split(None);
-    let models = Models {
-        chat,
-        decider: &NoDecider,
-        live: None,
-    };
+    let (shared, seat) = setup(&scratch, mode, asks).split();
+    let models = Models { chat, live: None };
     assemble(&shared, seat, models, &quiet(), &Interrupt::new(), work);
 }
 
@@ -239,9 +222,6 @@ pub(crate) fn setup(scratch: &Scratch, mode: Mode, asks: bool) -> Setup {
         history,
         session,
         ui: None,
-        shown: false,
-        #[cfg(unix)]
-        theme: None,
     }
 }
 

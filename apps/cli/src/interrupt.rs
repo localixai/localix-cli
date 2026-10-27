@@ -1,10 +1,9 @@
-//! The person stopping a task: Ctrl-C (SIGINT) or SIGTERM during it, or closing the browser
-//! window. The task ends the way the time limit ends it: the command running is killed with
-//! everything it started (commands run in their own session, so the terminal's signal never
-//! reaches them), and so is every terminal session `bash` keeps; the gate approves nothing more,
+//! The person stopping a task: Ctrl-C (SIGINT) or SIGTERM during it. The task ends the way the
+//! time limit ends it: the command running is killed with everything it started (commands run in
+//! their own session, so the terminal's signal never reaches them); the gate approves nothing more,
 //! and the task ends at its next model turn as `interrupted` (exit 130), with its `run.completed`
 //! event and its session saved. A second signal, or one while no task runs (at the prompt line),
-//! quits at once, killing the terminal sessions first. A signal or the window stops every
+//! quits at once. A signal stops every
 //! session's task; the interface's keys stop one session's, by its id.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -12,7 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::sync::lock;
 
-/// What the signal handler and the browser window stop: every task running, in every session.
+/// What the signal handler stops: every task running, in every session.
 /// Only atomics, so a signal handler may use it.
 pub(crate) struct Process {
     /// Raised by each stop: a task that began before it is stopped.
@@ -23,7 +22,7 @@ pub(crate) struct Process {
     pending: AtomicBool,
 }
 
-/// The process's own: what its signal handler and the browser window stop.
+/// The process's own: what its signal handler stops.
 pub(crate) static PROCESS: Process = Process::new();
 
 impl Process {
@@ -184,23 +183,9 @@ pub(crate) fn working() -> usize {
     PROCESS.busy.load(Ordering::SeqCst)
 }
 
-/// The browser window was closed: the tasks stop as on Ctrl-C, and the process never quits for
-/// it (at the prompt line, the window opens again on the next task).
-pub(crate) fn window_closed() {
-    PROCESS.stop();
-    crate::server::ui::ring();
-}
-
-/// The daemon's window was closed: it shows every terminal's tabs, and the person closed a
-/// window, not a session, so nothing stops. A task working in it is told (`arrivals`, the
-/// window's entry) and its browser calls fail; the window opens again when one is next used.
-pub(crate) fn window_closed_served() {}
-
-/// Quit now, as a second Ctrl-C does: the terminal sessions are killed first.
+/// Quit now, as a second Ctrl-C does.
 pub(crate) fn quit_now() -> ! {
-    tools::shell::kill_all_now();
-    // SAFETY: _exit ends the process at once; the sessions, the only thing that must not be left
-    // behind, are killed.
+    // SAFETY: _exit ends the process at once.
     unsafe { libc::_exit(crate::exit::INTERRUPTED) }
 }
 
@@ -210,8 +195,6 @@ pub(crate) fn install() {
     extern "C" fn on_signal(_: libc::c_int) {
         const NOTE: &[u8] = b"\nllx: stopping the task (Ctrl-C again quits now)\n";
         if PROCESS.stop() {
-            // Only atomics and kill: _exit skips the destructors that would close the sessions.
-            tools::shell::kill_all_now();
             // SAFETY: _exit is async-signal-safe; nothing is left to flush that matters more than
             // quitting when asked twice.
             unsafe { libc::_exit(crate::exit::INTERRUPTED) };

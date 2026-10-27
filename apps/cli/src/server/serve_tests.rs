@@ -21,16 +21,11 @@ fn served() -> Served {
 }
 
 /// [`served`], as the daemon `host` when there is one.
-fn served_by(host: Option<Arc<Host>>) -> Served {
-    served_with(host, || vec!["cargo build".into()])
-}
-
-/// [`served_by`], its terminal sessions listed by `shells`.
 #[expect(
     clippy::disallowed_methods,
     reason = "the in-process transport's channels, as the binary makes them"
 )]
-fn served_with(host: Option<Arc<Host>>, shells: fn() -> Vec<String>) -> Served {
+fn served_by(host: Option<Arc<Host>>) -> Served {
     let (to_server, incoming) = channel();
     let (out, from_server) = channel();
     let (desk, requests) = channel();
@@ -39,7 +34,6 @@ fn served_with(host: Option<Arc<Host>>, shells: fn() -> Vec<String>) -> Served {
     std::thread::spawn(move || {
         let info = Info {
             max_lanes: 3,
-            shells: Arc::new(shells),
             commands: vec![("help".into(), "the commands".into())],
             modes: vec![("plan".into(), "plan first".into())],
             background: true,
@@ -106,8 +100,8 @@ fn an_interface_that_attaches_is_told_what_the_server_allows() {
         kind: kind.into(),
         name: name.into(),
     };
-    let running = vec![running("session", "first"), running("shell", "cargo build")];
-    assert_eq!(served.done(2), Done::Work { shells: 1, running });
+    let running = vec![running("session", "first")];
+    assert_eq!(served.done(2), Done::Work { running });
 }
 
 /// Lane `id` open, as the desk says it.
@@ -228,7 +222,6 @@ fn another(served: &Served) -> (Sender<ToServer>, Receiver<ToClient>) {
     std::thread::spawn(move || {
         let info = Info {
             max_lanes: 3,
-            shells: Arc::new(Vec::new),
             commands: vec![],
             modes: vec![],
             background: true,
@@ -315,7 +308,7 @@ fn a_connection_is_told_only_what_came_of_its_own_commands() {
     attach(&to_server, 1, None);
     assert_eq!(until_done(&frames, 1).1, Done::Attached { seq: 0 });
     served.call(5, Command::Work);
-    assert!(matches!(served.done(5), Done::Work { shells: 1, .. }));
+    assert!(matches!(served.done(5), Done::Work { .. }));
     let call = ToServer::Call {
         id: 6,
         command: Command::Work,
@@ -323,7 +316,7 @@ fn a_connection_is_told_only_what_came_of_its_own_commands() {
     to_server.send(call).unwrap();
     let (before, done) = until_done(&frames, 6);
     assert!(before.is_empty(), "{before:?}");
-    assert!(matches!(done, Done::Work { shells: 0, .. }), "{done:?}");
+    assert!(matches!(done, Done::Work { .. }), "{done:?}");
 }
 
 #[test]
@@ -455,18 +448,4 @@ fn what_is_typed_for_a_session_not_open_is_refused_and_kept_nowhere() {
         },
     );
     assert!(matches!(served.done(2), Done::Failed { .. }));
-}
-
-#[test]
-fn a_command_that_panics_is_answered_failed_and_the_server_goes_on() {
-    let served = served_with(None, || -> Vec<String> {
-        panic!("a bug in the shells' table")
-    });
-    served.call(1, Command::Work);
-    assert!(
-        matches!(served.done(1), Done::Failed { why } if why.contains("a bug")),
-        "the panic is the command's error"
-    );
-    served.call(2, Command::List);
-    assert_eq!(served.done(2), Done::Ok, "the server still serves");
 }

@@ -1,15 +1,12 @@
-//! One task of a session, on its [`Rig`]: run, reported, recorded, and its terminal sessions
-//! closed in `exec`.
+//! One task of a session, on its [`Rig`]: run, reported, recorded.
 
 use std::time::{Duration, Instant};
 
-use contracts::chat::Spend;
 use contracts::history::Turn;
 use contracts::tool::Image;
-use contracts::view::View;
 use serde_json::Value;
 
-use super::{Ended, since};
+use super::Ended;
 use crate::attach;
 use crate::compose::Rig;
 use crate::exit;
@@ -19,13 +16,11 @@ impl Rig<'_> {
     /// Run one task in the session: report it, record it, and return its exit code.
     pub(crate) fn task(&mut self, goal: &str) -> i32 {
         let started = Instant::now();
-        let before = self.meter.spend();
         let workspace = self.workspace.root().display().to_string();
         self.output.started(&Start {
             goal,
             session: &self.session.id,
             model: self.choice.model(),
-            decision_model: &self.options.models.decision_model,
             workspace: &workspace,
         });
         let attached = self.pictures();
@@ -51,16 +46,10 @@ impl Rig<'_> {
         self.spent.absorb(&run.spend);
         self.context_left(run.used);
         let halt = self.brake.halted();
-        // In a session the terminals stay for the next task (a REPL, a server's log): they end
-        // when closed, with the session, or on quitting. One task of `exec` takes them with it.
-        if !self.asks {
-            self.sessions.close_all();
-        }
         self.interrupt.end();
         self.conversation = Some(run.conversation);
         let ended = Ended::of(&run.status, run.data.as_ref(), halt, self.options.timeout);
-        let decision = since(&self.meter.spend(), &before);
-        self.record(goal, &run.answer, ended.status, &decision);
+        self.record(goal, &run.answer, ended.status);
         // `-o` first, so `exit_code` in the report is the code the process ends with.
         let (code, error) = match self.write_last(&run.answer, run.data.as_ref()) {
             Ok(()) => (ended.code, ended.error),
@@ -79,7 +68,6 @@ impl Rig<'_> {
             data: run.data.as_ref(),
             error: error.as_deref(),
             agent: &run.spend,
-            decision: &decision,
             millis: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
             session: &self.session.id,
         };
@@ -124,24 +112,16 @@ impl Rig<'_> {
         }
     }
 
-    /// Add the task to the session, with where the browser was left, and save it.
-    fn record(&mut self, goal: &str, answer: &str, status: &str, hands: &Spend) {
-        let location = (self.shared.page.as_ref())
-            .filter(|page| page.is_open())
-            .and_then(|page| page.observe().ok())
-            .map(|view| view.location);
-        let mut turn = Turn {
+    /// Add the task to the session, and save it.
+    fn record(&mut self, goal: &str, answer: &str, status: &str) {
+        let turn = Turn {
             goal: goal.to_string(),
             answer: answer.to_string(),
             status: status.to_string(),
             at: session::now(),
             steps: self.output.take_steps(),
         };
-        turn.steps.extend(
-            self.output
-                .hands_spent(contracts::history::Spent::from(hands)),
-        );
-        self.session.record(turn, location.as_deref());
+        self.session.record(turn, None);
         if let Err(error) = self.meta.save(self.history, &mut self.session) {
             self.output
                 .note(&format!("llx: the session was not saved: {error}\n"));

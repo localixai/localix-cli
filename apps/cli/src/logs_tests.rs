@@ -5,7 +5,7 @@ use super::*;
 #[test]
 fn rust_log_is_read_as_env_logger_reads_it() {
     let filter = Filter::parse("warn, llx=debug ,llx::server=trace,nonsense=loud");
-    assert_eq!(filter.level("wry::webview"), LevelFilter::Warn);
+    assert_eq!(filter.level("ureq::pool"), LevelFilter::Warn);
     assert_eq!(filter.level("llx"), LevelFilter::Debug);
     assert_eq!(filter.level("llx::output"), LevelFilter::Debug);
     assert_eq!(filter.level("llx::server::hub"), LevelFilter::Trace);
@@ -15,7 +15,7 @@ fn rust_log_is_read_as_env_logger_reads_it() {
     // A bare target is all of its levels; nothing else is kept.
     let filter = Filter::parse("llx");
     assert_eq!(filter.level("llx::session"), LevelFilter::Trace);
-    assert_eq!(filter.level("tao"), LevelFilter::Off);
+    assert_eq!(filter.level("ureq"), LevelFilter::Off);
     assert_eq!(Filter::parse("off").max(), LevelFilter::Off);
     assert_eq!(Filter::parse("").max(), LevelFilter::Off);
 }

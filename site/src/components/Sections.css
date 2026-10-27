@@ -56,43 +56,6 @@
   font-size: var(--step-1);
   line-height: 1.4;
 }
-.plugin {
-  display: grid;
-  justify-items: start;
-  gap: 0.75rem;
-}
-.plugin > * {
-  grid-column: 1;
-}
-@media (min-width: 48rem) {
-  /* Under the commands' own columns: it belongs to the descriptions' side. */
-  .plugin {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-    column-gap: 4rem;
-  }
-  .plugin > * {
-    grid-column: 2;
-  }
-}
-.plugin p {
-  max-width: var(--measure);
-  margin: 0;
-  color: var(--soft);
-}
-.plugin code {
-  display: block;
-  max-width: 100%;
-  padding: 0.7rem 1rem;
-  overflow-x: auto;
-  scrollbar-width: none;
-  border: 1px solid var(--line-strong);
-  border-radius: 9px;
-  background: var(--card);
-  color: var(--white);
-  font: 400 0.8125rem/1.4 var(--mono);
-  white-space: nowrap;
-}
-
 .term {
   margin: 0;
   padding: 1.1rem 1.25rem;

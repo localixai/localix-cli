@@ -31,21 +31,16 @@ fn a_lane_working_is_named_by_its_title_and_its_jobs_by_theirs() {
     let work = Work::default();
     started(&work, "A", "first");
     started(&work, "B", "second");
-    assert_eq!(
-        work.running(vec![]),
-        [],
-        "lanes at their prompt stop nothing"
-    );
+    assert_eq!(work.running(), [], "lanes at their prompt stop nothing");
     work.saw(Some("A"), &Event::TaskStarted("fix it".into()));
     let title = Some("Fix the flaky test".to_string());
     work.saw(Some("A"), &Event::Updated(Update { title }));
     let jobs = vec![job("watch-ci", true), job("nightly", false)];
     work.saw(Some("B"), &Event::Jobs(jobs));
     assert_eq!(
-        work.running(vec!["cargo build".into()]),
+        work.running(),
         [
             running("session", "Fix the flaky test"),
-            running("shell", "cargo build"),
             running("monitor", "watch-ci"),
             running("schedule", "nightly"),
         ]
@@ -58,7 +53,7 @@ fn a_lane_working_is_named_by_its_title_and_its_jobs_by_theirs() {
     };
     work.saw(Some("A"), &ended);
     work.ended("B");
-    assert_eq!(work.running(vec![]), []);
+    assert_eq!(work.running(), []);
 }
 
 #[test]
@@ -66,5 +61,5 @@ fn an_agents_task_is_not_a_lanes() {
     let work = Work::default();
     started(&work, "A", "first");
     work.saw(Some("agent-1"), &Event::TaskStarted("look".into()));
-    assert_eq!(work.running(vec![]), []);
+    assert_eq!(work.running(), []);
 }

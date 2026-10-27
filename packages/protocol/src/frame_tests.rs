@@ -2,8 +2,8 @@ use serde_json::json;
 
 use super::*;
 use crate::{
-    Adjustment, Answer, Approval, Group, Input, JobRow, Label, Outcome, Picture, Place, Question,
-    Running, Saved, Target, Theme, ToolInfo, Turn,
+    Adjustment, Answer, Approval, Group, Input, JobRow, Label, Outcome, Place, Question, Running,
+    Saved, Target, Turn,
 };
 
 fn through_json<T: Serialize + for<'de> Deserialize<'de>>(frame: &T) -> T {
@@ -159,30 +159,8 @@ fn every_question_to_the_person_comes_back_the_same_through_json() {
             },
         },
         ToClient::Done {
-            id: 12,
-            done: Done::Tools {
-                tools: vec![ToolInfo {
-                    name: "window".into(),
-                    description: "Open things to look at".into(),
-                    parameters: json!({"type": "object", "required": ["action"]}),
-                }],
-            },
-        },
-        ToClient::Done {
-            id: 13,
-            done: Done::Tool {
-                report: "Opened t1.".into(),
-                state: Some("$ cat".into()),
-                image: Some(Picture {
-                    media_type: "image/jpeg".into(),
-                    data: "/9j/".into(),
-                }),
-            },
-        },
-        ToClient::Done {
             id: 2,
             done: Done::Work {
-                shells: 1,
                 running: vec![Running {
                     kind: "shell".into(),
                     name: "cargo build".into(),
@@ -243,11 +221,6 @@ fn every_frame_to_the_server_comes_back_the_same_through_json() {
                 place: Some(Place {
                     cwd: "/work/a".into(),
                     env: vec![("PATH".into(), "/venv/bin:/usr/bin".into())],
-                    theme: Some(Theme {
-                        fg: [1, 2, 3],
-                        bg: [4, 5, 6],
-                        cursor: [7, 8, 9],
-                    }),
                     args: vec!["-y".into(), "fix it".into()],
                     dir: "/work".into(),
                 }),
@@ -257,18 +230,6 @@ fn every_frame_to_the_server_comes_back_the_same_through_json() {
         ToServer::Call {
             id: 11,
             command: Command::Shutdown,
-        },
-        ToServer::Call {
-            id: 12,
-            command: Command::Tools,
-        },
-        ToServer::Call {
-            id: 13,
-            command: Command::Tool {
-                call: "window-7-1".into(),
-                name: "window".into(),
-                arguments: json!({"action": "list"}),
-            },
         },
     ];
     for frame in &frames {
@@ -326,11 +287,8 @@ fn an_event_from_a_server_that_numbers_nothing_still_reads() {
 
 #[test]
 fn a_server_that_says_less_of_its_work_still_reads() {
-    let said = r#"{"type":"work","shells":2}"#;
-    let work = Done::Work {
-        shells: 2,
-        running: vec![],
-    };
+    let said = r#"{"type":"work"}"#;
+    let work = Done::Work { running: vec![] };
     assert_eq!(serde_json::from_str::<Done>(said).unwrap(), work);
     let said = r#"{"type":"initialized","version":1,"max_lanes":8,"commands":[],"modes":[]}"#;
     let Done::Initialized { background, .. } = serde_json::from_str(said).unwrap() else {

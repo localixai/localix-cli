@@ -8,7 +8,6 @@ use agent::agent::Agent;
 use agent::conversation::Conversation;
 use contracts::history::Session;
 use contracts::tool::Tool;
-use decision_loop::meter::Meter;
 use session::Sessions;
 use tools::workspace::Workspace;
 
@@ -33,7 +32,7 @@ use protocol::Event;
 /// The built agent and what a task needs around it; one per process, for every task it runs.
 pub(crate) struct Rig<'a> {
     pub agent: Agent<'a>,
-    /// What the lane shares with the others: the browser's page among them.
+    /// What the lane shares with the others.
     pub shared: &'a Shared,
     pub options: &'a RunOptions,
     pub workspace: &'a Workspace,
@@ -41,12 +40,7 @@ pub(crate) struct Rig<'a> {
     pub brake: &'a Brake<'a>,
     /// Whether the person stopped the task running.
     pub interrupt: &'a Interrupt,
-    /// The decision model's spend, over all tasks.
-    pub meter: &'a Meter,
     pub history: &'a Sessions,
-    /// The terminal sessions `bash` keeps open: in a session they outlive its tasks; one task of
-    /// `exec` closes them when it ends.
-    pub sessions: &'a tools::shell::Sessions,
     /// The agents the session started: let go with it, and what they spend is the task's.
     pub agents: &'a dyn Delegation,
     /// The monitors and schedules running in the background.
@@ -148,9 +142,7 @@ pub(super) fn drive(
                 output: base.output,
                 brake: base.brake,
                 interrupt: base.interrupt,
-                meter: base.meter,
                 history: &shared.history,
-                sessions: lane.sessions,
                 agents: &agents,
                 jobs: lane.jobs,
                 jobs_kit: lane.jobs_kit,

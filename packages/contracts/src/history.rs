@@ -59,7 +59,7 @@ pub struct Step {
     pub ms: u64,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub failed: bool,
-    /// What it spent: a model turn's tokens and cost, the hands' at the task's end.
+    /// What it spent: a model turn's tokens and cost.
     #[serde(default, skip_serializing_if = "Spent::is_empty")]
     pub spent: Spent,
 }

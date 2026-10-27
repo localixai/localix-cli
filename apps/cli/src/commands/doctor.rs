@@ -1,7 +1,6 @@
 //! `llx doctor`: is everything a run needs in place? The sign-in to each provider, both models
-//! (each asked one tiny question), the WebView the browser tool opens, and the shell `bash` runs
-//! in. A missing display only leaves the browser out, and a missing decision model only its
-//! actions, so both warn without failing.
+//! (each asked one tiny question), and the shell `bash` runs in. A missing decision model only
+//! leaves `llx decide` out, so it warns without failing.
 
 use std::collections::BTreeMap;
 use std::process::{Command, Stdio};
@@ -14,7 +13,6 @@ use crate::choice;
 use crate::cli::ModelOptions;
 use crate::error::{self, Failure};
 use crate::exit;
-use crate::live::NO_DECIDER;
 use crate::providers::{self, Provider};
 
 /// One check: passed, failed, or a warning that does not fail the run.
@@ -36,18 +34,6 @@ fn line(mark: Mark, text: &str) -> Result<(), Failure> {
 
 pub(crate) fn doctor(models: &ModelOptions) -> Result<i32, Failure> {
     let mut ok = shell()?;
-    if tools::browser::has_display() {
-        line(
-            Mark::Pass,
-            "browser: the system WebView (a window opens on first use)",
-        )?;
-    } else {
-        let (why, hint) = (tools::browser::NO_WINDOW, tools::browser::NO_WINDOW_HINT);
-        line(
-            Mark::Warn,
-            &format!("browser: {why}, so the browser tool is left out{hint}"),
-        )?;
-    }
     let choice = choice::resolve(models, choice::saved(), None)?;
     // The provider in use, and every other one signed in to: the catalog lists hundreds.
     let listed = Provider::all()
@@ -78,7 +64,10 @@ pub(crate) fn doctor(models: &ModelOptions) -> Result<i32, Failure> {
     }
     match providers::decider(&models.decision_model) {
         Some(decider) => ok &= decision_model(decider.as_ref(), &models.decision_model)?,
-        None => line(Mark::Warn, &format!("decision model: {NO_DECIDER}"))?,
+        None => line(
+            Mark::Warn,
+            "decision model: `llx decide` runs on OpenRouter: set OPENROUTER_API_KEY",
+        )?,
     }
     Ok(if ok { exit::OK } else { exit::ENVIRONMENT })
 }

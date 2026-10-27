@@ -82,12 +82,11 @@ fn last_answer(turns: &[contracts::history::Turn]) -> Option<String> {
 pub(crate) fn usage(rig: &Rig) -> String {
     use crate::output::human::{thousands, tokens_in};
     let spent = &rig.spent;
-    let decision = rig.meter.spend();
     let minutes = rig.begun.elapsed().as_secs() / 60;
     let session = rig.output.total();
     format!(
         "tasks      {}\nagent      {} · {} turns · {} · {} out · ${:.4}\n\
-         decision   {} calls · ${:.4}\ntotal      ${:.4} over {minutes} min\n\
+         total      ${:.4} over {minutes} min\n\
          session    {} · {} out · ${:.4}\n",
         rig.session.turns.len(),
         rig.choice.model(),
@@ -95,9 +94,7 @@ pub(crate) fn usage(rig: &Rig) -> String {
         tokens_in(spent.input_tokens, spent.cached_tokens),
         thousands(spent.output_tokens),
         spent.cost,
-        decision.calls,
-        decision.cost,
-        spent.cost + decision.cost,
+        spent.cost,
         tokens_in(session.input_tokens, session.cached_tokens),
         thousands(session.output_tokens),
         session.cost,

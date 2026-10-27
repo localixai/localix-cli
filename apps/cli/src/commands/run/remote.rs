@@ -7,14 +7,13 @@ use tools::workspace::Workspace;
 use crate::{daemon, exit, interrupt, tui};
 
 /// The session in the daemon, this terminal its interface; why not, when it cannot be.
-pub(super) fn run(root: &Workspace, theme: Option<protocol::Theme>) -> Result<i32, String> {
+pub(super) fn run(root: &Workspace) -> Result<i32, String> {
     let config = daemon::config()?;
     let path = daemon::reach(&config)?;
     let connect: tui::Connect = Box::new(move |deliver| client::Client::connect(&path, deliver));
     let start = tui::Start {
         connect,
         root: root.root(),
-        theme,
         build: daemon::build(),
         quit_now: interrupt::quit_now,
     };

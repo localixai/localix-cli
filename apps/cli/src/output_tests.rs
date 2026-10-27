@@ -14,7 +14,7 @@ fn call() -> ToolCall {
     }
 }
 
-fn summary<'a>(agent: &'a Spend, decision: &'a Spend) -> Summary<'a> {
+fn summary(agent: &Spend) -> Summary<'_> {
     Summary {
         status: "achieved",
         code: 0,
@@ -22,7 +22,6 @@ fn summary<'a>(agent: &'a Spend, decision: &'a Spend) -> Summary<'a> {
         data: None,
         error: None,
         agent,
-        decision,
         millis: 10,
         session: "1-ab",
     }
@@ -33,7 +32,6 @@ fn run(output: &Output) {
         goal: "run the tests",
         session: "1-ab",
         model: "m",
-        decision_model: "d",
         workspace: "/w",
     };
     output.started(&start);
@@ -45,8 +43,8 @@ fn run(output: &Output) {
     });
     output.result(&call(), &done);
     output.turn(&Usage::default());
-    let (agent, decision) = (Spend::default(), Spend::default());
-    output.completed(&summary(&agent, &decision));
+    let agent = Spend::default();
+    output.completed(&summary(&agent));
 }
 
 #[test]
@@ -215,11 +213,11 @@ fn on_a_github_runner_the_answer_on_stdout_stays_byte_exact() {
     let (out, err) = (Captured::default(), Captured::default());
     let mut output = Output::with(false, false, Box::new(out.clone()), Box::new(err));
     output.runner = Runner::GitHub;
-    let (agent, decision) = (Spend::default(), Spend::default());
+    let agent = Spend::default();
     let answer = "::set-output name=x::1\n##[add-matcher]m.json";
     output.completed(&Summary {
         answer,
-        ..summary(&agent, &decision)
+        ..summary(&agent)
     });
     assert_eq!(out.text(), format!("{answer}\n"));
 }

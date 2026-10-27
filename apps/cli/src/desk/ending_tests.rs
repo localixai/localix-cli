@@ -10,7 +10,7 @@ use crate::desk::test_support::{Person, at_desk, at_desk_with, call, connected, 
 use crate::desk::{Work, run};
 use crate::server::serve::{Info, serve};
 use crate::server::{Peer, Ui};
-use crate::testing::{NoDecider, Scratch, gated, says, setup};
+use crate::testing::{Scratch, gated, says, setup};
 use crate::tui::app::{Action, App};
 use crate::tui::views::AgentState;
 use protocol::Command;
@@ -52,7 +52,7 @@ fn a_panicking_lane_ends_the_other_lanes() {
     let begun = Instant::now();
     let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let scratch = Scratch::new();
-        let (shared, seat) = setup(&scratch, crate::modes::built("bypass"), true).split(None);
+        let (shared, seat) = setup(&scratch, crate::modes::built("bypass"), true).split();
         #[expect(
             clippy::disallowed_methods,
             reason = "the in-process transport and the desk's requests, as the binary makes them"
@@ -74,7 +74,6 @@ fn a_panicking_lane_ends_the_other_lanes() {
             );
             let models = Models {
                 chat: &a,
-                decider: &NoDecider,
                 live: None,
             };
             lane_with(shared, seat, models, work)
@@ -87,7 +86,6 @@ fn a_panicking_lane_ends_the_other_lanes() {
             .unwrap();
             let info = Info {
                 max_lanes: crate::desk::MAX_LANES,
-                shells: Arc::new(Vec::new),
                 commands: vec![],
                 modes: vec![],
                 background: false,
@@ -213,7 +211,7 @@ fn moved_to_the_background_a_lane_waits_for_the_next_interface_and_keeps_its_job
             person.command(Command::Background);
             drop(person);
             std::thread::sleep(Duration::from_millis(500));
-            let kept = peer.work.running(vec![]);
+            let kept = peer.work.running();
             let schedule = protocol::Running {
                 kind: "schedule".into(),
                 name: "later".into(),

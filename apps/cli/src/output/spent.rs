@@ -1,8 +1,8 @@
 //! What the session spent in all: the saved session's steps to begin with, then each model turn
-//! (its agents' too) and the hands' at each task's end. The interface is told the whole of it
+//! (its agents' too). The interface is told the whole of it
 //! each time it grows.
 
-use contracts::history::{Session, Spent, Step};
+use contracts::history::{Session, Spent};
 
 use super::Output;
 use crate::sync::lock;
@@ -31,19 +31,6 @@ impl Output {
             *total
         };
         self.tell_total(total);
-    }
-
-    /// The hands' spend in a task, as a step of its own: the session keeps it, and it counts.
-    pub(crate) fn hands_spent(&self, spent: Spent) -> Option<Step> {
-        if spent.is_empty() {
-            return None;
-        }
-        self.spend(spent);
-        Some(Step {
-            what: "decision".into(),
-            spent,
-            ..Step::default()
-        })
     }
 
     fn tell_total(&self, total: Spent) {

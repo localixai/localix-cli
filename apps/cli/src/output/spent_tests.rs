@@ -1,5 +1,6 @@
 use agent::observer::Observer;
 use contracts::chat::Usage;
+use contracts::history::Step;
 use contracts::history::Turn;
 use protocol::{Event, Total};
 
@@ -80,17 +81,4 @@ fn a_new_session_says_nothing_until_it_spends() {
     let output = quiet().in_ui(Some(ui.for_lane("s1")));
     output.spent_before(&Session::default());
     assert!(totals(&frames).is_empty());
-}
-
-#[test]
-fn the_hands_spend_is_a_step_of_the_task_and_counts() {
-    let (ui, frames) = fake_ui();
-    let output = quiet().in_ui(Some(ui.for_lane("s1")));
-    assert!(
-        output.hands_spent(Spent::default()).is_none(),
-        "no step for nothing"
-    );
-    let step = output.hands_spent(spent(300, 0, 10, 0.004)).unwrap();
-    assert_eq!((step.what.as_str(), step.spent.cost), ("decision", 0.004));
-    assert_eq!(totals(&frames)[0].input_tokens, 300);
 }

@@ -17,8 +17,7 @@ workspace lints) and Localix (rule ids, ratchets, poke-then-pull sync).
 
 ## Bird's-eye view
 
-llx is a model in a loop over seven tools. The loop and the hands decide; they know no
-technology. Tools, stores and providers are technology behind ports. One composition root wires
+llx is a model in a loop over six tools. The loop decides; it knows no technology. Tools, stores and providers are technology behind ports. One composition root wires
 them for a session. A session runs in a server, and an interface shows it through a protocol,
 in the same process today, over a socket once the daemon lands (`docs/daemon.md`). Nothing a
 person sees is known below the interface; nothing a model or a tool does is known above the
@@ -32,7 +31,7 @@ server.
            apps/tui (target)    apps/server (target)    composition root: sessions, lanes,
            keys, drawing        agents, jobs, modes, the gate's and the person's answers
                 │                 │
-          packages/client        │        packages/agent, decision-loop   the core
+          packages/client        │        packages/agent                  the core
           (target)               │        packages/tools, session, providers/*   adapters
                 │                 │
           packages/protocol (target)        packages/contracts, queue, providers/kit
@@ -46,31 +45,30 @@ every new file already goes where its target crate will be.
 |---|---|---|
 | Vocabulary | `contracts` (ports, no logic), `queue`, `providers/kit` | no workspace crate |
 | Wire | `protocol` | no workspace crate: serde only |
-| Core | `agent`, `decision-loop` | `contracts` |
+| Core | `agent` | `contracts` |
 | Adapters | `tools`, `session` | `contracts` |
 | Adapters | `providers/{models,openai,openrouter}` | `contracts`, `kit` |
 | Client | `client` (in process; the socket in D3) | `protocol` |
 | Server | `apps/server` (target) | every package but `client` |
-| Interface | `apps/tui` (target), `call` (the tool clients': `llx window`) | `client`, `protocol` |
+| Interface | `apps/tui` (target) | `client`, `protocol` |
 | Binary | `apps/cli` | `server`, `tui`, `client` |
 
 ## Dependency rules
 
 - **L1** _checked_: `contracts` depends on no workspace crate.
-- **L2** _checked_: `agent` and `decision-loop` depend only on `contracts`.
+- **L2** _checked_: `agent` depends only on `contracts`.
 - **L3** _checked_: tools and stores depend only on `contracts`; primitives (`queue`) and the
   provider kit on nothing; providers on `contracts` and the kit. A tool knows nothing of the
-  agent, the hands, the models or the other tools; a provider nothing of tools or other providers.
+  agent, the models or the other tools; a provider nothing of tools or other providers.
 - **L4** _checked_: only apps compose packages. Nothing depends on an app, but the binary on the
   server and the interface.
-- **L5** _checked_: `contracts`, `agent` and `decision-loop` name no tool or provider (no browser,
-  page, URL, OpenRouter, OpenAI, model name). The agent learns a tool's world from
-  `ToolSpec::description`, the hands from `View::conventions`, the run's place from the app's
-  context.
+- **L5** _checked_: `contracts` and `agent` name no tool or provider (no browser, page, URL,
+  OpenRouter, OpenAI, model name). The agent learns a tool's world from `ToolSpec::description`,
+  the run's place from the app's context.
 - **L6** _checked_: `protocol` depends on no workspace crate. Its types are wire
   DTOs; domain types never derive its serde shapes, and it never re-exports one.
-- **L7** _checked_ on the sources (and with the crate, once it is one): an interface (the
-  terminal's `tui`, the tool clients' `call`) depends only on `client` and `protocol`: never on
+- **L7** _checked_ on the sources (and with the crate, once it is one): the interface (the
+  terminal's `tui`) depends only on `client` and `protocol`: never on
   the agent, tools, providers, the session store or the server, nor on the app's other modules.
   What it needs to show, the protocol carries (Codex's `verify_tui_core_boundary`).
 - **L8** _checked_ for the client: the server is the only crate that serves the protocol and
@@ -82,24 +80,22 @@ every new file already goes where its target crate will be.
 - **L10**: no `utils` or `common` crate, ever; a shared thing is named for what it is (`kit`,
   `queue`) and placed at the layer of what it knows.
 
-## Core rules (the agent and the hands)
+## Core rules (the agent)
 
 - **C1** _checked_ on the sources: the core decides, the shell acts. Effects leave the core
-  through a port (`Chat`, `Tool`, `Gate`, `Person`, `View`, `Inbox`, `History`); the core opens
+  through a port (`Chat`, `Tool`, `Gate`, `Person`, `Inbox`, `History`); the core opens
   no file, socket or process and reads no environment variable.
 - **C2**: time and limits come in as values (a budget, a deadline, a strategy); a test sets them.
 - **C3**: strategies, not special cases. What may be done another way is a trait with an
   implementation the app chooses: `history::Strategy` and its `Stage`s, the inbox, the gate, the
-  person, a window tab's `Kind`.
+  person.
 - **C4**: the prompt cache is a constraint. Nothing rewrites an earlier message unless a budget
   forces it, then in one pass with headroom; what was elided stays elided. Settings that change
   between tasks reach the model as a note at the end.
-- **C5**: untrusted content stays data. Tool output, pages, agents' answers, monitor lines are
+- **C5**: untrusted content stays data. Tool output, agents' answers, monitor lines are
   tagged (`<agent_result>`, `<monitor>`) where the agent reads them, never instructions.
-- **C6**: decision-model output never becomes a selector, coordinates or code: targets are refs
-  from the latest observation, typed text one of the task's values.
-- **C7**: no task- or site-specific wording in the prompt, tool descriptions or the hands'
-  instructions. A rule earns its place by the evals and stays general.
+- **C6**: (retired.)
+- **C7**: no task- or site-specific wording in the prompt or the tool descriptions. A rule earns its place by the evals and stays general.
 
 - **C8**: callers decide, functions act: branches go up to the caller, loops down into
   functions that take the batch.
@@ -136,31 +132,15 @@ every new file already goes where its target crate will be.
 - **A5**: how to call a provider (wire, auth, retries) lives in its package; which provider a
   choice uses, in `apps/cli/src/providers.rs` (the server's, later) only.
 - **A6**: a data file (JSON, TOML) lives in the package that owns its meaning.
-- **A7**: a heavy dependency stays in the one adapter that needs it (wry and tao in `tools`'s
-  browser, TLS in the kit); std first, and the release binary under 5 MiB.
-- **A8**: the browser engine is a cargo feature, `browser`, on by default in `tools` and `llx`.
-  Without it, `tools::browser` keeps its names with nothing behind them (a handle that cannot be
-  made, `has_display` false), so the app compiles the same code with no `cfg` of its own and
-  links no engine: the headless build, for CI and servers, where `window` has terminal tabs only.
-  The Linux release ships both builds; an installer takes the headless one where no WebKitGTK is.
-- **A9**: the native window has three states on macOS, the owner's decision (`presence.rs`, a pure
-  module the AppKit side applies). Hidden: no tab; the app is a background one. Mini, the default
-  whenever a tab is open: a small floating panel in a screen corner over every Space, a full-screen
-  app's too, never taking focus, with a live picture of the tab shown; the agent's `show` makes it
-  blink and never expands it. Expanded: the deck as a non-activating panel over the Space the person
-  is on, staying on that Space when the person goes to another (only the mini follows), not full screen, opened only by the person's click on the mini and closed to it by the
-  window's minimize button (the strip has none of its own), at the ordinary windows' level, so another app's window may cover it; it becomes key only when the person clicks into a text field. llx never
-  activates the app. The window keeps its size and keeps rendering in every state (collapsed, it is
-  invisible and click-through, as a headless one is), so nothing the agent reads depends on the
-  state. Elsewhere there is no mini: an ordinary window that does not take focus.
+- **A7**: a heavy dependency stays in the one adapter that needs it (TLS in the kit); std first, and the release binary under 5 MiB.
+- **A8**, **A9**: (retired.)
 
 ## Composition rules (the apps)
 
 - **K1**: the app composes, it does not know. No catalog data, wire format or provider rule in
   an app; if it needs a fact, a package exposes it.
-- **K2**: sessions, approvals, the person, modes, agents, jobs and the window's kinds are the
-  server's; keys, the composer, drawing, `$EDITOR`, the clipboard and the terminal's colours the
-  interface's.
+- **K2**: sessions, approvals, the person, modes, agents and jobs are the server's; keys, the
+  composer, drawing, `$EDITOR` and the clipboard the interface's.
 - **K3**: one person, one question at a time: every approval and `ask` goes through
   `gate::one_question`, whichever thread asks. A person is one interface: a desk's lock
   (`Shared::asking`), or the process's own for the terminal it asks at; a question waiting at
@@ -177,10 +157,7 @@ every new file already goes where its target crate will be.
   and no code branches on a mode's name.
 - **K6**: one place maps failures to the exit-code contract (`exit.rs`); the `--json` events and
   exit codes change only with a schema bump and a CHANGELOG entry.
-- **K7**: a tool client's calls are approved by the agent that makes them (its own permission
-  prompt for the `llx window` command, before the call reaches llx): the toolbox's gate is the
-  `bypass` mode's rules, and refuses once the call is stopped. The person is never asked through
-  llx for them.
+- **K7**: (retired with `llx window`.)
 
 ## Protocol rules (the seam between interface and server)
 
@@ -199,23 +176,12 @@ every new file already goes where its target crate will be.
   client, the first answer wins, `resolved` tells the rest, replayed on attach, aborted when its
   task stops.
 - **W6**: events are numbered per session in a bounded ring; a client that falls behind gets a
-  gap and reads the state again. A live-only event (a hands' step) is never replayed. A slow
+  gap and reads the state again. A live-only event (a step under a call) is never replayed. A slow
   client is cut off, never waited for.
 - **W7**: a request carries what the server needs to act on it (the session's id); no hidden
   state per connection but who is attached.
 - **W8**: one request's panic or failure never ends the server: it becomes that request's error.
-- **W9**: a tool client is `llx window`, one call per process: a command any agent runs from its
-  own shell (no MCP server: llx extends the agent that runs it through commands it composes, as
-  `exec` and `decide` do). It is an interface that calls the agent's tools, not a session: its
-  handshake's command line says `window` and names its owner (the directory, or `--as`), and the
-  server gives it that owner's toolbox (`window`) at its place, with no chat model. The toolbox
-  outlives the connection: an owner's tabs stay between its calls, until `llx window --end`, the
-  person closes them, or the daemon stops; while an owner has one, the daemon is in use (a new
-  build does not replace it). The call runs on a thread of its own and is answered when done; the
-  connection ending (its process killed) stops it. A picture it returns is written to a file the
-  output names. What the person sends from the owner's tabs (their comments) is held for the
-  owner, and handed back with its next call after that call's report, marked, as untrusted page
-  data with the person's notes.
+- **W9**: (retired.)
 
 ## Concurrency and errors
 
@@ -277,7 +243,7 @@ every new file already goes where its target crate will be.
 - **S5** _checked_: `unsafe` lives only where the OS is called: `tools` and the apps. The
   vocabulary, the core, the stores and the providers have none.
 - **S6**: one idea per file, named for it; a file's `//!` says what it is (_checked_: every
-  working file opens with one). A directory module (`shell/`, `browser/`) groups the files of
+  working file opens with one). A directory module (`shell/`, `fs/`) groups the files of
   one tool or one subsystem, its root `x.rs` beside the directory `x/`, never `x/mod.rs`
   (_checked_; the integration tests' `tests/common/mod.rs` and `tests/suite/mod.rs` stay, as
   cargo needs).
@@ -297,12 +263,8 @@ every new file already goes where its target crate will be.
 - **A provider:** an entry in the catalog (`providers/models`, from models.dev), a wire in a
   provider package if none fits, one arm in `providers.rs`.
 - **A model:** nothing in llx: it arrives with the catalog's refresh.
-- **A tool capability:** an `action` of an existing tool, or the shell. A tool client gets the
-  same `Tool` the agent has, from the toolbox (W9), never a copy of it, and its description and
-  parameters as that tool states them (`llx window` with no call prints them). A new tool is a decision
-  recorded here. `window` (the owner's decision): everything the agent opens to look at and work
-  in is a tab of one window, each kind a `tools::window::Kind` the app gives; a `goal` belongs to
-  every tab.
+- **A tool capability:** an `action` of an existing tool, or the shell. A new tool is a decision
+  recorded here.
 - **Something that reaches a run:** a kind in `arrivals.rs` and a post to the lane's queue (K4).
 - **A CI integration:** the GitHub Action is `action.yml` at the repository's root, composite
   shell steps only (no Node, no MCP server, no GitHub tool): it installs the release its own tag
@@ -311,14 +273,6 @@ every new file already goes where its target crate will be.
   (C7, K5); the agent reaches GitHub, as anything else, with `gh` and `git` through `bash`. It
   reads the exit codes and `--json` events (K6), so a schema bump updates it in the same commit.
   Ready-made workflows live in `examples/`, each run for real before it is published.
-- **A host's plugin:** `plugins/<host>/` (Claude Code's: `plugins/claude-code/`, the plugin
-  `llx`, listed in `.claude-plugin/marketplace.json` at the root so it installs from this
-  repository). It teaches the host's agent to call llx's commands from its own shell (a skill,
-  `guide`) and adds only what a command cannot (the person's comments from the window brought as
-  a turn of their own, the tabs ended with the session): no MCP server, no tool of its own, no
-  copy of a tool's description or of llx's logic (W9). It reads llx's output as a person would,
-  so a change to what `llx window`, `llx serve status` or the exit codes print updates it in the
-  same commit.
 - **A history stage:** a `Stage` in `agent/src/history.rs`, placed by its value in
   `Pipeline::default`, with a test, the long-dialogue simulation still passing.
 - **A protocol method:** its `*Params`/`*Response` in `protocol`, served in the server, called
@@ -329,13 +283,11 @@ every new file already goes where its target crate will be.
 
 - **D1** (done): the seam as the protocol, in process: `protocol` and `client` exist; the
   interface speaks only through them. L6-L8 are checked.
-- **D2** (done): sessions carry their place (directory, environment, theme).
+- **D2** (done): sessions carry their place (directory, environment).
 - **D3** (done): the socket and `llx serve`.
 - **D4** (done): attach and detach: the ring, replayed questions, the quit question, back to
   the sessions moved to the background.
-- **D5** (done): the window grouped by project.
-- **D6** (done): tool clients (W9, K7): `llx window`, the agent's `window` as a command any
-  agent runs from its shell, through the daemon; it replaced `llx mcp`, an MCP server.
+- **D5**, **D6**: (retired.)
 
 ## Budgets
 

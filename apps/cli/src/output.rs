@@ -1,5 +1,5 @@
 //! What a run shows as it goes and how it ends. For a person: a trace on stderr (`▸ tool args`,
-//! the browser hands' steps indented under their call) and the answer alone on stdout, so a pipe
+//! an agent's steps indented under its call) and the answer alone on stdout, so a pipe
 //! gets the answer and nothing else. With `--json`: one JSON event per line on stdout
 //! ([`json`]). A closed stdout is noticed when something is
 //! written to it, never with a panic: with `--json` that is every event, so the run stops at its
@@ -17,7 +17,6 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
 
 use contracts::chat::Spend;
-use decision_loop::step::GoalStep;
 use serde_json::Value;
 
 use ratatui::text::Line;
@@ -46,14 +45,13 @@ fn stderr_width() -> Option<usize> {
 
 /// The `--json` event schema: a public contract (see CHANGELOG.md). 4: JSON lines replace the one
 /// object of schema 3.
-pub(crate) const SCHEMA: u32 = 4;
+pub(crate) const SCHEMA: u32 = 5;
 
 /// What a run starts with, as `run.started` reports it.
 pub(crate) struct Start<'a> {
     pub goal: &'a str,
     pub session: &'a str,
     pub model: &'a str,
-    pub decision_model: &'a str,
     pub workspace: &'a str,
 }
 
@@ -67,7 +65,6 @@ pub(crate) struct Summary<'a> {
     pub data: Option<&'a Result<Value, String>>,
     pub error: Option<&'a str>,
     pub agent: &'a Spend,
-    pub decision: &'a Spend,
     pub millis: u64,
     pub session: &'a str,
 }
@@ -92,7 +89,7 @@ pub(crate) struct Output {
     colour: bool,
     width: usize,
     blocks: AtomicUsize,
-    /// The hands' actions under the call running, printed with it.
+    /// The steps under the call running (an agent's), printed with it.
     steps: Mutex<Vec<String>>,
     /// What the task did so far, each call by its id while it runs: for its session.
     done: Mutex<Vec<(String, contracts::history::Step)>>,
@@ -218,19 +215,6 @@ impl Output {
         }
     }
 
-    /// One action of the browser hands.
-    pub(crate) fn step(&self, step: &GoalStep) {
-        if let Some(ui) = &self.ui {
-            return ui.send(Event::Step(step.trace_line()));
-        }
-        if self.json {
-            self.event(&json::step(step, self.millis()));
-        }
-        if self.trace {
-            lock(&self.steps).push(step.trace_line());
-        }
-    }
-
     /// The interface the run is shown in, at a terminal.
     pub(crate) fn ui(&self) -> Option<&Ui> {
         self.ui.as_ref()
@@ -259,7 +243,7 @@ impl Output {
                 status: summary.status.to_string(),
                 millis: summary.millis,
                 turns: summary.agent.calls,
-                cost: summary.agent.cost + summary.decision.cost,
+                cost: summary.agent.cost,
             });
         }
         // At a terminal the answer comes first, rendered, then how the run ended; a pipe gets
@@ -278,7 +262,7 @@ impl Output {
                 status: summary.status,
                 millis: summary.millis,
                 turns: summary.agent.calls,
-                cost: summary.agent.cost + summary.decision.cost,
+                cost: summary.agent.cost,
             };
             self.block(&cells::end(&end, self.width));
             self.lines(&cells::note(&human::spend(summary), self.width));

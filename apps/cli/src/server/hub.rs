@@ -26,8 +26,8 @@ pub(crate) type ClientId = u64;
 /// Events kept for a client that attaches later.
 pub(crate) const KEPT: usize = 2_000;
 
-/// Whether `event` is worth giving again to a client that attaches. A hands' step is drawn as a
-/// passing line (W6); a copy, a quit, a prefill and a list are what one client asked for once.
+/// Whether `event` is worth giving again to a client that attaches. A step is drawn as a passing
+/// line (W6); a copy, a quit, a prefill and a list are what one client asked for once.
 /// The rest is replayed: a queue or a total is sent whole, so only the latest is kept.
 fn replayable(event: &Event) -> bool {
     !matches!(

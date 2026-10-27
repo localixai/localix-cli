@@ -1,8 +1,7 @@
 # The plan's rules (scripts/checks/plan.sh): the first input is the crates table, the second the
 # changed paths. POSIX awk only (macOS's awk, mawk, gawk): no intervals, no gawk extensions.
 #
-#   a crate's directory     -> fmt; clippy on it (fast) or on it and its dependents, in both the
-#                              default and the headless build; their tests in both builds
+#   a crate's directory     -> fmt; clippy on it (fast) or on it and its dependents; their tests
 #   Cargo.toml, Cargo.lock, clippy.toml, rust-toolchain.toml at the root -> the same, workspace-wide
 #   any manifest, the lock, the toolchain -> the release binary's size (not in fast)
 #   anything                -> the repository's rules (suite::repo), unless the tests run them
@@ -21,8 +20,7 @@ part == 1 {
     ncrates++
     dir[ncrates] = $1
     cname[ncrates] = $2
-    feat[$2] = ($3 == "features")
-    deps[$2] = $4
+    deps[$2] = $3
   }
   next
 }
@@ -74,19 +72,19 @@ function why(kind) {
   return first[kind] (count[kind] > 1 ? " and " (count[kind] - 1) " more" : "")
 }
 
-# `-p` for each crate of the set (only those with features, when asked), in name order.
-function scope(set, with_features,    i, c, out) {
+# `-p` for each crate of the set, in name order.
+function scope(set,    i, c, out) {
   if (seen("root")) return "--workspace"
   out = ""
   for (i = 1; i <= ncrates; i++) {
     c = cname[i]
-    if ((c in set) && (!with_features || feat[c])) out = out (out == "" ? "" : " ") "-p " c
+    if (c in set) out = out (out == "" ? "" : " ") "-p " c
   }
   return out
 }
 
 function cargo(check) {
-  return check ~ /^(clippy|clippy-headless|test|test-headless)$/ ? "--workspace" : ""
+  return check ~ /^(clippy|test)$/ ? "--workspace" : ""
 }
 
 function emit(check, scope_, reason) {
@@ -109,7 +107,7 @@ function everything(    n, names, i, c) {
   }
 }
 
-function changes(    c, i, j, m, d, grow, whole, rust, s, h, reason) {
+function changes(    c, i, j, m, d, grow, whole, rust, s, reason) {
   whole = seen("root")
   rust = whole || seen("rust")
   for (c in touched) affected[c] = 1
@@ -134,14 +132,11 @@ function changes(    c, i, j, m, d, grow, whole, rust, s, h, reason) {
     emit("fmt", "", "Rust changed: " (whole ? why("root") : why("rust")))
     if (whole) reason = why("root") " changed: every crate reads it"
     if (mode == "fast") {
-      emit("clippy", scope(touched, 0), whole ? reason : "the crates changed")
+      emit("clippy", scope(touched), whole ? reason : "the crates changed")
     } else {
-      s = scope(affected, 0)
+      s = scope(affected)
       emit("clippy", s, whole ? reason : "the crates changed and their dependents")
-      emit("clippy-headless", s, "the same, built without default features (A8)")
       emit("test", s, whole ? reason : "the crates changed and their dependents")
-      h = scope(affected, 1)
-      if (h != "") emit("test-headless", h, "those with features, tested without them (A8)")
     }
   }
   if (seen("any") && !(mode == "changed" && rust && (whole || (repo_crate in affected))))

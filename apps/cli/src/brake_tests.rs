@@ -100,30 +100,3 @@ fn a_stopped_task_halts_at_its_next_turn_and_says_so_after_its_last() {
     );
     assert_eq!(brake.halted(), Some(Halt::Interrupted));
 }
-
-#[test]
-fn a_stopped_task_asks_the_decision_model_nothing_more() {
-    struct Never;
-    impl Decider for Never {
-        #[expect(
-            clippy::panic_in_result_fn,
-            reason = "a test's fake: a call it should not get fails the test"
-        )]
-        fn decide(
-            &self,
-            _: &Value,
-            _: &BTreeMap<String, Question>,
-        ) -> Result<Decision, DecideError> {
-            panic!("asked after the stop")
-        }
-    }
-    let interrupt = Interrupt::new();
-    interrupt.begin();
-    interrupt.stop();
-    let decider = BrakedDecider {
-        inner: &Never,
-        interrupt: &interrupt,
-    };
-    let refused = decider.decide(&Value::Null, &BTreeMap::new());
-    assert!(matches!(refused, Err(DecideError::Unavailable(_))));
-}

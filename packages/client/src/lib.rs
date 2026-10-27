@@ -109,7 +109,7 @@ impl Client {
 
     /// `command` sent now, what is done with it waited for later: what is sent after it comes
     /// after it, whoever waits.
-    pub fn begin(&self, command: Command) -> Result<Begun, CallError> {
+    fn begin(&self, command: Command) -> Result<Begun, CallError> {
         let (reply, done) = sync_channel(1);
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         {
@@ -150,7 +150,7 @@ impl Client {
 }
 
 /// A command sent, whose answer is still to come.
-pub struct Begun {
+struct Begun {
     id: u64,
     done: Receiver<Done>,
     waiting: Arc<Waiting>,
@@ -158,7 +158,7 @@ pub struct Begun {
 
 impl Begun {
     /// What was done with the command, within `wait`.
-    pub fn wait(self, wait: Duration) -> Result<Done, CallError> {
+    fn wait(self, wait: Duration) -> Result<Done, CallError> {
         let done = match self.done.recv_timeout(wait) {
             Ok(done) => done,
             Err(RecvTimeoutError::Timeout) => {
@@ -174,9 +174,7 @@ impl Begun {
             | Done::Interrupted { .. }
             | Done::Work { .. }
             | Done::Attached { .. }
-            | Done::Status { .. }
-            | Done::Tools { .. }
-            | Done::Tool { .. }) => Ok(done),
+            | Done::Status { .. }) => Ok(done),
         }
     }
 }

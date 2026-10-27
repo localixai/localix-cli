@@ -10,7 +10,7 @@ use super::cells;
 use super::event::{Event, JobRow};
 use crate::tui::printable::printable;
 
-/// Rows of the hands' latest actions shown under their call.
+/// Rows of the latest steps shown under their call.
 const STEPS: usize = 3;
 
 impl App {

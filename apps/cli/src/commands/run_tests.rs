@@ -1,6 +1,5 @@
 use agent::agent::Status;
 use clap::Parser;
-use contracts::chat::Spend;
 use contracts::chat::{Completion, ToolCall};
 use serde_json::{Value, json};
 use session::Sessions;
@@ -13,7 +12,7 @@ use crate::exit;
 use crate::interrupt::Interrupt;
 use crate::mode::Mode;
 use crate::output::Output;
-use crate::testing::{Captured, NoDecider, Scratch, ScriptedChat};
+use crate::testing::{Captured, Scratch, ScriptedChat};
 
 #[test]
 fn an_answer_ends_with_the_code_its_result_line_says() {
@@ -85,38 +84,6 @@ fn a_halt_decides_the_status_and_exit_code() {
     }
 }
 
-#[test]
-fn a_task_counts_only_what_it_spent() {
-    let before = Spend {
-        model: "d".into(),
-        calls: 2,
-        input_tokens: 100,
-        output_tokens: 10,
-        cost: 0.5,
-        millis: 300,
-        ..Spend::default()
-    };
-    let now = Spend {
-        calls: 5,
-        input_tokens: 400,
-        output_tokens: 40,
-        cost: 1.25,
-        millis: 900,
-        ..before.clone()
-    };
-    let spent = since(&now, &before);
-    assert_eq!(
-        (
-            spent.calls,
-            spent.input_tokens,
-            spent.output_tokens,
-            spent.millis
-        ),
-        (3, 300, 30, 600)
-    );
-    assert!((spent.cost - 0.75).abs() < 1e-9);
-}
-
 /// What one composed task did: its events, the `-o` file, the session saved.
 struct Done {
     code: i32,
@@ -159,9 +126,6 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
         history,
         session,
         ui: None,
-        shown: false,
-        #[cfg(unix)]
-        theme: None,
     };
     let call = ToolCall {
         id: "c1".into(),
@@ -180,7 +144,6 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
     ]);
     let models = Models {
         chat: &chat,
-        decider: &NoDecider,
         live: None,
     };
     let out = Captured::default();
@@ -192,7 +155,7 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
     );
     let interrupt = Interrupt::new();
     let mut saved = None;
-    let (shared, seat) = setup.split(None);
+    let (shared, seat) = setup.split();
     let code = assemble(&shared, seat, models, &output, &interrupt, |rig| {
         let code = rig.task("make a file");
         saved = Some(rig.history.load(Some(&rig.session.id)).unwrap());

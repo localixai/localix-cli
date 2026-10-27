@@ -16,8 +16,6 @@ use crate::desk::Request;
 /// What the server tells an interface of itself when it attaches.
 pub(crate) struct Info {
     pub max_lanes: usize,
-    /// The commands of the terminal sessions running, in every lane of this interface's desk.
-    pub shells: Arc<dyn Fn() -> Vec<String> + Send + Sync>,
     /// What `/` offers, and the modes, each with what it does.
     pub commands: Vec<(String, String)>,
     pub modes: Vec<(String, String)>,
@@ -200,13 +198,9 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
             peer.abandon(None);
             Done::Ok
         }
-        Command::Work => {
-            let shells = (info.shells)();
-            Done::Work {
-                shells: shells.len(),
-                running: peer.work.running(shells),
-            }
-        }
+        Command::Work => Done::Work {
+            running: peer.work.running(),
+        },
         Command::Background => to_desk(Request::Background),
         // Served by `serving`, which knows the connection.
         Command::Attach { .. } => Done::Ok,
@@ -218,10 +212,6 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
             host.end();
             Done::Ok
         }),
-        // A session's tools are its agent's: a tool client gets its own toolbox (W9).
-        Command::Tools | Command::Tool { .. } | Command::Release => Done::Failed {
-            why: "a session's tools are its agent's: `llx window` calls them".into(),
-        },
     }
 }
 

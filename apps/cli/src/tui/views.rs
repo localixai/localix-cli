@@ -142,7 +142,7 @@ pub(crate) struct LaneState {
     /// The share of the context window left after the last task, in percent.
     pub context: Option<u8>,
     pub mode: String,
-    /// The latest actions of the browser's hands under the call running.
+    /// The latest steps under the call running (what an agent it started does).
     pub steps: Vec<String>,
     /// The person stopped the task running.
     pub stopping: bool,

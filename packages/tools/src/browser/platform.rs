@@ -27,6 +27,17 @@ pub(super) fn dock<T>(target: &EventLoopWindowTarget<T>, shown: bool) {
 #[cfg(not(target_os = "macos"))]
 pub(super) fn dock<T>(_target: &EventLoopWindowTarget<T>, _shown: bool) {}
 
+/// Start the visible deck in macOS's native full-screen Space. Test windows stay unseen.
+#[cfg(target_os = "macos")]
+pub(super) fn fullscreen(window: &tao::window::Window) {
+    if !unseen() {
+        window.set_fullscreen(Some(tao::window::Fullscreen::Borderless(None)));
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(super) fn fullscreen(_window: &tao::window::Window) {}
+
 /// Where a headless window goes. macOS keeps it on screen and makes it invisible afterwards
 /// ([`keep_rendering`]): WebKit marks an off-screen window hidden and stops its animation frames
 /// and timers, so a page there would never settle. Elsewhere it goes off screen.
@@ -46,23 +57,22 @@ pub(super) fn conceal(builder: WindowBuilder) -> WindowBuilder {
 
 /// WebKit stops animation frames and timers in a window it considers hidden, and a driven window
 /// usually sits behind the terminal that started it. So occlusion detection, a WKWebView switch,
-/// is off. A shown window is an ordinary one: it comes to the front once, without taking focus,
-/// and goes behind other windows like any other. A headless window is fully transparent, passes
-/// clicks through, and goes behind every window, as Bun's and WebKit's own test windows do: on
-/// screen, so WebKit sees it shown and the display it is on stays awake, under whatever the person
-/// watches. Only where the switch is missing does it float, so that nothing covers it.
+/// is off. A shown window is ordered behind other windows without taking focus; macOS places it
+/// in an ordinary Space rather than moving it onto a full-screen app. A headless window is fully
+/// transparent, passes clicks through, and goes behind every window, as Bun's and WebKit's own
+/// test windows do: on screen, so WebKit sees it shown and the display it is on stays awake,
+/// under whatever the person watches. Only where the switch is missing does it float, so that
+/// nothing covers it.
 #[cfg(target_os = "macos")]
 pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
     use objc2::msg_send;
     use objc2::runtime::Bool;
     use wry::WebViewExtMacOS;
 
-    // NSWindowCollectionBehavior: a shown window opens in the Space the person is in, so it never
-    // switches Spaces under them, and it goes full screen as any window does (its green button);
-    // a headless one joins every Space, even over a full-screen app, and stays out of window
-    // cycling and Mission Control.
+    // A shown window participates in ordinary Spaces and can itself go full screen. A headless
+    // one joins every Space, even over a full-screen app, and stays out of window cycling.
     const CAN_JOIN_ALL_SPACES: usize = 1 << 0;
-    const MOVE_TO_ACTIVE_SPACE: usize = 1 << 1;
+    const MANAGED: usize = 1 << 2;
     const TRANSIENT: usize = 1 << 3;
     const IGNORES_CYCLE: usize = 1 << 6;
     const FULL_SCREEN_PRIMARY: usize = 1 << 7;
@@ -74,7 +84,7 @@ pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
     let behavior = if headless {
         CAN_JOIN_ALL_SPACES | TRANSIENT | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY
     } else {
-        MOVE_TO_ACTIVE_SPACE | FULL_SCREEN_PRIMARY
+        MANAGED | FULL_SCREEN_PRIMARY
     };
     // SAFETY: wry's NSWindow is alive while its WebView is; it takes an
     // NSWindowCollectionBehavior (an NSUInteger).
@@ -94,7 +104,7 @@ pub(super) fn keep_rendering(webview: &wry::WebView, headless: bool) {
         // SAFETY: as above; it takes a BOOL.
         let _: () = unsafe { msg_send![&*window, setHasShadow: Bool::NO] };
     }
-    if headless && switched {
+    if !headless || switched {
         // SAFETY: as above; `orderBack:` takes a sender, which may be nil, and returns nothing.
         let _: () = unsafe {
             msg_send![&*window, orderBack: std::ptr::null::<objc2::runtime::AnyObject>()]

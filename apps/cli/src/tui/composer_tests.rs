@@ -208,3 +208,58 @@ fn ctrl_u_clears_the_line_before_the_cursor_and_no_other() {
     composer.key(with(KeyCode::Char('u'), KeyModifiers::CONTROL));
     assert_eq!(composer.text(), "one\nb", "the text after the cursor stays");
 }
+
+#[test]
+fn selection_moves_by_character_word_and_line_and_replaces() {
+    let mut c = Composer::default();
+    c.set("one 日本 two");
+    c.key(with(KeyCode::Left, KeyModifiers::SHIFT | KeyModifiers::ALT));
+    assert_eq!(c.selection(), Some(7..10));
+    c.key(with(
+        KeyCode::Left,
+        KeyModifiers::SHIFT | KeyModifiers::CONTROL,
+    ));
+    assert_eq!(c.selection(), Some(4..10));
+    c.key(with(
+        KeyCode::Right,
+        KeyModifiers::SHIFT | KeyModifiers::CONTROL,
+    ));
+    assert_eq!(c.selection(), Some(6..10));
+    c.paste("X\r\nY");
+    assert_eq!(c.text(), "one 日本X\nY");
+    c.key(with(KeyCode::Home, KeyModifiers::SHIFT));
+    typed(&mut c, "z");
+    assert_eq!(c.text(), "one 日本X\nz");
+    c.key(with(KeyCode::Home, KeyModifiers::SHIFT));
+    c.key(key(KeyCode::Backspace));
+    assert_eq!(c.text(), "one 日本X\n");
+}
+
+#[test]
+fn selection_deletion_reset_and_rendering() {
+    use ratatui::style::Modifier;
+    let mut c = Composer::default();
+    c.set("abc日本d");
+    c.key(with(KeyCode::Home, KeyModifiers::SHIFT));
+    let (lines, _) = c.render(&Span::raw("> "), "", 5);
+    let selected: String = lines
+        .iter()
+        .flat_map(|line| &line.spans)
+        .filter(|span| span.style.add_modifier.contains(Modifier::REVERSED))
+        .map(|span| span.content.as_ref())
+        .collect();
+    assert_eq!(selected, "abc日本d");
+    c.key(key(KeyCode::Delete));
+    assert_eq!(c.text(), "");
+    c.set("hello");
+    c.key(with(KeyCode::Left, KeyModifiers::SHIFT));
+    c.key(key(KeyCode::Left));
+    assert_eq!(c.selection(), None);
+    c.key(with(KeyCode::End, KeyModifiers::SHIFT));
+    c.set("new");
+    typed(&mut c, "!");
+    assert_eq!(c.text(), "new!");
+    c.key(with(KeyCode::Char('a'), KeyModifiers::CONTROL));
+    typed(&mut c, "> ");
+    assert_eq!(c.text(), "> new!");
+}

@@ -44,7 +44,7 @@ const PAD = 14, LINE = 1.1;
 function size() {
   if (!innerWidth || !innerHeight) return;
   term.options.lineHeight = LINE;
-  let low = 6, high = 40;
+  let low = 6, high = 16;
   for (let step = 0; step < 16; step++) {
     const mid = (low + high) / 2;
     term.options.fontSize = mid;
@@ -52,14 +52,6 @@ function size() {
     if (fits && fits.cols >= COLS && fits.rows >= ROWS) low = mid; else high = mid;
   }
   term.options.fontSize = Math.floor(low * 100) / 100;
-  // Rows are whole device pixels tall: what that leaves below the grid goes between the lines.
-  const room = innerHeight - 2 * PAD;
-  let line = Math.min(LINE * 1.2, LINE * room / (ROWS * cell().height));
-  for (let step = 0; line > LINE && step < 20; step++, line -= 0.005) {
-    term.options.lineHeight = line;
-    if (ROWS * cell().height <= room) break;
-  }
-  if (ROWS * cell().height > room) term.options.lineHeight = LINE;
 }
 // A cell as the emulator lays it out (the fit addon reads the same).
 const cell = () => term._core._renderService.dimensions.css.cell;

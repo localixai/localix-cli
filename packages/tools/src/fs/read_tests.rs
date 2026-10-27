@@ -114,11 +114,161 @@ fn an_empty_file_says_so() {
 #[test]
 fn a_binary_file_is_refused() {
     let dir = Scratch::new();
-    dir.file("image.png", b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR");
+    dir.file("binary.dat", b"\0binary");
     assert_eq!(
-        failed(read(&dir, json!({"path": "image.png"}))),
-        "image.png is a binary file: it cannot be read as text"
+        failed(read(&dir, json!({"path": "binary.dat"}))),
+        "binary.dat is a binary file: it cannot be read as text"
     );
+}
+
+#[test]
+fn image_formats_are_returned_by_signature_with_dimensions() {
+    use base64::Engine as _;
+    let dir = Scratch::new();
+    let fixtures: &[(&[u8], &str)] = &[
+        (
+            b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x03\0\0\0\x02",
+            "image/png",
+        ),
+        (b"\xff\xd8\xff\xc0\0\x07\x08\0\x02\0\x03", "image/jpeg"),
+        (b"GIF89a\x03\0\x02\0", "image/gif"),
+        (
+            b"RIFF\x16\0\0\0WEBPVP8X\x0a\0\0\0\0\0\0\0\x02\0\0\x01\0\0",
+            "image/webp",
+        ),
+        (
+            b"RIFF\x11\0\0\0WEBPVP8L\x05\0\0\0\x2f\x02\x40\0\0",
+            "image/webp",
+        ),
+        (
+            b"RIFF\x16\0\0\0WEBPVP8 \x0a\0\0\0\0\0\0\x9d\x01\x2a\x03\0\x02\0",
+            "image/webp",
+        ),
+    ];
+    let workspace = Workspace::new(dir.path()).unwrap();
+    let tool = ReadTool {
+        workspace: &workspace,
+    };
+    for (bytes, media) in fixtures {
+        dir.file("file.dat", bytes);
+        let output = tool.call(&json!({"path": "file.dat"})).unwrap();
+        let image = output.image.unwrap();
+        assert_eq!(image.media_type, *media);
+        assert_eq!((image.width, image.height), (3, 2));
+        assert_eq!(
+            base64::engine::general_purpose::STANDARD
+                .decode(image.data)
+                .unwrap(),
+            *bytes
+        );
+    }
+}
+
+#[test]
+fn a_real_png_is_returned_intact() {
+    use base64::Engine as _;
+    // A complete 1 × 1 PNG, including IDAT and IEND chunks.
+    let encoded = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .unwrap();
+    let dir = Scratch::new();
+    dir.file("pixel.png", &bytes);
+    let workspace = Workspace::new(dir.path()).unwrap();
+    let output = ReadTool {
+        workspace: &workspace,
+    }
+    .call(&json!({"path": "pixel.png"}))
+    .unwrap();
+    assert_eq!(output.report, "pixel.png (image/png, 1 × 1)");
+    assert_eq!(output.state, None);
+    let image = output.image.unwrap();
+    assert_eq!(image.media_type, "image/png");
+    assert_eq!((image.width, image.height), (1, 1));
+    assert_eq!(
+        base64::engine::general_purpose::STANDARD
+            .decode(image.data)
+            .unwrap(),
+        bytes
+    );
+}
+
+#[test]
+fn denied_image_paths_are_refused() {
+    let dir = Scratch::new();
+    let denied = dir.file("private/pic.png", b"GIF89a\x01\0\x01\0");
+    let workspace = Workspace::new(dir.path()).unwrap().denying([denied]);
+    let tool = ReadTool {
+        workspace: &workspace,
+    };
+    let error = tool.call(&json!({"path": "private/pic.png"})).unwrap_err();
+    assert!(matches!(error, ToolError::Failed(message) if message.contains("off limits")));
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(
+            dir.path().join("private/pic.png"),
+            dir.path().join("link.png"),
+        )
+        .unwrap();
+        let error = tool.call(&json!({"path": "link.png"})).unwrap_err();
+        assert!(matches!(error, ToolError::Failed(message) if message.contains("off limits")));
+    }
+}
+
+#[test]
+fn image_size_limit_includes_the_boundary_and_catches_a_growing_reader() {
+    let limit = 5 * 1024 * 1024;
+    let mut bytes = vec![0; limit];
+    bytes[..10].copy_from_slice(b"GIF89a\x01\0\x01\0");
+    let dir = Scratch::new();
+    dir.file("limit.gif", &bytes);
+    let workspace = Workspace::new(dir.path()).unwrap();
+    let output = ReadTool {
+        workspace: &workspace,
+    }
+    .call(&json!({"path": "limit.gif"}))
+    .unwrap();
+    assert_eq!(
+        (output.image.unwrap().width, output.report.as_str()),
+        (1, "limit.gif (image/gif, 1 × 1)")
+    );
+
+    // The file may grow after metadata is read: bound the actual stream as well.
+    bytes.push(0);
+    let args = Args {
+        path: "growing.gif".into(),
+        offset: None,
+        limit: None,
+    };
+    let mut reader = io::Cursor::new(bytes);
+    let error = image::read(
+        &mut reader,
+        "growing.gif",
+        limit as u64,
+        image::Format::Gif,
+        &args,
+    )
+    .unwrap_err();
+    assert!(matches!(error, ToolError::Failed(message) if message.contains("5 MiB")));
+    assert_eq!(reader.position(), limit as u64 + 1);
+}
+
+#[test]
+fn images_reject_line_arguments_bad_headers_and_excess_size() {
+    let dir = Scratch::new();
+    dir.file("pic", b"GIF89a\x03\0\x02\0");
+    for args in [
+        json!({"path":"pic", "offset": 1}),
+        json!({"path":"pic", "limit": 1}),
+    ] {
+        assert!(failed(read(&dir, args)).contains("offset and limit"));
+    }
+    dir.file("pic", b"GIF89a");
+    assert!(failed(read(&dir, json!({"path":"pic"}))).contains("invalid or incomplete"));
+    let mut large = vec![0; 5 * 1024 * 1024 + 1];
+    large[..6].copy_from_slice(b"GIF89a");
+    dir.file("pic", large);
+    assert!(failed(read(&dir, json!({"path":"pic"}))).contains("5 MiB"));
 }
 
 #[test]

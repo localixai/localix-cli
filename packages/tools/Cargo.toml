@@ -13,7 +13,6 @@ default = ["browser"]
 # Off, `tools::browser` keeps its names with nothing behind them and none of these is linked: the
 # headless build, for CI and servers (ARCHITECTURE.md A8).
 browser = [
-    "dep:base64",
     "dep:tao",
     "dep:wry",
     "dep:url",
@@ -35,8 +34,8 @@ required-features = ["browser"]
 
 # The tool protocol only (rule L3): a tool knows nothing of the loop or the model.
 [dependencies]
-# Already in the tree through openrouter: a screenshot goes to the model as base64.
-base64 = { workspace = true, optional = true }
+# Images go to the model as base64, including in the headless build.
+base64.workspace = true
 contracts.workspace = true
 serde.workspace = true
 serde_json.workspace = true

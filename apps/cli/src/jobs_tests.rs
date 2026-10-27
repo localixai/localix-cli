@@ -48,6 +48,81 @@ fn in_exec_a_task_waits_for_its_monitor_and_reads_each_batch() {
     });
 }
 
+#[cfg(unix)]
+#[test]
+fn monitor_remains_expected_until_completion_is_posted() {
+    use contracts::tool::Tool;
+    let scratch = Scratch::new();
+    let workspace = Workspace::new(scratch.path()).unwrap();
+    let output = Output::with(
+        false,
+        false,
+        Box::new(Captured::default()),
+        Box::new(Captured::default()),
+    );
+    let (entered, waiting) = std::sync::mpsc::sync_channel(1);
+    let (resume, released) = std::sync::mpsc::sync_channel::<()>(0);
+    let released = Mutex::new(released);
+    let queue = queue::Queue::new(16).on_open(move |_| {
+        entered.send(()).unwrap();
+        released.lock().unwrap().recv().unwrap();
+    });
+    let kit = Kit {
+        workspace: &workspace,
+        gate: &contracts::gate::Open,
+        hidden: &Vec::new,
+        output: &output,
+        session: false,
+        queue: &queue,
+    };
+    let jobs = Jobs::default();
+    std::thread::scope(|scope| {
+        let tool = JobsTool::new(&kit, &jobs, scope);
+        tool.call(&json!({"action":"monitor", "command":"true"}))
+            .unwrap();
+        waiting.recv_timeout(Duration::from_secs(5)).unwrap();
+        let expecting = jobs.expecting(&kit);
+        resume.send(()).unwrap();
+        assert!(expecting);
+    });
+    assert!(!jobs.expecting(&kit));
+}
+
+#[cfg(unix)]
+#[test]
+fn background_command_wakes_exec_with_both_streams_and_exit() {
+    let replies = vec![
+        call(
+            json!({"action":"command", "command":"printf out; printf err >&2; exit 7", "name":"build"}),
+        ),
+        says("Waiting."),
+        says("Done."),
+    ];
+    composed(crate::modes::built("bypass"), false, replies, |rig| {
+        rig.task("run it");
+        let all = users(rig).join("\n");
+        assert!(all.contains("<job_result job=\"build\">"), "{all}");
+        assert!(
+            all.contains("exit 7")
+                && all.contains("### stdout\nout")
+                && all.contains("### stderr\nerr"),
+            "{all}"
+        );
+        0
+    });
+}
+
+#[test]
+fn background_command_requires_bash_approval() {
+    let mut replies = vec![call(json!({"action":"command", "command":"echo test"}))];
+    replies.extend(answers(1));
+    composed(crate::modes::built("default"), false, replies, |rig| {
+        rig.task("run it");
+        assert!(results(rig)[0].0 && results(rig)[0].1.contains("no one is at a terminal"));
+        0
+    });
+}
+
 #[test]
 fn schedules_need_a_session_and_are_listed_and_stopped_there() {
     let schedule = json!({"action": "schedule", "prompt": "check the deploy", "in": "45m",

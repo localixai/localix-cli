@@ -86,7 +86,71 @@ pub struct BashTool<'a> {
     pub sessions: &'a Sessions,
 }
 
+/// A command and directory approved together by the gate.
+pub struct ApprovedCommand {
+    command: String,
+    dir: std::path::PathBuf,
+    place: Option<String>,
+    timeout: Duration,
+}
+
 impl BashTool<'_> {
+    /// Validate and approve a non-interactive command before dispatching it to a worker.
+    pub fn approve_command(&self, arguments: &Value) -> Result<ApprovedCommand, ToolError> {
+        let args: Args = serde_json::from_value(arguments.clone())
+            .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
+        if args.interactive() {
+            return Err(ToolError::Failed(
+                "terminal sessions are tabs of the window: open one there".into(),
+            ));
+        }
+        let command = args.command.as_deref().unwrap_or_default();
+        if command.trim().is_empty() {
+            return Err(ToolError::Failed(EMPTY.into()));
+        }
+        let (dir, place) = self.dir(args.workdir.as_deref())?;
+        let effect = match &place {
+            Some(place) => format!("{}  (in {place})", summary(command)),
+            None => summary(command),
+        };
+        ask(self.gate, NAME, command, &effect)?;
+        Ok(ApprovedCommand {
+            command: command.to_string(),
+            dir,
+            place,
+            timeout: Duration::from_millis(
+                args.timeout_ms
+                    .unwrap_or(DEFAULT_TIMEOUT_MS)
+                    .clamp(1, MAX_TIMEOUT_MS),
+            ),
+        })
+    }
+
+    /// Run a command whose exact arguments were approved by `approve_command`.
+    pub fn run_approved(&self, approved: ApprovedCommand) -> Result<ToolOutput, ToolError> {
+        let ApprovedCommand {
+            command,
+            dir,
+            place,
+            timeout,
+        } = approved;
+        let names = (self.hidden)();
+        let hidden: Vec<&str> = names.iter().map(String::as_str).collect();
+        let job = Job {
+            command: &command,
+            dir: &dir,
+            timeout,
+            env: Env {
+                vars: self.workspace.env(),
+                hidden: &hidden,
+            },
+            stop: self.stop,
+        };
+        let finished = process::run(&job)
+            .map_err(|error| ToolError::Failed(format!("the shell could not start: {error}")))?;
+        Ok(report(&finished, place.as_deref()).into())
+    }
+
     /// A terminal session's call, for the window's terminal tabs: what it did, and the id of a
     /// session it started while that session runs.
     pub fn terminal(&self, arguments: &Value) -> Result<(ToolOutput, Option<u32>), ToolError> {
@@ -114,43 +178,8 @@ impl Tool for BashTool<'_> {
     }
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
-        let args: Args = serde_json::from_value(arguments.clone())
-            .map_err(|error| ToolError::Failed(format!("unusable arguments: {error}")))?;
-        // Terminal sessions are reached through `terminal`: the window's tabs.
-        if args.interactive() {
-            return Err(ToolError::Failed(
-                "terminal sessions are tabs of the window: open one there".into(),
-            ));
-        }
-        let command = args.command.as_deref().unwrap_or_default();
-        if command.trim().is_empty() {
-            return Err(ToolError::Failed(EMPTY.into()));
-        }
-        let (dir, place) = self.dir(args.workdir.as_deref())?;
-        let effect = match &place {
-            Some(place) => format!("{}  (in {place})", summary(command)),
-            None => summary(command),
-        };
-        ask(self.gate, NAME, command, &effect)?;
-        let timeout = args
-            .timeout_ms
-            .unwrap_or(DEFAULT_TIMEOUT_MS)
-            .clamp(1, MAX_TIMEOUT_MS);
-        let names = (self.hidden)();
-        let hidden: Vec<&str> = names.iter().map(String::as_str).collect();
-        let job = Job {
-            command,
-            dir: &dir,
-            timeout: Duration::from_millis(timeout),
-            env: Env {
-                vars: self.workspace.env(),
-                hidden: &hidden,
-            },
-            stop: self.stop,
-        };
-        let finished = process::run(&job)
-            .map_err(|error| ToolError::Failed(format!("the shell could not start: {error}")))?;
-        Ok(report(&finished, place.as_deref()).into())
+        let approved = self.approve_command(arguments)?;
+        self.run_approved(approved)
     }
 }
 

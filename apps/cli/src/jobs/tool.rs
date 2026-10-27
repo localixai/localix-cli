@@ -27,9 +27,9 @@ const RESTART: &str = "start it again with a filter that prints only the lines y
 const EXEC_WATCH: Duration = Duration::from_secs(600);
 
 pub(crate) struct JobsTool<'scope, 'env> {
-    kit: &'env Kit<'env>,
-    jobs: &'env Jobs,
-    scope: &'scope Scope<'scope, 'env>,
+    pub(super) kit: &'env Kit<'env>,
+    pub(super) jobs: &'env Jobs,
+    pub(super) scope: &'scope Scope<'scope, 'env>,
 }
 
 impl<'scope, 'env> JobsTool<'scope, 'env> {
@@ -126,12 +126,8 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                 hidden: &hidden,
             };
             let ended = monitor::watch(&command, root, env, deadline, &stopped, &lines);
-            let listed = {
-                let mut state = jobs.lock();
-                let before = state.jobs.len();
-                state.jobs.retain(|job| job.id != id);
-                state.jobs.len() < before
-            };
+            // Keep it listed until its final arrival is posted: exec waits while it is listed.
+            let listed = jobs.lock().jobs.iter().any(|job| job.id == id);
             let why = match ended {
                 Ok(Ended::Exit(how)) => format!("its command ended ({how})"),
                 Ok(Ended::Deadline) => {
@@ -144,6 +140,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                 let ended = format!("The monitor ended: {why}.");
                 kit.queue.post(crate::arrivals::monitor(&label, &ended));
             }
+            jobs.lock().jobs.retain(|job| job.id != id);
             jobs.show(kit);
         });
         // The OS refused a thread: the monitor is not listed, and the model is told.
@@ -263,6 +260,12 @@ impl Tool for JobsTool<'_, '_> {
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
         match spec::action(arguments).map_err(ToolError::Failed)? {
+            Action::Command {
+                command,
+                workdir,
+                timeout_ms,
+                name,
+            } => self.command(command, workdir.as_deref(), timeout_ms, name),
             Action::Monitor {
                 command,
                 name,
@@ -281,7 +284,7 @@ impl Tool for JobsTool<'_, '_> {
 }
 
 /// A new job's id and name (the name given, else its id).
-fn new_job(state: &mut State, name: Option<String>) -> (String, String) {
+pub(super) fn new_job(state: &mut State, name: Option<String>) -> (String, String) {
     state.made += 1;
     let id = format!("job-{}", state.made);
     let name = name

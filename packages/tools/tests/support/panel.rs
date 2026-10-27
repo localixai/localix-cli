@@ -84,6 +84,11 @@ pub(crate) fn scenario(browser: &Browser, driver: &WebviewDriver) {
         width >= Some(900.0) && height >= Some(600.0),
         "{width:?} by {height:?}"
     );
+    // A large window must not enlarge the fixed grid or center it away from the edge.
+    let layout = browser.peek(&panel, "(() => { const s = document.getElementById('s'), r = s.getBoundingClientRect(); return { font: parseFloat(getComputedStyle(s).fontSize), left: r.left, top: r.top }; })()").unwrap();
+    assert!(layout["font"].as_f64().unwrap() <= 16.0, "{layout}");
+    assert!(layout["left"].as_f64().unwrap() <= 16.0, "{layout}");
+    assert!(layout["top"].as_f64().unwrap() <= 16.0, "{layout}");
     let href = read["href"].clone();
 
     // A tab beside the browser's, shown as it opens.

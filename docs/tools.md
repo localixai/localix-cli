@@ -15,7 +15,7 @@ an `action`, or a kind of `window` tab), or is left to the shell.
 
 ## read
 
-A file's lines, numbered, up to 2000 lines and about 20 KB at a time (`offset`, `limit`), or a directory's entries. Long lines are cut, binary files and anything but regular files (a FIFO, a device) refused. It reads anywhere (a dependency's source, a system header) except llx's own key and sessions.
+A text file's lines, numbered, up to 2000 lines and about 20 KB at a time (`offset`, `limit`), or a directory's entries. PNG, JPEG, GIF and WebP files up to 5 MiB are sent to the model as images; `offset` and `limit` do not apply to them. Image headers are checked, but the file is not fully decoded; a corrupt file or a format the selected model does not support may be rejected by the provider. Long lines are cut; other binary files and anything but regular files (a FIFO, a device) are refused. It reads anywhere (a dependency's source, a system header) except llx's own key and sessions.
 
 ## edit
 
@@ -75,6 +75,7 @@ Starts other agents and works with them, in parallel:
 
 Work that comes back later.
 
+- `command` runs a shell command in the background, with the same approval, working directory, output limits and timeout as `bash` (2 min by default, 10 at most). Its exit status and captured stdout and stderr reach the agent as a `<job_result>` message; in `exec` the task waits for it. `list` and `stop` manage it.
 - `monitor` runs a command in the background (approved like a command, in its own process group, without the key variables `bash` leaves out): each batch of lines it prints reaches the main agent as a `<monitor>` message, at its next step while a task runs, else as a task of its own. It ends when the command exits, at its deadline (5 min by default, 30 at most; 10 in `exec`, where the task waits for it) or with `stop`, and the agent is told.
 - `schedule` gives a `prompt` back as a task of its own at a time: `in` (`45m`, `2h`) or a 5-field `cron` in local time (`*/10 * * * *`, `0 9 * * 1-5`; both day fields restricted match either), once or `recurring` (for 7 days at most). It runs between tasks, behind what you queued, while the session is open (not in `exec`; not restored by `resume`; no jitter).
 - At most 8 monitors and 50 jobs. `list`, `stop`.

@@ -1,10 +1,10 @@
-//! A monitor's command: run in the background, in a process group of its own (so a stop kills
+//! A monitor's command: run in the background, in a session of its own (so a stop kills
 //! everything it started), with no input. The lines it prints come back in batches: those that
 //! arrive close together make one message, so a burst is one step, not many.
 
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
@@ -33,19 +33,15 @@ pub(super) fn watch(
     stopped: &dyn Fn() -> bool,
     lines: &dyn Fn(Vec<String>, usize),
 ) -> Result<Ended, String> {
-    let mut shell = Command::new("sh");
+    // The tools' own way to run a command: a session of its own, only the standard streams
+    // inherited (a monitor lives long: a descriptor inherited by chance would stay open as long).
+    let mut shell = tools::shell::shell(command);
     shell
-        .arg("-c")
-        .arg(command)
         .current_dir(dir)
-        .stdin(Stdio::null());
-    shell.stdout(Stdio::piped()).stderr(Stdio::piped());
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     env.apply(&mut shell);
-    #[cfg(unix)]
-    std::os::unix::process::CommandExt::process_group(&mut shell, 0);
-    // A monitor lives long: a descriptor it inherited by chance would stay open as long.
-    #[cfg(unix)]
-    tools::shell::streams_only(&mut shell);
     let mut child = shell
         .spawn()
         .map_err(|error| format!("the command could not start: {error}"))?;
@@ -131,20 +127,9 @@ pub(super) fn watch(
     };
     flush(&mut batch, &mut dropped);
     if !matches!(ended, Ended::Exit(_)) {
-        kill(&mut child);
+        tools::shell::kill(&mut child);
     }
     Ok(ended)
-}
-
-/// End the command and everything it started.
-fn kill(child: &mut std::process::Child) {
-    #[cfg(unix)]
-    // SAFETY: a negative pid signals the process group the child leads; it is ours.
-    unsafe {
-        libc::kill(-child.id().cast_signed(), libc::SIGKILL);
-    }
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 #[cfg(test)]

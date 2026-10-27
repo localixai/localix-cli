@@ -36,7 +36,7 @@ pub use bash::BashTool;
 pub use inherit::streams_only;
 #[cfg(not(unix))]
 pub use none::{Sessions, kill_all_now, kill_with, running_anywhere, running_with};
-pub use process::{Ending, Env, SHELL};
+pub use process::{Ending, Env, SHELL, kill, shell};
 #[cfg(unix)]
 pub use running::{kill_all_now, kill_with, running_anywhere, running_with};
 #[cfg(unix)]

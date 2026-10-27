@@ -181,8 +181,10 @@ fn watch(
     }
 }
 
+/// `sh -c command` as the leader of a session of its own (so `kill` ends all it starts), inheriting
+/// llx's standard streams only.
 #[cfg(unix)]
-pub(super) fn shell(command: &str) -> Command {
+pub fn shell(command: &str) -> Command {
     use std::os::unix::process::CommandExt;
     let mut shell = Command::new("sh");
     shell.arg("-c").arg(command);
@@ -199,7 +201,7 @@ pub(super) fn shell(command: &str) -> Command {
 }
 
 #[cfg(windows)]
-fn shell(command: &str) -> Command {
+pub fn shell(command: &str) -> Command {
     use std::os::windows::process::CommandExt;
     // cmd parses its own command line: passed raw, the command reaches it as written.
     let mut shell = Command::new("cmd");
@@ -211,7 +213,7 @@ fn shell(command: &str) -> Command {
 /// session (the jobs a shell with job control put in groups of their own); whether all of it is
 /// known to be gone. `child` must not be reaped yet: its pid is the session's id until it is.
 #[cfg(unix)]
-pub(super) fn kill(child: &mut Child) -> bool {
+pub fn kill(child: &mut Child) -> bool {
     // A pid the system gave: it is a pid_t, which `id` widened.
     let leader = child.id().cast_signed();
     // SAFETY: kill only sends a signal; it touches nothing in this process.
@@ -233,7 +235,7 @@ pub(super) fn kill(child: &mut Child) -> bool {
     reason = "taskkill signals the tree and returns: it has no wait of its own"
 )]
 #[cfg(windows)]
-fn kill(child: &mut Child) -> bool {
+pub fn kill(child: &mut Child) -> bool {
     let tree = Command::new("taskkill")
         .args(["/PID", &child.id().to_string(), "/T", "/F"])
         .stdin(Stdio::null())

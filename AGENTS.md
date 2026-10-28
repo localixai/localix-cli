@@ -8,7 +8,7 @@ K, W, R, S). Every new file goes where its layer says, in its target crate's pla
 does not fit is redesigned, or ARCHITECTURE.md is changed first, in its own commit, with the
 owner's agreement; an exception is never made in code. Cite the rule ids a change touches.
 
-`llx` is an ultrafast, lightweight agent runtime: a minimal agent for the terminal, helpers on any model, and a decision step for scripts and CI. It has six tools: `read`, `edit`, `bash` (commands run to their end), `ask`, a question to the person that the app answers, `agents`, other agents it starts (each a session with a parent, run in parallel), and `jobs`, monitors and schedules. The tool set is deliberately minimal: no plugins, no MCP servers consumed, no skills, no extra tools. A new capability goes into one of these six (as an `action`), or is left to the shell.
+`llx` is an ultrafast, lightweight agent runtime: a minimal agent for the terminal, helpers on any model, and a decision step for scripts and CI. It has six tools: `read`, `edit`, `bash` (commands run to their end), `ask`, a question to the person that the app answers, `agents`, other agents it starts (each a session with a parent, run in parallel), and `jobs`, monitors and schedules. A seventh, `exec`, runs a short JavaScript script (QuickJS, in process) that calls those tools, for a chain of calls in one turn (ARCHITECTURE.md X1-X6). The tool set is deliberately minimal: no plugins, no MCP servers consumed, no skills, no extra tools. A new capability goes into one of these (as an `action`), or is left to the shell.
 
 ## Layout
 

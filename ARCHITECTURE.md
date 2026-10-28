@@ -17,7 +17,7 @@ and Localix (rule ids, ratchets, poke-then-pull sync).
 
 ## Bird's-eye view
 
-llx is a model in a loop over six tools. The loop decides; it knows no technology. Tools, stores and providers are technology behind ports. One composition root wires
+llx is a model in a loop over six tools, and a seventh, `exec`, a script that calls them (X1-X6). The loop decides; it knows no technology. Tools, stores and providers are technology behind ports. One composition root wires
 them for a session. A session runs in a server, and an interface shows it through a protocol,
 in the same process today, over a socket once the daemon lands (`docs/daemon.md`). Nothing a
 person sees is known below the interface; nothing a model or a tool does is known above the
@@ -132,7 +132,7 @@ every new file already goes where its target crate will be.
 - **A5**: how to call a provider (wire, auth, retries) lives in its package; which provider a
   choice uses, in `apps/cli/src/providers.rs` (the server's, later) only.
 - **A6**: a data file (JSON, TOML) lives in the package that owns its meaning.
-- **A7**: a heavy dependency stays in the one adapter that needs it (TLS in the kit); std first, and the release binary under 5 MiB.
+- **A7**: a heavy dependency stays in the one adapter that needs it (TLS in the kit, QuickJS in `tools`); std first, and the release binary under 5 MiB.
 - **A8**, **A9**: (retired.)
 
 ## Composition rules (the apps)
@@ -181,6 +181,36 @@ every new file already goes where its target crate will be.
   state per connection but who is attached.
 - **W8**: one request's panic or failure never ends the server: it becomes that request's error.
 - **W9**: (retired.)
+
+## Script rules (`exec`)
+
+A model that writes one short script for a chain of calls (search, read what it found, keep what
+matters; run the checks, keep the failures) spends one turn where it would spend many, and sends
+back only what the answer needs. llx runs the script in process, on QuickJS, for about half a
+MiB.
+
+- **X1**: `exec` is a tool in `tools` (`tools/src/script/`). It runs JavaScript on QuickJS
+  (`rquickjs`, synchronous, no `futures`: R1), a fresh runtime for each call, with no file system,
+  network, process or clock of its own: a script reaches the world only through
+  `tools.<name>(args)`.
+- **X2**: the functions a script calls are the run's own tools, the same instances the agent
+  holds, given to `exec` as `&dyn Tool` by the composition root: a call from a script asks the
+  gate, goes through `Workspace`, is checkpointed for `/rewind` and brings a directory's
+  instructions exactly as a direct call does (A1, A3, L3: `exec` knows the `Tool` port, never
+  another tool). A script never reaches a tool the run does not offer, nor `exec` itself.
+- **X3**: a script runs within the run's limits: its stop and deadline reach the engine's
+  interrupt (C2, R10), its memory is bounded, and what it returns or prints is cut as a command's
+  output is. A script that throws is a failed call with its message, never the run's end.
+- **X4**: its input is the script's text, not JSON (no string to escape): where a provider takes a
+  tool of free text (the Responses API's custom tools) it is offered so, with a grammar; elsewhere
+  as a function with one string argument. `ToolSpec` says which; the providers render it (L5:
+  the agent knows neither).
+- **X5**: what a script does is seen: each call it makes reaches the observer, the interface, the
+  log and the `--json` events as a call of its own, under the `exec` call that made it.
+- **X6**: when to write a script is the tool description's and the prompt's to say, in general
+  terms (C7): a chain where each call needs the last result, or a result far larger than what the
+  answer needs; not one call, not independent calls (they go in one turn), not a file's whole
+  content carried in a string.
 
 ## Concurrency and errors
 
@@ -262,7 +292,8 @@ every new file already goes where its target crate will be.
 - **A provider:** an entry in the catalog (`providers/models`, from models.dev), a wire in a
   provider package if none fits, one arm in `providers.rs`.
 - **A model:** nothing in llx: it arrives with the catalog's refresh.
-- **A tool capability:** an `action` of an existing tool, or the shell. A new tool is a decision
+- **A tool capability:** an `action` of an existing tool, or the shell; what is done by chaining
+  the tools is `exec`'s (X1-X6). A new tool is a decision
   recorded here.
 - **Something that reaches a run:** a kind in `arrivals.rs` and a post to the lane's queue (K4).
 - **A CI integration:** the GitHub Action is `action.yml` at the repository's root, composite

@@ -17,7 +17,7 @@ and Localix (rule ids, ratchets, poke-then-pull sync).
 
 ## Bird's-eye view
 
-llx is a model in a loop over six tools, and a seventh, `exec`, a script that calls them (X1-X6). The loop decides; it knows no technology. Tools, stores and providers are technology behind ports. One composition root wires
+llx is a model in a loop over six tools, and a seventh, `exec`, a script through which the model reaches `read` and `bash` (X1-X6). The loop decides; it knows no technology. Tools, stores and providers are technology behind ports. One composition root wires
 them for a session. A session runs in a server, and an interface shows it through a protocol,
 in the same process today, over a socket once the daemon lands (`docs/daemon.md`). Nothing a
 person sees is known below the interface; nothing a model or a tool does is known above the
@@ -148,7 +148,7 @@ every new file already goes where its target crate will be.
 - **K4**: something that reaches a run from outside its calls is a kind in `arrivals.rs` (its
   policy and tag) posted to the lane's queue; the agent's inbox knows no source.
 - **K5**: a mode is a named set of rules (`allow`, `deny`), and nothing else: the built-in ones
-  (`default`, no rule; `plan`, `edit` denied; `bypass`, everything allowed) and the person's,
+  (`default`, no rule; `plan`, `apply_patch` denied; `bypass`, everything allowed) and the person's,
   from `<config>/llx/settings.json`, where one may replace a built-in. `--allow` and `--deny` add
   to the mode's. A deny refuses in every mode; an allow runs without asking; what no rule settles
   is asked of the person, or refused when no one is there. Rules come from the command line and
@@ -197,7 +197,10 @@ MiB.
   holds, given to `exec` as `&dyn Tool` by the composition root: a call from a script asks the
   gate, goes through `Workspace`, is checkpointed for `/rewind` and brings a directory's
   instructions exactly as a direct call does (A1, A3, L3: `exec` knows the `Tool` port, never
-  another tool). A script never reaches a tool the run does not offer, nor `exec` itself.
+  another tool). A script never reaches a tool the run does not offer, nor `exec` itself. The
+  model reaches `read` and `bash` only through a script; files change by `apply_patch`, a call of
+  its own as free text (X4), never from a script, where a patch's quotes, backticks and `${`
+  would have to be escaped.
 - **X3**: a script runs within the run's limits: its stop and deadline reach the engine's
   interrupt (C2, R10), its memory is bounded, and what it returns or prints is cut as a command's
   output is. A script that throws is a failed call with its message, never the run's end.

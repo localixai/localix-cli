@@ -157,6 +157,9 @@ fn adopt(rig: &mut Rig, choice: Choice) -> Result<std::io::Result<PathBuf>, Stri
     }
     let saved = choice::save(&choice);
     rig.choice = choice;
+    if let Some(ui) = rig.output.ui() {
+        ui.send(super::repl::header(rig));
+    }
     Ok(saved)
 }
 

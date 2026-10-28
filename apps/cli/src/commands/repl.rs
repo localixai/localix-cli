@@ -17,11 +17,7 @@ pub(crate) use super::entry::{Entry, HELP, commands, entry};
 /// The session in `ui`, after `first` when it is given.
 pub(crate) fn run(rig: &mut Rig, ui: &Ui, first: Option<&str>) -> i32 {
     ui.send(Event::Mode(rig.mode.get().name().to_string()));
-    ui.send(Event::Header(vec![
-        env!("CARGO_PKG_VERSION").to_string(),
-        rig.choice.label(),
-        super::sessions::home_relative(&rig.workspace.root().display().to_string()),
-    ]));
+    ui.send(header(rig));
     if !rig.session.turns.is_empty() {
         let turns = rig.session.turns.iter().map(crate::server::wire::turn);
         ui.send(Event::Earlier(turns.collect()));
@@ -55,6 +51,16 @@ pub(crate) fn run(rig: &mut Rig, ui: &Ui, first: Option<&str>) -> i32 {
         }
     }
     exit::OK
+}
+
+/// The session's header: the version, the model it thinks with, the workspace. Sent again when
+/// the model changes, so the line printed last, and the one replayed on attach, names it.
+pub(super) fn header(rig: &Rig) -> Event {
+    Event::Header(vec![
+        env!("CARGO_PKG_VERSION").to_string(),
+        rig.choice.label(),
+        super::sessions::home_relative(&rig.workspace.root().display().to_string()),
+    ])
 }
 
 /// Carry out an entry that is not `/exit`; the task it asks to run, if any.

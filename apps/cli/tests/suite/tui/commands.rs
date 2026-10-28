@@ -30,6 +30,25 @@ fn slash_down_enter_opens_model_which_applies_the_one_chosen() {
 }
 
 #[test]
+fn the_header_names_the_model_model_switched_to() {
+    // The bug a person saw: after /model the header line still named the model the session
+    // started with. A switch prints the header again, with the model now in use.
+    let model = Model::start(vec![]);
+    let mut term = Term::start(&model, &[]);
+    term.type_text("/model").press(key::ENTER);
+    term.wait_for("• Model", LONG);
+    term.press(key::DOWN).press(key::ENTER);
+    let screen = term.wait_for("Now openrouter · ", LONG);
+    let chosen = screen
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("Now openrouter · "))
+        .and_then(|rest| rest.split(' ').next())
+        .unwrap()
+        .to_string();
+    term.wait_for(&format!("· openrouter · {chosen} ·"), LONG);
+}
+
+#[test]
 fn slash_mode_offers_the_modes_the_server_says() {
     let model = Model::start(vec![]);
     let mut term = Term::start(&model, &[]);

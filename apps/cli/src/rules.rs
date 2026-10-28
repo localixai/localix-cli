@@ -1,5 +1,5 @@
 //! `--allow` and `--deny`: rules on what runs without asking, read as Claude Code writes them
-//! (`bash(cargo test *)`, `edit(docs/**)`, `jobs`). A deny rule refuses what it names in every
+//! (`bash(cargo test *)`, `apply_patch(docs/**)`, `jobs`). A deny rule refuses what it names in every
 //! mode; an allow rule lets what it names run where the mode would ask or, with no one to ask,
 //! refuse. Plan mode stays read-only whatever is allowed. They come from the command line only:
 //! a rule read from the repository would let a pull request allow itself.
@@ -9,8 +9,8 @@ mod git;
 mod path;
 
 /// The tools a rule can name, and whether a pattern can narrow it: a command's text for `bash`,
-/// a path for `edit`. The others are named whole.
-const TOOLS: [(&str, bool); 3] = [("bash", true), ("edit", true), ("jobs", false)];
+/// a path for `apply_patch`. The others are named whole.
+const TOOLS: [(&str, bool); 3] = [("bash", true), ("apply_patch", true), ("jobs", false)];
 
 /// What the rules say of an effect before the mode does.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,7 +112,7 @@ fn denies(rule: &Rule, subject: &str) -> bool {
     match (&rule.pattern, rule.tool) {
         (None, _) => true,
         (Some(_), _) if subject.is_empty() => false,
-        (Some(pattern), "edit") => path::matches(pattern, subject),
+        (Some(pattern), "apply_patch") => path::matches(pattern, subject),
         (Some(pattern), _) => command::every(subject)
             .iter()
             .any(|part| command::matches(pattern, part)),
@@ -130,7 +130,7 @@ fn allows(rules: &[Rule], tool: &str, subject: &str) -> bool {
     if patterns.is_empty() || subject.is_empty() {
         return false;
     }
-    if tool == "edit" {
+    if tool == "apply_patch" {
         return patterns
             .iter()
             .any(|pattern| path::matches(pattern, subject));
@@ -176,7 +176,10 @@ fn rule(text: &str) -> Result<Rule, String> {
             )));
         }
         Some(pattern) => {
-            if let Some(why) = (tool == "edit").then(|| path::invalid(pattern)).flatten() {
+            if let Some(why) = (tool == "apply_patch")
+                .then(|| path::invalid(pattern))
+                .flatten()
+            {
                 return Err(wrong(why));
             }
             Some(pattern.to_string())

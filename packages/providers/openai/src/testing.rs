@@ -51,7 +51,13 @@ impl Scripted {
         Self::answering(
             replies
                 .into_iter()
-                .map(|(status, body)| Ok(Reply { status, body }))
+                .map(|(status, body)| {
+                    Ok(Reply {
+                        status,
+                        headers: vec![],
+                        body,
+                    })
+                })
                 .collect(),
         )
     }

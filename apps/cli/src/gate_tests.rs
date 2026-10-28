@@ -37,7 +37,7 @@ fn always_remembers_the_tool_for_the_run() {
     assert_eq!(gate.check(bash("ls")), Verdict::Allow);
     assert_eq!(gate.check(bash("rm -rf target")), Verdict::Allow);
     let edit = Effect {
-        tool: "edit",
+        tool: "apply_patch",
         subject: "",
         summary: "edit src/lib.rs (+1 -1 lines)",
     };

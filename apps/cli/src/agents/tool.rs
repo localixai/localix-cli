@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::Scope;
 
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
 use super::kit::Kit;
@@ -177,7 +177,7 @@ impl Tool for AgentsTool<'_, '_> {
         ToolSpec {
             name: spec::NAME.into(),
             description: spec::description(),
-            parameters: spec::parameters(),
+            input: Input::Json(spec::parameters()),
         }
     }
 

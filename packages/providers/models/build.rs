@@ -108,8 +108,23 @@ fn resolve(
     if model.get("type").is_none() {
         model["type"] = json!("chat");
     }
+    let merged = model.get("api").cloned().unwrap_or(Value::Null);
     model["api"] = apis(own.get("api"), provider);
+    carry_freeform(&mut model, &merged);
     model
+}
+
+/// The free-text tools each API takes, from the lab's and the provider's `[api.*]` tables merged:
+/// the API's own list, over the model's.
+fn carry_freeform(model: &mut Value, merged: &Value) {
+    let Some(apis) = model["api"].as_object_mut() else {
+        return;
+    };
+    for (protocol, api) in apis {
+        if let Some(kinds) = merged.pointer(&format!("/{protocol}/capabilities/tools/freeform")) {
+            api["capabilities"] = json!({"tools": {"freeform": kinds}});
+        }
+    }
 }
 
 /// models.dev's merge: tables key by key, everything else replaced.
@@ -205,6 +220,7 @@ fn kept(model: &Value) -> Value {
         "/status",
         "/modalities/output",
         "/capabilities/tools/supported",
+        "/capabilities/tools/freeform",
         "/capabilities/reasoning",
         "/limit/context",
         "/limit/input",

@@ -266,9 +266,10 @@ fn a_command_runs_to_its_end_with_no_terminal() {
         stop: &|| false,
     };
     let spec = tool.spec();
-    let properties = &spec.parameters["properties"];
+    let schema = spec.input.schema();
+    let properties = &schema["properties"];
     assert!(properties.get("session").is_none() && properties.get("tty").is_none());
-    assert_eq!(spec.parameters["required"], serde_json::json!(["command"]));
+    assert_eq!(schema["required"], serde_json::json!(["command"]));
     assert!(!spec.description.contains("{terminal}"));
     let session = tool.call(&serde_json::json!({"command": "python3", "tty": true}));
     assert!(matches!(session, Err(ToolError::Failed(_))));

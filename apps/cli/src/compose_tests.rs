@@ -34,25 +34,22 @@ fn ask_is_offered_in_a_session_only() {
             .collect()
     };
     composed(crate::modes::built("default"), true, vec![], |rig| {
-        assert_eq!(
-            names(rig),
-            ["read", "edit", "bash", "ask", "agents", "jobs"]
-        );
+        assert_eq!(names(rig), ["exec", "apply_patch", "ask", "agents", "jobs"]);
         0
     });
     composed(crate::modes::built("bypass"), false, vec![], |rig| {
-        assert_eq!(names(rig), ["read", "edit", "bash", "agents", "jobs"]);
+        assert_eq!(names(rig), ["exec", "apply_patch", "agents", "jobs"]);
         0
     });
 }
 
 #[test]
 fn plan_mode_changes_no_file() {
-    let create = ToolCall {
-        id: "c1".into(),
-        name: "edit".into(),
-        arguments: json!({"path": "plan.md", "old_string": "", "new_string": "x"}),
-    };
+    let create = crate::testing::scripted(
+        "c1",
+        "edit",
+        json!({"path": "plan.md", "old_string": "", "new_string": "x"}),
+    );
     let mut replies = vec![Completion {
         calls: vec![create],
         ..Completion::default()
@@ -68,7 +65,7 @@ fn plan_mode_changes_no_file() {
             .iter()
             .any(|message| {
                 matches!(message, Message::ToolResult { content, failed: true, .. }
-                if content.contains("refused by the rule `edit`"))
+                if content.contains("refused by the rule `apply_patch`"))
             });
         assert!(refused);
         assert!(!rig.workspace.root().join("plan.md").exists());
@@ -144,15 +141,11 @@ fn commands_never_see_the_key_of_the_provider_in_use() {
     });
 }
 
-/// The main session's `read` and `edit` learn a subdirectory's instructions once, with the first
+/// The main session's `read` and `apply_patch` learn a subdirectory's instructions once, with the first
 /// call there, and an edit is kept for `/rewind`.
 #[test]
 fn the_main_tools_learn_a_subtrees_instructions_once_and_keep_edits() {
-    let call = |id: &str, name: &str, arguments| ToolCall {
-        id: id.into(),
-        name: name.into(),
-        arguments,
-    };
+    let call = crate::testing::scripted;
     let edit = json!({"path": "sub/a.txt", "old_string": "one", "new_string": "two"});
     let mut replies = vec![Completion {
         calls: vec![call("c1", "read", json!({"path": "sub/a.txt"}))],
@@ -179,6 +172,95 @@ fn the_main_tools_learn_a_subtrees_instructions_once_and_keep_edits() {
     });
 }
 
+/// A patch is one call on several files: each is kept for `/rewind` (a move's two), each learns
+/// its directory's instructions once, and the mode's gate answers for each.
+#[test]
+fn a_patch_reaches_every_file_it_names() {
+    let patch = "*** Begin Patch\n*** Update File: sub/a.txt\n@@\n-one\n+two\n\
+                 *** Add File: other/b.txt\n+new\n\
+                 *** Update File: sub/c.txt\n*** Move to: moved/c.txt\n*** End Patch";
+    for (mode, changed) in [("bypass", true), ("plan", false)] {
+        let call = ToolCall {
+            id: "c1".into(),
+            name: "apply_patch".into(),
+            arguments: json!(patch),
+        };
+        let mut replies = vec![Completion {
+            calls: vec![call],
+            ..Completion::default()
+        }];
+        replies.extend(answers(1));
+        composed(crate::modes::built(mode), true, replies, |rig| {
+            let root = rig.workspace.root();
+            for (dir, rules) in [("sub", "Use tabs here."), ("other", "Use spaces there.")] {
+                std::fs::create_dir_all(root.join(dir)).unwrap();
+                std::fs::write(root.join(dir).join("AGENTS.md"), rules).unwrap();
+            }
+            std::fs::write(root.join("sub/a.txt"), "one\n").unwrap();
+            std::fs::write(root.join("sub/c.txt"), "c\n").unwrap();
+            rig.task("change");
+            let results = crate::testing::results(rig);
+            let (failed, report) = &results[0];
+            if changed {
+                assert!(!failed, "{report}");
+                assert!(report.contains("Use tabs here."), "{report}");
+                assert!(report.contains("Use spaces there."), "{report}");
+                assert_eq!(
+                    std::fs::read_to_string(root.join("sub/a.txt")).unwrap(),
+                    "two\n"
+                );
+                assert!(root.join("other/b.txt").exists() && root.join("moved/c.txt").exists());
+                // a.txt, b.txt, and both ends of the move.
+                assert_eq!(rig.checkpoints.tasks()[0].changed(), 4);
+            } else {
+                assert!(
+                    *failed && report.contains("refused by the rule `apply_patch`"),
+                    "{report}"
+                );
+                assert_eq!(
+                    std::fs::read_to_string(root.join("sub/a.txt")).unwrap(),
+                    "one\n"
+                );
+                assert!(!root.join("other/b.txt").exists());
+            }
+            0
+        });
+    }
+}
+
+/// `exec`'s calls are the main session's own: a subtree's instructions come once, as for a
+/// direct call (ARCHITECTURE.md X2). Files change through `apply_patch` alone, never a script.
+#[test]
+fn a_script_calls_the_tools_the_session_calls() {
+    let script = "const a = await tools.read({path: 'sub/a.txt'});\n\
+        return typeof tools.apply_patch + '|' + typeof tools.edit + '|' + a;";
+    let call = ToolCall {
+        id: "c1".into(),
+        name: "exec".into(),
+        arguments: json!(script),
+    };
+    let mut replies = vec![Completion {
+        calls: vec![call],
+        ..Completion::default()
+    }];
+    replies.extend(answers(1));
+    composed(crate::modes::built("bypass"), true, replies, |rig| {
+        let sub = rig.workspace.root().join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("AGENTS.md"), "Use tabs here.").unwrap();
+        std::fs::write(sub.join("a.txt"), "one\n").unwrap();
+        rig.task("read a");
+        let results = crate::testing::results(rig);
+        let (failed, report) = &results[0];
+        assert!(
+            !failed && report.starts_with("undefined|undefined|"),
+            "{report}"
+        );
+        assert!(report.contains("Use tabs here."), "{report}");
+        0
+    });
+}
+
 /// A provider chosen with `/login` after the session began has its key kept from commands too:
 /// the variables are read at each command, not fixed when the session starts.
 #[test]
@@ -190,11 +272,11 @@ fn a_provider_chosen_later_has_its_key_kept_from_commands_too() {
     // SAFETY: no other test reads or sets this variable.
     unsafe { std::env::set_var("CEREBRAS_API_KEY", "csk-test") };
     let probe = || Completion {
-        calls: vec![ToolCall {
-            id: "b".into(),
-            name: "bash".into(),
-            arguments: json!({"command": "echo key=${CEREBRAS_API_KEY:-none}"}),
-        }],
+        calls: vec![crate::testing::scripted(
+            "b",
+            "bash",
+            json!({"command": "echo key=${CEREBRAS_API_KEY:-none}"}),
+        )],
         ..Completion::default()
     };
     let mut replies = vec![probe()];
@@ -243,7 +325,7 @@ fn two_lanes_over_one_shared_share_the_workspace_but_keep_their_own() {
             assert!(!std::ptr::eq(a.jobs, b.jobs));
             assert_ne!(a.session.id, b.session.id);
             assert_eq!(names(a), names(b));
-            assert_eq!(names(b), ["read", "edit", "bash", "ask", "agents", "jobs"]);
+            assert_eq!(names(b), ["exec", "apply_patch", "ask", "agents", "jobs"]);
             0
         })
     });

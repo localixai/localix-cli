@@ -147,3 +147,13 @@ fn openrouters_address_is_read_from_the_sessions_environment() {
     drop(std::net::TcpStream::connect(address));
     assert!(asked.join().unwrap(), "the stand-in was called");
 }
+
+#[test]
+fn a_model_the_catalog_says_takes_grammars_is_offered_scripts_as_custom_tools() {
+    use openai::responses::Texts;
+    let provider = Provider::openai();
+    assert_eq!(provider.texts("gpt-6-luna"), Texts::Custom);
+    // One the catalog lists none for, and one it does not know: functions.
+    assert_eq!(provider.texts("gpt-5.3-codex-spark"), Texts::Functions);
+    assert_eq!(provider.texts("not-a-model"), Texts::Functions);
+}

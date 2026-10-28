@@ -1,6 +1,6 @@
 use agent::agent::Status;
 use clap::Parser;
-use contracts::chat::{Completion, ToolCall};
+use contracts::chat::Completion;
 use serde_json::{Value, json};
 use session::Sessions;
 
@@ -127,11 +127,7 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
         session,
         ui: None,
     };
-    let call = ToolCall {
-        id: "c1".into(),
-        name: "bash".into(),
-        arguments: json!({"command": "echo hi > made.txt"}),
-    };
+    let call = crate::testing::scripted("c1", "bash", json!({"command": "echo hi > made.txt"}));
     let chat = ScriptedChat::new(vec![
         Completion {
             calls: vec![call],

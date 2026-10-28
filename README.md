@@ -37,7 +37,7 @@ llx is a minimal agent runtime: a model in a loop over a few plain tools, on any
 
 | Who calls | Command | What they get |
 | --- | --- | --- |
-| **You** | `llx` | A minimal agent at your terminal, with six tools: `read`, `edit`, `bash`, `ask`, `agents`, `jobs` |
+| **You** | `llx` | A minimal agent at your terminal, with six tools: `read`, `apply_patch`, `bash`, `ask`, `agents`, `jobs` |
 | **Your scripts and CI** | `llx exec --json --schema …` | One task, then exit: JSON events, an answer in the shape you define, exit codes to branch on |
 | **Your other agents** | `llx exec` · `llx decide` | Commands they run from their shell: helpers on any model, quick decisions. They extend the agent you use, never replace it |
 
@@ -61,6 +61,19 @@ llx is a minimal agent runtime: a model in a loop over a few plain tools, on any
   </tr>
 </table>
 
+## Benchmark
+
+One task: make a Bun, React and Vite app match its spec, checked by 9 tests. llx and Codex on the same model, low reasoning; medians of 5 runs each.
+
+| Model | Agent | Context | Time | Cost | Passed |
+| --- | --- | --- | --- | --- | --- |
+| GPT-6 Luna | llx | **49k** | **21.5 s** | **$0.0025** | 4/5 |
+| | Codex | 199k | 28.5 s | $0.0045 | 5/5 |
+| GPT-6.1 Terra | llx | **62k** | **22.1 s** | $0.032 | 5/5 |
+| | Codex | 82k | 24.1 s | **$0.020** | 5/5 |
+
+The runs: [benchmarks/arena](benchmarks/arena); the task and its checks: [evals/arena](evals/arena/arena.py).
+
 ## Install
 
 ```bash
@@ -81,7 +94,7 @@ llx extends the agent you already use: it calls llx from its shell, as its task 
 
 ## In CI and scripts
 
-In CI llx is the same agent as at your terminal. It works through the plain filesystem and primitive commands: `read`, `edit`, and `bash` with `gh`, `git`, `jq` and your project's own tools. There is no MCP server, no GitHub tool and no built-in prompt. Your workflow owns the prompt and the posting, so the same task runs on GitHub, GitLab or any runner with a shell. The job that runs the model holds a read-only token, and a second job posts what it answered: the write token is never near the model.
+In CI llx is the same agent as at your terminal. It works through the plain filesystem and primitive commands: `read`, `apply_patch`, and `bash` with `gh`, `git`, `jq` and your project's own tools. There is no MCP server, no GitHub tool and no built-in prompt. Your workflow owns the prompt and the posting, so the same task runs on GitHub, GitLab or any runner with a shell. The job that runs the model holds a read-only token, and a second job posts what it answered: the write token is never near the model.
 
 ```yaml
 # a step of a job, after actions/checkout
@@ -94,7 +107,7 @@ In CI llx is the same agent as at your terminal. It works through the plain file
   with:
     model: anthropic/claude-haiku-5.5
     allow: bash
-    deny: edit
+    deny: apply_patch
     schema: '{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}'
     prompt: |
       Review pull request #$PR with gh and git. Run something to confirm a problem

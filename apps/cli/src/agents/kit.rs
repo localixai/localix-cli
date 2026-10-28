@@ -5,16 +5,19 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicU64;
 
 use contracts::chat::Chat;
 use contracts::gate::Gate;
 use contracts::history::History;
 use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
-use tools::fs::{EditTool, ReadTool};
+use tools::fs::{PatchTool, ReadTool};
+use tools::script::{ExecTool, Offered};
 use tools::shell::BashTool;
 use tools::workspace::Workspace;
 
+use super::reported::{Reported, Scene};
 use crate::instructions::Instructed;
 use crate::mode::{Mode, ModeCell};
 use crate::output::Output;
@@ -33,7 +36,7 @@ pub(crate) struct Kit<'a> {
     pub context: &'a str,
     pub max_turns: usize,
     /// The model's context window, set at each task (the model can change between them).
-    pub window: &'a std::sync::atomic::AtomicU64,
+    pub window: &'a AtomicU64,
     /// How each agent's conversation is prepared for the model.
     pub strategy: &'a dyn agent::history::Strategy,
     /// Where an agent's file changes are kept too, for `/rewind`.
@@ -63,15 +66,22 @@ pub(crate) struct Own<'a> {
     pub gate: &'a dyn Gate,
     pub stop: &'a (dyn Fn() -> bool + Sync),
     pub seen: Mutex<HashSet<PathBuf>>,
+    /// The session whose calls these are: what the log names.
+    pub who: &'a str,
+    /// The agent they belong to, named where a script's calls are shown; none for the main one.
+    pub agent: Option<&'a str>,
 }
 
-/// A session's tools: `read`, `edit` and `bash` (commands run to their end).
+/// A session's tools: `exec`, the script that calls `read` and `bash` (commands run to their end),
+/// which the model reaches only through it, and `apply_patch`, which changes the files.
 pub(crate) struct Tools<'a> {
     kit: &'a Kit<'a>,
     own: &'a Own<'a>,
     read: ReadTool<'a>,
-    edit: EditTool<'a>,
+    patch: PatchTool<'a>,
     bash: BashTool<'a>,
+    /// Numbers the calls its scripts make.
+    made: AtomicU64,
 }
 
 impl<'a> Tools<'a> {
@@ -82,7 +92,7 @@ impl<'a> Tools<'a> {
             read: ReadTool {
                 workspace: kit.workspace,
             },
-            edit: EditTool {
+            patch: PatchTool {
                 workspace: kit.workspace,
                 gate: own.gate,
             },
@@ -92,6 +102,7 @@ impl<'a> Tools<'a> {
                 hidden: kit.hidden,
                 stop: own.stop,
             },
+            made: AtomicU64::new(0),
         }
     }
 
@@ -104,16 +115,39 @@ impl<'a> Tools<'a> {
             seen: &own.seen,
         };
         let tracked = crate::checkpoints::Tracked {
-            inner: &self.edit,
+            inner: &self.patch,
             workspace: kit.workspace,
             checkpoints: kit.checkpoints,
         };
-        let edit = Instructed {
+        let patch = Instructed {
             inner: &tracked,
             root: kit.root(),
             seen: &own.seen,
         };
-        let tools: [&dyn Tool; 3] = [&read, &edit, &self.bash];
+        // A script calls these same instances (X2): what wraps a tool for the agent (the gate,
+        // the checkpoints, the directory's instructions) is in the call. `ask`, `agents` and
+        // `jobs` are left out: the person is never asked from a script, and a task started
+        // from one would outlive it. Each call it makes is reported (X5).
+        let scene = Scene {
+            output: kit.output,
+            who: own.who,
+            agent: own.agent,
+            made: &self.made,
+        };
+        let reported = |inner| Reported {
+            inner,
+            scene: &scene,
+        };
+        let (scripted_read, scripted_bash) = (reported(&read), reported(&self.bash));
+        let exec = ExecTool {
+            tools: vec![&scripted_read, &scripted_bash],
+            stop: own.stop,
+            offered: Offered::Alone,
+        };
+        // The model reaches `read` and `bash` only through a script: one turn makes a chain of
+        // calls and sends back only what the script keeps. A patch is a call of its own, as text:
+        // in a script's string its code's quotes, backticks and `${` would have to be escaped.
+        let tools: [&dyn Tool; 2] = [&exec, &patch];
         work(&tools)
     }
 
@@ -158,7 +192,7 @@ impl Tool for Withheld {
 
     fn call(&self, _: &Value) -> Result<ToolOutput, ToolError> {
         Err(ToolError::Failed(format!(
-            "`{}` is the main session's alone: an agent works with read, edit and bash, \
+            "`{}` is the main session's alone: an agent works with read, apply_patch and bash, \
              and decides on its best assumption where it would ask",
             self.0.name
         )))

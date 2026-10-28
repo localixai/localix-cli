@@ -6,8 +6,8 @@
 # Needs: the secret OPENROUTER_API_KEY. No labels, no settings.
 # Adapt: `model`, the prompt (what your reviewers care about), `allow` and `deny`.
 #
-# Security: the model job has a read-only token, and the checkout is a throwaway copy. `deny: edit`
-# refuses the edit tool, not what a command writes; nothing it writes can be committed, because
+# Security: the model job has a read-only token, and the checkout is a throwaway copy. `deny: apply_patch`
+# refuses the apply_patch tool, not what a command writes; nothing it writes can be committed, because
 # no job with a model holds a token that can push. The provider key is hidden from the commands
 # the agent runs, but assume a command could read it: use a key with a spend limit. AGENTS.md and
 # CLAUDE.md come from the pull request. Pull requests from forks are skipped.
@@ -51,7 +51,7 @@ jobs:
         with:
           model: anthropic/claude-haiku-5.5
           allow: bash
-          deny: edit
+          deny: apply_patch
           prompt: |
             Review pull request #$PR of $GH_REPO. The working tree is the pull request merged into
             its base. gh is signed in, read only.

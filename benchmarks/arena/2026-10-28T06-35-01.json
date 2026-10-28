@@ -1,0 +1,97 @@
+{
+ "hidden_sha256": "fdd65039f2cd592d2ac1684b9a8781809076d9c7d9b2ac5ec2a91de4fe75b763",
+ "at": "2026-10-28T06-35-01",
+ "task": "ledger-web",
+ "prompt": "The ledger app's tests fail and its report does not do what docs/SPEC.md says. Make the app match the spec, the month picker included. Do not change the existing tests. Check your work with `bun test`, `bunx tsc --noEmit` and `bunx vite build`.",
+ "effort": "low",
+ "models": {
+  "llx": "gpt-6-luna"
+ },
+ "versions": {
+  "llx": "llx 0.2.0",
+  "bun": "1.4.4",
+  "machine": "Darwin arm64 26.6.2"
+ },
+ "rows": [
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 23.9,
+   "model": "gpt-6-luna",
+   "turns": 7,
+   "tools": 6,
+   "input": 49394,
+   "cached": 38656,
+   "output": 1853,
+   "cost": 0.0024,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 18.8,
+   "model": "gpt-6-luna",
+   "turns": 7,
+   "tools": 6,
+   "input": 59889,
+   "cached": 40576,
+   "output": 1726,
+   "cost": 0.0032,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 21.6,
+   "model": "gpt-6-luna",
+   "turns": 6,
+   "tools": 5,
+   "input": 39859,
+   "cached": 25728,
+   "output": 1536,
+   "cost": 0.0024,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 21.5,
+   "model": "gpt-6-luna",
+   "turns": 6,
+   "tools": 5,
+   "input": 40752,
+   "cached": 25984,
+   "output": 1610,
+   "cost": 0.0025,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 20.9,
+   "model": "gpt-6-luna",
+   "turns": 8,
+   "tools": 7,
+   "input": 58021,
+   "cached": 38912,
+   "output": 1728,
+   "cost": 0.0032,
+   "passed": false,
+   "check": [
+    "FAIL bun test: 4 failing (a DD.MM.YYYY date counts in its own month;a refund counts against its own category;the whole sample, month by month;the month picker)"
+   ]
+  }
+ ]
+}

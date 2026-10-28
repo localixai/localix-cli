@@ -1,5 +1,5 @@
 //! `/rewind` (also `/undo`, or Esc Esc on an empty prompt): back to before
-//! one of the conversation's tasks. The files as they were then (what `edit` changed), the
+//! one of the conversation's tasks. The files as they were then (what `apply_patch` changed), the
 //! conversation as it was then (the task's words back in the prompt to change), or both.
 
 use crate::compose::Rig;

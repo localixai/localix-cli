@@ -30,11 +30,7 @@ impl Lines for Picks {
 
 fn edit(arguments: serde_json::Value) -> Completion {
     Completion {
-        calls: vec![ToolCall {
-            id: "e".into(),
-            name: "edit".into(),
-            arguments,
-        }],
+        calls: vec![crate::testing::scripted("e", "edit", arguments)],
         ..Completion::default()
     }
 }

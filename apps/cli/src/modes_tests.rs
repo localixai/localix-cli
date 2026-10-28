@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn the_persons_modes_follow_the_built_in_ones_and_may_replace_one() {
     let text = r#"{"modes": {"review": {"allow": ["bash(cargo test *)"], "description": "Review."},
-        "plan": {"allow": ["bash(cargo test *)"], "deny": ["edit"]}}}"#;
+        "plan": {"allow": ["bash(cargo test *)"], "deny": ["apply_patch"]}}}"#;
     let modes = Modes::with_settings(Some(text), "settings.json").unwrap();
     assert_eq!(modes.names(), "default, plan, bypass, review");
     let plan = modes.named("plan").unwrap();

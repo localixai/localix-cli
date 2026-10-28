@@ -28,12 +28,12 @@ const BUILT_IN: [(&str, &str, &[&str], &[&str]); 3] = [
          the assumptions it rests on. Such a plan achieves the goal, unrun and unchecked as it \
          is; commands are asked.",
         &[],
-        &["edit"],
+        &["apply_patch"],
     ),
     (
         BYPASS,
         "Everything runs without asking (-y).",
-        &["bash", "edit", "jobs"],
+        &["bash", "apply_patch", "jobs"],
         &[],
     ),
 ];

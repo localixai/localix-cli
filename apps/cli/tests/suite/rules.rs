@@ -131,7 +131,7 @@ fn a_deny_rule_refuses_even_with_yes_and_names_itself() {
 }
 
 #[test]
-fn an_edit_rule_allows_the_paths_it_names_and_no_others() {
+fn an_apply_patch_rule_allows_the_paths_it_names_and_no_others() {
     let home = Home::new();
     let model = Model::start(vec![
         Reply::call(
@@ -147,7 +147,7 @@ fn an_edit_rule_allows_the_paths_it_names_and_no_others() {
     let out = exec(
         &home,
         &model,
-        &["exec", "--allow", "edit(docs/**)", "x"],
+        &["exec", "--allow", "apply_patch(docs/**)", "x"],
         "",
     );
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
@@ -168,7 +168,7 @@ fn plan_mode_stays_read_only_whatever_is_allowed() {
     let out = exec(
         &home,
         &model,
-        &["exec", "--mode", "plan", "--allow", "edit", "x"],
+        &["exec", "--mode", "plan", "--allow", "apply_patch", "x"],
         "",
     );
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
@@ -178,7 +178,7 @@ fn plan_mode_stays_read_only_whatever_is_allowed() {
 #[test]
 fn a_rule_that_cannot_be_read_is_not_ready() {
     let home = Home::new();
-    for rule in ["bash(echo *", "nosuchtool", "edit(//etc/**)"] {
+    for rule in ["bash(echo *", "nosuchtool", "apply_patch(//etc/**)"] {
         let model = running("echo hi");
         let out = exec(&home, &model, &["exec", "--allow", rule, "x"], "");
         assert_eq!(out.status.code(), Some(3), "{rule}");

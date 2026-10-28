@@ -82,13 +82,30 @@ pub(crate) fn head(name: &str, label: &Label, state: &State, width: usize) -> Ve
 
 /// What a finished call printed or why it failed, under its head.
 pub(crate) fn body(name: &str, outcome: &Outcome, width: usize) -> Vec<Line<'static>> {
-    if name == "edit"
+    if name == "apply_patch"
         && let Outcome::Done { report } = outcome
-        && let Some(diff) = report.split_once("\n\nDiff:\n").map(|(_, diff)| diff)
+        && let Some((summary, diffs)) = report.split_once("\n\nDiff of ")
     {
-        let first = report.lines().next().unwrap_or_default().to_string();
-        let mut out = body("edit", &Outcome::Done { report: first }, width);
-        out.extend(edit_diff::render(diff, width));
+        let mut out = body(
+            name,
+            &Outcome::Done {
+                report: summary.into(),
+            },
+            width,
+        );
+        let diffs: Vec<&str> = diffs.split("\n\nDiff of ").collect();
+        for each in &diffs {
+            let (file, diff) = each.split_once(":\n").unwrap_or((each, ""));
+            // Which file a diff is of, when there are several.
+            if diffs.len() > 1 {
+                let file = cut(&printable(file), width.saturating_sub(4).max(1));
+                out.push(Line::from(Span::styled(
+                    format!("    {file}"),
+                    style::dim(),
+                )));
+            }
+            out.extend(edit_diff::render(diff, width));
+        }
         return out;
     }
     let rows = match outcome {
@@ -149,12 +166,15 @@ fn output_rows(name: &str, report: &str) -> Vec<(String, Style)> {
             }
             out
         }
-        "edit" => report
-            .lines()
-            .next()
-            .and_then(|line| line.rfind("(").and_then(|at| line.get(at..)))
-            .map(|counts| vec![(counts.trim_end_matches('.').to_string(), style::dim())])
-            .unwrap_or_default(),
+        // One file: its counts, as the head names it; several: a line each.
+        "apply_patch" => match report.lines().nth(1) {
+            None => (report.rfind('(').and_then(|at| report.get(at..)))
+                .map(|counts| vec![(counts.to_string(), style::dim())])
+                .unwrap_or_default(),
+            Some(_) => (report.lines())
+                .map(|line| (printable(line), style::dim()))
+                .collect(),
+        },
         "read" => vec![],
         // What the person answered, without the report's own heading.
         "ask" => rows(report).into_iter().skip(1).collect(),

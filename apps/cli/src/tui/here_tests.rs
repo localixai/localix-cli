@@ -34,10 +34,11 @@ fn the_transcript_shows_a_finished_edit_by_its_path_in_the_project() {
     let mut app = App::new(60, 20, vec![]);
     app.files = Files::new("/work/stats".into(), Box::new(drop));
     app.event(Event::TaskStarted("fix it".into()), now);
-    let edited = label("Editing", "Edited", "/work/stats/stats.py");
-    app.event(call("1", "edit", &edited), now);
-    app.event(result("1", "edit", &edited, done("Edited stats.py.")), now);
+    let edited = label("Patching", "Patched", "/work/stats/stats.py");
+    app.event(call("1", "apply_patch", &edited), now);
+    let report = done("Updated stats.py (+1 -1 lines)");
+    app.event(result("1", "apply_patch", &edited, report), now);
     let shown = history(&mut app);
-    assert!(shown.contains("Edited stats.py"), "{shown}");
+    assert!(shown.contains("Patched stats.py"), "{shown}");
     assert!(!shown.contains("/work/stats"), "{shown}");
 }

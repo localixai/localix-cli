@@ -46,7 +46,7 @@ jobs:
         with:
           model: anthropic/claude-haiku-5.5
           allow: bash
-          deny: edit
+          deny: apply_patch
           max-turns: '80'
           timeout: '1800'
           prompt: |

@@ -93,20 +93,25 @@ fn a_running_call_has_a_dim_bullet_and_a_present_verb() {
 
 #[test]
 fn files_say_what_changed() {
-    let edited = done("Edited src/a.rs: replaced 1 occurrence (+3 -1 lines).\n12 fn a() {}");
-    let created = done("Created site/index.html (48 lines).");
+    let edited = done("Updated src/a.rs (+3 -1 lines)");
+    let created = done("Created site/index.html (48 lines)");
+    let several = done("Updated src/a.rs (+1 -1 lines)\nDeleted src/b.rs");
     insta::assert_snapshot!([
         shown("read", said("Reading", "Read", "src/lib.rs"), State::Done(&done("1 use x;")), 80),
         shown("read", said("Reading", "Read", "src/lib.rs from line 40"), State::Done(&done("40 x")), 80),
-        shown("edit", said("Editing", "Edited", "src/a.rs"), State::Done(&edited), 80),
-        shown("edit", said("Creating", "Created", "site/index.html"), State::Done(&created), 80),
+        shown("apply_patch", said("Patching", "Patched", "src/a.rs"), State::Done(&edited), 80),
+        shown("apply_patch", said("Patching", "Patched", "site/index.html"), State::Done(&created), 80),
+        shown("apply_patch", said("Patching", "Patched", "src/a.rs, src/b.rs"), State::Done(&several), 80),
     ].join("\n"), @r"
     • Read src/lib.rs
     • Read src/lib.rs from line 40
-    • Edited src/a.rs
+    • Patched src/a.rs
       └ (+3 -1 lines)
-    • Created site/index.html
+    • Patched site/index.html
       └ (48 lines)
+    • Patched src/a.rs, src/b.rs
+      └ Updated src/a.rs (+1 -1 lines)
+        Deleted src/b.rs
     ");
 }
 
@@ -115,11 +120,11 @@ fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
     use ratatui::style::Color;
 
     let outcome = done(
-        "Edited a.rs: replaced 1 occurrence (+1 -1 lines).\n\nDiff:\n@@ -181,3 +181,3 @@\n target: 'bun',\n-throw: true,\n+throw: false,\n end",
+        "Updated a.rs (+1 -1 lines)\n\nDiff of a.rs:\n@@ -181,3 +181,3 @@\n target: 'bun',\n-throw: true,\n+throw: false,\n end",
     );
     let rendered = lines(
-        "edit",
-        &said("Editing", "Edited", "a.rs"),
+        "apply_patch",
+        &said("Patching", "Patched", "a.rs"),
         &State::Done(&outcome),
         60,
     );
@@ -142,12 +147,12 @@ fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
         })
     }));
     let long = format!(
-        "Created x (1 line).\n\nDiff:\n@@ -0,0 +1,1 @@\n+    {}",
+        "Created x (1 line)\n\nDiff of x:\n@@ -0,0 +1,1 @@\n+    {}",
         "x".repeat(80)
     );
     let rendered = lines(
-        "edit",
-        &said("Editing", "Edited", "x"),
+        "apply_patch",
+        &said("Patching", "Patched", "x"),
         &State::Done(&done(&long)),
         30,
     );
@@ -171,11 +176,12 @@ fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
 fn a_diff_colours_its_signs_and_code_only_never_a_band_and_dims_its_numbers() {
     use ratatui::style::{Color, Modifier};
 
-    let report =
-        done("Edited x.\n\nDiff:\n@@ -1,2 +1,2 @@\n context\n-old\n+abcdefghijklmnopqrstuvwxyz");
+    let report = done(
+        "Updated x (+1 -1 lines)\n\nDiff of x:\n@@ -1,2 +1,2 @@\n context\n-old\n+abcdefghijklmnopqrstuvwxyz",
+    );
     let rendered = lines(
-        "edit",
-        &said("Editing", "Edited", "x"),
+        "apply_patch",
+        &said("Patching", "Patched", "x"),
         &State::Done(&report),
         24,
     );
@@ -203,11 +209,11 @@ fn row_bg(rows: &[Line]) -> bool {
 #[test]
 fn separated_diff_hunks_keep_their_line_numbers_and_a_visible_gap() {
     let report = done(
-        "Edited x (+2 -2 lines).\n\nDiff:\n@@ -1,1 +1,1 @@\n-a\n+b\n@@ -300,1 +300,1 @@\n-c\n+d",
+        "Updated x (+2 -2 lines)\n\nDiff of x:\n@@ -1,1 +1,1 @@\n-a\n+b\n@@ -300,1 +300,1 @@\n-c\n+d",
     );
     let shown = shown(
-        "edit",
-        said("Editing", "Edited", "x"),
+        "apply_patch",
+        said("Patching", "Patched", "x"),
         State::Done(&report),
         60,
     );
@@ -217,14 +223,37 @@ fn separated_diff_hunks_keep_their_line_numbers_and_a_visible_gap() {
 }
 
 #[test]
+fn a_patch_of_several_files_shows_each_diff_under_its_name() {
+    let report = done(
+        "Updated a.rs (+1 -1 lines)\nCreated b.rs (1 line)\n\nDiff of a.rs:\n@@ -1,1 +1,1 @@\n-a\n+b\n\n\
+         Diff of b.rs:\n@@ -0,0 +1,1 @@\n+new",
+    );
+    let shown = shown(
+        "apply_patch",
+        said("Patching", "Patched", "a.rs, b.rs"),
+        State::Done(&report),
+        60,
+    );
+    let (a, b) = (
+        shown.find("    a.rs").unwrap(),
+        shown.find("    b.rs").unwrap(),
+    );
+    assert!(a < shown.find("- a").unwrap(), "{shown}");
+    assert!(
+        b > shown.find("+ b").unwrap() && b < shown.find("+ new").unwrap(),
+        "{shown}"
+    );
+}
+
+#[test]
 fn a_failed_call_shows_why() {
     let outcome = Outcome::Failed {
-        why: "old_string was not found in src/a.rs".into(),
+        why: "src/a.rs: the lines to change were not found".into(),
         declined: false,
     };
-    insta::assert_snapshot!(shown("edit", said("Editing", "Edited", "src/a.rs"), State::Done(&outcome), 80), @r"
-    • Edited src/a.rs
-      └ old_string was not found in src/a.rs
+    insta::assert_snapshot!(shown("apply_patch", said("Patching", "Patched", "src/a.rs"), State::Done(&outcome), 80), @r"
+    • Patched src/a.rs
+      └ src/a.rs: the lines to change were not found
     ");
 }
 

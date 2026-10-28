@@ -1,8 +1,9 @@
-//! A path as an `edit` rule reads it: a glob from the workspace root, as `.gitignore` writes one.
+//! A path as an `apply_patch` rule reads it: a glob from the workspace root, as `.gitignore`
+//! writes one.
 //! A pattern with no `/` names a file at any depth (`*.md`); one with a `/` is anchored at the
 //! root, `*` staying within a directory and `**` crossing any number of them.
 
-/// Why `pattern` cannot be an edit rule, if it cannot: it must stay inside the workspace.
+/// Why `pattern` cannot be an `apply_patch` rule, if it cannot: it must stay inside the workspace.
 pub(super) fn invalid(pattern: &str) -> Option<&'static str> {
     if pattern.starts_with('/') || pattern.starts_with('~') {
         return Some("a path rule is relative to the workspace root, the only place edits reach");

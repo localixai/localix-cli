@@ -266,7 +266,7 @@ fn a_bare_tool_name_matches_every_call_of_it_and_only_of_it() {
     let any = rules(&["bash", "jobs"], &[]);
     assert_eq!(any.judge("bash", "rm -rf $(pwd)"), Ruling::Allowed);
     assert_eq!(any.judge("jobs", ""), Ruling::Allowed);
-    assert_eq!(any.judge("edit", "a.md"), Ruling::Unsettled);
+    assert_eq!(any.judge("apply_patch", "a.md"), Ruling::Unsettled);
     assert_eq!(
         rules(&["Bash(echo *)"], &[]).judge("bash", "echo hi"),
         Ruling::Allowed
@@ -295,32 +295,36 @@ fn a_pattern_needs_a_subject_to_match() {
 fn an_edit_rule_is_a_glob_from_the_workspace_root() {
     for (rule, yes, no) in [
         (
-            "edit(docs/**)",
+            "apply_patch(docs/**)",
             &["docs/a.md", "docs/x/y.md"][..],
             &["src/docs/a.md", "a.md"][..],
         ),
-        ("edit(*.md)", &["a.md", "docs/a.md"], &["a.rs"]),
-        ("edit(src/*.rs)", &["src/a.rs"], &["src/x/a.rs"]),
+        ("apply_patch(*.md)", &["a.md", "docs/a.md"], &["a.rs"]),
+        ("apply_patch(src/*.rs)", &["src/a.rs"], &["src/x/a.rs"]),
         (
-            "edit(CHANGELOG.md)",
+            "apply_patch(CHANGELOG.md)",
             &["CHANGELOG.md"],
             &["docs/CHANGELOG.md.bak"],
         ),
     ] {
         let judged = rules(&[rule], &[]);
         for path in yes {
-            assert_eq!(judged.judge("edit", path), Ruling::Allowed, "{rule} {path}");
+            assert_eq!(
+                judged.judge("apply_patch", path),
+                Ruling::Allowed,
+                "{rule} {path}"
+            );
         }
         for path in no {
             assert_eq!(
-                judged.judge("edit", path),
+                judged.judge("apply_patch", path),
                 Ruling::Unsettled,
                 "{rule} {path}"
             );
         }
     }
     assert_eq!(
-        rules(&["edit(docs/**)"], &[]).judge("edit", "docs/../src/a.rs"),
+        rules(&["apply_patch(docs/**)"], &[]).judge("apply_patch", "docs/../src/a.rs"),
         Ruling::Unsettled
     );
 }
@@ -330,9 +334,9 @@ fn a_rule_that_cannot_be_read_says_which() {
     for rule in [
         "bash(echo *",
         "nosuchtool",
-        "edit(//etc/**)",
-        "edit(~/x)",
-        "edit(../x)",
+        "apply_patch(//etc/**)",
+        "apply_patch(~/x)",
+        "apply_patch(../x)",
         "bash()",
         "",
     ] {

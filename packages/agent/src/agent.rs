@@ -186,7 +186,7 @@ impl Agent<'_> {
             .iter()
             .map(|spec| {
                 let size = spec.name.len() + spec.description.len();
-                (size + spec.parameters.to_string().len()) as u64 / 4
+                (size + spec.input.schema().to_string().len()) as u64 / 4
             })
             .sum();
         for turn in 0..self.max_turns {

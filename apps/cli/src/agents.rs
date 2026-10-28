@@ -9,6 +9,7 @@
 mod child;
 pub(crate) mod inbox;
 pub(crate) mod kit;
+pub(crate) mod reported;
 pub(crate) mod spec;
 mod tool;
 mod wait;

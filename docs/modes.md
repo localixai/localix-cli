@@ -9,7 +9,7 @@ What llx asks before it acts, how to stop it, and what it does and does not prot
 
 ## Modes
 
-`read` never asks. `edit`, `bash` and `jobs` ask before they act, through one gate. What the gate answers comes from rules:
+`read` never asks. `apply_patch`, `bash` and `jobs` ask before they act, through one gate. What the gate answers comes from rules:
 
 1. A **deny** rule that matches refuses, and the refusal names the rule.
 2. An **allow** rule that matches runs it without asking.
@@ -20,10 +20,10 @@ A **mode** is a named set of those rules, and nothing more. Three are built in:
 | Mode | Rules |
 | --- | --- |
 | `default` | none: everything is asked, or refused with no one to ask |
-| `plan` | deny `edit`: the `edit` tool refused without asking |
+| `plan` | deny `apply_patch`: the `apply_patch` tool refused without asking |
 | `bypass` (`-y`) | allow everything |
 
-`plan` and `--deny edit` refuse the `edit` tool. They do not stop a command that writes a file: `bash` is a rule of its own, asked or, with no one to ask, refused. `--allow bash --deny edit` runs commands and refuses the tool, so the agent changes no file with `edit`, but a command can still write one. In CI the checkout is throwaway and the job's token cannot write, which is what keeps the agent from changing anything it can commit ([CI](ci.md#security)). On your own machine, a container is the sandbox.
+`plan` and `--deny apply_patch` refuse the `apply_patch` tool. They do not stop a command that writes a file: `bash` is a rule of its own, asked or, with no one to ask, refused. `--allow bash --deny apply_patch` runs commands and refuses the tool, so the agent changes no file with `apply_patch`, but a command can still write one. In CI the checkout is throwaway and the job's token cannot write, which is what keeps the agent from changing anything it can commit ([CI](ci.md#security)). On your own machine, a container is the sandbox.
 
 Your own go in `modes` in `~/.config/llx/settings.json` (under `XDG_CONFIG_HOME` when set); one with the name of a built-in mode replaces it:
 
@@ -31,7 +31,7 @@ Your own go in `modes` in `~/.config/llx/settings.json` (under `XDG_CONFIG_HOME`
 {
   "modes": {
     "review": { "allow": ["bash(cargo test *)", "bash(git log *)"], "description": "Review, tests allowed." },
-    "fix":    { "allow": ["bash(cargo *)", "edit(src/**)", "edit(tests/**)"], "deny": ["bash(git push *)"] }
+    "fix":    { "allow": ["bash(cargo *)", "apply_patch(src/**)", "apply_patch(tests/**)"], "deny": ["bash(git push *)"] }
   }
 }
 ```
@@ -51,9 +51,9 @@ Rules are written as Claude Code writes them:
 | `bash(cargo test)` | that command exactly |
 | `bash(cargo test *)` | `cargo test`, `cargo test -q`, …, not `cargo testing` |
 | `bash(* --version)` | any program's `--version` |
-| `edit` | every file change |
-| `edit(docs/**)` | a file under `docs/`, from the workspace root |
-| `edit(*.md)` | a Markdown file at any depth |
+| `apply_patch` | every file change |
+| `apply_patch(docs/**)` | a file under `docs/`, from the workspace root |
+| `apply_patch(*.md)` | a Markdown file at any depth |
 | `jobs` | every monitor or schedule |
 
 - `*` stands for any text, spaces included; the words before it limit the rule, so put it after the subcommand (`git log *`, not `git * main`).
@@ -84,8 +84,8 @@ In a session, an approval replaces the prompt with what would happen (`Run this 
 ## Trust boundaries
 
 - **Tool output is data, not instructions.** File contents and command output are untrusted. The system prompt says so. This lowers the risk of prompt injection without removing it: approve commands with that in mind, and use `-y` in places where a wrong command costs little.
-- **The workspace limits `edit`, not `bash`.** `edit` changes only files inside the workspace, after following symlinks. `bash` is a real shell with your permissions, and there is no sandbox: the gate is what stands between the model and your machine. Refusing `edit` (`plan`, `--deny edit`) does not stop a command from writing a file. A `workdir` outside the workspace is named as such in the question.
-- **llx's own files are off limits** to `read` and `edit`, symlinks included: its config directory (the saved key, the ChatGPT tokens, the `/login` choice) and the sessions directory.
+- **The workspace limits `apply_patch`, not `bash`.** `apply_patch` changes only files inside the workspace, after following symlinks. `bash` is a real shell with your permissions, and there is no sandbox: the gate is what stands between the model and your machine. Refusing `apply_patch` (`plan`, `--deny apply_patch`) does not stop a command from writing a file. A `workdir` outside the workspace is named as such in the question.
+- **llx's own files are off limits** to `read` and `apply_patch`, symlinks included: its config directory (the saved key, the ChatGPT tokens, the `/login` choice) and the sessions directory.
 - **Keys and tokens:** `/login` saves an OpenRouter key in `~/.config/llx/credentials` and a ChatGPT sign-in's tokens (access, refresh, ID, and the account id) in `~/.config/llx/openai.json` (under `XDG_CONFIG_HOME` when set), mode 0600, also when an older file was wider; the choice of provider, model and level goes in `settings.json` beside them. Keys and tokens are never printed or logged; a pasted key is read with the echo off and shown only as its masked ends. The ChatGPT access token is refreshed five minutes before it lapses (and once when a request is refused), and the refreshed tokens are saved. `llx logout` removes both files. `OPENROUTER_API_KEY` wins over a saved key when set. Commands start without it, or the key variables of the provider in use (or of one chosen later with `/login`), in their environment, but that is no barrier. A command can read the key from llx's own environment (`ps -E` on macOS; `/proc/<llx pid>/environ` on Linux, which llx closes to other processes of the same user by marking itself non-dumpable, but not to root, and a hosted CI runner gives passwordless `sudo`) or from the saved file. What keeps it from a command is approving each one (not `--yes`, `bypass`, or a rule that allows it). Where `bash` is allowed on input from strangers, assume the key can leak: use a key made for the job, with a spend limit, and narrow rules ([CI](ci.md#security)).
 
 A long-lived server runs as `cmd > log 2>&1 &`.

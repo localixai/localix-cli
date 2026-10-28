@@ -1,7 +1,7 @@
 //! The agent's tool protocol: a tool says what it is for and what arguments it takes, and turns a
 //! call into text for the model. A tool knows nothing of the agent or the model that calls it.
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// How a tool is offered to the model.
 #[derive(Debug, Clone, PartialEq)]
@@ -9,8 +9,76 @@ pub struct ToolSpec {
     pub name: String,
     /// What it does and how to use it well: all the model knows of the tool's world.
     pub description: String,
-    /// The arguments, as a JSON Schema object.
-    pub parameters: Value,
+    /// What a call to it carries.
+    pub input: Input,
+}
+
+/// What a tool takes. A call's `ToolCall::arguments` has the shape its input says: an object for
+/// `Json`, a string (the text, as the model wrote it) for `Text`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Input {
+    /// Arguments, as a JSON Schema object: every tool but a script.
+    Json(Value),
+    /// Free text (a script's source), with nothing to escape. A provider that takes such tools
+    /// offers it so; any other offers a function with one string argument ([`TEXT_ARGUMENT`]).
+    Text(Grammar),
+}
+
+/// What the text of a `Text` input looks like.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Grammar {
+    /// Any text.
+    Free,
+    /// A grammar in Lark syntax, for a provider that holds the model to it.
+    Lark(String),
+}
+
+/// The one argument of a text tool offered as a function.
+pub const TEXT_ARGUMENT: &str = "source";
+
+impl Input {
+    /// The JSON Schema of the function that stands for this input.
+    pub fn schema(&self) -> Value {
+        match self {
+            Self::Json(schema) => schema.clone(),
+            Self::Text(_) => json!({
+                "type": "object",
+                "properties": {TEXT_ARGUMENT: {"type": "string", "description": "The text, as it is."}},
+                "required": [TEXT_ARGUMENT],
+                "additionalProperties": false,
+            }),
+        }
+    }
+
+    /// The arguments of a function call as a call to the tool: a text tool's text taken out of
+    /// its one argument. What is not that shape stays as it is, for the tool to refuse.
+    #[must_use]
+    pub fn from_function(&self, arguments: Value) -> Value {
+        let text = match (self, &arguments) {
+            (Self::Text(_), Value::Object(map)) if map.len() == 1 => map.get(TEXT_ARGUMENT),
+            _ => None,
+        };
+        match text {
+            Some(text @ Value::String(_)) => text.clone(),
+            _ => arguments,
+        }
+    }
+
+    /// A call's arguments as the function that stands for the tool takes them.
+    pub fn to_function(&self, arguments: &Value) -> Value {
+        match (self, arguments) {
+            (Self::Text(_), Value::String(text)) => json!({TEXT_ARGUMENT: text}),
+            _ => arguments.clone(),
+        }
+    }
+
+    /// Whether `arguments` have the shape this input takes.
+    pub fn accepts(&self, arguments: &Value) -> bool {
+        match self {
+            Self::Json(_) => arguments.is_object(),
+            Self::Text(_) => arguments.is_string(),
+        }
+    }
 }
 
 /// What a call did, as the model reads it.

@@ -4,7 +4,7 @@
 use std::sync::Mutex;
 
 use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::{Value, json};
 
 use crate::conversation::Conversation;
@@ -126,7 +126,7 @@ impl Tool for Echo {
         ToolSpec {
             name: "echo".into(),
             description: "Says what it did.".into(),
-            parameters: json!({"type": "object"}),
+            input: Input::Json(json!({"type": "object"})),
         }
     }
     #[expect(

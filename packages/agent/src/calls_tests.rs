@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use contracts::chat::{Completion, Message, ToolCall};
 use contracts::inbox::Inbox;
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Grammar, Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::{Value, json};
 
 use crate::agent::Agent;
@@ -54,7 +54,7 @@ impl Tool for Meet<'_> {
         ToolSpec {
             name: name.into(),
             description: String::new(),
-            parameters: json!({"type": "object"}),
+            input: Input::Json(json!({"type": "object"})),
         }
     }
 
@@ -229,6 +229,56 @@ fn a_batch_is_watched_call_by_call() {
         events.iter().filter(|e| e.starts_with("ok look")).count(),
         2
     );
+}
+
+/// A tool that takes free text and reports it back.
+struct Script;
+
+impl Tool for Script {
+    fn spec(&self) -> ToolSpec {
+        ToolSpec {
+            name: "script".into(),
+            description: String::new(),
+            input: Input::Text(Grammar::Free),
+        }
+    }
+
+    fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
+        let text = arguments.as_str().unwrap_or("not text");
+        Ok(ToolOutput::from(format!("ran {text}")))
+    }
+}
+
+#[test]
+fn a_text_tool_is_called_with_its_text_and_a_json_tool_refuses_text() {
+    let room = Room::default();
+    let look = look(&room);
+    let chat = Scripted::new(vec![
+        turn(vec![
+            ToolCall {
+                id: "s".into(),
+                name: "script".into(),
+                arguments: json!("return 1"),
+            },
+            ToolCall {
+                id: "o".into(),
+                name: "script".into(),
+                arguments: json!({"source": "return 1"}),
+            },
+            ToolCall {
+                id: "l".into(),
+                name: "look".into(),
+                arguments: json!("path"),
+            },
+        ]),
+        says("Done."),
+    ]);
+    let tools: [&dyn Tool; 2] = [&Script, &look];
+    let run = agent(&chat, &tools, None).run("go");
+    let results = results(run.conversation.messages());
+    assert_eq!(results[0], ("s".to_string(), "ran return 1".to_string()));
+    assert!(results[1].1.contains("takes text"), "{results:?}");
+    assert!(results[2].1.contains("JSON object"), "{results:?}");
 }
 
 /// An inbox that gives out what the test put in, and waits once for what comes later.

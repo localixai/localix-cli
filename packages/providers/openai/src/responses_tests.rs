@@ -5,7 +5,7 @@ use provider_kit::http::Reply;
 use serde_json::{Value, json};
 
 use contracts::chat::Message;
-use contracts::tool::ToolSpec;
+use contracts::tool::{Input, ToolSpec};
 
 use super::request::items;
 use super::*;
@@ -133,7 +133,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
     let spec = ToolSpec {
         name: "read".into(),
         description: "Read".into(),
-        parameters: json!({"type": "object"}),
+        input: Input::Json(json!({"type": "object"})),
     };
     let conversation = conversation();
     let request = Request {
@@ -144,7 +144,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
     let selection = Selection::new(entry("gpt-6-sol"))
         .with_effort(Effort::High)
         .unwrap();
-    let body = body(&selection, request);
+    let body = body(&selection, request, Texts::Functions);
     assert_eq!(body["model"], "gpt-6-sol");
     assert_eq!(
         (body["store"].clone(), body["stream"].clone()),
@@ -187,7 +187,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
         may_call: true,
     };
     assert_eq!(
-        super::body(&off, request)["reasoning"],
+        super::body(&off, request, Texts::Functions)["reasoning"],
         json!({"effort": "none"})
     );
 
@@ -197,7 +197,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
         tools: &[],
         may_call: false,
     };
-    let body = super::body(&Selection::new(entry("gpt-next")), bare);
+    let body = super::body(&Selection::new(entry("gpt-next")), bare, Texts::Functions);
     assert!(body.get("reasoning").is_none() && body.get("tools").is_none());
 }
 
@@ -357,6 +357,7 @@ fn a_picture_goes_in_as_a_user_message_with_an_input_image() {
             image,
         },
         "gpt-6-sol",
+        &offer::Offer::new(&[], Texts::Functions, &[]),
     )[0];
     assert_eq!(item["role"], "user");
     assert_eq!(item["content"][0]["text"], "The screenshot");
@@ -374,6 +375,7 @@ fn a_request_that_went_out_unanswered_is_not_sent_again() {
             Err(HttpError::Unanswered("timed out".into())),
             Ok(Reply {
                 status: 200,
+                headers: vec![],
                 body: streamed(&[completed()]),
             }),
         ]),
@@ -396,6 +398,7 @@ fn a_request_that_never_went_out_is_sent_again() {
             Err(HttpError::Unsent("connection refused".into())),
             Ok(Reply {
                 status: 200,
+                headers: vec![],
                 body: streamed(&[completed()]),
             }),
         ]),
@@ -415,7 +418,7 @@ fn sessions_with_the_same_prompt_and_tools_share_the_prompt_cache_and_others_do_
     let spec = |name: &str| ToolSpec {
         name: name.into(),
         description: "A tool".into(),
-        parameters: json!({"type": "object"}),
+        input: Input::Json(json!({"type": "object"})),
     };
     let key = |tools: &[ToolSpec], rules: &str| {
         let (model, http, _) = model(vec![(200, streamed(&[completed()]))], tokens(LATER));
@@ -468,7 +471,11 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
         tools: &[],
         may_call: true,
     };
-    let body = body(&Selection::new(entry("gpt-6-sol")), request);
+    let body = body(
+        &Selection::new(entry("gpt-6-sol")),
+        request,
+        Texts::Functions,
+    );
     assert_eq!(body["include"], json!(["reasoning.encrypted_content"]));
     let input = body["input"].as_array().unwrap();
     // Only the sealed one: an item the backend did not keep cannot be named by its id alone.
@@ -482,7 +489,11 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
         tools: &[],
         may_call: true,
     };
-    let other = super::body(&Selection::new(entry("gpt-6-luna")), request);
+    let other = super::body(
+        &Selection::new(entry("gpt-6-luna")),
+        request,
+        Texts::Functions,
+    );
     assert_eq!(other["input"][1]["type"], "function_call");
 
     // A model that does not reason is asked for nothing.
@@ -492,7 +503,132 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
         may_call: true,
     };
     assert_eq!(
-        super::body(&Selection::new(entry("gpt-next")), bare)["include"],
+        super::body(&Selection::new(entry("gpt-next")), bare, Texts::Functions)["include"],
         json!([])
+    );
+}
+
+fn script_spec() -> ToolSpec {
+    ToolSpec {
+        name: "exec".into(),
+        description: "Run a script".into(),
+        input: Input::Text(contracts::tool::Grammar::Lark("start: /.+/".into())),
+    }
+}
+
+fn ask_with(model: &ChatModel, spec: &ToolSpec) -> Completion {
+    let conversation = [Message::User("goal".into())];
+    let request = Request {
+        conversation: &conversation,
+        tools: std::slice::from_ref(spec),
+        may_call: true,
+    };
+    model.complete(request).unwrap()
+}
+
+#[test]
+fn a_streamed_custom_call_is_the_script_as_the_model_wrote_it() {
+    let script = "const r = await tools.read({path: \"a\"});\nreturn r;";
+    let reply = streamed(&[
+        json!({"type": "response.output_item.added", "item": {"type": "custom_tool_call",
+            "call_id": "c1", "name": "exec", "input": ""}}),
+        json!({"type": "response.custom_tool_call_input.delta", "call_id": "c1",
+            "delta": "const r = await"}),
+        json!({"type": "response.custom_tool_call_input.done", "call_id": "c1"}),
+        json!({"type": "response.output_item.done", "item": {"type": "custom_tool_call",
+            "call_id": "c1", "name": "exec", "input": script}}),
+        completed(),
+    ]);
+    let (model, http, _) = model(vec![(200, reply)], tokens(LATER));
+    let model = model.with_texts(Texts::Custom);
+    let completion = ask_with(&model, &script_spec());
+    assert_eq!(completion.calls.len(), 1);
+    assert_eq!(completion.calls[0].name, "exec");
+    assert_eq!(completion.calls[0].arguments, json!(script));
+    let sent: Value = serde_json::from_str(&http.sent()[0].body).unwrap();
+    assert_eq!(sent["tools"][0]["type"], "custom");
+    assert_eq!(sent["tools"][0]["format"]["syntax"], "lark");
+}
+
+#[test]
+fn a_script_called_as_a_function_is_the_text_of_its_one_argument() {
+    let arguments = json!({"source": "return 1"}).to_string();
+    let reply = streamed(&[
+        json!({"type": "response.output_item.done", "item": {"type": "function_call",
+            "call_id": "c1", "name": "exec", "arguments": arguments}}),
+        completed(),
+    ]);
+    let (model, http, _) = model(vec![(200, reply)], tokens(LATER));
+    let completion = ask_with(&model, &script_spec());
+    assert_eq!(completion.calls[0].arguments, json!("return 1"));
+    let sent: Value = serde_json::from_str(&http.sent()[0].body).unwrap();
+    assert_eq!(sent["tools"][0]["type"], "function");
+}
+
+#[test]
+fn the_routing_token_a_reply_gives_goes_back_within_its_task_and_no_further() {
+    // The backend names the machine that holds a task's cache in a header; sent back with the
+    // task's next requests, they read their start from that cache instead of anew.
+    let answer = |state: Option<&str>| {
+        Ok(Reply {
+            status: 200,
+            headers: state
+                .map(|state| vec![("x-codex-turn-state".to_string(), state.to_string())])
+                .unwrap_or_default(),
+            body: streamed(&[completed()]),
+        })
+    };
+    let (model, http, _) = model_of(
+        Scripted::answering(vec![
+            answer(Some("s1")),
+            answer(None),
+            answer(Some("s9")),
+            answer(None),
+            answer(Some("s2")),
+            answer(None),
+        ]),
+        tokens(LATER),
+    );
+    let ask = |conversation: &[Message]| {
+        model
+            .complete(Request {
+                conversation,
+                tools: &[],
+                may_call: true,
+            })
+            .unwrap();
+    };
+    let task = &conversation()[..2];
+    let other = [
+        Message::System("rules".into()),
+        Message::User("another".into()),
+    ];
+    let mut next = conversation();
+    next.push(Message::Assistant {
+        text: Some("done".into()),
+        calls: vec![],
+        carried: vec![],
+    });
+    next.push(Message::User("a second goal".into()));
+    ask(task);
+    ask(&conversation());
+    // Another session on the same model (an agent) has a task of its own.
+    ask(&other);
+    ask(&other[..]);
+    ask(&next);
+    ask(&next);
+    let states: Vec<Option<String>> = (http.sent().iter())
+        .map(|sent| sent.header("x-codex-turn-state").map(str::to_string))
+        .collect();
+    assert_eq!(
+        states,
+        [
+            None,
+            Some("s1".into()),
+            None,
+            Some("s9".into()),
+            None,
+            Some("s2".into())
+        ]
     );
 }

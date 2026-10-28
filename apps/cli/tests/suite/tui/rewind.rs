@@ -22,12 +22,9 @@ fn a_task_changes_a_file_and_esc_esc_rewinds_it() {
         std::fs::read_to_string(term.file("notes.txt")).unwrap(),
         "hello\n"
     );
-    // The model was offered the tools, and read the task.
-    assert!(
-        model.requests()[0]["tools"]
-            .to_string()
-            .contains("\"edit\"")
-    );
+    // The model was offered the script that reads, and the patch that changes the files.
+    let tools = model.requests()[0]["tools"].to_string();
+    assert!(tools.contains("\"exec\"") && tools.contains("\"apply_patch\""));
     assert!(said(&model, 0).contains("Goal: create notes.txt"));
     term.press(key::ESC).press(key::ESC);
     term.wait_for("Rewind to before", LONG);

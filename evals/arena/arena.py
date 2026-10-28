@@ -175,7 +175,7 @@ def prepare(parent, agent):
     quiet = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "check": True}
     subprocess.run(["git", "init", "-q"], cwd=work, **quiet)
     subprocess.run(["git", "add", "-A"], cwd=work, **quiet)
-    subprocess.run(["git", "-c", "user.name=arena", "-c", "user.email=arena@localhost", "commit", "-qm", "start"], cwd=work, **quiet)
+    subprocess.run(["git", "-c", "user.name=arena", "-c", "user.email=arena@localhost", "-c", "commit.gpgsign=false", "commit", "-qm", "start"], cwd=work, **quiet)
     subprocess.run(["bun", "install", "--frozen-lockfile"], cwd=work, **quiet)
     return work
 

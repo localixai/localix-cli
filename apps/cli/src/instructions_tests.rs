@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Mutex;
 
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::{Value, json};
 
 use super::*;
@@ -70,7 +70,7 @@ impl Tool for Echo {
         ToolSpec {
             name: "read".into(),
             description: String::new(),
-            parameters: json!({}),
+            input: Input::Json(json!({})),
         }
     }
     fn call(&self, _: &Value) -> Result<ToolOutput, ToolError> {
@@ -114,4 +114,27 @@ fn a_subdirectorys_rules_come_once_with_the_first_file_touched_there() {
     assert_eq!(again.report, "contents");
     let outside = tool.call(&json!({"path": "/etc/hosts"})).unwrap();
     assert_eq!(outside.report, "contents");
+}
+
+/// A patch brings the rules of every directory it changes, each once.
+#[test]
+fn a_patch_brings_the_instructions_of_each_directory_it_names() {
+    let repo = Scratch::new();
+    let root = repo.path().to_path_buf();
+    write(&root.join("a/AGENTS.md"), "a rules");
+    write(&root.join("b/AGENTS.md"), "b rules");
+    let seen = Mutex::new(HashSet::from([root.clone()]));
+    let tool = Instructed {
+        inner: &Echo,
+        root,
+        seen: &seen,
+    };
+    let patch = "*** Begin Patch\n*** Add File: a/x.txt\n+x\n*** Add File: b/y.txt\n+y\n\
+                 *** Add File: a/z.txt\n+z\n*** End Patch";
+    let report = tool.call(&json!(patch)).unwrap().report;
+    assert!(
+        report.contains("a rules") && report.contains("b rules"),
+        "{report}"
+    );
+    assert_eq!(report.matches("a rules").count(), 1, "{report}");
 }

@@ -1,4 +1,4 @@
-use contracts::chat::{Completion, ToolCall};
+use contracts::chat::Completion;
 use serde_json::json;
 
 use super::*;
@@ -27,11 +27,11 @@ fn a_session_works_in_the_clients_directory_with_the_clients_environment() {
     let command = r#"ls; echo "[$LLX_ONLY_THE_CLIENT_HAS]""#;
     let chat = ScriptedChat::new(vec![
         Completion {
-            calls: vec![ToolCall {
-                id: "b".into(),
-                name: "bash".into(),
-                arguments: json!({ "command": command }),
-            }],
+            calls: vec![crate::testing::scripted(
+                "b",
+                "bash",
+                json!({ "command": command }),
+            )],
             ..Completion::default()
         },
         says("done"),

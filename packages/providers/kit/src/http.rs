@@ -5,11 +5,22 @@ use std::time::Duration;
 
 use crate::App;
 
-/// What a server answered.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// What a server answered: its status, its headers (names in lower case) and its body.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Reply {
     pub status: u16,
+    pub headers: Vec<(String, String)>,
     pub body: String,
+}
+
+impl Reply {
+    /// The value of the header `name`, in any case.
+    #[must_use]
+    pub fn header(&self, name: &str) -> Option<&str> {
+        (self.headers.iter())
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
 }
 
 pub trait Http: Send + Sync {
@@ -98,10 +109,20 @@ impl Http for Web {
             }
         })?;
         let status = response.status().as_u16();
+        let headers = (response.headers().iter())
+            .filter_map(|(name, value)| {
+                let value = value.to_str().ok()?;
+                Some((name.as_str().to_ascii_lowercase(), value.to_string()))
+            })
+            .collect();
         let body = (response.body_mut().with_config().limit(BODY_LIMIT))
             .read_to_string()
             .map_err(|error| HttpError::Unanswered(format!("the answer was not read: {error}")))?;
-        Ok(Reply { status, body })
+        Ok(Reply {
+            status,
+            headers,
+            body,
+        })
     }
 }
 

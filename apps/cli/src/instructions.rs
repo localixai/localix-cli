@@ -148,7 +148,7 @@ pub(crate) fn block(found: &Found, applies: Option<&Path>) -> String {
     )
 }
 
-/// A tool (`read`, `edit`) that, the first time it touches a file in a directory below the
+/// A tool (`read`, `apply_patch`) that, the first time it touches a file in a directory below the
 /// working directory that has its own instruction file, adds that file to its result: the
 /// agent learns a subtree's rules where it works, and nothing earlier in the conversation changes.
 pub(crate) struct Instructed<'a> {
@@ -169,12 +169,9 @@ impl Tool for Instructed<'_> {
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
         let mut output = self.inner.call(arguments)?;
-        let path = arguments
-            .get("path")
-            .and_then(Value::as_str)
-            .map(PathBuf::from);
-        if let Some(path) = path {
-            for found in self.below(&path) {
+        // A patch names several files, each in its own directory.
+        for path in tools::fs::named_paths(arguments) {
+            for found in self.below(Path::new(&path)) {
                 let applies = found.path.parent().map(Path::to_path_buf);
                 output.report.push_str("\n\n");
                 output.report.push_str(&block(&found, applies.as_deref()));

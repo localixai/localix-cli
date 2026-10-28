@@ -23,7 +23,7 @@ else it needs, if anything, and what to change to make it yours: the model, the 
 
 ## How they are built
 
-The agent works as at a terminal: `read`, `edit` and `bash`, with `gh`, `git` and `jq` in its
+The agent works as at a terminal: `read`, `apply_patch` and `bash`, with `gh`, `git` and `jq` in its
 shell. There is no MCP server, no GitHub tool and no built-in prompt: the prompt is in the
 workflow, where you can read it, and so is what gets posted.
 
@@ -34,8 +34,8 @@ workflow, where you can read it, and so is what gets posted.
 - **Answers are data.** `schema:` makes the agent answer with JSON that matches it; the posting
   job reads it with `jq`. `review.yml` keeps only findings on lines the diff shows before it
   posts them.
-- **What the agent may run.** `allow: bash` with `deny: edit` lets it read and run anything and
-  refuses the `edit` tool, not writes: a command can still change a file. The checkout is
+- **What the agent may run.** `allow: bash` with `deny: apply_patch` lets it read and run anything and
+  refuses the `apply_patch` tool, not writes: a command can still change a file. The checkout is
   throwaway and the job has no token that can write, so it changes nothing it can commit.
   `llx.yml` allows edits and denies `git commit` and `git push`; its patch goes to the posting
   job, which refuses a change to `.github/`.

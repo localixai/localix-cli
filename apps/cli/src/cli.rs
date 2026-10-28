@@ -15,8 +15,9 @@ const ABOUT: &str = "llx: an ultrafast, lightweight agent runtime: a minimal age
 const LONG_ABOUT: &str = "llx: an ultrafast, lightweight agent runtime. A minimal agent for the \
 terminal (llx), one task for scripts and CI (llx exec), and a decision step (llx decide).
 
-It works in a directory (the current one, or -C DIR) with six tools: read, edit, bash (commands \
-run to their end), ask, a question to you (in a session only), agents: other agents it starts in parallel, each a session of its own (in a \
+It works in a directory (the current one, or -C DIR) with its tools: exec, a short JavaScript \
+script that reads files and runs commands (each run to its end), apply_patch, a patch that \
+changes files, ask, a question to you (in a session only), agents: other agents it starts in parallel, each a session of its own (in a \
 session, a list under the prompt shows them: down arrow, then enter to see one), and jobs: \
 monitors (a background command whose lines come back) and schedules (a prompt at a time).
 
@@ -35,7 +36,7 @@ asked at the terminal (1 yes, 2 always for this tool, 3 no; outside a session y,
 refused with no one to ask. A mode (--mode) is a named set of rules: default (none), plan \
 (file changes refused), bypass (-y, everything allowed), or your own from `modes` in \
 ~/.config/llx/settings.json. --allow and --deny add rules for one run: bash(cargo test *), \
-edit(docs/**). In a session, /mode switches it and Shift+Tab goes round the modes \
+apply_patch(docs/**). In a session, /mode switches it and Shift+Tab goes round the modes \
 (after the task if working); the mode is always shown under the prompt, and /status shows it \
 too. Markdown tables wrap their cells \
 to the terminal width; completed edits show numbered diffs with red/green background bands. Tab completes a slash command \
@@ -311,7 +312,7 @@ pub(crate) struct RunOptions {
     )]
     pub mode: Option<String>,
     /// Run what RULE names without asking, where the mode would ask or, with no one to ask,
-    /// refuse: `bash(cargo test *)` (every part of the command must match), `edit(docs/**)`.
+    /// refuse: `bash(cargo test *)` (every part of the command must match), `apply_patch(docs/**)`.
     /// Repeat it. Plan mode stays read-only. The syntax is Claude Code's; what a
     /// pattern covers, and what it never does, is in docs/modes.md#rules.
     #[arg(long, value_name = "RULE", help_heading = "Approvals")]

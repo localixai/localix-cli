@@ -134,7 +134,7 @@ jobs:
           timeout: '1500'
           allow: |
             bash
-            edit
+            apply_patch
           deny: |
             bash(git push *)
             bash(git commit *)

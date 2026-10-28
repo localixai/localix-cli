@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -63,7 +63,7 @@ impl Tool for ReadTool<'_> {
         ToolSpec {
             name: NAME.into(),
             description: DESCRIPTION.into(),
-            parameters: json!({
+            input: Input::Json(json!({
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "The file or directory to read."},
@@ -74,7 +74,7 @@ impl Tool for ReadTool<'_> {
                 },
                 "required": ["path"],
                 "additionalProperties": false,
-            }),
+            })),
         }
     }
 

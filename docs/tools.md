@@ -1,12 +1,14 @@
 # Tools
 
 llx has six tools. The set is deliberately minimal: a new capability goes into one of them (as
-an `action`), or is left to the shell.
+an `action`), or is left to the shell. The model reaches `read` and `bash` through `exec`, a short
+JavaScript script that calls them: independent reads and commands in one turn, and only what the
+script keeps sent back.
 
 | Tool | What it is for |
 | --- | --- |
 | [`read`](#read) | Files and directories |
-| [`edit`](#edit) | Exact replacement, or a new file |
+| [`apply_patch`](#apply_patch) | A patch: files changed, created, deleted or moved |
 | [`bash`](#bash) | Commands that run to their end |
 | [`ask`](#ask) | A question to you |
 | [`agents`](#agents) | Other agents, in parallel |
@@ -16,9 +18,9 @@ an `action`), or is left to the shell.
 
 A text file's lines, numbered, up to 2000 lines and about 20 KB at a time (`offset`, `limit`), or a directory's entries. PNG, JPEG, GIF and WebP files up to 8 MB (as for a picture you attach) are sent to the model as pictures; `offset` and `limit` do not apply to them. Image headers are checked, but the file is not fully decoded; a corrupt file or a format the selected model does not support may be rejected by the provider. Long lines are cut; other binary files and anything but regular files (a FIFO, a device) are refused. It reads anywhere (a dependency's source, a system header) except llx's own key and sessions.
 
-## edit
+## apply_patch
 
-- Exact replacement: `old_string` must occur once, unless `replace_all` is set. An empty `old_string` creates a file.
+- A patch as free text, `*** Begin Patch` … `*** End Patch`: `*** Add File`, `*** Delete File`, `*** Update File` (with `*** Move to`), each update's hunks found by their lines and the lines around them. Every file is worked out and asked of the gate before any is written; a hunk that does not fit changes nothing.
 - Writes are atomic (a new temporary file, then a rename) and keep CRLF line endings and permissions; a read-only file is refused, and a file with other hard links is written in place.
 - It asks the gate, refuses to write when the file changed while the question was open, and changes only files inside the workspace.
 

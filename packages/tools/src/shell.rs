@@ -4,7 +4,7 @@
 mod bash;
 #[cfg(unix)]
 mod inherit;
-mod output;
+pub(crate) mod output;
 mod process;
 #[cfg(unix)]
 mod sweep;

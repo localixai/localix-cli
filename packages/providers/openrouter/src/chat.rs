@@ -1,6 +1,6 @@
 //! The chat port over OpenAI's chat completions, with tool calling: OpenRouter's models, and any
 //! provider's that speaks the same wire. OpenRouter takes its own `reasoning` object, a usage
-//! report with the cost, and prompt-cache marks; the others take `reasoning_effort`, and OpenAI's
+//! report with the cost, and prompt-cache marks for the models that take them; the others take `reasoning_effort`, and OpenAI's
 //! own API the prompt cache's key.
 
 use contracts::catalog::{Effort, Selection};
@@ -28,59 +28,106 @@ impl Chat for ChatModel {
                     ChatError::Unavailable(format!("{} {other}", self.client.name))
                 }
             })?;
-        let message = value
-            .pointer("/choices/0/message")
-            .ok_or_else(|| ChatError::Invalid("no message in the completion".into()))?;
-        // Who served it (OpenRouter routes a model to one of its hosts) and the calls as they
-        // came: what a call that reached a tool malformed is traced back to.
-        log::debug!(
-            "{} served {}: {}",
-            value["provider"].as_str().unwrap_or(&self.client.name),
-            value["model"].as_str().unwrap_or(model),
-            message.get("tool_calls").unwrap_or(&Value::Null)
-        );
-        let calls = message
-            .get("tool_calls")
-            .and_then(Value::as_array)
-            .map(|calls| calls.iter().filter_map(read_call).collect())
-            .unwrap_or_default();
-        let text = message
-            .get("content")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|text| !text.is_empty())
-            .map(String::from);
-        let tokens = |pointer: &str| value.pointer(pointer).and_then(Value::as_u64).unwrap_or(0);
-        Ok(Completion {
-            text,
-            calls,
-            carried: vec![],
-            usage: Usage {
-                model: value["model"].as_str().unwrap_or(model).to_string(),
-                cost: value
-                    .pointer("/usage/cost")
-                    .and_then(Value::as_f64)
-                    .unwrap_or(0.0),
-                millis: timing.millis,
-                input_tokens: tokens("/usage/prompt_tokens"),
-                cached_tokens: tokens("/usage/prompt_tokens_details/cached_tokens"),
-                output_tokens: tokens("/usage/completion_tokens"),
-            },
-        })
+        let mut completion = read(&value, model, timing.millis)?;
+        completion.calls = (completion.calls.into_iter())
+            .map(|call| incoming(call, request.tools))
+            .collect();
+        Ok(completion)
     }
+}
+
+/// A call the model made, as the agent takes it: a script's text taken out of its one argument.
+fn incoming(mut call: ToolCall, tools: &[ToolSpec]) -> ToolCall {
+    if let Some(spec) = tools.iter().find(|spec| spec.name == call.name) {
+        call.arguments = spec.input.from_function(call.arguments);
+    }
+    call
+}
+
+/// The completion in a reply: its text, its calls, the reasoning that goes back with it, and the
+/// usage.
+fn read(value: &Value, model: &str, millis: u64) -> Result<Completion, ChatError> {
+    let message = value
+        .pointer("/choices/0/message")
+        .ok_or_else(|| ChatError::Invalid("no message in the completion".into()))?;
+    // Who served it (OpenRouter routes a model to one of its hosts) and the calls as they came:
+    // what a call that reached a tool malformed is traced back to.
+    log::debug!(
+        "{} served {}: {}",
+        value["provider"].as_str().unwrap_or("the host"),
+        value["model"].as_str().unwrap_or(model),
+        message.get("tool_calls").unwrap_or(&Value::Null)
+    );
+    let calls = message
+        .get("tool_calls")
+        .and_then(Value::as_array)
+        .map(|calls| calls.iter().filter_map(read_call).collect())
+        .unwrap_or_default();
+    let text = message
+        .get("content")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(String::from);
+    let tokens = |pointer: &str| value.pointer(pointer).and_then(Value::as_u64).unwrap_or(0);
+    Ok(Completion {
+        text,
+        calls,
+        carried: thought(message, model).into_iter().collect(),
+        usage: Usage {
+            model: value["model"].as_str().unwrap_or(model).to_string(),
+            cost: value
+                .pointer("/usage/cost")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0),
+            millis,
+            input_tokens: tokens("/usage/prompt_tokens"),
+            cached_tokens: tokens("/usage/prompt_tokens_details/cached_tokens"),
+            output_tokens: tokens("/usage/completion_tokens"),
+        },
+    })
+}
+
+/// The fields a host says its model's reasoning in, the first that holds some taken: a host may
+/// say it twice, in two of them.
+const THOUGHT: [&str; 3] = ["reasoning_content", "reasoning", "reasoning_text"];
+
+/// The reasoning a message holds, as it goes back: OpenRouter's `reasoning_details` whole (signed
+/// or sealed parts a model checks), else the text with the field it came in; tagged with the model
+/// that wrote it, which alone may read it.
+fn thought(message: &Value, model: &str) -> Option<Value> {
+    if let Some(details) = message
+        .get("reasoning_details")
+        .filter(|details| details.as_array().is_some_and(|parts| !parts.is_empty()))
+    {
+        return Some(json!({"model": model, "fields": {"reasoning_details": details}}));
+    }
+    THOUGHT.iter().find_map(|field| {
+        let text = message
+            .get(*field)?
+            .as_str()
+            .filter(|text| !text.is_empty())?;
+        Some(json!({"model": model, "fields": {*field: text}}))
+    })
 }
 
 /// The request's body: OpenRouter's own fields, or the generic ones.
 fn body(host: Wire, selection: &Selection, request: &Request) -> Value {
     let model = &selection.model().id;
-    let messages: Vec<Value> = request.conversation.iter().map(wire).collect();
+    let messages: Vec<Value> = (request.conversation.iter())
+        .map(|message| wire(message, model, request.tools))
+        .collect();
     // No output limit: a whole file in one call is a long reply, and a cut one breaks the
     // call's arguments. The model's own maximum applies.
     let mut body = json!({"model": model});
     // Only a model that takes levels is sent one: another may refuse the field.
     let levels = !selection.model().efforts.is_empty();
     if host == Wire::OpenRouter {
-        body["messages"] = json!(cached(messages));
+        body["messages"] = json!(if takes_marks(model) {
+            cached(messages)
+        } else {
+            messages
+        });
         if levels {
             body["reasoning"] = reasoning(selection.effort());
         }
@@ -117,7 +164,7 @@ fn cache_key(model: &str, request: &Request) -> String {
         [
             spec.name.clone(),
             spec.description.clone(),
-            spec.parameters.to_string(),
+            spec.input.schema().to_string(),
         ]
     });
     let rules = request
@@ -148,20 +195,34 @@ pub(crate) fn reasoning(effort: Effort) -> Value {
     }
 }
 
-/// A message in the chat-completions wire format.
-fn wire(message: &Message) -> Value {
+/// A message in the chat-completions wire format, for `model`: the reasoning another model wrote
+/// stays out.
+fn wire(message: &Message, model: &str, tools: &[ToolSpec]) -> Value {
     match message {
         Message::System(text) => json!({"role": "system", "content": text}),
         Message::User(text) => json!({"role": "user", "content": text}),
-        // What another provider carries is its own: chat completions has no place for it.
-        Message::Assistant { text, calls, .. } => {
+        Message::Assistant {
+            text,
+            calls,
+            carried,
+        } => {
             let mut out = json!({"role": "assistant", "content": text});
+            // Only what this provider kept: another's (a Responses reasoning) has no "fields".
+            let kept = carried.iter().filter(|kept| kept["model"] == model);
+            for (field, value) in kept.filter_map(|kept| kept["fields"].as_object()).flatten() {
+                out[field.as_str()] = value.clone();
+            }
             if !calls.is_empty() {
                 out["tool_calls"] = calls
                     .iter()
                     .map(|call| {
+                        // A script's text goes back in the one argument it was offered with.
+                        let arguments = match tools.iter().find(|spec| spec.name == call.name) {
+                            Some(spec) => spec.input.to_function(&call.arguments),
+                            None => call.arguments.clone(),
+                        };
                         json!({"id": call.id, "type": "function", "function": {
-                            "name": call.name, "arguments": call.arguments.to_string()}})
+                            "name": call.name, "arguments": arguments.to_string()}})
                     })
                     .collect();
             }
@@ -196,12 +257,22 @@ fn picture(caption: &str, image: &Image) -> Value {
 
 fn function(spec: &ToolSpec) -> Value {
     json!({"type": "function", "function": {
-        "name": spec.name, "description": spec.description, "parameters": spec.parameters}})
+        "name": spec.name, "description": spec.description, "parameters": spec.input.schema()}})
+}
+
+/// Whether OpenRouter's model `id` caches only where told to: Anthropic, Gemini and Qwen take
+/// `cache_control` breakpoints (its prompt-caching guide); OpenAI, DeepSeek, Grok, Moonshot and the
+/// rest cache a repeated start on their own, and a mark would only change their content's shape.
+/// The catalog's `cache.explicit` also covers other mechanisms (OpenAI's own breakpoint field), so
+/// it cannot say this; OpenRouter ids name the vendor first, and that is what is read.
+fn takes_marks(id: &str) -> bool {
+    ["anthropic/", "google/gemini", "qwen/"]
+        .iter()
+        .any(|vendor| id.starts_with(vendor))
 }
 
 /// The conversation with prompt-cache breakpoints on the system prompt and the newest message, so
-/// each turn re-reads only what was added since the last one (Anthropic models through
-/// OpenRouter; other providers ignore the marks or cache on their own).
+/// each turn re-reads only what was added since the last one.
 fn cached(mut messages: Vec<Value>) -> Vec<Value> {
     let mark = |message: &mut Value| {
         if let Some(text) = message["content"].as_str().map(str::to_string) {

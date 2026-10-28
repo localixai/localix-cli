@@ -14,6 +14,7 @@ mod modes;
 mod pipes;
 mod repo;
 mod rules;
+mod script;
 mod sessions;
 mod sign_in;
 #[cfg(unix)]

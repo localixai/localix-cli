@@ -74,6 +74,8 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
         gate: &gate,
         stop: &stop,
         seen: Mutex::new(seen),
+        who: id,
+        agent: Some(&name),
     };
     let tools = Tools::new(kit, &own);
     let watch = Watch {

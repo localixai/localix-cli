@@ -11,10 +11,23 @@ type Card = { title: string; text: string; lines: Line[]; link?: { href: string;
 const EXAMPLES = `${GITHUB}/blob/main/examples`;
 
 /** What each step printed in the recorded runs (public/demo-llx.cast and its takes), shortened; the
- *  the review card is examples/github/review.yml, the API card examples/breaking-changes' recorded
+ *  benchmark card is benchmarks/arena's two runs (medians); the review card is examples/github/review.yml, the API card examples/breaking-changes' recorded
  *  run (demo/output.txt); the rules card is put together from llx's own wording of a refusal
  *  (packages/tools/src/lib.rs). */
 const CARDS: Card[] = [
+  {
+    title: 'Less context, same model',
+    text: 'One task: make a Bun, React and Vite app match its spec, checked by 9 tests. llx and Codex on the same model, low reasoning; medians of 5 runs each.',
+    link: { href: `${GITHUB}/tree/main/benchmarks/arena`, label: 'the runs' },
+    lines: [
+      [['dim', '                    Luna 6           Terra 6.1']],
+      [['dim', '              llx    Codex        llx    Codex']],
+      [['', 'context '], ['ok', '      49k'], ['', '     199k'], ['ok', '        62k'], ['', '      82k']],
+      [['', 'time    '], ['ok', '    21.5s'], ['', '    28.5s'], ['ok', '      22.1s'], ['', '    24.1s']],
+      [['', 'cost    '], ['ok', '  $0.0025'], ['', '  $0.0045'], ['', '     $0.032'], ['ok', '   $0.020']],
+      [['', 'passed  '], ['', '      4/5'], ['', '      5/5'], ['', '        5/5'], ['', '      5/5']],
+    ],
+  },
   {
     title: 'Any model, any provider',
     text: 'Pick a provider and a model with /model: a ChatGPT sign-in, OpenRouter, Anthropic, xAI, DeepSeek. The reasoning level with ← →, saved for every run after.',
@@ -35,7 +48,7 @@ const CARDS: Card[] = [
       [['acc', '↳ '], ['hi', 'Spawned'], ['', ' mean · mean() on an empty list']],
       [['ok', '● '], ['', 'Agent "median" finished · 6s']],
       [['ok', '● '], ['', 'Agent "mean" finished · 6s']],
-      [['ok', '• '], ['hi', 'Edited'], ['', ' stats.py '], ['dim', '(+1 -1 lines)']],
+      [['ok', '• '], ['hi', 'Patched'], ['', ' stats.py '], ['dim', '(+1 -1 lines)']],
       [['', '• Fixed '], ['acc', 'stats.py:15'], ['', ': averages the two middle values.']],
     ],
   },
@@ -43,7 +56,7 @@ const CARDS: Card[] = [
     title: 'Checks a change in CI',
     text: 'Reads the diff, runs the tests, changes nothing, and answers with data your pipeline reads: JSON that matches your schema.',
     lines: [
-      [['dim', '$ '], ['', 'git diff | llx exec -y --deny edit \\']],
+      [['dim', '$ '], ['', 'git diff | llx exec -y --deny apply_patch \\']],
       [['', '    --schema @ship.json "Safe to ship? Which bump?"']],
       [['ok', '• '], ['hi', 'Ran'], ['', ' python3 -m unittest -v']],
       [['dim', '  └ Ran 4 tests in 0.000s · OK']],
@@ -59,7 +72,7 @@ const CARDS: Card[] = [
       [['acc', '- uses: '], ['', 'rsaryev/llx@v0']],
       [['acc', '  with:']],
       [['', '    allow: bash']],
-      [['', '    deny: edit']],
+      [['', '    deny: apply_patch']],
       [['', '    prompt: |']],
       [['', '      Review pull request #$PR of $GH_REPO.']],
       [['', '      Find real problems: bugs, security flaws, lost data.']],
@@ -72,7 +85,7 @@ const CARDS: Card[] = [
     text: 'A GitLab job on every merge request: llx reads the diff, the spec and the code behind it, read-only, and says what breaks the API’s clients, even what no spec diff sees, like a unit or an order that changed.',
     link: { href: `${EXAMPLES}/breaking-changes/README.md`, label: 'breaking-changes, with its GitLab job' },
     lines: [
-      [['dim', '$ '], ['', 'llx exec --deny edit --schema @schema.json "$prompt"']],
+      [['dim', '$ '], ['', 'llx exec --deny apply_patch --schema @schema.json "$prompt"']],
       [['bad', 'BREAKS'], ['', '  structural  POST /orders: 201 became 200']],
       [['bad', 'BREAKS'], ['', '  semantic    Order.amount: major units now cents']],
       [['bad', 'BREAKS'], ['', "  semantic    'skip' is a page index, not an offset"]],
@@ -91,7 +104,7 @@ const CARDS: Card[] = [
       [['dim', '$ '], ['', "echo 'App crashes when the cart is empty' |"]],
       [['', '    llx decide --choices bug,feature,question "Label it"']],
       [['ok', 'bug']],
-      [['dim', '$ '], ['', 'git diff | llx exec -y --deny edit "A one-line commit message"']],
+      [['dim', '$ '], ['', 'git diff | llx exec -y --deny apply_patch "A one-line commit message"']],
       [['', 'Fix median calculation for even-length lists']],
     ],
   },

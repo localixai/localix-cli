@@ -1,7 +1,7 @@
 //! Checkpoints: before a task's first change to a file, what the file
 //! held (or that it did not exist), so `/rewind` (or Esc Esc on an empty prompt) can put the
 //! files back as they were before any task of the conversation, the conversation too, or both.
-//! Only `edit`'s changes are kept, the agents' among them; what a command changed is not.
+//! Only `apply_patch`'s changes are kept, the agents' among them; what a command changed is not.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -93,7 +93,7 @@ impl Checkpoints {
     }
 }
 
-/// `edit`, keeping each file's content before its first change in the task.
+/// `apply_patch`, keeping each file's content before its first change in the task.
 pub(crate) struct Tracked<'a> {
     pub inner: &'a dyn Tool,
     pub workspace: &'a Workspace,
@@ -106,9 +106,11 @@ impl Tool for Tracked<'_> {
     }
 
     fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
-        let path = arguments.get("path").and_then(Value::as_str);
-        if let Some(path) = path.and_then(|p| self.workspace.writable(p).ok()) {
-            self.checkpoints.keep(path);
+        // A patch names several files: each is kept as it is found.
+        for path in tools::fs::named_paths(arguments) {
+            if let Ok(path) = self.workspace.writable(&path) {
+                self.checkpoints.keep(path);
+            }
         }
         self.inner.call(arguments)
     }

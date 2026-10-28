@@ -1,7 +1,9 @@
 //! The composition root: the one place that builds the packages and hands them to the agent
 //! through its ports. [`compose`] builds the chat model; [`assemble`] builds the rest around any
-//! model: the brake, the workspace, the mode's gate, the person, and the tools: `read`, `edit`,
-//! `bash` and `ask` in a session.//! are closed when `assemble` returns, before `main` exits (which would skip their `Drop`).
+//! model: the brake, the workspace, the mode's gate, the person, and the tools: `exec` (which
+//! reaches `read` and `bash`), `apply_patch`, and `ask` in a session. What it starts (threads,
+//! monitors) is closed when `assemble` returns, before `main` exits (which would skip their
+//! `Drop`).
 
 mod lane;
 mod rig;
@@ -149,10 +151,13 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
     // The main session's tools are an agent's, on the session's own gate and stop. A
     // subdirectory's own instructions come with the first call that touches a file there; the
     // directories the context already covers are known.
+    let session_id = seat.session.id.clone();
     let own = Own {
         gate: base.gate,
         stop: base.stopped,
         seen: Mutex::new(instructions::chain(workspace.root()).into_iter().collect()),
+        who: &session_id,
+        agent: None,
     };
     let main_tools = Tools::new(&kit, &own);
     let registry = Registry::new(Arc::clone(&lane_queue));

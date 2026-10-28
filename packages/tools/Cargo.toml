@@ -12,6 +12,8 @@ license.workspace = true
 # Images go to the model as base64.
 base64.workspace = true
 contracts.workspace = true
+# `exec`: the JavaScript engine its scripts run on.
+rquickjs.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

@@ -44,6 +44,7 @@ fn scripted(
         .map(|answer| {
             answer.map(|(status, body)| Reply {
                 status,
+                headers: vec![],
                 body: body.into(),
             })
         })

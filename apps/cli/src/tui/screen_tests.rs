@@ -183,17 +183,16 @@ fn every_frame_is_one_synchronized_update() {
 fn successful_edit_displays_the_actual_before_and_after_in_the_terminal() {
     use crate::tui::app::App;
     use crate::tui::test_support::{Term, done, label, result};
-    // What `edit` reports of `throw: true` made `throw: false` in a file of three lines.
-    let report = "Edited config.rs: replaced 1 occurrence (+1 -1 lines).\n     1\ttarget: 'bun',\n     \
-                  2\tthrow: false,\n     3\tend\n\nDiff:\n@@ -1,3 +1,3 @@\n target: 'bun',\n\
-                  -throw: true,\n+throw: false,\n end\n";
+    // What `apply_patch` reports of `throw: true` made `throw: false` in a file of three lines.
+    let report = "Updated config.rs (+1 -1 lines)\n\nDiff of config.rs:\n@@ -1,3 +1,3 @@\n\
+                  target: 'bun',\n-throw: true,\n+throw: false,\n end\n";
     let now = std::time::Instant::now();
     let mut app = App::new(80, 30, vec![]);
     let mut term = Term::new(&app);
-    let edited = label("Editing", "Edited", "config.rs");
-    app.event(result("c1", "edit", &edited, done(report)), now);
+    let edited = label("Patching", "Patched", "config.rs");
+    app.event(result("c1", "apply_patch", &edited, done(report)), now);
     let shown = term.draw(&mut app, now);
-    assert!(shown.contains("• Edited config.rs"), "{shown}");
+    assert!(shown.contains("• Patched config.rs"), "{shown}");
     assert!(shown.contains("- throw: true,"), "{shown}");
     assert!(shown.contains("+ throw: false,"), "{shown}");
     assert!(shown.contains("target: 'bun',"), "{shown}");

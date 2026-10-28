@@ -48,8 +48,11 @@ fn plan_refuses_edits_by_its_rule_without_asking() {
     let typed = Typed::new(&["y\n"]);
     let waited = |_: Duration| {};
     let gate = ModeGate::new(&mode, Some(&typed), &waited);
-    let why = denied(gate.check(effect("edit")));
-    assert!(why.contains("`edit`") && why.contains("plan"), "{why}");
+    let why = denied(gate.check(effect("apply_patch")));
+    assert!(
+        why.contains("`apply_patch`") && why.contains("plan"),
+        "{why}"
+    );
     assert!(
         typed.asked.lock().unwrap().is_empty(),
         "the person was not asked"
@@ -104,7 +107,7 @@ fn bypass_allows_without_asking() {
     let typed = Typed::new(&[]);
     let waited = |_: Duration| panic!("nobody waited");
     let gate = ModeGate::new(&mode, Some(&typed), &waited);
-    for tool in ["edit", "bash", "jobs"] {
+    for tool in ["apply_patch", "bash", "jobs"] {
         assert_eq!(gate.check(effect(tool)), Verdict::Allow, "{tool}");
     }
     assert!(typed.asked.lock().unwrap().is_empty());
@@ -127,7 +130,7 @@ fn the_context_states_the_rules_and_what_becomes_of_the_rest() {
     let plan = built("plan");
     let text = describe(&plan, &none, false, false);
     assert!(
-        text.starts_with("plan:") && text.contains("`edit`"),
+        text.starts_with("plan:") && text.contains("`apply_patch`"),
         "{text}"
     );
     assert!(text.contains("is refused"), "{text}");

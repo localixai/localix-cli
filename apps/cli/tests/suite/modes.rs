@@ -49,7 +49,7 @@ fn a_mode_of_the_persons_runs_what_it_allows_and_the_model_is_told_its_rules() {
 
 #[test]
 fn the_persons_mode_replaces_a_built_in_one_of_the_same_name() {
-    let home = with_modes(json!({"plan": {"allow": ["bash(echo *)"], "deny": ["edit"]}}));
+    let home = with_modes(json!({"plan": {"allow": ["bash(echo *)"], "deny": ["apply_patch"]}}));
     let model = running("echo checked");
     let out = exec(&home, &model, &["exec", "--mode", "plan", "x"], "");
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));

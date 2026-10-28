@@ -7,7 +7,7 @@ use std::thread::Scope;
 use std::time::{Duration, Instant};
 
 use contracts::gate::{Effect, Verdict};
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
 use super::monitor::{self, Ended};
@@ -254,7 +254,7 @@ impl Tool for JobsTool<'_, '_> {
         ToolSpec {
             name: spec::NAME.into(),
             description: spec::description(),
-            parameters: spec::parameters(),
+            input: Input::Json(spec::parameters()),
         }
     }
 

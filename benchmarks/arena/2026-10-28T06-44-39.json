@@ -1,0 +1,181 @@
+{
+ "hidden_sha256": "fdd65039f2cd592d2ac1684b9a8781809076d9c7d9b2ac5ec2a91de4fe75b763",
+ "at": "2026-10-28T06-44-39",
+ "task": "ledger-web",
+ "prompt": "The ledger app's tests fail and its report does not do what docs/SPEC.md says. Make the app match the spec, the month picker included. Do not change the existing tests. Check your work with `bun test`, `bunx tsc --noEmit` and `bunx vite build`.",
+ "effort": "low",
+ "models": {
+  "llx": "gpt-6.1-terra",
+  "codex": "gpt-6.1-terra",
+  "claude": "claude-sonnet-5-5"
+ },
+ "versions": {
+  "llx": "llx 0.2.0",
+  "codex": "codex-cli 0.163.0",
+  "claude": "2.1.312 (Claude Code)",
+  "bun": "1.4.4",
+  "machine": "Darwin arm64 26.6.2"
+ },
+ "rows": [
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 21.1,
+   "model": "gpt-6.1-terra",
+   "turns": 9,
+   "tools": 5,
+   "input": 57785,
+   "cached": 38912,
+   "output": 2241,
+   "cost": 0.032,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 23.9,
+   "model": "gpt-6.1-terra",
+   "turns": 1,
+   "tools": 3,
+   "input": 62619,
+   "cached": 56320,
+   "output": 1815,
+   "cost": 0.0182,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 24.6,
+   "model": "gpt-6.1-terra",
+   "turns": 1,
+   "tools": 10,
+   "input": 82735,
+   "cached": 75520,
+   "output": 1974,
+   "cost": 0.0209,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 22.1,
+   "model": "gpt-6.1-terra",
+   "turns": 10,
+   "tools": 5,
+   "input": 61993,
+   "cached": 46848,
+   "output": 2275,
+   "cost": 0.0289,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 25.1,
+   "model": "gpt-6.1-terra",
+   "turns": 10,
+   "tools": 6,
+   "input": 66734,
+   "cached": 45824,
+   "output": 2371,
+   "cost": 0.0351,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 22.4,
+   "model": "gpt-6.1-terra",
+   "turns": 1,
+   "tools": 10,
+   "input": 82192,
+   "cached": 75264,
+   "output": 1790,
+   "cost": 0.0196,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 24.1,
+   "model": "gpt-6.1-terra",
+   "turns": 1,
+   "tools": 14,
+   "input": 82845,
+   "cached": 75392,
+   "output": 1837,
+   "cost": 0.0204,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 21.9,
+   "model": "gpt-6.1-terra",
+   "turns": 9,
+   "tools": 5,
+   "input": 55784,
+   "cached": 43392,
+   "output": 2224,
+   "cost": 0.0257,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 24.0,
+   "model": "gpt-6.1-terra",
+   "turns": 11,
+   "tools": 6,
+   "input": 69516,
+   "cached": 51328,
+   "output": 2266,
+   "cost": 0.0321,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 24.6,
+   "model": "gpt-6.1-terra",
+   "turns": 1,
+   "tools": 3,
+   "input": 62917,
+   "cached": 54400,
+   "output": 2011,
+   "cost": 0.0213,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  }
+ ]
+}

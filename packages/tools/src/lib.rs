@@ -4,16 +4,18 @@
 //! first.
 //! - [`workspace`]: the directory the coding tools work in: where paths resolve, where files may
 //!   change.
-//! - [`fs`]: `read` (a file's numbered lines, a directory's entries) and `edit` (exact replacement,
-//!   or a new file).
+//! - [`fs`]: `read` (a file's numbered lines, a directory's entries) and `apply_patch` (a patch that
+//!   changes, creates, deletes or moves files).
 //! - [`shell`]: `bash`: a command run in the workspace, its exit code and its output.
 //! - [`ask`]: questions to the person (`contracts::person::Person`), who answers in the app.
+//! - [`script`]: `exec`: a JavaScript script that chains the other tools in one call.
 
 use contracts::gate::{Effect, Gate, Verdict};
 use contracts::tool::ToolError;
 
 pub mod ask;
 pub mod fs;
+pub mod script;
 pub mod shell;
 pub mod workspace;
 

@@ -17,7 +17,7 @@ prompt=$(sed -e "s|{SPEC}|$spec|g" -e "s|{BASE}|$base|g" "$here/prompt.md")
 # Read only: llx's own `read`, and commands that change nothing. Anything else is refused, as no
 # one is there to ask. stdin is closed: with the prompt on the command line, an open stdin (a CI
 # runner's, `ssh` without -n) would be read to its end first.
-llx exec --deny edit \
+llx exec --deny apply_patch \
   --allow 'bash(git diff *)' --allow 'bash(git show *)' --allow 'bash(git log *)' \
   --allow 'bash(git status *)' --allow 'bash(ls *)' --allow 'bash(grep *)' \
   --max-turns 30 --timeout 300 --schema "@$here/schema.json" -o "$out" "$prompt" </dev/null >/dev/null ||

@@ -2,23 +2,21 @@
 //! level, and the prompt cache's key.
 
 use contracts::catalog::{Effort, Selection};
-use contracts::chat::{Message, Request};
+use contracts::chat::{Message, Request, ToolCall};
+use contracts::tool::ToolSpec;
 use serde_json::{Value, json};
 
-use super::offer::{Offer, Texts};
-
-/// The request body for `request`, a tool of free text offered as `texts` says.
-pub(crate) fn body(selection: &Selection, request: Request, texts: Texts) -> Value {
-    let offer = Offer::new(request.tools, texts, request.conversation);
+/// The request body for `request`.
+pub(crate) fn body(selection: &Selection, request: Request) -> Value {
     let mut body = json!({
         "model": selection.model().id,
         "input": (request.conversation.iter())
-            .flat_map(|message| items(message, &selection.model().id, &offer))
+            .flat_map(|message| items(message, &selection.model().id))
             .collect::<Vec<_>>(),
         "store": false,
         "stream": true,
         "include": [],
-        "prompt_cache_key": cache_key(selection, &request, &offer),
+        "prompt_cache_key": cache_key(selection, &request),
     });
     // Off is said: a request without the field reasons at the backend's own default.
     if !selection.model().efforts.is_empty() {
@@ -33,7 +31,7 @@ pub(crate) fn body(selection: &Selection, request: Request, texts: Texts) -> Val
         body["include"] = json!(["reasoning.encrypted_content"]);
     }
     if !request.tools.is_empty() {
-        body["tools"] = request.tools.iter().map(|spec| offer.tool(spec)).collect();
+        body["tools"] = request.tools.iter().map(tool).collect();
         body["tool_choice"] = json!(if request.may_call { "auto" } else { "none" });
         // Several calls in one turn: independent reads and searches cost one turn, not many. The
         // agent runs together only the calls whose tools allow it, the rest in order.
@@ -45,11 +43,8 @@ pub(crate) fn body(selection: &Selection, request: Request, texts: Texts) -> Val
 /// The prompt cache's key: the model, the tools and the system prompt, the start every request
 /// of every session with them shares. The backend sends requests with one key to where that start
 /// is cached, so a new session (an agent's too) reads it from the cache instead of afresh.
-fn cache_key(selection: &Selection, request: &Request, offer: &Offer) -> String {
-    let tools = request
-        .tools
-        .iter()
-        .map(|spec| offer.tool(spec).to_string());
+fn cache_key(selection: &Selection, request: &Request) -> String {
+    let tools = request.tools.iter().map(|spec| tool(spec).to_string());
     let rules = request
         .conversation
         .iter()
@@ -66,7 +61,19 @@ fn cache_key(selection: &Selection, request: &Request, offer: &Offer) -> String 
 
 /// A message as the Responses API's input items, for `model`: a reasoning another model sealed
 /// (before `/model` switched) is left out, as that model alone can open it.
-pub(super) fn items(message: &Message, model: &str, offer: &Offer) -> Vec<Value> {
+/// A tool as the request's `tools` list it.
+fn tool(spec: &ToolSpec) -> Value {
+    json!({"type": "function", "name": spec.name, "description": spec.description,
+        "parameters": spec.parameters, "strict": false})
+}
+
+/// An earlier call as an input item.
+fn call_item(call: &ToolCall) -> Value {
+    json!({"type": "function_call", "call_id": call.id, "name": call.name,
+        "arguments": call.arguments.to_string()})
+}
+
+pub(super) fn items(message: &Message, model: &str) -> Vec<Value> {
     let text = |role: &str, kind: &str, text: &str| json!({"type": "message", "role": role, "content": [{"type": kind, "text": text}]});
     match message {
         Message::System(rules) => vec![text("developer", "input_text", rules)],
@@ -83,7 +90,7 @@ pub(super) fn items(message: &Message, model: &str, offer: &Offer) -> Vec<Value>
                 said.iter()
                     .map(|said| text("assistant", "output_text", said)),
             )
-            .chain(calls.iter().map(|call| offer.call_item(call)))
+            .chain(calls.iter().map(call_item))
             .collect(),
         // A picture goes in as the person's message, after the call that took it.
         Message::Image { caption, image } => vec![json!({"type": "message", "role": "user",
@@ -100,7 +107,7 @@ pub(super) fn items(message: &Message, model: &str, offer: &Offer) -> Vec<Value>
                 true => format!("Error: {content}"),
                 false => content.clone(),
             };
-            vec![offer.output_item(id, &output)]
+            vec![json!({"type": "function_call_output", "call_id": id, "output": output})]
         }
     }
 }

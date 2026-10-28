@@ -37,7 +37,7 @@ llx is a minimal agent runtime: a model in a loop over a few plain tools, on any
 
 | Who calls | Command | What they get |
 | --- | --- | --- |
-| **You** | `llx` | A minimal agent at your terminal, with six tools: `read`, `apply_patch`, `bash`, `ask`, `agents`, `jobs` |
+| **You** | `llx` | A minimal agent at your terminal, with four tools: `bash`, `ask`, `agents`, `jobs` |
 | **Your scripts and CI** | `llx exec --json --schema …` | One task, then exit: JSON events, an answer in the shape you define, exit codes to branch on |
 | **Your other agents** | `llx exec` · `llx decide` | Commands they run from their shell: helpers on any model, quick decisions. They extend the agent you use, never replace it |
 
@@ -63,14 +63,25 @@ llx is a minimal agent runtime: a model in a loop over a few plain tools, on any
 
 ## Benchmark
 
-One task: make a Bun, React and Vite app match its spec, checked by 9 tests. llx and Codex in turns on the same model, low reasoning; medians of 5 runs each.
+Two tasks on a Bun, React and Vite app, llx and Codex on the same model, low reasoning, every run of a model started at once; medians of 5 runs each.
+
+Make the app match its spec, checked by 9 tests:
 
 | Model | Agent | Context | Time | Cost | Passed |
 | --- | --- | --- | --- | --- | --- |
-| GPT-6 Luna | llx | **47k** | **28.6 s** | **$0.0031** | 4/5 |
-| | Codex | 211k | 43.2 s | $0.0052 | **5/5** |
-| GPT-6.1 Terra | llx | **33k** | **25.2 s** | **$0.019** | 5/5 |
-| | Codex | 81k | 31.4 s | $0.021 | 5/5 |
+| GPT-6 Luna | llx | **23k** | **23.5 s** | **$0.0020** | 5/5 |
+| | Codex | 181k | 36.8 s | $0.0042 | 5/5 |
+| GPT-6.1 Terra | llx | **31k** | 28.2 s | $0.024 | 5/5 |
+| | Codex | 63k | **26.5 s** | **$0.019** | 5/5 |
+
+Build a phone shop's landing page from its brief, checked by 8 tests:
+
+| Model | Agent | Context | Time | Cost | Passed |
+| --- | --- | --- | --- | --- | --- |
+| GPT-6 Luna | llx | **45k** | **49.7 s** | **$0.0045** | **5/5** |
+| | Codex | 181k | 76.7 s | $0.0080 | 3/5 |
+| GPT-6.1 Terra | llx | **32k** | 66.8 s | **$0.042** | 5/5 |
+| | Codex | 87k | 66.9 s | $0.045 | 5/5 |
 
 The runs: [benchmarks/arena](benchmarks/arena); the task and its checks: [evals/arena](evals/arena/arena.py).
 
@@ -94,7 +105,7 @@ llx extends the agent you already use: it calls llx from its shell, as its task 
 
 ## In CI and scripts
 
-In CI llx is the same agent as at your terminal. It works through the plain filesystem and primitive commands: `read`, `apply_patch`, and `bash` with `gh`, `git`, `jq` and your project's own tools. There is no MCP server, no GitHub tool and no built-in prompt. Your workflow owns the prompt and the posting, so the same task runs on GitHub, GitLab or any runner with a shell. The job that runs the model holds a read-only token, and a second job posts what it answered: the write token is never near the model.
+In CI llx is the same agent as at your terminal. It works through the plain filesystem and primitive commands: `bash` with `gh`, `git`, `jq` and your project's own tools. There is no MCP server, no GitHub tool and no built-in prompt. Your workflow owns the prompt and the posting, so the same task runs on GitHub, GitLab or any runner with a shell. The job that runs the model holds a read-only token, and a second job posts what it answered: the write token is never near the model.
 
 ```yaml
 # a step of a job, after actions/checkout
@@ -107,7 +118,6 @@ In CI llx is the same agent as at your terminal. It works through the plain file
   with:
     model: anthropic/claude-haiku-5.5
     allow: bash
-    deny: apply_patch
     schema: '{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}'
     prompt: |
       Review pull request #$PR with gh and git. Run something to confirm a problem

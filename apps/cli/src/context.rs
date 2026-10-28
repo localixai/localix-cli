@@ -9,6 +9,9 @@ use contracts::history::Session;
 
 use crate::instructions;
 
+/// The runtimes a script can be written in, named in this order when the shell has them.
+const RUNTIMES: [&str; 3] = ["python3", "node", "bun"];
+
 /// Bytes of an earlier session's answers a resumed session is told.
 const PREVIOUS_LIMIT: usize = 8 * 1024;
 /// Bytes of one earlier answer.
@@ -24,6 +27,8 @@ pub(crate) struct Environment<'a> {
     pub mode: &'a str,
     /// Unix seconds now.
     pub now: u64,
+    /// The runtimes the session's shell has ([`runtimes`]).
+    pub runtimes: &'a [&'a str],
 }
 
 /// The whole context: the environment, the project's instructions, and what a resumed session
@@ -51,15 +56,43 @@ pub(crate) fn resumed(fresh: &str, session: &Session, root: &Path) -> String {
 
 /// The shell is not said here: the `bash` tool's own description names it.
 fn describe(environment: &Environment) -> String {
+    let runtimes = match environment.runtimes {
+        [] => String::new(),
+        found => format!(
+            "Runtimes: {} (for a script: use whichever makes the job simplest)\n",
+            found.join(", ")
+        ),
+    };
     format!(
-        "<environment>\nWorking directory: {} (the workspace root: files change only inside it)\n\
-         System: {} {}\nDate: {} (UTC)\nMode: {}\n</environment>",
+        "<environment>\nWorking directory: {} (the workspace root)\n\
+         System: {} {}\n{runtimes}Date: {} (UTC)\nMode: {}\n</environment>",
         environment.root.display(),
         std::env::consts::OS,
         std::env::consts::ARCH,
         date(environment.now),
         environment.mode,
     )
+}
+
+/// The runtimes found in the directories of `path` (a `PATH`), looked up without running
+/// anything (ARCHITECTURE.md B2): a program there that can be run.
+pub(crate) fn runtimes(path: &std::ffi::OsStr) -> Vec<&'static str> {
+    let dirs: Vec<PathBuf> = std::env::split_paths(path).collect();
+    (RUNTIMES.into_iter())
+        .filter(|name| dirs.iter().any(|dir| runnable(&dir.join(name))))
+        .collect()
+}
+
+#[cfg(unix)]
+fn runnable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path)
+        .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn runnable(path: &Path) -> bool {
+    path.with_extension("exe").is_file()
 }
 
 /// The person's own instructions, then the project's from the repository root down to `root`,

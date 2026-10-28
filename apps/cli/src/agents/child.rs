@@ -2,8 +2,8 @@
 //! answer is posted to the main agent, and the task is recorded in its session.
 
 use std::fmt::Write as _;
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use agent::agent::{Agent, Run, Status};
@@ -55,14 +55,13 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
                 (
                     child.session.name.clone(),
                     child.conversation.take(),
-                    std::mem::take(&mut child.seen),
                     child.told.clone(),
                     Arc::clone(&child.stop),
                     Arc::clone(&child.letters),
                 )
             })
     };
-    let Some((name, conversation, seen, told, flag, letters)) = taken else {
+    let Some((name, conversation, told, flag, letters)) = taken else {
         return;
     };
     let stop = || (kit.stopped)() || flag.load(Ordering::SeqCst);
@@ -73,9 +72,6 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
     let own = Own {
         gate: &gate,
         stop: &stop,
-        seen: Mutex::new(seen),
-        who: id,
-        agent: Some(&name),
     };
     let tools = Tools::new(kit, &own);
     let watch = Watch {
@@ -133,11 +129,7 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
         turns: run.spend.calls,
         cost: run.spend.cost,
     });
-    let seen = own
-        .seen
-        .into_inner()
-        .unwrap_or_else(|poison| poison.into_inner());
-    keep(kit, registry, id, message, run, status, seen, now);
+    keep(kit, registry, id, message, run, status, now);
 }
 
 /// What the agent's thread keeps once its record is made, for the work done after the lock.
@@ -150,10 +142,6 @@ struct Recorded {
 
 /// Put the agent's conversation back, record its task, count its spend and post its answer. The
 /// registry is locked to change it only: the session is saved and the answer posted after (R6).
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the parts of a finished task, each used once; a struct would only rename them"
-)]
 fn keep(
     kit: &Kit,
     registry: &Registry,
@@ -161,7 +149,6 @@ fn keep(
     message: &str,
     run: Run,
     status: &str,
-    seen: std::collections::HashSet<std::path::PathBuf>,
     told: mode::Mode,
 ) {
     let recorded = {
@@ -172,7 +159,6 @@ fn keep(
             .iter_mut()
             .find(|c| c.session.id == id)
             .map(|child| {
-                child.seen = seen;
                 child.told = told;
                 child.status = status.to_string();
                 if child.open {

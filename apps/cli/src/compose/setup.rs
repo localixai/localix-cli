@@ -57,8 +57,6 @@ pub(crate) struct Shared {
     pub choice: Choice,
     pub terminal: bool,
     pub asks: bool,
-    /// How many lanes are in a task now.
-    pub working: std::sync::atomic::AtomicUsize,
     /// The person at this interface, asked one question at a time (`gate::one_question`): each
     /// terminal of the daemon is a person of its own.
     pub asking: std::sync::Mutex<()>,
@@ -88,7 +86,6 @@ impl Setup {
             choice: self.choice.clone(),
             terminal: self.terminal,
             asks: self.asks,
-            working: Default::default(),
             asking: Default::default(),
         };
         let seat = Seat {

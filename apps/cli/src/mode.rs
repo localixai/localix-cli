@@ -1,6 +1,7 @@
-//! The mode a run works in: a name, a line on what it does, and its rules (ARCHITECTURE.md K5).
-//! The gate judges each effect by the mode's rules and the command line's, then asks the person
-//! what no rule settles, or refuses it with no one to ask. The context says the same rules, from
+//! The mode a run works in: a name, a line on what it does, its rules, and what its commands may
+//! reach (ARCHITECTURE.md K5). The gate judges each effect by the mode's rules and the command
+//! line's; in a read-only mode it lets the rest run in the sandbox, which changes nothing (B3);
+//! otherwise it asks the person what no rule settles, or refuses it with no one to ask. The context says the same rules, from
 //! the same values, so the two cannot drift apart; a mode never filters the tools (the list stays
 //! the same, and so does the prompt cache). A change in a session reaches the model as a
 //! `<mode_change>` note.
@@ -24,15 +25,30 @@ struct Named {
     name: String,
     hint: String,
     rules: Rules,
+    reach: Reach,
+}
+
+/// What a mode's commands may do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Reach {
+    /// What the person allows (the rules, or their answer).
+    Anything,
+    /// Read, and change nothing: they run in the sandbox, without asking.
+    ReadOnly,
 }
 
 impl Mode {
-    pub(crate) fn new(name: &str, hint: &str, rules: Rules) -> Self {
+    pub(crate) fn new(name: &str, hint: &str, rules: Rules, reach: Reach) -> Self {
         Self(Arc::new(Named {
             name: name.to_string(),
             hint: hint.to_string(),
             rules,
+            reach,
         }))
+    }
+
+    pub(crate) fn reach(&self) -> Reach {
+        self.0.reach
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -100,6 +116,14 @@ pub(crate) fn describe(mode: &Mode, more: &Rules, terminal: bool, asks: bool) ->
     if let Some(rules) = mode.rules().with(more).describe() {
         text.push(' ');
         text.push_str(&rules);
+    }
+    if mode.reach() == Reach::ReadOnly {
+        text.push_str(
+            " Commands run without asking, in a sandbox: they read every file, but writing a file, \
+             opening a socket or reaching another program fails; $TMPDIR is a scratch directory \
+             of their own.",
+        );
+        return text;
     }
     text.push_str(match terminal {
         true => " Anything else is asked of the person, who may refuse it; a refusal says why.",
@@ -176,14 +200,18 @@ impl<'a> ModeGate<'a> {
 impl Gate for ModeGate<'_> {
     fn check(&self, effect: Effect) -> Verdict {
         let mode = self.mode.get();
-        match mode
+        let ruling = mode
             .rules()
             .with(&self.rules)
-            .judge(effect.tool, effect.subject)
-        {
-            Ruling::Denied(why) => return Verdict::Deny(format!("{why} (mode {})", mode.name())),
-            Ruling::Allowed => return Verdict::Allow,
-            Ruling::Unsettled => {}
+            .judge(effect.tool, effect.subject);
+        match (ruling, mode.reach()) {
+            (Ruling::Denied(why), _) => {
+                return Verdict::Deny(format!("{why} (mode {})", mode.name()));
+            }
+            // Nothing to ask: it cannot change anything.
+            (Ruling::Allowed | Ruling::Unsettled, Reach::ReadOnly) => return Verdict::ReadOnly,
+            (Ruling::Allowed, Reach::Anything) => return Verdict::Allow,
+            (Ruling::Unsettled, Reach::Anything) => {}
         }
         let Some(asker) = &self.asker else {
             return Verdict::Deny(NO_ONE.into());

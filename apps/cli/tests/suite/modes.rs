@@ -49,11 +49,12 @@ fn a_mode_of_the_persons_runs_what_it_allows_and_the_model_is_told_its_rules() {
 
 #[test]
 fn the_persons_mode_replaces_a_built_in_one_of_the_same_name() {
-    let home = with_modes(json!({"plan": {"allow": ["bash(echo *)"], "deny": ["apply_patch"]}}));
-    let model = running("echo checked");
+    // The built-in `plan` would run it where it changes nothing; the person's lets it change.
+    let home = with_modes(json!({"plan": {"allow": ["bash(touch *)"], "deny": ["jobs"]}}));
+    let model = running("touch made.txt");
     let out = exec(&home, &model, &["exec", "--mode", "plan", "x"], "");
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
-    assert!(said(&model, 1).contains("checked"), "{}", said(&model, 1));
+    assert!(home.path().join("made.txt").exists(), "{}", said(&model, 1));
 }
 
 #[test]
@@ -101,13 +102,7 @@ fn a_mode_that_cannot_be_read_is_not_ready_and_says_where() {
 fn plan_refuses_a_file_change_and_bypass_allows_it() {
     for (mode, made) in [("plan", false), ("bypass", true)] {
         let home = Home::new();
-        let model = Model::start(vec![
-            Reply::call(
-                "edit",
-                json!({"path": "a.md", "old_string": "", "new_string": "a\n"}),
-            ),
-            Reply::text("Done.\nRESULT: achieved"),
-        ]);
+        let model = running("echo a > a.md");
         let out = exec(&home, &model, &["exec", "--mode", mode, "x"], "");
         assert_eq!(out.status.code(), Some(0), "{mode}: {}", text(&out.stderr));
         assert_eq!(home.path().join("a.md").exists(), made, "{mode}");

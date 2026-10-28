@@ -29,16 +29,16 @@ fn paths_in_the_project_read_from_it_and_its_cd_is_dropped() {
 }
 
 #[test]
-fn the_transcript_shows_a_finished_edit_by_its_path_in_the_project() {
+fn the_transcript_shows_a_finished_command_by_its_paths_in_the_project() {
     let now = Instant::now();
     let mut app = App::new(60, 20, vec![]);
     app.files = Files::new("/work/stats".into(), Box::new(drop));
     app.event(Event::TaskStarted("fix it".into()), now);
-    let edited = label("Patching", "Patched", "/work/stats/stats.py");
-    app.event(call("1", "apply_patch", &edited), now);
-    let report = done("Updated stats.py (+1 -1 lines)");
-    app.event(result("1", "apply_patch", &edited, report), now);
+    let command = ran("cd /work/stats && cat /work/stats/stats.py");
+    app.event(call("1", "bash", &command), now);
+    let report = done("exit 0 in 0.1s\n### stdout\nimport sys");
+    app.event(result("1", "bash", &command, report), now);
     let shown = history(&mut app);
-    assert!(shown.contains("Patched stats.py"), "{shown}");
+    assert!(shown.contains("cat stats.py"), "{shown}");
     assert!(!shown.contains("/work/stats"), "{shown}");
 }

@@ -30,6 +30,4 @@ fn what_is_not_a_measurable_picture_is_none() {
     assert_eq!(size(b"\x89PNG\r\n\x1a\n\0\0\0\rIEND"), None);
     // A GIF of no width.
     assert_eq!(size(b"GIF89a\0\0\x02\0"), None);
-    assert!(begins(b"GIF89a"));
-    assert!(!begins(b"GIF"));
 }

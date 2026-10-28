@@ -11,21 +11,34 @@ type Card = { title: string; text: string; lines: Line[]; link?: { href: string;
 const EXAMPLES = `${GITHUB}/blob/main/examples`;
 
 /** What each step printed in the recorded runs (public/demo-llx.cast and its takes), shortened; the
- *  benchmark card is benchmarks/arena's two runs (medians); the review card is examples/github/review.yml, the API card examples/breaking-changes' recorded
+ *  benchmark cards are benchmarks/arena's runs (medians: ledger-web, then phone-shop); the review card is examples/github/review.yml, the API card examples/breaking-changes' recorded
  *  run (demo/output.txt); the rules card is put together from llx's own wording of a refusal
  *  (packages/tools/src/lib.rs). */
 const CARDS: Card[] = [
   {
     title: 'Less context, same model',
-    text: 'One task: make a Bun, React and Vite app match its spec, checked by 9 tests. llx and Codex in turns on the same model, low reasoning; medians of 5 runs each.',
+    text: 'One task: make a Bun, React and Vite app match its spec, checked by 9 tests. llx and Codex on the same model, low reasoning, every run at once; medians of 5 runs each.',
     link: { href: `${GITHUB}/tree/main/benchmarks/arena`, label: 'the runs' },
     lines: [
       [['dim', '                    Luna 6           Terra 6.1']],
       [['dim', '              llx    Codex        llx    Codex']],
-      [['', 'context '], ['ok', '      47k'], ['', '     211k'], ['ok', '        33k'], ['', '      81k']],
-      [['', 'time    '], ['ok', '    28.6s'], ['', '    43.2s'], ['ok', '      25.2s'], ['', '    31.4s']],
-      [['', 'cost    '], ['ok', '  $0.0031'], ['', '  $0.0052'], ['ok', '     $0.019'], ['', '   $0.021']],
-      [['', 'passed  '], ['', '      4/5'], ['ok', '      5/5'], ['', '        5/5'], ['', '      5/5']],
+      [['', 'context '], ['ok', '      23k'], ['', '     181k'], ['ok', '        31k'], ['', '      63k']],
+      [['', 'time    '], ['ok', '    23.5s'], ['', '    36.8s'], ['', '      28.2s'], ['ok', '    26.5s']],
+      [['', 'cost    '], ['ok', '  $0.0020'], ['', '  $0.0042'], ['', '     $0.024'], ['ok', '   $0.019']],
+      [['', 'passed  '], ['', '      5/5'], ['', '      5/5'], ['', '        5/5'], ['', '      5/5']],
+    ],
+  },
+  {
+    title: 'Builds a page from a brief',
+    text: "A second task: a phone shop's landing page from its brief, checked by 8 tests. Every run at once, the same model, low reasoning; medians of 5 runs each.",
+    link: { href: `${GITHUB}/tree/main/benchmarks/arena`, label: 'the runs' },
+    lines: [
+      [['dim', '                    Luna 6           Terra 6.1']],
+      [['dim', '              llx    Codex        llx    Codex']],
+      [['', 'context '], ['ok', '      45k'], ['', '     181k'], ['ok', '        32k'], ['', '      87k']],
+      [['', 'time    '], ['ok', '    49.7s'], ['', '    76.7s'], ['', '      66.8s'], ['', '    66.9s']],
+      [['', 'cost    '], ['ok', '  $0.0045'], ['', '  $0.0080'], ['ok', '     $0.042'], ['', '   $0.045']],
+      [['', 'passed  '], ['ok', '      5/5'], ['', '      3/5'], ['', '        5/5'], ['', '      5/5']],
     ],
   },
   {
@@ -48,7 +61,7 @@ const CARDS: Card[] = [
       [['acc', '↳ '], ['hi', 'Spawned'], ['', ' mean · mean() on an empty list']],
       [['ok', '● '], ['', 'Agent "median" finished · 6s']],
       [['ok', '● '], ['', 'Agent "mean" finished · 6s']],
-      [['ok', '• '], ['hi', 'Patched'], ['', ' stats.py '], ['dim', '(+1 -1 lines)']],
+      [['ok', '• '], ['hi', 'Ran'], ['', " python3 - <<'EOF'  "], ['dim', '# stats.py, the median']],
       [['', '• Fixed '], ['acc', 'stats.py:15'], ['', ': averages the two middle values.']],
     ],
   },
@@ -56,7 +69,7 @@ const CARDS: Card[] = [
     title: 'Checks a change in CI',
     text: 'Reads the diff, runs the tests, changes nothing, and answers with data your pipeline reads: JSON that matches your schema.',
     lines: [
-      [['dim', '$ '], ['', 'git diff | llx exec -y --deny apply_patch \\']],
+      [['dim', '$ '], ['', 'git diff | llx exec --mode plan \\']],
       [['', '    --schema @ship.json "Safe to ship? Which bump?"']],
       [['ok', '• '], ['hi', 'Ran'], ['', ' python3 -m unittest -v']],
       [['dim', '  └ Ran 4 tests in 0.000s · OK']],
@@ -72,7 +85,6 @@ const CARDS: Card[] = [
       [['acc', '- uses: '], ['', 'rsaryev/llx@v0']],
       [['acc', '  with:']],
       [['', '    allow: bash']],
-      [['', '    deny: apply_patch']],
       [['', '    prompt: |']],
       [['', '      Review pull request #$PR of $GH_REPO.']],
       [['', '      Find real problems: bugs, security flaws, lost data.']],
@@ -85,7 +97,8 @@ const CARDS: Card[] = [
     text: 'A GitLab job on every merge request: llx reads the diff, the spec and the code behind it, read-only, and says what breaks the API’s clients, even what no spec diff sees, like a unit or an order that changed.',
     link: { href: `${EXAMPLES}/breaking-changes/README.md`, label: 'breaking-changes, with its GitLab job' },
     lines: [
-      [['dim', '$ '], ['', 'llx exec --deny apply_patch --schema @schema.json "$prompt"']],
+      [['dim', '$ '], ['', "llx exec --allow 'bash(git diff *)' --allow 'bash(cat *)' \\"]],
+      [['', '    --schema @schema.json "$prompt"']],
       [['bad', 'BREAKS'], ['', '  structural  POST /orders: 201 became 200']],
       [['bad', 'BREAKS'], ['', '  semantic    Order.amount: major units now cents']],
       [['bad', 'BREAKS'], ['', "  semantic    'skip' is a page index, not an offset"]],
@@ -104,7 +117,7 @@ const CARDS: Card[] = [
       [['dim', '$ '], ['', "echo 'App crashes when the cart is empty' |"]],
       [['', '    llx decide --choices bug,feature,question "Label it"']],
       [['ok', 'bug']],
-      [['dim', '$ '], ['', 'git diff | llx exec -y --deny apply_patch "A one-line commit message"']],
+      [['dim', '$ '], ['', 'git diff | llx exec --mode plan "A one-line commit message"']],
       [['', 'Fix median calculation for even-length lists']],
     ],
   },
@@ -112,8 +125,8 @@ const CARDS: Card[] = [
     title: 'Runs under your rules',
     text: 'A mode is a set of rules: what runs without asking, what is refused in every mode. They come from your command line and settings, never from the repository.',
     lines: [
-      [['hi', 'default'], ['dim', '  everything is asked']],
-      [['hi', 'plan   '], ['dim', '  file changes refused']],
+      [['hi', 'default'], ['dim', '  each command is asked']],
+      [['hi', 'plan   '], ['dim', '  read-only, in a sandbox']],
       [['hi', 'bypass '], ['dim', '  everything runs (-y)']],
       [['dim', '$ '], ['', "llx exec --allow 'bash(cargo test *)' \\"]],
       [['', "    --deny 'bash(git push *)' \"Fix the failing test\""]],

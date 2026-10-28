@@ -4,18 +4,16 @@
 //! first.
 //! - [`workspace`]: the directory the coding tools work in: where paths resolve, where files may
 //!   change.
-//! - [`fs`]: `read` (a file's numbered lines, a directory's entries) and `apply_patch` (a patch that
-//!   changes, creates, deletes or moves files).
-//! - [`shell`]: `bash`: a command run in the workspace, its exit code and its output.
+//! - [`fs`]: the pictures a person attaches, read for the model.
+//! - [`shell`]: `bash`: a command run in the workspace, its exit code and its output; the model
+//!   reads, searches and changes files with it.
 //! - [`ask`]: questions to the person (`contracts::person::Person`), who answers in the app.
-//! - [`script`]: `exec`: a JavaScript script that chains the other tools in one call.
 
 use contracts::gate::{Effect, Gate, Verdict};
 use contracts::tool::ToolError;
 
 pub mod ask;
 pub mod fs;
-pub mod script;
 pub mod shell;
 pub mod workspace;
 
@@ -24,13 +22,20 @@ mod testing;
 
 /// Ask `gate` before an effect on `subject` ([`Effect::subject`]); a refusal is a failed call the
 /// model reads, so it can try another way.
-fn ask(gate: &dyn Gate, tool: &str, subject: &str, summary: &str) -> Result<(), ToolError> {
+/// Ask the gate before an effect: what the tool may do, or the refusal it tells the model.
+fn ask(
+    gate: &dyn Gate,
+    tool: &str,
+    subject: &str,
+    summary: &str,
+) -> Result<shell::Scope, ToolError> {
     match gate.check(Effect {
         tool,
         subject,
         summary,
     }) {
-        Verdict::Allow => Ok(()),
+        Verdict::Allow => Ok(shell::Scope::Open),
+        Verdict::ReadOnly => Ok(shell::Scope::ReadOnly),
         Verdict::Deny(reason) => Err(ToolError::Failed(format!("not allowed: {reason}"))),
     }
 }

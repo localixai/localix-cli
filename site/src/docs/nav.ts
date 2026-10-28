@@ -21,7 +21,7 @@ export const NAV: NavGroup[] = [
   },
   {
     title: 'Reference',
-    blurb: 'The seven tools, modes and approvals, llx in other agents, the exit codes and the JSON events.',
+    blurb: 'The four tools, modes and approvals, llx in other agents, the exit codes and the JSON events.',
     pages: [
       { slug: 'tools', source: 'docs/tools.md' },
       { slug: 'modes', source: 'docs/modes.md' },
@@ -41,5 +41,5 @@ export const UNLISTED: Record<string, string> = {
 export const INDEX = {
   title: 'llx docs',
   description:
-    'How llx works at your terminal, in scripts and CI, and for other agents: the command line, the GitHub Action and its recipes, the seven tools, the modes, and the exit codes and events a pipeline relies on.',
+    'How llx works at your terminal, in scripts and CI, and for other agents: the command line, the GitHub Action and its recipes, the four tools, the modes, and the exit codes and events a pipeline relies on.',
 };

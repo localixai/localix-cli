@@ -164,9 +164,9 @@ run_action PR=7 INPUT_PROMPT_FILE="$tmp/pf/p.md" INPUT_PROMPT='then $PR'
 eq "prompt-file first, read as it is" $'from the file $PR\n\nthen 7' "$(cat "$tmp/run/prompt")"
 
 # Rules, one per line, blanks and padding dropped; the other inputs.
-run_action INPUT_ALLOW=$'bash(gh pr view *)\n\n  apply_patch  \r\nbash(git log *)' INPUT_DENY=$'apply_patch(docs/**)\n' INPUT_MODE=plan \
+run_action INPUT_ALLOW=$'bash(gh pr view *)\n\n  jobs  \r\nbash(git log *)' INPUT_DENY=$'bash(git push *)\n' INPUT_MODE=plan \
   INPUT_PROVIDER=openrouter INPUT_MODEL=acme/m INPUT_REASONING=low INPUT_ARGS='--foo bar' INPUT_MAX_TURNS=9 INPUT_TIMEOUT=60
-has "rules" "$(args)" "--allow"$'\001'"bash(gh pr view *)"$'\001'"--allow"$'\001'"apply_patch"$'\001'"--allow"$'\001'"bash(git log *)"$'\001'"--deny"$'\001'"apply_patch(docs/**)"$'\001'
+has "rules" "$(args)" "--allow"$'\001'"bash(gh pr view *)"$'\001'"--allow"$'\001'"jobs"$'\001'"--allow"$'\001'"bash(git log *)"$'\001'"--deny"$'\001'"bash(git push *)"$'\001'
 has "mode, limits and extra arguments" "$(args)" "--mode"$'\001'"plan"$'\001'
 has "limits" "$(args)" "--max-turns"$'\001'"9"$'\001'"--timeout"$'\001'"60"$'\001'
 has "extra arguments, before the prompt" "$(args)" "--foo"$'\001'"bar"$'\001'"-"$'\001'

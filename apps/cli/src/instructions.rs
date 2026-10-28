@@ -5,18 +5,14 @@
 //! - the project's: in each directory from the repository's root down to the working directory,
 //!   the first of `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md` (a deeper file comes later and
 //!   wins);
-//! - a directory below the working directory: its file arrives with the result of the first call
-//!   that touches a file there ([`Instructed`]).
+//! - a directory below the working directory may hold its own: the prompt says to read it before
+//!   working there.
 //!
 //! A line that is only `@path` brings in that file, as in CLAUDE.md. Everything is read once
 //! and only ever appended, so the conversation's prefix, and the prompt cache, stay as they were.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
-use serde_json::Value;
 
 /// The names an instruction file has, the first found in a directory being the one read.
 pub(crate) const NAMES: [&str; 3] = ["AGENTS.override.md", "AGENTS.md", "CLAUDE.md"];
@@ -146,67 +142,6 @@ pub(crate) fn block(found: &Found, applies: Option<&Path>) -> String {
         found.path.display(),
         found.text
     )
-}
-
-/// A tool (`read`, `apply_patch`) that, the first time it touches a file in a directory below the
-/// working directory that has its own instruction file, adds that file to its result: the
-/// agent learns a subtree's rules where it works, and nothing earlier in the conversation changes.
-pub(crate) struct Instructed<'a> {
-    pub inner: &'a dyn Tool,
-    pub root: PathBuf,
-    /// The directories whose instructions the agent has (those of the start among them).
-    pub seen: &'a Mutex<HashSet<PathBuf>>,
-}
-
-impl Tool for Instructed<'_> {
-    fn spec(&self) -> ToolSpec {
-        self.inner.spec()
-    }
-
-    fn parallel(&self) -> bool {
-        self.inner.parallel()
-    }
-
-    fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
-        let mut output = self.inner.call(arguments)?;
-        // A patch names several files, each in its own directory.
-        for path in tools::fs::named_paths(arguments) {
-            for found in self.below(Path::new(&path)) {
-                let applies = found.path.parent().map(Path::to_path_buf);
-                output.report.push_str("\n\n");
-                output.report.push_str(&block(&found, applies.as_deref()));
-            }
-        }
-        Ok(output)
-    }
-}
-
-impl Instructed<'_> {
-    /// The instruction files between the working directory and `path`'s directory not yet given.
-    fn below(&self, path: &Path) -> Vec<Found> {
-        let path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            self.root.join(path)
-        };
-        let Ok(inside) = path.strip_prefix(&self.root) else {
-            return vec![];
-        };
-        let mut dir = self.root.clone();
-        let mut out = vec![];
-        let parts: Vec<_> = inside
-            .parent()
-            .map(|p| p.components().collect())
-            .unwrap_or_default();
-        for part in parts {
-            dir.push(part);
-            let new = crate::sync::lock(self.seen).insert(dir.clone());
-            if new && let Some(found) = in_dir(&dir, FILE_LIMIT) {
-                out.push(found);
-            }
-        }
-        out
-    }
 }
 
 #[cfg(test)]

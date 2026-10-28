@@ -1,7 +1,8 @@
 {
  "hidden_sha256": "fdd65039f2cd592d2ac1684b9a8781809076d9c7d9b2ac5ec2a91de4fe75b763",
- "at": "2026-10-28T14-40-52",
+ "at": "2026-10-28T23-15-15",
  "task": "ledger-web",
+ "parallel": true,
  "prompt": "The ledger app's tests fail and its report does not do what docs/SPEC.md says. Make the app match the spec, the month picker included. Do not change the existing tests. Check your work with `bun test`, `bunx tsc --noEmit` and `bunx vite build`.",
  "effort": "low",
  "models": {
@@ -20,142 +21,14 @@
   {
    "agent": "llx",
    "exit": 0,
-   "seconds": 26.1,
+   "seconds": 23.5,
    "model": "gpt-6-luna",
-   "turns": 8,
-   "tools": 7,
-   "input": 58283,
-   "cached": 40320,
-   "output": 1564,
-   "cost": 0.003,
-   "passed": true,
-   "check": [
-    "PASS"
-   ]
-  },
-  {
-   "agent": "codex",
-   "exit": 0,
-   "seconds": 43.2,
-   "model": "gpt-6-luna",
-   "turns": 1,
-   "tools": 17,
-   "input": 211346,
-   "cached": 191104,
-   "output": 2579,
-   "cost": 0.0052,
-   "passed": true,
-   "check": [
-    "PASS"
-   ]
-  },
-  {
-   "agent": "codex",
-   "exit": 0,
-   "seconds": 56.6,
-   "model": "gpt-6-luna",
-   "turns": 1,
-   "tools": 17,
-   "input": 229332,
-   "cached": 208256,
-   "output": 2586,
-   "cost": 0.0055,
-   "passed": true,
-   "check": [
-    "PASS"
-   ]
-  },
-  {
-   "agent": "llx",
-   "exit": 0,
-   "seconds": 29.0,
-   "model": "gpt-6-luna",
-   "turns": 9,
-   "tools": 8,
-   "input": 65405,
-   "cached": 40960,
-   "output": 1669,
-   "cost": 0.0037,
-   "passed": true,
-   "check": [
-    "PASS"
-   ]
-  },
-  {
-   "agent": "llx",
-   "exit": 0,
-   "seconds": 28.6,
-   "model": "gpt-6-luna",
-   "turns": 7,
-   "tools": 6,
-   "input": 47334,
-   "cached": 26496,
-   "output": 1426,
-   "cost": 0.0031,
-   "passed": false,
-   "check": [
-    "FAIL bun test: 4 failing (a DD.MM.YYYY date counts in its own month;a refund counts against its own category;the whole sample, month by month;the month picker)"
-   ]
-  },
-  {
-   "agent": "codex",
-   "exit": 0,
-   "seconds": 44.8,
-   "model": "gpt-6-luna",
-   "turns": 1,
-   "tools": 13,
-   "input": 215076,
-   "cached": 187136,
-   "output": 2336,
-   "cost": 0.0058,
-   "passed": true,
-   "check": [
-    "PASS"
-   ]
-  },
-  {
-   "agent": "codex",
-   "exit": 0,
-   "seconds": 33.0,
-   "model": "gpt-6-luna",
-   "turns": 1,
-   "tools": 12,
-   "input": 177950,
-   "cached": 161664,
-   "output": 2257,
-   "cost": 0.0044,
-   "passed": true,
-   "check": [
-    "PASS"
-   ]
-  },
-  {
-   "agent": "llx",
-   "exit": 0,
-   "seconds": 28.6,
-   "model": "gpt-6-luna",
-   "turns": 5,
-   "tools": 4,
-   "input": 33459,
-   "cached": 15104,
-   "output": 1254,
-   "cost": 0.0026,
-   "passed": true,
-   "check": [
-    "PASS"
-   ]
-  },
-  {
-   "agent": "llx",
-   "exit": 0,
-   "seconds": 28.6,
-   "model": "gpt-6-luna",
-   "turns": 6,
-   "tools": 5,
-   "input": 39424,
-   "cached": 18816,
-   "output": 1611,
-   "cost": 0.0031,
+   "turns": 4,
+   "tools": 3,
+   "input": 18091,
+   "cached": 7552,
+   "output": 1828,
+   "cost": 0.002,
    "passed": true,
    "check": [
     "PASS"
@@ -168,10 +41,138 @@
    "model": "gpt-6-luna",
    "turns": 1,
    "tools": 12,
-   "input": 178302,
-   "cached": 159360,
-   "output": 2512,
-   "cost": 0.0047,
+   "input": 214035,
+   "cached": 200064,
+   "output": 2306,
+   "cost": 0.0046,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 29.9,
+   "model": "gpt-6-luna",
+   "turns": 1,
+   "tools": 12,
+   "input": 177162,
+   "cached": 162944,
+   "output": 2293,
+   "cost": 0.0042,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 26.7,
+   "model": "gpt-6-luna",
+   "turns": 6,
+   "tools": 5,
+   "input": 31688,
+   "cached": 17152,
+   "output": 1897,
+   "cost": 0.0026,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 17.4,
+   "model": "gpt-6-luna",
+   "turns": 5,
+   "tools": 4,
+   "input": 24330,
+   "cached": 17024,
+   "output": 1659,
+   "cost": 0.0017,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 30.6,
+   "model": "gpt-6-luna",
+   "turns": 1,
+   "tools": 10,
+   "input": 179162,
+   "cached": 168832,
+   "output": 2382,
+   "cost": 0.0039,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 36.8,
+   "model": "gpt-6-luna",
+   "turns": 1,
+   "tools": 14,
+   "input": 180799,
+   "cached": 170112,
+   "output": 2287,
+   "cost": 0.0039,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 25.5,
+   "model": "gpt-6-luna",
+   "turns": 5,
+   "tools": 4,
+   "input": 23199,
+   "cached": 10624,
+   "output": 1905,
+   "cost": 0.0023,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 20.2,
+   "model": "gpt-6-luna",
+   "turns": 5,
+   "tools": 4,
+   "input": 22319,
+   "cached": 12288,
+   "output": 1590,
+   "cost": 0.0019,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 37.9,
+   "model": "gpt-6-luna",
+   "turns": 1,
+   "tools": 17,
+   "input": 235159,
+   "cached": 220928,
+   "output": 2547,
+   "cost": 0.0049,
    "passed": true,
    "check": [
     "PASS"

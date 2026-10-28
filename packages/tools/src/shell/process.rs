@@ -6,7 +6,7 @@
 //! read never stalls.
 
 use std::io::{self, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, Mutex};
@@ -14,6 +14,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::output::Output;
+use super::sandbox::{Held, Scope};
 
 /// How long the output may stay open after the shell exits: a background process it started may
 /// hold the pipes, and is not waited for.
@@ -40,6 +41,10 @@ pub(super) struct Job<'a> {
     pub env: Env<'a>,
     /// Whether the person stopped the task: the command is killed as soon as it says so.
     pub stop: &'a (dyn Fn() -> bool + Sync),
+    /// What the command may do: anything, or read alone (in the sandbox).
+    pub scope: Scope,
+    /// What a read-only command may not even read: the app's own files ([`Workspace::denied`]).
+    pub kept: &'a [PathBuf],
 }
 
 /// How a command ended.
@@ -73,7 +78,7 @@ pub(super) struct Finished {
 
 /// Run `job` in a shell, with no input.
 pub(super) fn run(job: &Job) -> io::Result<Finished> {
-    let mut shell = shell(job.command);
+    let (mut shell, _held) = scoped(job.command, job.scope, job.kept)?;
     quiet_env(&mut shell, job.env);
     let mut child = shell
         .current_dir(job.dir)
@@ -181,13 +186,30 @@ fn watch(
     }
 }
 
+/// The shell for `command` in `scope`, and what it holds until it ends: an open command holds
+/// nothing.
+pub fn scoped(command: &str, scope: Scope, kept: &[PathBuf]) -> io::Result<(Command, Held)> {
+    match scope {
+        Scope::Open => Ok((shell(command), Held::default())),
+        Scope::ReadOnly => super::sandbox::read_only(command, kept),
+    }
+}
+
 /// `sh -c command` as the leader of a session of its own (so `kill` ends all it starts), inheriting
 /// llx's standard streams only.
 #[cfg(unix)]
 pub fn shell(command: &str) -> Command {
-    use std::os::unix::process::CommandExt;
     let mut shell = Command::new("sh");
     shell.arg("-c").arg(command);
+    lead(&mut shell);
+    shell
+}
+
+/// Make `shell` the leader of a session of its own when it starts, inheriting llx's standard
+/// streams only. A sandbox's own hooks, added after, run after these.
+#[cfg(unix)]
+pub(super) fn lead(shell: &mut Command) {
+    use std::os::unix::process::CommandExt;
     // SAFETY: setsid takes nothing and only makes the forked child a session's leader.
     let lead = || match unsafe { libc::setsid() } {
         -1 => Err(io::Error::last_os_error()),
@@ -196,8 +218,7 @@ pub fn shell(command: &str) -> Command {
     // SAFETY: setsid is async-signal-safe, and nothing else runs between fork and exec. The new
     // session's process group has the shell's pid, which `kill` signals.
     unsafe { shell.pre_exec(lead) };
-    super::inherit::streams_only(&mut shell);
-    shell
+    super::inherit::streams_only(shell);
 }
 
 #[cfg(windows)]

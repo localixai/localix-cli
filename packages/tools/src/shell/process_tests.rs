@@ -14,6 +14,8 @@ fn job<'a>(command: &'a str, dir: &'a Path, timeout: Duration) -> Job<'a> {
         timeout,
         env: Env::default(),
         stop: &never,
+        scope: Scope::Open,
+        kept: &[],
     }
 }
 

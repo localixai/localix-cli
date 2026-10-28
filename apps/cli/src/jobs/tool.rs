@@ -7,7 +7,7 @@ use std::thread::Scope;
 use std::time::{Duration, Instant};
 
 use contracts::gate::{Effect, Verdict};
-use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
 use super::monitor::{self, Ended};
@@ -41,13 +41,15 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
         Self { kit, jobs, scope }
     }
 
-    fn ask(&self, summary: &str) -> Result<(), ToolError> {
+    /// Ask the gate: what a monitor's command may do, or the refusal.
+    fn ask(&self, summary: &str) -> Result<tools::shell::Scope, ToolError> {
         match self.kit.gate.check(Effect {
             tool: spec::NAME,
             subject: "",
             summary,
         }) {
-            Verdict::Allow => Ok(()),
+            Verdict::Allow => Ok(tools::shell::Scope::Open),
+            Verdict::ReadOnly => Ok(tools::shell::Scope::ReadOnly),
             Verdict::Deny(why) => Err(ToolError::Failed(why)),
         }
     }
@@ -59,7 +61,7 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
         timeout: Duration,
     ) -> Result<ToolOutput, ToolError> {
         let dir = self.kit.workspace.root();
-        self.ask(&format!("monitor: {command}  (in {})", dir.display()))?;
+        let scope = self.ask(&format!("monitor: {command}  (in {})", dir.display()))?;
         let timeout = match self.kit.session {
             true => timeout,
             false => timeout.min(EXEC_WATCH),
@@ -125,7 +127,14 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
                 vars: kit.workspace.env(),
                 hidden: &hidden,
             };
-            let ended = monitor::watch(&command, root, env, deadline, &stopped, &lines);
+            let ended = monitor::watch(
+                (&command, scope, kit.workspace.denied()),
+                root,
+                env,
+                deadline,
+                &stopped,
+                &lines,
+            );
             // Keep it listed until its final arrival is posted: exec waits while it is listed.
             let listed = jobs.lock().jobs.iter().any(|job| job.id == id);
             let why = match ended {
@@ -254,7 +263,7 @@ impl Tool for JobsTool<'_, '_> {
         ToolSpec {
             name: spec::NAME.into(),
             description: spec::description(),
-            input: Input::Json(spec::parameters()),
+            parameters: spec::parameters(),
         }
     }
 

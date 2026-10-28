@@ -15,11 +15,8 @@ use serde_json::{Value, json};
 use crate::auth;
 use crate::tokens::{self, Tokens};
 
-mod offer;
 mod request;
 mod route;
-pub use offer::Texts;
-use offer::custom_call;
 use request::body;
 
 pub(crate) const BASE: &str = "https://chatgpt.com/backend-api/codex";
@@ -60,8 +57,6 @@ pub struct ChatModel {
     /// One per process: the backend's `session_id`.
     session: String,
     base: String,
-    /// How a tool of free text (a script) is offered.
-    texts: Texts,
     /// Each task's machine, as the backend named it.
     routes: route::Routes,
 }
@@ -87,15 +82,8 @@ impl ChatModel {
             // Only the session's id: without randomness, the time is unique enough.
             session: oauth::random(16).unwrap_or_else(|_| format!("llx-{}", tokens::now())),
             base: BASE.into(),
-            texts: Texts::Functions,
             routes: route::Routes::default(),
         }
-    }
-
-    /// How tools of free text are offered: as `custom` ones for a model that takes those.
-    #[must_use]
-    pub fn with_texts(self, texts: Texts) -> Self {
-        Self { texts, ..self }
     }
 
     /// The tokens to send, refreshed first when they are about to lapse (or `force`d). One thread
@@ -146,8 +134,7 @@ impl ChatModel {
 impl Chat for ChatModel {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let task = route::task(request.conversation);
-        let body = body(&self.selection, request, self.texts).to_string();
-        let offer = offer::Offer::new(request.tools, self.texts, &[]);
+        let body = body(&self.selection, request).to_string();
         let address = format!("{}/responses", self.base);
         let started = std::time::Instant::now();
         let mut renewed = false;
@@ -187,9 +174,6 @@ impl Chat for ChatModel {
                 200 => Attempt::Done({
                     self.routes.keep(task.clone(), &reply);
                     read(&reply.body, self.selection.model().id.as_str()).map(|mut completion| {
-                        completion.calls = (completion.calls.into_iter())
-                            .map(|call| offer.incoming(call))
-                            .collect();
                         completion.usage.millis =
                             u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
                         completion
@@ -231,8 +215,6 @@ pub(crate) fn read(body: &str, model: &str) -> Result<Completion, ChatError> {
                             .filter_map(|part| part["text"].as_str().map(str::to_string)),
                     ),
                     Some("function_call") => completion.calls.extend(call(item)),
-                    // A tool of free text offered as a custom one: its input is the text whole.
-                    Some("custom_tool_call") => completion.calls.extend(custom_call(item)),
                     // Nothing is stored at the backend: only a sealed reasoning can go back, and
                     // only to the model that sealed it.
                     Some("reasoning") if item["encrypted_content"].is_string() => {

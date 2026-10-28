@@ -27,49 +27,10 @@ impl Reply {
         Self::Text(text.into())
     }
 
-    /// The model calls `name`: `read` and `bash` through a script, the only way it reaches them
-    /// (`exec`), an `edit` as the patch that makes it (`apply_patch`), the others directly.
+    /// The model calls `name` with `arguments`.
     pub(crate) fn call(name: &str, arguments: Value) -> Self {
-        Self::Calls(vec![scripted(name, arguments)])
+        Self::Calls(vec![(name.into(), arguments)])
     }
-}
-
-/// A call as the model makes it: one of the tools a script reaches, as a script that makes it and
-/// returns its result.
-pub(crate) fn scripted(name: &str, arguments: Value) -> (String, Value) {
-    let text = |key: &str| arguments[key].as_str().unwrap_or_default().to_owned();
-    match name {
-        "read" | "bash" => {
-            let source = format!("return await tools.{name}({arguments});");
-            ("exec".into(), json!({ "source": source }))
-        }
-        "edit" => {
-            let patch = patch(&text("path"), &text("old_string"), &text("new_string"));
-            ("apply_patch".into(), json!({ "source": patch }))
-        }
-        _ => (name.into(), arguments),
-    }
-}
-
-/// The patch that puts `new` in place of the whole lines `old` in `path`, or, with `old` empty,
-/// makes the file.
-fn patch(path: &str, old: &str, new: &str) -> String {
-    use std::fmt::Write as _;
-    let lines = |text: &str, sign: char| -> String {
-        text.lines().fold(String::new(), |mut out, line| {
-            let _ = writeln!(out, "{sign}{line}");
-            out
-        })
-    };
-    let body = match old {
-        "" => format!("*** Add File: {path}\n{}", lines(new, '+')),
-        _ => format!(
-            "*** Update File: {path}\n@@\n{}{}",
-            lines(old, '-'),
-            lines(new, '+')
-        ),
-    };
-    format!("*** Begin Patch\n{body}*** End Patch")
 }
 
 #[derive(Default)]

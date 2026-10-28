@@ -6,7 +6,7 @@ pub(crate) const HELP: &str = "Type a task and press Enter; each one goes on fro
   /model            choose the model and its reasoning level (of the providers signed in to)
   /login            sign in to a provider, then choose its model and reasoning level
   /mode [name]      the modes, or switch to one (also /permissions)
-  /rewind           back to before a task: its files, the conversation, or both (also /undo)
+  /rewind           the conversation back to before a task; files stay (also /undo)
   /diff             the changes since the last commit, new files too
   /init             write an AGENTS.md for this project
   /copy             copy the last answer
@@ -75,7 +75,7 @@ pub(crate) fn commands() -> Vec<(String, String)> {
         ("mode", "show the modes, or switch: /mode plan"),
         (
             "rewind",
-            "go back to before a task: the files, the conversation, or both",
+            "the conversation back to before a task; the files stay",
         ),
         ("diff", "the changes since the last commit, new files too"),
         ("init", "write an AGENTS.md for this project"),

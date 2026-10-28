@@ -180,25 +180,6 @@ fn every_frame_is_one_synchronized_update() {
 }
 
 #[test]
-fn successful_edit_displays_the_actual_before_and_after_in_the_terminal() {
-    use crate::tui::app::App;
-    use crate::tui::test_support::{Term, done, label, result};
-    // What `apply_patch` reports of `throw: true` made `throw: false` in a file of three lines.
-    let report = "Updated config.rs (+1 -1 lines)\n\nDiff of config.rs:\n@@ -1,3 +1,3 @@\n\
-                  target: 'bun',\n-throw: true,\n+throw: false,\n end\n";
-    let now = std::time::Instant::now();
-    let mut app = App::new(80, 30, vec![]);
-    let mut term = Term::new(&app);
-    let edited = label("Patching", "Patched", "config.rs");
-    app.event(result("c1", "apply_patch", &edited, done(report)), now);
-    let shown = term.draw(&mut app, now);
-    assert!(shown.contains("• Patched config.rs"), "{shown}");
-    assert!(shown.contains("- throw: true,"), "{shown}");
-    assert!(shown.contains("+ throw: false,"), "{shown}");
-    assert!(shown.contains("target: 'bun',"), "{shown}");
-}
-
-#[test]
 fn consecutive_reads_form_a_compact_chain_even_when_they_finish_in_separate_frames() {
     use crate::tui::app::App;
     use crate::tui::event::Event;
@@ -210,9 +191,10 @@ fn consecutive_reads_form_a_compact_chain_even_when_they_finish_in_separate_fram
     app.event(Event::TaskStarted("inspect the files".into()), now);
     for (path, offset) in [("src/main.rs", 1), ("src/lib.rs", 20), ("README.md", 1)] {
         let read = label("Reading", "Read", &format!("{path} from line {offset}"));
-        app.event(call(path, "read", &read), now);
+        // A call with nothing to show under it, as a read is.
+        app.event(call(path, "jobs", &read), now);
         term.draw(&mut app, now);
-        app.event(result(path, "read", &read, done("contents")), now);
+        app.event(result(path, "jobs", &read, done("")), now);
         term.draw(&mut app, now);
     }
     app.event(Event::Answer("Found the entry points.".into()), now);

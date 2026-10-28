@@ -213,3 +213,30 @@ fn the_time_limit_holds_while_the_task_waits_on_a_quiet_monitor() {
     assert_eq!(out.status.code(), Some(2), "{stderr}");
     assert!(stderr.contains("time limit"), "{stderr}");
 }
+
+#[test]
+fn an_agent_is_offered_the_tools_of_the_main_session() {
+    let names = |request: &Value| -> Vec<String> {
+        (request["tools"].as_array().unwrap().iter())
+            .map(|tool| tool["function"]["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let home = Home::new();
+    let model = Model::start(vec![Reply::call(
+        "agents",
+        json!({"action": "spawn", "task": "say hi", "name": "scout"}),
+    )]);
+    let out = exec(&home, &model, &["exec", "-y", "start scout"], "");
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    let requests = model.requests();
+    assert!(
+        requests.len() >= 3,
+        "the agent asked too: {}",
+        requests.len()
+    );
+    let main = names(&requests[0]);
+    assert_eq!(main, ["bash", "agents", "jobs"]);
+    for request in &requests {
+        assert_eq!(names(request), main, "one list, one prompt cache");
+    }
+}

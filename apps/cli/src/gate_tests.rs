@@ -36,12 +36,12 @@ fn always_remembers_the_tool_for_the_run() {
     let gate = terminal(&script);
     assert_eq!(gate.check(bash("ls")), Verdict::Allow);
     assert_eq!(gate.check(bash("rm -rf target")), Verdict::Allow);
-    let edit = Effect {
-        tool: "apply_patch",
+    let monitor = Effect {
+        tool: "jobs",
         subject: "",
-        summary: "edit src/lib.rs (+1 -1 lines)",
+        summary: "monitor: tail -f log",
     };
-    assert!(matches!(gate.check(edit), Verdict::Deny(_)));
+    assert!(matches!(gate.check(monitor), Verdict::Deny(_)));
     assert_eq!(script.asked.lock().unwrap().len(), 2, "bash was asked once");
 }
 

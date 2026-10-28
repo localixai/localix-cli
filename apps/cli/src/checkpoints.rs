@@ -1,28 +1,14 @@
-//! Checkpoints: before a task's first change to a file, what the file
-//! held (or that it did not exist), so `/rewind` (or Esc Esc on an empty prompt) can put the
-//! files back as they were before any task of the conversation, the conversation too, or both.
-//! Only `apply_patch`'s changes are kept, the agents' among them; what a command changed is not.
+//! Checkpoints: where the conversation stood before each task, so `/rewind` (or Esc Esc on an
+//! empty prompt) can take it back to before one of them. Files are not kept: the model changes
+//! them through the shell, and nothing records a command's files (ARCHITECTURE.md B4).
 
-use std::path::PathBuf;
 use std::sync::Mutex;
 
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
-use serde_json::Value;
-use tools::workspace::Workspace;
-
-/// One task: what it asked, where the conversation stood before it, the files as it found them.
+/// One task: what it asked, and where the conversation stood before it.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Task {
     pub(crate) goal: String,
     pub(crate) at: usize,
-    files: Vec<(PathBuf, Option<Vec<u8>>)>,
-}
-
-impl Task {
-    /// How many files it changed.
-    pub(crate) fn changed(&self) -> usize {
-        self.files.len()
-    }
 }
 
 /// The tasks of the conversation, oldest first.
@@ -39,7 +25,6 @@ impl Checkpoints {
         self.lock().push(Task {
             goal: goal.to_string(),
             at,
-            files: vec![],
         });
     }
 
@@ -47,72 +32,9 @@ impl Checkpoints {
         self.lock().clone()
     }
 
-    /// Keep what `path` holds before the running task first changes it.
-    fn keep(&self, path: PathBuf) {
-        let mut tasks = self.lock();
-        let Some(task) = tasks.last_mut() else {
-            return;
-        };
-        if task.files.iter().all(|(kept, _)| *kept != path) {
-            let before = std::fs::read(&path).ok();
-            task.files.push((path, before));
-        }
-    }
-
-    /// Put the files back as they were before task `index`, and forget it and those after it;
-    /// the files written back, and any that could not be.
-    pub(crate) fn restore(&self, index: usize) -> (usize, Vec<String>) {
-        let mut tasks = self.lock();
-        let mut restored = 0;
-        let mut failed = vec![];
-        // Newest first, so a file changed by several tasks ends as the oldest found it.
-        for task in tasks.drain(index..).rev() {
-            for (path, before) in task.files.into_iter().rev() {
-                let done = match before {
-                    Some(bytes) => std::fs::write(&path, bytes),
-                    None => std::fs::remove_file(&path).or_else(|e| {
-                        if e.kind() == std::io::ErrorKind::NotFound {
-                            Ok(())
-                        } else {
-                            Err(e)
-                        }
-                    }),
-                };
-                match done {
-                    Ok(()) => restored += 1,
-                    Err(error) => failed.push(format!("{}: {error}", path.display())),
-                }
-            }
-        }
-        (restored, failed)
-    }
-
-    /// Forget task `index` and those after it, leaving the files as they are.
+    /// Forget task `index` and those after it.
     pub(crate) fn forget(&self, index: usize) {
         self.lock().truncate(index);
-    }
-}
-
-/// `apply_patch`, keeping each file's content before its first change in the task.
-pub(crate) struct Tracked<'a> {
-    pub inner: &'a dyn Tool,
-    pub workspace: &'a Workspace,
-    pub checkpoints: &'a Checkpoints,
-}
-
-impl Tool for Tracked<'_> {
-    fn spec(&self) -> ToolSpec {
-        self.inner.spec()
-    }
-
-    fn call(&self, arguments: &Value) -> Result<ToolOutput, ToolError> {
-        // A patch names several files: each is kept as it is found.
-        for path in tools::fs::named_paths(arguments) {
-            if let Ok(path) = self.workspace.writable(&path) {
-                self.checkpoints.keep(path);
-            }
-        }
-        self.inner.call(arguments)
     }
 }
 

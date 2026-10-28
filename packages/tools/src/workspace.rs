@@ -1,6 +1,5 @@
-//! The directory the coding tools work in. Paths the model writes resolve against its root; a file
-//! may be read anywhere (a dependency's source, a system header), but changed only inside the root,
-//! so a slip in a path never touches the rest of the machine.
+//! The directory the tools work in: where a command runs, and where the `workdir` the model writes
+//! resolves; a directory the app keeps to itself (its keys, its records) is never one.
 
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -52,6 +51,12 @@ impl Workspace {
         &self.root
     }
 
+    /// What the app keeps to itself, canonical where it exists: a read-only command's sandbox
+    /// leaves it unread where the system can.
+    pub fn denied(&self) -> &[PathBuf] {
+        &self.denied
+    }
+
     /// Where `path` points, for reading: relative to the root, or absolute; `~` is the home
     /// directory. `.` and `..` are resolved by name, so the result is clean in reports.
     pub fn readable(&self, path: &str) -> Result<PathBuf, ToolError> {
@@ -72,22 +77,6 @@ impl Workspace {
             }
         }
         Ok(wanted)
-    }
-
-    /// Where `path` points, for changing: as [`Self::readable`], but only inside the root once
-    /// symlinks are followed. The result is the real location, so a write through a symlink lands
-    /// on its target instead of replacing the link.
-    pub fn writable(&self, path: &str) -> Result<PathBuf, ToolError> {
-        let wanted = self.readable(path)?;
-        let real = real(&wanted);
-        if !real.starts_with(&self.root) {
-            return Err(ToolError::Failed(format!(
-                "{} is outside the workspace {}: files are changed only inside it",
-                wanted.display(),
-                self.root.display()
-            )));
-        }
-        Ok(real)
     }
 
     /// `path` as a report shows it: relative to the root when inside it, else as it is.

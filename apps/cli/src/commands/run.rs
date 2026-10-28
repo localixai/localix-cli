@@ -188,10 +188,19 @@ pub(crate) fn run(
     if let Some(place) = &place {
         workspace = place::workspace(place).map_err(Failure::Usage)?;
     }
+    // The client's `PATH` in the daemon, as its commands run with it.
+    let path = (workspace
+        .env()
+        .and_then(|env| env.iter().find(|(name, _)| name == "PATH")))
+    .map_or_else(
+        || std::env::var_os("PATH").unwrap_or_default(),
+        |(_, path)| path.into(),
+    );
     let environment = Environment {
         root: workspace.root(),
         mode: &mode::describe(&mode, &rules, terminal, asks),
         now: session::now(),
+        runtimes: &context::runtimes(&path),
     };
     let context = context::gather(&environment, resumed.as_ref());
     let fresh = context::gather(&environment, None);

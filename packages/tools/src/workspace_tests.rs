@@ -34,43 +34,13 @@ fn an_empty_path_is_refused() {
 }
 
 #[test]
-fn absolute_paths_are_readable_anywhere_but_writable_only_inside() {
+fn absolute_paths_are_readable_anywhere() {
     let dir = Scratch::new();
     let workspace = Workspace::new(dir.path().join(".")).unwrap();
     let outside = std::env::temp_dir().join("elsewhere.txt");
-    let shown = outside.to_str().unwrap();
-    assert_eq!(workspace.readable(shown).unwrap(), outside);
-    assert!(failed(workspace.writable(shown)).contains("outside the workspace"));
-    assert!(failed(workspace.writable("../escape.txt")).contains("outside the workspace"));
-    let inside = workspace.root().join("new/dir/file.rs");
-    assert_eq!(workspace.writable("new/dir/file.rs").unwrap(), inside);
     assert_eq!(
-        workspace.writable(inside.to_str().unwrap()).unwrap(),
-        inside
-    );
-}
-
-#[cfg(unix)]
-#[test]
-fn a_symlink_out_of_the_root_is_not_writable() {
-    let dir = Scratch::new();
-    let elsewhere = Scratch::new();
-    std::fs::create_dir_all(dir.path().join("root")).unwrap();
-    std::os::unix::fs::symlink(elsewhere.path(), dir.path().join("root/out")).unwrap();
-    let workspace = Workspace::new(dir.path().join("root")).unwrap();
-    assert!(failed(workspace.writable("out/file.txt")).contains("outside the workspace"));
-}
-
-#[cfg(unix)]
-#[test]
-fn a_write_through_a_symlink_inside_lands_on_its_target() {
-    let dir = Scratch::new();
-    let target = dir.file("real.txt", "x");
-    std::os::unix::fs::symlink(&target, dir.path().join("link.txt")).unwrap();
-    let workspace = Workspace::new(dir.path()).unwrap();
-    assert_eq!(
-        workspace.writable("link.txt").unwrap(),
-        workspace.root().join("real.txt")
+        workspace.readable(outside.to_str().unwrap()).unwrap(),
+        outside
     );
 }
 
@@ -101,7 +71,6 @@ fn a_denied_path_is_refused_however_it_is_reached() {
     for path in [&key, &sessions.join("1-ab.json")] {
         let message = failed(workspace.readable(path.to_str().unwrap()));
         assert!(message.ends_with("is off limits to the tools"), "{message}");
-        assert!(failed(workspace.writable(path.to_str().unwrap())).contains("off limits"));
     }
     #[cfg(unix)]
     {

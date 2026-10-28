@@ -9,14 +9,11 @@
 mod child;
 pub(crate) mod inbox;
 pub(crate) mod kit;
-pub(crate) mod reported;
 pub(crate) mod spec;
 mod tool;
 mod wait;
 pub(crate) mod watch;
 
-use std::collections::HashSet;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
@@ -72,7 +69,6 @@ struct Child {
     session: Session,
     /// Away while it works.
     conversation: Option<Conversation>,
-    seen: HashSet<PathBuf>,
     /// The mode it last heard of.
     told: Mode,
     /// How its last task ended.

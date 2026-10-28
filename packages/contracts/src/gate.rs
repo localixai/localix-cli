@@ -19,6 +19,9 @@ pub struct Effect<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Verdict {
     Allow,
+    /// Allowed as long as it changes nothing: a command runs where it can only read (the tool's
+    /// sandbox), or, where it cannot be confined, not at all.
+    ReadOnly,
     /// Not allowed, and why: the tool says so to the model, which can try another way.
     Deny(String),
 }

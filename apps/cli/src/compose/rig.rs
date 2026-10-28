@@ -11,7 +11,7 @@ use contracts::tool::Tool;
 use session::Sessions;
 use tools::workspace::Workspace;
 
-use super::{Base, Lane, Seat, Shared};
+use super::{Base, Lane, Seat};
 use crate::agents::{AgentsTool, Delegation, Registry};
 use crate::brake::Brake;
 use crate::checkpoints::Checkpoints;
@@ -32,8 +32,6 @@ use protocol::Event;
 /// The built agent and what a task needs around it; one per process, for every task it runs.
 pub(crate) struct Rig<'a> {
     pub agent: Agent<'a>,
-    /// What the lane shares with the others.
-    pub shared: &'a Shared,
     pub options: &'a RunOptions,
     pub workspace: &'a Workspace,
     pub output: &'a Output,
@@ -136,7 +134,6 @@ pub(super) fn drive(
             };
             let mut rig = Rig {
                 agent,
-                shared,
                 options,
                 workspace: &shared.workspace,
                 output: base.output,

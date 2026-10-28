@@ -1,34 +1,24 @@
 # Tools
 
-llx has six tools. The set is deliberately minimal: a new capability goes into one of them (as
-an `action`), or is left to the shell. The model reaches `read` and `bash` through `exec`, a short
-JavaScript script that calls them: independent reads and commands in one turn, and only what the
-script keeps sent back.
+llx has four tools. The set is deliberately minimal: a new capability goes into one of them (as
+an `action`), or is left to the shell. The model works as you do at a terminal: it reads with `cat`,
+`sed -n` and `rg`, writes a whole file with a heredoc (`cat > path <<'EOF'`), and changes part of a
+file with a short script (`python3 - <<'EOF'`) that checks the old text occurs exactly once. Its
+context names the script runtimes found on the session's `PATH` (`python3`, `node`, `bun`, only
+those present) in a `Runtimes:` line.
 
 | Tool | What it is for |
 | --- | --- |
-| [`read`](#read) | Files and directories |
-| [`apply_patch`](#apply_patch) | A patch: files changed, created, deleted or moved |
-| [`bash`](#bash) | Commands that run to their end |
+| [`bash`](#bash) | Commands that run to their end: reading, searching, changing files, running checks |
 | [`ask`](#ask) | A question to you |
 | [`agents`](#agents) | Other agents, in parallel |
 | [`jobs`](#jobs) | Monitors and schedules |
-
-## read
-
-A text file's lines, numbered, up to 2000 lines and about 20 KB at a time (`offset`, `limit`), or a directory's entries. PNG, JPEG, GIF and WebP files up to 8 MB (as for a picture you attach) are sent to the model as pictures; `offset` and `limit` do not apply to them. Image headers are checked, but the file is not fully decoded; a corrupt file or a format the selected model does not support may be rejected by the provider. Long lines are cut; other binary files and anything but regular files (a FIFO, a device) are refused. It reads anywhere (a dependency's source, a system header) except llx's own key and sessions.
-
-## apply_patch
-
-- A patch as free text, `*** Begin Patch` … `*** End Patch`: `*** Add File`, `*** Delete File`, `*** Update File` (with `*** Move to`), each update's hunks found by their lines and the lines around them. Every file is worked out and asked of the gate before any is written; a hunk that does not fit changes nothing.
-- Writes are atomic (a new temporary file, then a rename) and keep CRLF line endings and permissions; a read-only file is refused, and a file with other hard links is written in place.
-- It asks the gate, refuses to write when the file changed while the question was open, and changes only files inside the workspace.
 
 ## bash
 
 - `sh -c` in the workspace or a `workdir`, with stdin closed. On Unix it runs in its own session, with no terminal, so a program that prompts fails at once; git and pagers are told not to prompt or page.
 - A timeout (120 s by default, at most 600 s) or Ctrl-C kills it with everything it started.
-- Each stream keeps its first and last 5,000 bytes. A non-zero exit is a normal result. It asks the gate.
+- Each stream keeps its first and last 5,000 bytes. A non-zero exit is a normal result. It asks the gate. In a read-only mode its commands run in an operating system sandbox instead ([modes](modes.md#modes)); a command that writes a file fails there.
 - The key variables of the provider in use (as the catalog names them, such as `DEEPSEEK_API_KEY`) and `OPENROUTER_API_KEY` are left out of a command's environment; other providers' variables stay, so a project's own tests can use them; a provider chosen later with `/login` has its variables left out too, from the next command on. That is no barrier, since a command can still read llx's own environment (`ps -E` on macOS; on Linux llx marks itself non-dumpable, so only root can read `/proc/<llx pid>/environ`, and a hosted CI runner gives passwordless `sudo`) and the saved key file. Where `bash` runs on input from strangers, see [CI security](ci.md#security).
 
 ## ask

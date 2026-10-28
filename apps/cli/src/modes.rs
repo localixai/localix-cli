@@ -1,11 +1,12 @@
 //! The modes a run can work in: the built-in ones, then the person's from `settings.json`, where
 //! one of the same name replaces a built-in one. A mode is only a name, a line on what it does,
-//! and its rules (ARCHITECTURE.md K5): no code asks which mode it is.
+//! its rules and whether its commands are read-only (ARCHITECTURE.md K5): no code asks which mode
+//! it is.
 
 use serde_json::Value;
 
 use crate::error::Failure;
-use crate::mode::Mode;
+use crate::mode::{Mode, Reach};
 use crate::rules::Rules;
 
 /// What `-y` chooses, and what a tool client's calls run in (K7).
@@ -13,28 +14,28 @@ pub(crate) const BYPASS: &str = "bypass";
 /// What a run starts in when nothing is chosen.
 const DEFAULT: &str = "default";
 
-/// The built-in modes: a name, what it does, its allow and deny rules.
-const BUILT_IN: [(&str, &str, &[&str], &[&str]); 3] = [
+/// The built-in modes: a name, what it does, its allow and deny rules, what its commands reach.
+type BuiltIn = (&'static str, &'static str, &'static [&'static str], Reach);
+const BUILT_IN: [BuiltIn; 3] = [
     (
         DEFAULT,
-        "Each command and file change is asked; with no one to ask, refused.",
+        "Each command is asked; with no one to ask, refused.",
         &[],
-        &[],
+        Reach::Anything,
     ),
     (
         "plan",
-        "Read-only: file changes are refused, so a goal to change something is reached by a \
-         plan of the change, not by making it: what would change and where, step by step, then \
-         the assumptions it rests on. Such a plan achieves the goal, unrun and unchecked as it \
-         is; commands are asked.",
+        "Read-only: nothing can be changed, so a goal to change something is reached by a plan \
+         of the change, not by making it: what would change and where, step by step, then the \
+         assumptions it rests on. Such a plan achieves the goal, unrun and unchecked as it is.",
         &[],
-        &["apply_patch"],
+        Reach::ReadOnly,
     ),
     (
         BYPASS,
         "Everything runs without asking (-y).",
-        &["bash", "apply_patch", "jobs"],
-        &[],
+        &["bash", "jobs"],
+        Reach::Anything,
     ),
 ];
 
@@ -45,9 +46,9 @@ impl Modes {
     /// The built-in modes alone.
     pub(crate) fn built_in() -> Self {
         let owned = |list: &[&str]| list.iter().map(ToString::to_string).collect::<Vec<_>>();
-        let modes = BUILT_IN.iter().map(|(name, hint, allow, deny)| {
-            let rules = Rules::new(&owned(allow), &owned(deny)).unwrap_or_default();
-            Mode::new(name, hint, rules)
+        let modes = BUILT_IN.iter().map(|(name, hint, allow, reach)| {
+            let rules = Rules::new(&owned(allow), &[]).unwrap_or_default();
+            Mode::new(name, hint, rules, *reach)
         });
         Self(modes.collect())
     }
@@ -77,9 +78,14 @@ impl Modes {
                 }
             };
             let rules = Rules::new(&list("allow")?, &list("deny")?).map_err(|why| wrong(&why))?;
+            let reach = match mode.get("read_only") {
+                None | Some(Value::Bool(false)) => Reach::Anything,
+                Some(Value::Bool(true)) => Reach::ReadOnly,
+                Some(_) => return Err(wrong("`read_only` is true or false")),
+            };
             let hint = mode.get("description").and_then(Value::as_str);
             let hint = hint.map_or_else(|| "The person's own mode.".to_string(), str::to_string);
-            let mode = Mode::new(name, &hint, rules);
+            let mode = Mode::new(name, &hint, rules, reach);
             match modes.0.iter().position(|known| known.name() == name) {
                 Some(at) => modes.0[at] = mode,
                 None => modes.0.push(mode),

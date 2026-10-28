@@ -5,7 +5,7 @@
 use std::sync::mpsc;
 
 use contracts::chat::ToolCall;
-use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 
 use crate::observer::Observer;
 
@@ -30,8 +30,7 @@ pub(crate) fn batch_end(
 
 /// Whether `call` may run beside others: its tool says so and its arguments can be read.
 pub(crate) fn parallel(tools: &[&dyn Tool], specs: &[ToolSpec], call: &ToolCall) -> bool {
-    find(tools, specs, call)
-        .is_some_and(|(tool, spec)| spec.input.accepts(&call.arguments) && tool.parallel())
+    find(tools, specs, call).is_some_and(|tool| call.arguments.is_object() && tool.parallel())
 }
 
 /// `calls`, all at once; their outcomes in the same order. Each is shown to `observer` as it
@@ -78,29 +77,22 @@ pub(crate) fn together(
 
 /// Run `call` on the tool it names; `specs` are the tools' specs, in the same order.
 pub(crate) fn invoke(tools: &[&dyn Tool], specs: &[ToolSpec], call: &ToolCall) -> Outcome {
-    let (tool, spec) = find(tools, specs, call)
+    let tool = find(tools, specs, call)
         .ok_or_else(|| ToolError::Failed(format!("there is no tool {}", call.name)))?;
-    if !spec.input.accepts(&call.arguments) {
-        return Err(ToolError::Failed(match spec.input {
-            Input::Json(_) => "the arguments are not a JSON object (a reply cut short leaves \
-                them incomplete): call the tool again, and write a large file in parts"
+    if !call.arguments.is_object() {
+        return Err(ToolError::Failed(
+            "the arguments are not a JSON object (a reply cut short leaves them incomplete): \
+             call the tool again, and write a large file in parts"
                 .into(),
-            Input::Text(_) => "this tool takes text, written as it is, not JSON arguments: \
-                call the tool again with the text alone"
-                .into(),
-        }));
+        ));
     }
     tool.call(&call.arguments)
 }
 
-/// The tool `call` names and its spec.
-fn find<'a, 'b>(
-    tools: &[&'a dyn Tool],
-    specs: &'b [ToolSpec],
-    call: &ToolCall,
-) -> Option<(&'a dyn Tool, &'b ToolSpec)> {
+/// The tool `call` names.
+fn find<'a>(tools: &[&'a dyn Tool], specs: &[ToolSpec], call: &ToolCall) -> Option<&'a dyn Tool> {
     let at = specs.iter().position(|spec| spec.name == call.name)?;
-    Some((tools.get(at).copied()?, &specs[at]))
+    tools.get(at).copied()
 }
 
 #[cfg(test)]

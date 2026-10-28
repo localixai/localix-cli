@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::Scope;
 
-use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
 use super::kit::Kit;
@@ -44,7 +44,7 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
             let mut session = self.kit.history.start();
             session.parent = Some(state.parent.clone());
             session.name.clone_from(&name);
-            session.workspace = self.kit.root().display().to_string();
+            session.workspace = self.kit.workspace.root().display().to_string();
             if let Some(ui) = self.kit.output.ui() {
                 ui.send(Event::Started {
                     id: session.id.clone(),
@@ -57,9 +57,6 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
             state.children.push(Child {
                 session,
                 conversation: None,
-                seen: crate::instructions::chain(self.kit.workspace.root())
-                    .into_iter()
-                    .collect(),
                 told: self.kit.started.clone(),
                 status: String::new(),
                 open: true,
@@ -177,7 +174,7 @@ impl Tool for AgentsTool<'_, '_> {
         ToolSpec {
             name: spec::NAME.into(),
             description: spec::description(),
-            input: Input::Json(spec::parameters()),
+            parameters: spec::parameters(),
         }
     }
 

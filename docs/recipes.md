@@ -5,10 +5,9 @@ stdin and write stdout, so the CLIs you already have read the input and post the
 recipe is one line you can run as is; the outputs below are from real runs.
 
 - `llx decide`: one of a few options, about a second, a fraction of a cent. No tools.
-- `llx exec --mode plan`: the agent reads the code and answers. The `apply_patch` tool is refused, and
-  so is a command when no one is there to approve it.
-- `llx exec --allow bash --deny apply_patch`: the agent may run commands to explore and confirm, and
-  edits no file with its tool.
+- `llx exec --mode plan`: the agent reads the code and answers. Its commands run
+  in a read-only sandbox: nothing is written, nothing leaves the machine.
+- `llx exec --allow bash`: the agent may run commands to explore and confirm, without asking.
 - `llx exec -y`: the agent may act (pages, commands, edits). Only on input you trust.
 
 Both need `OPENROUTER_API_KEY` (`exec` takes any provider: [docs/ci.md](ci.md#keys-and-models)).
@@ -153,7 +152,6 @@ jobs:
         with:
           model: anthropic/claude-haiku-5.5
           allow: bash
-          deny: apply_patch
           prompt: |
             Review pull request #$PR with gh and git. Bugs and risks only, as a short markdown list.
   post:
@@ -179,7 +177,7 @@ hands it to the model as data, not as yours, but keep the job safe on its own:
 
 - run the model in a job with a read-only token, and post from a second job that has no model key
   and runs nothing from the pull request;
-- review and triage with `--allow bash --deny apply_patch`, `--mode plan` or `decide`, never `-y`, and name
+- review and triage with `--allow bash`, `--mode plan` or `decide`, never `-y`, and name
   what the agent may run where the input is from strangers (`--allow 'bash(gh pr view *)'`);
 - never run `pull_request_target` with the pull request's code checked out, and let only people
   with write access start the agent.

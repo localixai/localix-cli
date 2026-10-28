@@ -18,11 +18,6 @@ enum Format {
     Webp,
 }
 
-/// Whether `bytes` begin as a picture does: its signature alone, so a file's first bytes do.
-pub(crate) fn begins(bytes: &[u8]) -> bool {
-    Format::detect(bytes).is_some()
-}
-
 /// The picture `bytes` hold, ready for a model; `None` when they are not a PNG, JPEG, GIF or
 /// WebP whose header gives its size.
 #[must_use]

@@ -1,5 +1,5 @@
 use contracts::chat::{Completion, Message, Usage};
-use contracts::tool::{Input, Tool, ToolError};
+use contracts::tool::{Tool, ToolError};
 use serde_json::{Value, json};
 
 use super::*;
@@ -422,7 +422,7 @@ impl Tool for Wordy {
         ToolSpec {
             name: "echo".into(),
             description: "d".repeat(40_000),
-            input: Input::Json(json!({"type": "object"})),
+            parameters: json!({"type": "object"}),
         }
     }
     fn call(&self, _: &Value) -> Result<contracts::tool::ToolOutput, ToolError> {

@@ -37,9 +37,7 @@ fn an_agent_is_shown_from_the_list_stopped_with_x_and_let_go_by_rewind() {
     term.wait_for("■ scout", LONG);
     // Esc gives the list's keys back to the composer; Esc Esc there rewinds.
     term.press(key::ESC).press(key::ESC).press(key::ESC);
-    term.wait_for("Rewind to before", LONG);
-    term.press(key::ENTER);
-    term.wait_for("Code and conversation", LONG);
+    term.wait_for("Rewind the conversation to before", LONG);
     term.press(key::ENTER);
     let screen = term.wait_for("Rewound", LONG);
     let tree_rows = screen.lines().filter(|row| row.contains("■ scout")).count();

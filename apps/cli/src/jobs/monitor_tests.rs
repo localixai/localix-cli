@@ -27,9 +27,16 @@ fn with(
     let batches = Mutex::new(vec![]);
     let deadline = Instant::now() + Duration::from_secs(seconds);
     let dir = std::env::temp_dir();
-    let ended = watch(command, &dir, env, deadline, stopped, &|lines, _| {
-        batches.lock().unwrap().push(lines);
-    })
+    let ended = watch(
+        (command, tools::shell::Scope::Open, &[]),
+        &dir,
+        env,
+        deadline,
+        stopped,
+        &|lines, _| {
+            batches.lock().unwrap().push(lines);
+        },
+    )
     .unwrap();
     let ended = match ended {
         Ended::Exit(how) => how,

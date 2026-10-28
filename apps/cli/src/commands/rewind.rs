@@ -1,6 +1,6 @@
-//! `/rewind` (also `/undo`, or Esc Esc on an empty prompt): back to before
-//! one of the conversation's tasks. The files as they were then (what `apply_patch` changed), the
-//! conversation as it was then (the task's words back in the prompt to change), or both.
+//! `/rewind` (also `/undo`, or Esc Esc on an empty prompt): the conversation back to before one
+//! of its tasks, the task's words back in the prompt to change. Files stay as they are: the model
+//! changes them through the shell, and nothing records a command's files (ARCHITECTURE.md B4).
 
 use crate::compose::Rig;
 use crate::picker::{Item, Terminal};
@@ -32,60 +32,27 @@ fn steps(rig: &mut Rig, terminal: &mut dyn Terminal) -> String {
             if label.len() < line.len() {
                 label.push('…');
             }
-            let files = match task.changed() {
-                0 => "no file changed".to_string(),
-                n => format!("{} changed", crate::output::count(n, "file")),
-            };
-            Item::new(label, files, false)
+            Item::new(label, "", false)
         })
         .collect();
-    let Some(picked) = terminal.pick("Rewind to before", &items) else {
+    let Some(picked) = terminal.pick("Rewind the conversation to before", &items) else {
         return "Nothing changed.\n".into();
     };
     let index = tasks.len() - 1 - picked;
-    let what = [
-        Item::new(
-            "Code and conversation",
-            "the files and the talk as they were",
-            true,
-        ),
-        Item::new("Conversation only", "the files stay as they are now", false),
-        Item::new("Code only", "the conversation goes on as it is", false),
-    ];
-    let Some(how) = terminal.pick("Rewind", &what) else {
-        return "Nothing changed.\n".into();
-    };
-    let mut said = vec![];
-    match how {
-        1 => rig.checkpoints.forget(index),
-        _ => {
-            let (restored, failed) = rig.checkpoints.restore(index);
-            said.push(format!("{restored} file(s) put back"));
-            said.extend(failed.into_iter().map(|f| format!("not put back: {f}")));
-        }
+    let task = &tasks[index];
+    rig.checkpoints.forget(index);
+    match &mut rig.conversation {
+        Some(conversation) if task.at > 0 => conversation.truncate(task.at),
+        _ => rig.conversation = None,
     }
-    if how != 2 {
-        let task = &tasks[index];
-        match &mut rig.conversation {
-            Some(conversation) if task.at > 0 => conversation.truncate(task.at),
-            _ => rig.conversation = None,
-        }
-        rig.agents.forget();
-        said.push("the conversation is back to before it".into());
-        // The person's own words go back in the prompt; what came from the background does not.
-        if let Some(ui) = &rig.ui
-            && crate::server::wire::shown(&task.goal) == task.goal
-        {
-            ui.send(Event::Prefill(task.goal.clone()));
-        }
+    rig.agents.forget();
+    // The person's own words go back in the prompt; what came from the background does not.
+    if let Some(ui) = &rig.ui
+        && crate::server::wire::shown(&task.goal) == task.goal
+    {
+        ui.send(Event::Prefill(task.goal.clone()));
     }
-    // The files are shared: another lane's task may have changed them since.
-    let working = rig.shared.working.load(std::sync::atomic::Ordering::SeqCst);
-    let warning = match working {
-        0 => "",
-        _ => "Another session is working in this directory; restoring may undo its changes.\n",
-    };
-    format!("{warning}Rewound: {}.\n", said.join("; "))
+    "Rewound: the conversation is back to before it; the files stay as they are.\n".into()
 }
 
 #[cfg(test)]

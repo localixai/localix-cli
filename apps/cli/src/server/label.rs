@@ -41,22 +41,6 @@ fn describe(name: &str, args: &Value) -> What {
             }
             what(("Running", "Ran"), subject)
         }
-        "read" => {
-            let subject = match args.get("offset").and_then(Value::as_u64) {
-                Some(offset) => format!("{} from line {offset}", text("path")),
-                None => text("path").to_string(),
-            };
-            what(("Reading", "Read"), subject)
-        }
-        "apply_patch" => {
-            let paths = tools::fs::named_paths(args);
-            let subject = if paths.is_empty() {
-                "a patch".to_string()
-            } else {
-                paths.join(", ")
-            };
-            what(("Patching", "Patched"), subject)
-        }
         "ask" => {
             let n = args
                 .get("questions")

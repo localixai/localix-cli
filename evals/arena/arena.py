@@ -8,8 +8,9 @@ plugins, no MCP servers. The agent's JSON stream becomes one row: whether check.
 wall time, the turns and tool calls, the tokens, and the cost priced from one table (PRICES, the
 catalog's), API-equivalent: all three run on subscriptions here.
 
-Runs go one after another, never at once (a benchmark is timed; see README.md), the agents' order
-rotating each repeat. Usage:
+Runs go one after another (a benchmark is timed; see README.md), the agents' order rotating each
+repeat; with --parallel every run starts at once, so all of them meet the backend in the same
+minutes (its cache varies over the day), at the price of slower wall times on a shared machine. Usage:
 
   python3 evals/arena/arena.py                      # each agent once
   python3 evals/arena/arena.py --repeat 3 --record  # the benchmark: rows into benchmarks/arena/
@@ -27,6 +28,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -233,6 +235,22 @@ def versions():
             "machine": f"{platform.system()} {platform.machine()} {platform.mac_ver()[0]}".strip()}
 
 
+def one(n, agent, logs):
+    """One run in a folder and home of its own, its row printed as soon as it ends."""
+    parent = Path(tempfile.mkdtemp(prefix=f"llx-arena-{n}-"))
+    original, copy = fresh_home(parent, agent) if agent in ("llx", "codex") else (None, None)
+    try:
+        row = run(agent, parent, logs)
+    finally:  # a refreshed sign-in goes back; the copy never stays behind, even when a run breaks
+        if copy:
+            hand_back(original, copy)
+        shutil.rmtree(parent / f"home-{agent}", ignore_errors=True)
+    print(f"{n} {agent:7} {'pass' if row['passed'] else 'FAIL'} {row['seconds']:>6}s "
+          f"{row['turns']:>3} turns {row['tools']:>3} tools {row['input']:>9,} in "
+          f"{row['output']:>7,} out ${row['cost']:.4f}  {'; '.join(row['check'][:3])}", flush=True)
+    return row
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--agents", default="llx,codex,claude")
@@ -241,6 +259,7 @@ def main():
     parser.add_argument("--model", help="the OpenAI model llx and Codex both use (default gpt-6.1-terra)")
     parser.add_argument("--effort", default=EFFORT)
     parser.add_argument("--task", default=TASK_NAME, choices=sorted(TASKS))
+    parser.add_argument("--parallel", action="store_true", help="start every run at once")
     args = parser.parse_args()
     if args.model:
         MODEL["llx"] = MODEL["codex"] = args.model
@@ -251,24 +270,15 @@ def main():
     stamp = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     logs = ROOT / "evals" / "results" / f"arena-{stamp}"
     logs.mkdir(parents=True)
-    rows = []
-    for n in range(args.repeat):
-        order = agents[n % len(agents):] + agents[: n % len(agents)]
-        for agent in order:
-            parent = Path(tempfile.mkdtemp(prefix=f"llx-arena-{n}-"))
-            original, copy = fresh_home(parent, agent) if agent in ("llx", "codex") else (None, None)
-            try:
-                row = run(agent, parent, logs)
-            finally:  # a refreshed sign-in goes back; the copy never stays behind, even when a run breaks
-                if copy:
-                    hand_back(original, copy)
-                shutil.rmtree(parent / f"home-{agent}", ignore_errors=True)
-            rows.append(row)
-            print(f"{agent:7} {'pass' if row['passed'] else 'FAIL'} {row['seconds']:>6}s "
-                  f"{row['turns']:>3} turns {row['tools']:>3} tools {row['input']:>9,} in "
-                  f"{row['output']:>7,} out ${row['cost']:.4f}  {'; '.join(row['check'][:3])}", flush=True)
+    runs = [(n, agent) for n in range(args.repeat)
+            for agent in agents[n % len(agents):] + agents[: n % len(agents)]]
+    if args.parallel:
+        with ThreadPoolExecutor(max_workers=len(runs)) as pool:
+            rows = list(pool.map(lambda r: one(*r, logs), runs))
+    else:
+        rows = [one(n, agent, logs) for n, agent in runs]
     hidden = hashlib.sha256((HERE / "hidden" / f"{TASK_NAME}.test.tsx").read_bytes()).hexdigest()
-    result = {"hidden_sha256": hidden, "at": stamp, "task": TASK_NAME, "prompt": TASK, "effort": EFFORT, "models": MODEL, "versions": versions(), "rows": rows}
+    result = {"hidden_sha256": hidden, "at": stamp, "task": TASK_NAME, "parallel": args.parallel, "prompt": TASK, "effort": EFFORT, "models": MODEL, "versions": versions(), "rows": rows}
     (logs / "summary.json").write_text(json.dumps(result, indent=1))
     if args.record:
         KEEP.mkdir(parents=True, exist_ok=True)

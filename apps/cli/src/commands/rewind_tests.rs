@@ -28,41 +28,39 @@ impl Lines for Picks {
     }
 }
 
-fn edit(arguments: serde_json::Value) -> Completion {
+fn change(command: &str) -> Completion {
     Completion {
-        calls: vec![crate::testing::scripted("e", "edit", arguments)],
+        calls: vec![crate::testing::scripted(
+            "b",
+            "bash",
+            json!({"command": command}),
+        )],
         ..Completion::default()
     }
 }
 
 #[test]
-fn rewinding_puts_back_the_files_and_the_conversation_before_the_task() {
-    let mut replies = vec![edit(
-        json!({"path": "a.txt", "old_string": "", "new_string": "1\n"}),
-    )];
+fn rewinding_goes_back_in_the_conversation_and_leaves_the_files() {
+    let mut replies = vec![change("echo 1 > a.txt")];
     replies.extend(answers(1));
-    replies.push(edit(
-        json!({"path": "a.txt", "old_string": "1", "new_string": "2"}),
-    ));
+    replies.push(change("echo 2 > a.txt"));
     replies.extend(answers(1));
     composed(crate::modes::built("bypass"), true, replies, |rig| {
         rig.task("make a");
         let after_first = rig.conversation.as_ref().unwrap().messages().len();
         rig.task("change a");
         let file = rig.workspace.root().join("a.txt");
+        // The newest task first: back to before "change a".
+        let said = steps(rig, &mut picks(&[Some(0)]));
+        assert!(said.contains("the conversation is back"), "{said}");
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "2\n");
-        // The newest task first: back to before "change a", code and conversation.
-        let said = steps(rig, &mut picks(&[Some(0), Some(0)]));
-        assert!(said.starts_with("Rewound: 1 file(s) put back"), "{said}");
-        assert_eq!(std::fs::read_to_string(&file).unwrap(), "1\n");
         assert_eq!(
             rig.conversation.as_ref().unwrap().messages().len(),
             after_first
         );
-        // Before the first, the conversation only: the file stays, the conversation is new.
-        let said = steps(rig, &mut picks(&[Some(0), Some(1)]));
-        assert!(said.contains("the conversation is back"), "{said}");
-        assert!(file.exists() && rig.conversation.is_none());
+        // Before the first: the conversation is new.
+        steps(rig, &mut picks(&[Some(0)]));
+        assert!(rig.conversation.is_none());
         assert!(steps(rig, &mut picks(&[])).starts_with("Nothing to rewind"));
         0
     });
@@ -75,7 +73,7 @@ fn background_tasks_are_listed_as_the_transcript_shows_them_and_not_put_back_in_
         rig.task(&crate::arrivals::monitor("ticks", "tick 1").render());
         let (ui, frames) = crate::testing::fake_ui();
         rig.ui = Some(ui);
-        let mut person = picks(&[Some(0), Some(1)]);
+        let mut person = picks(&[Some(1)]);
         steps(rig, &mut person);
         assert_eq!(person.1[0], ["≋ ticks · tick 1", "◷ hello · say hello"]);
         let prefilled = (crate::testing::events(&frames).into_iter())
@@ -119,7 +117,7 @@ impl Chat for Delegates {
 fn rewinding_the_conversation_lets_its_agents_go() {
     composed_with(crate::modes::built("bypass"), true, &Delegates, |rig| {
         rig.task("write it with an agent");
-        steps(rig, &mut picks(&[Some(0), Some(0)]));
+        steps(rig, &mut picks(&[Some(0)]));
         rig.task("write it with an agent");
         let started = rig
             .conversation
@@ -147,31 +145,6 @@ fn init_is_listed_as_the_command_typed_not_its_instruction() {
         let mut person = picks(&[None]);
         steps(rig, &mut person);
         assert_eq!(person.1[0], ["/init"]);
-        0
-    });
-}
-
-#[test]
-fn rewinding_while_another_session_works_here_warns() {
-    let mut replies = vec![edit(
-        json!({"path": "a.txt", "old_string": "", "new_string": "1\n"}),
-    )];
-    replies.extend(answers(1));
-    composed(crate::modes::built("bypass"), true, replies, |rig| {
-        rig.task("make a");
-        let said = steps(rig, &mut picks(&[None]));
-        assert!(!said.contains("Another session"), "{said}");
-        // Another lane over the same workspace is in a task.
-        rig.shared
-            .working
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let said = steps(rig, &mut picks(&[Some(0), Some(0)]));
-        assert!(
-            said.starts_with(
-                "Another session is working in this directory; restoring may undo its changes."
-            ),
-            "{said}"
-        );
         0
     });
 }

@@ -461,50 +461,11 @@ pub(crate) fn events(
     events.collect()
 }
 
-/// The patch that puts `new` in place of the whole lines `old` in `path`, or, with `old` empty,
-/// makes the file.
-pub(crate) fn patch(path: &str, old: &str, new: &str) -> String {
-    use std::fmt::Write as _;
-    let lines = |text: &str, sign: char| -> String {
-        text.lines().fold(String::new(), |mut out, line| {
-            let _ = writeln!(out, "{sign}{line}");
-            out
-        })
-    };
-    let body = match old {
-        "" => format!("*** Add File: {path}\n{}", lines(new, '+')),
-        _ => format!(
-            "*** Update File: {path}\n@@\n{}{}",
-            lines(old, '-'),
-            lines(new, '+')
-        ),
-    };
-    format!("*** Begin Patch\n{body}*** End Patch")
-}
-
-/// A call as the model makes it: `read` and `bash` through a script (`exec`), the only way it
-/// reaches them; an `edit` (`path`, `old_string`, `new_string`) as the patch that makes it; any
-/// other tool directly.
+/// A call as the model makes it.
 pub(crate) fn scripted(id: &str, name: &str, arguments: serde_json::Value) -> ToolCall {
-    let text = |key: &str| arguments[key].as_str().unwrap_or_default().to_owned();
-    let (name, arguments) = match name {
-        "read" | "bash" => (
-            "exec".to_owned(),
-            serde_json::Value::String(format!("return await tools.{name}({arguments});")),
-        ),
-        "edit" => (
-            "apply_patch".to_owned(),
-            serde_json::Value::String(patch(
-                &text("path"),
-                &text("old_string"),
-                &text("new_string"),
-            )),
-        ),
-        _ => (name.to_owned(), arguments),
-    };
     ToolCall {
         id: id.into(),
-        name,
+        name: name.into(),
         arguments,
     }
 }

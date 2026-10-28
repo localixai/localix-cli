@@ -1,17 +1,33 @@
 use super::*;
+use crate::mode::Reach;
 
 #[test]
 fn the_persons_modes_follow_the_built_in_ones_and_may_replace_one() {
     let text = r#"{"modes": {"review": {"allow": ["bash(cargo test *)"], "description": "Review."},
-        "plan": {"allow": ["bash(cargo test *)"], "deny": ["apply_patch"]}}}"#;
+        "plan": {"allow": ["bash(cargo test *)"]}, "look": {"read_only": true}}}"#;
     let modes = Modes::with_settings(Some(text), "settings.json").unwrap();
-    assert_eq!(modes.names(), "default, plan, bypass, review");
+    assert_eq!(modes.names(), "default, plan, bypass, look, review");
     let plan = modes.named("plan").unwrap();
     assert_eq!(
         plan.rules().judge("bash", "cargo test -q"),
         crate::rules::Ruling::Allowed
     );
     assert_eq!(modes.named("review").unwrap().hint(), "Review.");
+    // A mode is read-only when it says so: one that replaces `plan` and does not, is not.
+    assert_eq!(modes.named("look").unwrap().reach(), Reach::ReadOnly);
+    assert_eq!(plan.reach(), Reach::Anything);
+    assert_eq!(modes.named("review").unwrap().reach(), Reach::Anything);
+    assert_eq!(
+        Modes::built_in().named("plan").unwrap().reach(),
+        Reach::ReadOnly
+    );
+}
+
+#[test]
+fn read_only_is_true_or_false() {
+    let text = r#"{"modes": {"odd": {"read_only": "yes"}}}"#;
+    let why = Modes::with_settings(Some(text), "settings.json").unwrap_err();
+    assert!(why.contains("`odd`") && why.contains("read_only"), "{why}");
 }
 
 #[test]

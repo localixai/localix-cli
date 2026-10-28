@@ -50,10 +50,6 @@ pub struct Capabilities {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Tools {
     pub supported: bool,
-    /// The kinds of free-text tool it takes: `text`, `lark`, `regex` (the last two hold the text to
-    /// a grammar).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub freeform: Vec<String>,
 }
 
 /// How this host lets a caller control the model's reasoning.
@@ -99,28 +95,6 @@ pub struct Limit {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Api {
     pub base_url: String,
-    /// What the model takes through this API where it differs from the model's own.
-    #[serde(default, skip_serializing_if = "ApiCapabilities::is_empty")]
-    pub capabilities: ApiCapabilities,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct ApiCapabilities {
-    #[serde(default)]
-    pub tools: ApiTools,
-}
-
-impl ApiCapabilities {
-    fn is_empty(&self) -> bool {
-        self.tools.freeform.is_empty()
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct ApiTools {
-    /// As [`Tools::freeform`], for this API alone.
-    #[serde(default)]
-    pub freeform: Vec<String>,
 }
 
 impl Model {
@@ -174,21 +148,6 @@ impl Model {
         let uncached = input.saturating_sub(cached) as f64;
         let cached = cached as f64 * cache_price.unwrap_or(input_price);
         Some((uncached * input_price + cached + output as f64 * output_price) / 1_000_000.0)
-    }
-
-    /// Whether it takes tools of free text held to a Lark grammar through `protocol`: the API's own
-    /// list of free-text kinds, else the model's. A catalog that says nothing says no.
-    pub fn takes_lark(&self, protocol: &str) -> bool {
-        let own = self
-            .api
-            .get(protocol)
-            .map(|api| api.capabilities.tools.freeform.as_slice())
-            .filter(|kinds| !kinds.is_empty());
-        let kinds = own.unwrap_or_else(|| {
-            let tools = self.capabilities.tools.as_ref();
-            tools.map_or(&[][..], |tools| tools.freeform.as_slice())
-        });
-        kinds.iter().any(|kind| kind == "lark")
     }
 
     /// The address of its API in `protocol`, when it is served so at a fixed address.

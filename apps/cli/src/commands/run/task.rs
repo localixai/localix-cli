@@ -26,7 +26,6 @@ impl Rig<'_> {
         let attached = self.pictures();
         crate::meta::title::start(self, goal);
         self.brake.arm(Duration::from_secs(self.options.timeout));
-        let _working = Working::of(&self.shared.working);
         self.interrupt.begin();
         self.jobs_kit.queue.begin();
         let at = self.conversation.as_ref().map_or(0, |c| c.messages().len());
@@ -126,21 +125,5 @@ impl Rig<'_> {
             self.output
                 .note(&format!("llx: the session was not saved: {error}\n"));
         }
-    }
-}
-
-/// A lane in a task, counted while it lasts (and even if it unwinds), for `/rewind`'s warning.
-struct Working<'a>(&'a std::sync::atomic::AtomicUsize);
-
-impl<'a> Working<'a> {
-    fn of(count: &'a std::sync::atomic::AtomicUsize) -> Self {
-        count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        Self(count)
-    }
-}
-
-impl Drop for Working<'_> {
-    fn drop(&mut self) {
-        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
     }
 }

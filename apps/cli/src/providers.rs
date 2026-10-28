@@ -253,21 +253,8 @@ impl Provider {
         }))
     }
 
-    /// How a script is offered to model `id` over the ChatGPT backend: as a custom tool held to
-    /// its grammar where the catalog says the model takes those, else as a function.
-    fn texts(&self, id: &str) -> openai::responses::Texts {
-        let grammar = catalog()
-            .model(&self.0, id)
-            .is_some_and(|model| model.takes_lark(RESPONSES));
-        match grammar {
-            true => openai::responses::Texts::Custom,
-            false => openai::responses::Texts::Functions,
-        }
-    }
-
     fn unpriced(&self, selection: &Selection, vars: Vars) -> Option<Box<dyn Chat>> {
         let selection = selection.clone();
-        let id = selection.model().id.clone();
         if self.0 == "openai"
             && let Some(tokens) = openai::tokens::load(APP)
         {
@@ -280,7 +267,7 @@ impl Provider {
                 tokens,
                 selection,
             );
-            return Some(Box::new(model.with_texts(self.texts(&id))));
+            return Some(Box::new(model));
         }
         let (key, _) = self.key_in(vars)?;
         let client = match self.0.as_str() {

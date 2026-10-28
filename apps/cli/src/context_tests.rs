@@ -9,7 +9,41 @@ fn environment(root: &Path) -> Environment<'_> {
         root,
         mode: "default: the person approves each command",
         now: 1_792_627_200,
+        runtimes: &[],
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn the_runtimes_on_the_path_are_named_in_a_fixed_order_and_only_those() {
+    use std::os::unix::fs::PermissionsExt;
+    let scratch = Scratch::new();
+    let program = |dir: &str, name: &str, mode: u32| {
+        let path = scratch.file(&format!("{dir}/{name}"), "#!/bin/sh\n");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+    };
+    program("a", "bun", 0o755);
+    program("b", "python3", 0o755);
+    // Not a program: no one can run it.
+    program("b", "node", 0o644);
+    let path = std::env::join_paths([scratch.path().join("a"), scratch.path().join("b")]).unwrap();
+    assert_eq!(runtimes(&path), ["python3", "bun"]);
+    assert!(runtimes(std::ffi::OsStr::new("")).is_empty());
+}
+
+#[test]
+fn the_environment_names_the_runtimes_found_and_says_nothing_when_there_are_none() {
+    let scratch = Scratch::new();
+    let found = Environment {
+        runtimes: &["python3", "node"],
+        ..environment(scratch.path())
+    };
+    assert!(
+        describe(&found).contains("\nRuntimes: python3, node (for a script: use whichever"),
+        "{}",
+        describe(&found)
+    );
+    assert!(!describe(&environment(scratch.path())).contains("Runtimes"));
 }
 
 #[test]

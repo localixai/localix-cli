@@ -41,7 +41,7 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 | --- | --- |
 | `-C, --cd DIR` | The workspace: paths resolve in it and files change only inside it. Default: the current directory. |
 | `--mode MODE` | A named set of rules: `default`, `plan`, `bypass`, or your own from `settings.json` (see [Modes and approvals](modes.md)). Also `--permission-mode`. Default: `default`. |
-| `--allow RULE`, `--deny RULE` | Add a rule to the mode's for this run: `bash(cargo test *)`, `apply_patch(docs/**)`, `jobs` ([the syntax](modes.md#rules)). Repeat them. A deny refuses in every mode, `-y` included. |
+| `--allow RULE`, `--deny RULE` | Add a rule to the mode's for this run: `bash(cargo test *)`, `bash(git push *)`, `jobs` ([the syntax](modes.md#rules)). Repeat them. A deny refuses in every mode, `-y` included. |
 | `-y, --yes` | `--mode bypass`: allow commands and file changes without asking. Also `--yolo` and `--dangerously-skip-permissions`. Giving it with `--mode` is a usage error. |
 | `-p, --print` | Run the prompt as one task and exit, as `exec` does. |
 | `-c, --continue` | Go on with the newest session of this directory, as `resume --last` does. |
@@ -79,7 +79,7 @@ interface cannot start) it is a usage error pointing to `llx exec`, which prints
 - Under the prompt, a list shows the session, the agents it started (as a branch) and the jobs running; with no agents it is gone. Time and tokens follow each row's status. The other sessions take one line, `← 2 other sessions (1 working, 1 waiting for you)`.
 - ↓ from an empty prompt gives the list the keys: ↑↓ choose, Enter or → shows an agent's transcript, `x` stops an agent or a job, Esc or ← go back.
 - Each session gets a short title from its first task, made in the background by the same model at its lowest reasoning level (the task never waits for it), shown in the list and saved with the session.
-- A successful `apply_patch` shows an inline diff with old and new line numbers, context, and red and green bands that fill the row, also in the scrollback. Long lines wrap; large previews are bounded and marked when cut.
+- A `bash` call shows its command and the end of its output.
 - Markdown answers support tables with aligned columns, wrapped cells and inline styles. On very narrow terminals, cells are shown vertically.
 - Consecutive successful calls of the same tool are joined with `↳`; failures and questions stay distinct.
 
@@ -116,7 +116,7 @@ Typing `/` lists them. Tab completes the selected command (with a trailing space
 | `/mode [name]` (also `/permissions`) | Lists the [modes](modes.md) or switches to one. |
 | `/new` (also `/clear`) | Opens a new session and shows it, even while a task works; the old one goes on in the background. |
 | `/status` | The models, the workspace, the mode, the session |
-| `/rewind` (also `/undo`, or Esc Esc on an empty prompt) | Goes back to before one of the conversation's tasks: the files `apply_patch` changed (the agents' too; not what commands changed), the conversation (the task's words back in the prompt; the session's agents are let go), or both. |
+| `/rewind` (also `/undo`, or Esc Esc on an empty prompt) | Goes back in the conversation to before one of its tasks (one picker, "Rewind the conversation to before"): the task's words come back in the prompt and the session's agents are let go. The files stay as they are: nothing records what a command changed. |
 | `/diff` | The changes since the last commit, new files too. |
 | `/init` | Writes an `AGENTS.md` for the project. |
 | `/copy` | Copies the last answer that says something. |
@@ -168,7 +168,7 @@ llx reads instruction files, so a repository that already has them works as it i
 
 - your own, for every project: `~/.llx/AGENTS.md`;
 - the project's: in each directory from the git repository's root down to the workspace, the first of `AGENTS.override.md`, `AGENTS.md` and `CLAUDE.md`, root first, so a deeper file wins over a shallower one;
-- a directory below the workspace: its file comes with the result of the first `read` or `apply_patch` of a file there, and covers that directory's tree.
+- a directory below the workspace: its file is not in the context; the prompt tells the agent to read it before working there.
 
 A line that is only `@path` brings that file in (relative to the file, or `~/…`), three levels deep, each file once, as in CLAUDE.md. The task you give wins over every file. Each file is capped at 16 KiB and those read at the start at 32 KiB together, with a note when something was cut. They reach the agent in a context block with the environment: the workspace, the OS, the date and the mode.
 

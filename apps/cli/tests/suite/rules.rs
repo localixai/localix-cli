@@ -51,7 +51,7 @@ fn an_allowed_command_chained_to_another_is_refused() {
         "echo hi > made.txt",
     ] {
         let model = running(command);
-        let args = ["exec", "--mode", "plan", "--allow", "bash(echo *)", "x"];
+        let args = ["exec", "--allow", "bash(echo *)", "x"];
         let out = exec(&home, &model, &args, "");
         assert_eq!(
             out.status.code(),
@@ -92,7 +92,7 @@ fn an_allowed_git_push_cannot_be_told_a_program_to_run() {
     let home = Home::new();
     repository_with_a_program(&home);
     let model = running("git push --receive-pack=./receive.sh origin HEAD:refs/heads/x");
-    let args = ["exec", "--mode", "plan", "--allow", "bash(git push *)", "x"];
+    let args = ["exec", "--allow", "bash(git push *)", "x"];
     let out = exec(&home, &model, &args, "");
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
     assert!(!home.path().join("made.txt").exists(), "the program ran");
@@ -108,7 +108,7 @@ fn an_allowed_git_push_still_pushes() {
     let home = Home::new();
     repository_with_a_program(&home);
     let model = running("git push -u origin HEAD:refs/heads/x");
-    let args = ["exec", "--mode", "plan", "--allow", "bash(git push *)", "x"];
+    let args = ["exec", "--allow", "bash(git push *)", "x"];
     let out = exec(&home, &model, &args, "");
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
     assert!(home.path().join("remote.git/refs/heads/x").exists());
@@ -131,46 +131,10 @@ fn a_deny_rule_refuses_even_with_yes_and_names_itself() {
 }
 
 #[test]
-fn an_apply_patch_rule_allows_the_paths_it_names_and_no_others() {
-    let home = Home::new();
-    let model = Model::start(vec![
-        Reply::call(
-            "edit",
-            json!({"path": "docs/a.md", "old_string": "", "new_string": "a\n"}),
-        ),
-        Reply::call(
-            "edit",
-            json!({"path": "src/b.rs", "old_string": "", "new_string": "b\n"}),
-        ),
-        Reply::text("Done.\nRESULT: achieved"),
-    ]);
-    let out = exec(
-        &home,
-        &model,
-        &["exec", "--allow", "apply_patch(docs/**)", "x"],
-        "",
-    );
-    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
-    assert!(home.path().join("docs/a.md").exists());
-    assert!(!home.path().join("src/b.rs").exists());
-}
-
-#[test]
 fn plan_mode_stays_read_only_whatever_is_allowed() {
-    let home = Home::new();
-    let model = Model::start(vec![
-        Reply::call(
-            "edit",
-            json!({"path": "a.md", "old_string": "", "new_string": "a\n"}),
-        ),
-        Reply::text("Done.\nRESULT: achieved"),
-    ]);
-    let out = exec(
-        &home,
-        &model,
-        &["exec", "--mode", "plan", "--allow", "apply_patch", "x"],
-        "",
-    );
+    let (home, model) = (Home::new(), running("echo a > a.md"));
+    let args = ["exec", "--mode", "plan", "--allow", "bash", "x"];
+    let out = exec(&home, &model, &args, "");
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
     assert!(!home.path().join("a.md").exists());
 }
@@ -178,7 +142,7 @@ fn plan_mode_stays_read_only_whatever_is_allowed() {
 #[test]
 fn a_rule_that_cannot_be_read_is_not_ready() {
     let home = Home::new();
-    for rule in ["bash(echo *", "nosuchtool", "apply_patch(//etc/**)"] {
+    for rule in ["bash(echo *", "nosuchtool", "apply_patch"] {
         let model = running("echo hi");
         let out = exec(&home, &model, &["exec", "--allow", rule, "x"], "");
         assert_eq!(out.status.code(), Some(3), "{rule}");

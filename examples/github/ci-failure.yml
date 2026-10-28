@@ -56,7 +56,6 @@ jobs:
         with:
           model: anthropic/claude-haiku-5.5
           allow: bash
-          deny: apply_patch
           prompt: |
             Run $RUN (attempt $ATTEMPT) of this repository's tests failed on pull request #$PR. The
             working tree is the pull request's head. gh is signed in, read only.

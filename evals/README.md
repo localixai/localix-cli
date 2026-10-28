@@ -71,7 +71,7 @@ judges each the same way: the files the task keeps unchanged, then hidden tests
 cargo build --release
 python3 evals/arena/arena.py --agents llx,codex --model gpt-6-luna --effort low --repeat 5
 python3 evals/arena/arena.py --agents llx,codex --repeat 3 --record   # kept in benchmarks/arena/
-python3 evals/arena/arena.py --agents llx,codex --task phone-shop --model gpt-6-luna --repeat 2
+python3 evals/arena/arena.py --agents llx,codex --task phone-shop --repeat 5 --parallel --record   # every run at once
 ```
 
 Each run is a fresh copy of the fixture (a git repository, its packages installed) and a fresh home

@@ -4,7 +4,7 @@
 //! extraction call. The data is checked here; a mismatch goes back to the model to fix, and what
 //! is returned always matches the schema or the run fails.
 
-use contracts::tool::{Input, ToolSpec};
+use contracts::tool::ToolSpec;
 use serde_json::{Value, json};
 
 pub(crate) const TOOL: &str = "result";
@@ -18,13 +18,11 @@ pub(crate) fn spec(schema: &Value) -> ToolSpec {
             schema allows it and no value was shown). Call it once, when done, instead of \
             answering in text."
             .into(),
-        input: Input::Json(
-            json!({"type": "object", "required": ["data", "summary", "achieved"], "properties": {
-                "data": schema,
-                "summary": {"type": "string", "description": "One or two sentences for a person: what was found or done."},
-                "achieved": {"type": "boolean", "description": "Whether the goal was reached."}
-            }}),
-        ),
+        parameters: json!({"type": "object", "required": ["data", "summary", "achieved"], "properties": {
+            "data": schema,
+            "summary": {"type": "string", "description": "One or two sentences for a person: what was found or done."},
+            "achieved": {"type": "boolean", "description": "Whether the goal was reached."}
+        }}),
     }
 }
 

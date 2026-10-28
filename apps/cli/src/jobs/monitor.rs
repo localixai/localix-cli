@@ -23,10 +23,10 @@ pub(super) enum Ended {
     Stopped,
 }
 
-/// Run `command` in `dir` with `env` until it exits, `deadline` passes or `stopped` says so; give each
-/// batch of lines to `lines`.
+/// Run `command` in `dir` with `env`, in the scope the gate allowed (read-only: in the sandbox),
+/// until it exits, `deadline` passes or `stopped` says so; give each batch of lines to `lines`.
 pub(super) fn watch(
-    command: &str,
+    (command, scope, kept): (&str, tools::shell::Scope, &[std::path::PathBuf]),
     dir: &Path,
     env: tools::shell::Env,
     deadline: Instant,
@@ -35,7 +35,8 @@ pub(super) fn watch(
 ) -> Result<Ended, String> {
     // The tools' own way to run a command: a session of its own, only the standard streams
     // inherited (a monitor lives long: a descriptor inherited by chance would stay open as long).
-    let mut shell = tools::shell::shell(command);
+    let (mut shell, _held) = tools::shell::scoped(command, scope, kept)
+        .map_err(|error| format!("the command could not start: {error}"))?;
     shell
         .current_dir(dir)
         .stdin(Stdio::null())

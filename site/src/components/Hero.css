@@ -1,89 +1,81 @@
-/* The hero: one sentence, the install, and the thing itself: an agent's calls and what they
-   printed, the width of the page. Left-aligned on one edge; the only motion is the first paint. */
+/* The landing, one screen: the copy on the left with one word on a white chip, the recorded run
+   on the right, larger, since it is the product. Stacked on a phone. The only motion is the
+   first paint. */
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  justify-items: start;
-  padding-block: clamp(3rem, 8vw, 6rem) clamp(3rem, 7vw, 5.5rem);
+  gap: clamp(2.5rem, 7vw, 4rem);
+  padding-block: clamp(2rem, 6vw, 4rem) clamp(2.5rem, 7vw, 4rem);
 }
 h1 {
-  max-width: 12.5em;
   margin: 0;
-  font: 700 clamp(2.5rem, 1.2rem + 5.2vw, 5.25rem) / 0.98 var(--display);
-  letter-spacing: -0.055em;
+  font: 700 clamp(2.5rem, 1.4rem + 5.2vw, 4.5rem) / 0.98 var(--display);
+  letter-spacing: -0.05em;
   text-wrap: balance;
 }
+.hero-chip {
+  display: inline-block;
+  padding: 0 0.1em 0.04em;
+  border-radius: 0.08em;
+  background: var(--white);
+  color: var(--black);
+  transform: rotate(-1.5deg);
+}
 .lede {
-  max-width: 36rem;
-  margin: clamp(1.5rem, 3vw, 2rem) 0 0;
+  max-width: 32em;
+  margin: clamp(1.25rem, 2.2vw, 2rem) 0 0;
   color: var(--soft);
   font-size: var(--step-1);
   line-height: 1.55;
+  text-wrap: pretty;
 }
-.lede code {
-  color: var(--white);
-  font: 0.9em var(--mono);
+.hero-copy .install {
+  margin-top: clamp(1.5rem, 3vw, 2.25rem);
 }
-.hero-start {
-  display: flex;
-  max-width: 100%;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.75rem;
-  align-items: center;
-  margin-top: clamp(1.75rem, 3vw, 2.25rem);
-}
-.hero-start .install-box {
-  margin-top: 0;
-}
-.hero-docs {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2.75rem;
-  color: var(--white);
-  font-size: 0.9375rem;
-  font-weight: 500;
-  text-decoration: underline;
-  text-decoration-color: var(--faint);
-  text-underline-offset: 5px;
-  transition: text-decoration-color 160ms ease;
-}
-.hero-docs:hover {
-  text-decoration-color: currentColor;
-}
-
-.hero-session {
-  justify-self: stretch;
-  margin: clamp(3rem, 6vw, 4.5rem) 0 0;
-}
-.hero-session .term {
-  padding: clamp(1.1rem, 2.5vw, 1.75rem);
-  font-size: clamp(0.78rem, 0.7rem + 0.28vw, 0.9rem);
-  line-height: 1.8;
-}
-/* On a phone a long command wraps under its prompt instead of running off the frame. */
-.term-wrap .code-line {
-  padding-left: 2ch;
-  text-indent: -2ch;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.term-wrap .term-out {
-  padding-left: 0;
-  text-indent: 0;
-}
-.hero-session figcaption {
-  margin-top: 0.85rem;
+.hero-under {
+  margin: 0.9rem 0 0;
   color: var(--muted);
-  font-size: var(--step-s);
+  font: 400 var(--step-s) / 1.5 var(--mono);
+}
+.hero-under a {
+  color: var(--soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 160ms ease;
+}
+.hero-under a:hover {
+  color: var(--white);
+}
+.hero-demo {
+  min-width: 0;
+  margin: 0;
 }
 
-/* First paint, the one moment of motion: the words, then the session under them. */
-.hero > * {
+/* Side by side on wide screens, the hero filling the window between the bar and the footer. */
+@media (min-width: 60rem) {
+  .hero {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+    column-gap: clamp(3rem, 5vw, 6rem);
+    align-items: center;
+    min-height: calc(100svh - 10rem);
+  }
+  h1 {
+    font-size: clamp(2.75rem, 4.3vw, 5.5rem);
+  }
+}
+
+.hero-copy > *,
+.hero-demo {
   animation: rise 700ms var(--ease-out) both;
 }
 .hero .lede { animation-delay: 70ms; }
-.hero .hero-start { animation-delay: 120ms; }
-.hero .hero-session { animation-delay: 200ms; }
+.hero .install { animation-delay: 120ms; }
+.hero .hero-under { animation-delay: 160ms; }
+.hero .hero-demo { animation-delay: 220ms; }
 @keyframes rise {
   from { opacity: 0; transform: translateY(12px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-copy > *,
+  .hero-demo { animation: none; }
 }

@@ -1,46 +1,56 @@
-/* The recorded session in a plain terminal. */
+/* The recorded run in a real terminal, almost the page's black, edged by a hairline. Its palette
+   is player.ts's THEME. */
 .film {
   overflow: hidden;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
   border-radius: 14px;
-  background: #0f0f0f;
-  box-shadow:
-    0 1px 0 rgb(255 255 255 / 0.03) inset,
-    0 40px 90px -40px rgb(0 0 0 / 0.95);
+  background: #090909;
 }
-.film .ap-wrapper {
-  background: transparent;
-}
-.asciinema-player-theme-llx {
-  --term-color-foreground: #e6e6e6;
-  --term-color-background: #0f0f0f;
-  --term-color-0: #1a1a1a;
-  --term-color-1: #ef7a6d;
-  --term-color-2: #8bd49c;
-  --term-color-3: #e7c97a;
-  --term-color-4: #8fb6e8;
-  --term-color-5: #c3a6f0;
-  --term-color-6: #7fd0d6;
-  --term-color-7: #cfcfcf;
-  --term-color-8: #6b6b6b;
-  --term-color-9: #f39185;
-  --term-color-10: #a3e0b1;
-  --term-color-11: #f0d897;
-  --term-color-12: #a9c8f0;
-  --term-color-13: #d3bdf5;
-  --term-color-14: #9adde2;
-  --term-color-15: #ffffff;
+.film .xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
-/* One quiet line under the film says what it shows. */
+/* One quiet line under it: the chapters, which jump to a command, and play or pause. */
 .demo-caption {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem 0.75rem;
   justify-content: space-between;
-  margin: 0.9rem 0.25rem 0;
+  align-items: center;
+  margin: 0.75rem 0.25rem 0;
   color: var(--muted);
   font: 400 0.8125rem / 1.5 var(--mono);
 }
-.demo-caption code {
+.film-chapters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+}
+.demo-caption button {
+  min-height: 2rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+.demo-caption button:hover,
+.demo-caption button[aria-current] {
+  color: var(--white);
+}
+.demo-caption .film-toggle {
+  min-width: 4.5ch;
+  text-align: right;
   color: var(--soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.demo-caption button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }

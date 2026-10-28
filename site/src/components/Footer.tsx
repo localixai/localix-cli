@@ -9,7 +9,6 @@ export function Footer() {
         <a href={DOCS}>Docs</a>
         <a href={GITHUB}>GitHub</a>
         <a href={`${GITHUB}/blob/main/CHANGELOG.md`}>Changelog</a>
-        <a href={`${GITHUB}/blob/main/SECURITY.md`}>Security</a>
       </nav>
     </footer>
   );

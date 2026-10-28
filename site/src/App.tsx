@@ -1,7 +1,7 @@
 import { Footer } from './components/Footer';
 import { Hero } from './components/Hero';
+import { Loop } from './components/Loop';
 import { Nav } from './components/Nav';
-import { Blocks, Own, Pipeline } from './components/Sections';
 
 export function App() {
   return (
@@ -9,9 +9,7 @@ export function App() {
       <Nav />
       <main id="main">
         <Hero />
-        <Blocks />
-        <Pipeline />
-        <Own />
+        <Loop />
       </main>
       <Footer />
     </>

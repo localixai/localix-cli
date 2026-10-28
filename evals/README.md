@@ -55,3 +55,26 @@ A task in `tasks.json` has an `id`, a `kind` (`code`) and a `goal`. It can also 
 | plan-csv | code | `--mode plan` with no terminal: a feature planned from reading the code (a CSV option where item names hold commas), answered as a list that names what only reading finds (the test file `test_report.py`, the header `item,qty,price,value`) and its assumptions, and no file changed |
 
 Add a task when a real failure shows something general the suite does not cover yet. Keep its fixture tiny and limited to the standard library, and make its `check` pass only for a correct result. Do not add one that only rewards wording.
+
+## The arena: llx beside other agents
+
+`evals/arena/arena.py` gives one reference task (`ledger-web`: a Bun, React and Vite app whose CSV
+report misreads its spec) to llx and to Codex on the same model and level, and judges each the same
+way: the visible tests unchanged, then hidden tests (`evals/arena/hidden/`) copied in only after the
+agent is done, `tsc` and `vite build` (`evals/arena/check.sh`).
+
+```bash
+cargo build --release
+python3 evals/arena/arena.py --agents llx,codex --model gpt-6-luna --effort low --repeat 5
+python3 evals/arena/arena.py --agents llx,codex --repeat 3 --record   # kept in benchmarks/arena/
+```
+
+Each run is a fresh copy of the fixture (a git repository, its packages installed) and a fresh home
+of its own beside it: only the ChatGPT sign-in and the model catalog are copied in (llx's, Codex's),
+a sign-in the run refreshed goes back to yours, and the home is removed after the run, so no session,
+memory or setting of yours or of an earlier run is there. Both agents use the ChatGPT sign-in, so a
+run costs no API money; the cost shown is what the same tokens would cost at the API's prices. Codex
+reports one turn per run, and reads several files in one command: compare pass, time, tokens and
+cost, not turns or calls. `summary.json` names the hidden tests' SHA-256, so runs on another version
+of them do not compare. Claude Code takes part with a configuration directory of its own, signed in
+once: `CLAUDE_CONFIG_DIR=~/.cache/llx-arena/claude-config claude /login`.

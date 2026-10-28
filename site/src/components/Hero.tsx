@@ -12,7 +12,7 @@ export function Hero() {
           <span className="hero-chip">Ultrafast</span>, lightweight agent runtime
         </h1>
         <p className="lede">
-          One small binary that Claude Code, Codex, a script or CI calls from its shell: a task done on any model, a
+          One small binary that Claude Code, another agent, a script or CI calls from its shell: a task done on any model, a
           choice made in a second.
         </p>
         <InstallCommand tabs={INSTALL} />

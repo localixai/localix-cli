@@ -180,7 +180,7 @@ fn a_task_keeps_what_it_did_each_call_and_turn_with_its_time() {
 #[test]
 fn on_a_github_runner_the_trace_cannot_issue_workflow_commands() {
     // A file or a model's answer can hold `::add-mask::` or `##[add-matcher]`: the runner reads
-    // such a line on either stream as a command (openai/codex-action#187). The trace on stderr
+    // such a line on either stream as a command. The trace on stderr
     // is what is guarded here; stdout is pinned below to stay as it is.
     let err = Captured::default();
     let mut output = Output::with(

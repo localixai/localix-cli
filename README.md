@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  One binary under 4 MB that Claude Code, Codex, a script or CI calls from its shell: helpers on any model, one task for CI, and a choice made in a second. With a minimal agent of its own.
+  One binary under 4 MB that Claude Code, another agent, a script or CI calls from its shell: helpers on any model, one task for CI, and a choice made in a second. With a minimal agent of its own.
 </p>
 
 <p align="center">
@@ -39,7 +39,7 @@ llx is a minimal agent runtime: a model in a loop over a few plain tools, on any
 | --- | --- | --- |
 | **You** | `llx` | A minimal agent at your terminal, with six tools: `read`, `edit`, `bash`, `ask`, `agents`, `jobs` |
 | **Your scripts and CI** | `llx exec --json --schema …` | One task, then exit: JSON events, an answer in the shape you define, exit codes to branch on |
-| **Your other agents** | `llx exec` · `llx decide` | Commands they run from their shell: helpers on any model, quick decisions. They extend Claude Code or Codex, never replace them |
+| **Your other agents** | `llx exec` · `llx decide` | Commands they run from their shell: helpers on any model, quick decisions. They extend the agent you use, never replace it |
 
 <table>
   <tr>

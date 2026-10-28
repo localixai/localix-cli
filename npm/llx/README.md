@@ -7,7 +7,7 @@ installs it for your platform (macOS arm64 and x64, Linux x64).
 npm install -g @localixai/llx     # then: llx
 ```
 
-Another agent (Claude Code, Codex, a script) calls llx from its shell: `llx exec` for a helper
+Another agent (Claude Code, another agent, a script) calls llx from its shell: `llx exec` for a helper
 on any model, `llx decide` for a quick choice.
 
 Docs: <https://github.com/rsaryev/llx>

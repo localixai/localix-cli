@@ -109,7 +109,7 @@ pub(crate) enum Runner {
     Plain,
     /// GitHub Actions takes a line that begins `::` or `##[` as a workflow command, on either
     /// stream. Only the trace on stderr is guarded: a file or an answer quoted in it must not be
-    /// one (openai/codex-action#187). Stdout is the answer and the `--json` data, byte-exact for
+    /// one, as a runner reads such a line as a command. Stdout is the answer and the `--json` data, byte-exact for
     /// pipes: a caller that lets it reach the runner's log writes it to a file instead.
     GitHub,
 }

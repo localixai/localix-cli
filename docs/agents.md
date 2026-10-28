@@ -1,6 +1,6 @@
 # llx in other agents
 
-llx extends the agent you already use (Claude Code, Codex, a script of yours): it does not replace it. Your agent stays in charge, thinks, edits and checks; it calls llx from its own shell for what it lacks or what costs too much. Each block is a command, so the agent composes them as its task needs, and its own permission prompt shows every call.
+llx extends the agent you already use (Claude Code, another agent, a script of yours): it does not replace it. Your agent stays in charge, thinks, edits and checks; it calls llx from its own shell for what it lacks or what costs too much. Each block is a command, so the agent composes them as its task needs, and its own permission prompt shows every call.
 
 | Block | What your agent gets | Command |
 | --- | --- | --- |

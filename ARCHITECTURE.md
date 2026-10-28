@@ -12,8 +12,8 @@ test can state it, and the test comes with the rule.
 Sources: matklad's ARCHITECTURE.md and "Large Rust Workspaces", rust-analyzer's architecture and
 style guides, the Rust Design Patterns' anti-patterns, corrode.dev, BurntSushi on unwrap,
 sans-IO (quinn-proto, Firezone), ports and adapters, the Rust API Guidelines, LSP and JSON-RPC
-2.0, the clippy configurations of ruff, uv, zed, tikv and rust-analyzer, Codex (`codex-rs`: its protocol crates, app-server client, TUI boundary check,
-workspace lints) and Localix (rule ids, ratchets, poke-then-pull sync).
+2.0, the clippy configurations of ruff, uv, zed, tikv and rust-analyzer, an agent server's protocol crates, app-server client, TUI boundary check and workspace lints,
+and Localix (rule ids, ratchets, poke-then-pull sync).
 
 ## Bird's-eye view
 
@@ -70,7 +70,7 @@ every new file already goes where its target crate will be.
 - **L7** _checked_ on the sources (and with the crate, once it is one): the interface (the
   terminal's `tui`) depends only on `client` and `protocol`: never on
   the agent, tools, providers, the session store or the server, nor on the app's other modules.
-  What it needs to show, the protocol carries (Codex's `verify_tui_core_boundary`).
+  What it needs to show, the protocol carries.
 - **L8** _checked_ for the client: the server is the only crate that serves the protocol and
   the only one that knows every package; the client knows only the protocol, and is the only
   one that knows the socket.
@@ -170,8 +170,7 @@ every new file already goes where its target crate will be.
   grows by optional fields and new methods; both sides ignore what they do not know. A breaking
   change is a new protocol version, and a build mismatch restarts an idle daemon.
 - **W4**: one client interface, two transports: in process (channels) and the socket, with the
-  same frames, so every in-process test covers the daemon's path (Codex
-  `AppServerClient::{InProcess, Remote}`).
+  same frames, so every in-process test covers the daemon's path.
 - **W5**: a question the server asks a person belongs to the session: sent to every attached
   client, the first answer wins, `resolved` tells the rest, replayed on attach, aborted when its
   task stops.

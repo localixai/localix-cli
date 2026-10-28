@@ -5,7 +5,7 @@ and sign-ins. `llx` at a terminal is a client: it
 draws, reads keys, and speaks to the daemon over a socket. Several terminals, several projects,
 one place where work goes on when a terminal closes.
 
-Sources read: Codex's app-server (`codex-rs/app-server*`, its daemon and TUI client), Localix's API
+Sources read: an agent's app-server (its daemon and TUI client), Localix's API
 server and UI (`docs/internals/architecture*`, `client-server-sync.md`, the wake queue), and llx's
 own seam (`apps/cli/src/tui/event.rs`, `tui/ui.rs`, `desk.rs`).
 
@@ -13,17 +13,17 @@ own seam (`apps/cli/src/tui/event.rs`, `tui/ui.rs`, `desk.rs`).
 
 | Decision | Taken from | Why |
 |---|---|---|
-| One daemon per user, started by the first client, found at a fixed socket path; a probe with a short timeout, else spawn | Codex (`daemon_auto_start`, 50 ms probe) | No setup step; a second terminal attaches |
-| Unix socket in a `0700` directory, socket `0600`, no token; `flock` against a second daemon | Codex | Same-user only, std only |
-| One client interface, two transports: in process (channels) and remote (socket) | Codex (`AppServerClient::{InProcess, Remote}`) | `exec`, tests and `--no-daemon` keep working with no socket |
-| A request the daemon asks a person (approval, question, choice, a line) belongs to the session, not the client: sent to every attached client, first answer wins, `resolved` tells the others; replayed to a client that attaches; aborted when the task stops | Codex (server requests), Localix (HITL replay) | A closed terminal never loses a question; two terminals never both answer |
+| One daemon per user, started by the first client, found at a fixed socket path; a probe with a short timeout, else spawn | An agent app-server (a 50 ms probe) | No setup step; a second terminal attaches |
+| Unix socket in a `0700` directory, socket `0600`, no token; `flock` against a second daemon | An agent app-server | Same-user only, std only |
+| One client interface, two transports: in process (channels) and remote (socket) | An agent app-server's client | `exec`, tests and `--no-daemon` keep working with no socket |
+| A request the daemon asks a person (approval, question, choice, a line) belongs to the session, not the client: sent to every attached client, first answer wins, `resolved` tells the others; replayed to a client that attaches; aborted when the task stops | An agent app-server (server requests), Localix (HITL replay) | A closed terminal never loses a question; two terminals never both answer |
 | The person's input goes to a queue on the daemon (the lane's queue), not a reply channel held by the UI | Localix (wake queue), llx's own `packages/queue` | The daemon owns all state; the client only shows it |
 | A bounded per-session event ring with a cursor; a client that attaches replays after its cursor, and a gap means "read again" | Localix (`epoch:seq`, `transport.gap`) | Reattach without a durable log |
 | Live-only events (a hands' step) are never replayed | Localix (replay tiers) | Replaying deltas corrupts what is drawn |
-| A slow client is cut off, not waited for | Codex, Localix | The daemon never blocks on a terminal |
-| Session settings (directory, environment, mode, model) live on the session; the client gives them when it opens one | Codex (thread params), Localix (session cwd) | A lane is a project; two clients, two projects |
-| Signals never interrupt a task: Ctrl-C becomes `session/interrupt` | Codex | One daemon, many terminals |
-| No idle exit: the daemon lives until stopped | Codex | Schedules and monitors outlive every terminal |
+| A slow client is cut off, not waited for | An agent app-server, Localix | The daemon never blocks on a terminal |
+| Session settings (directory, environment, mode, model) live on the session; the client gives them when it opens one | An agent app-server (thread params), Localix (session cwd) | A lane is a project; two clients, two projects |
+| Signals never interrupt a task: Ctrl-C becomes `session/interrupt` | An agent app-server | One daemon, many terminals |
+| No idle exit: the daemon lives until stopped | An agent app-server | Schedules and monitors outlive every terminal |
 
 What we do not take: WebSocket framing (newline-delimited JSON is enough on a local socket, and
 adds no dependency), schema generation, experimental API gating, an updater loop (a version

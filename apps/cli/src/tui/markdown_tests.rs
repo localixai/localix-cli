@@ -47,14 +47,14 @@ See [the docs](https://llx.sh/docs) or https://llx.sh.\n\n---\n\nEnd.";
 
 #[test]
 fn tables_keep_columns_rows_and_inline_styles() {
-    let text = "| | Codex | Our edit |\n|---|---|---|\n| Format | **Patch** | `exact replacement` |\n| Operations | creation | replacement |\n\nAfter the table.";
+    let text = "| | Theirs | Our edit |\n|---|---|---|\n| Format | **Patch** | `exact replacement` |\n| Operations | creation | replacement |\n\nAfter the table.";
     let rows = render(text, 60);
     let screen = shown(text, 60);
     assert!(screen.contains("│"), "{screen}");
     assert!(!screen.contains("|---|"), "{screen}");
     let header = rows
         .iter()
-        .position(|row| style::plain(row).contains("Codex"))
+        .position(|row| style::plain(row).contains("Theirs"))
         .unwrap();
     let format = rows
         .iter()

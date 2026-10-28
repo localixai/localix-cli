@@ -14,6 +14,7 @@ fn a_conversation_goes_out_in_the_wire_format_with_cache_marks() {
             Message::Assistant {
                 text: None,
                 calls: vec![call],
+                carried: vec![],
             },
             Message::ToolResult {
                 id: "c1".into(),

@@ -257,9 +257,14 @@ pub(crate) fn whole(tokens: f64) -> u64 {
 pub(crate) fn tokens(message: &Message) -> u64 {
     let chars = match message {
         Message::System(text) | Message::User(text) => text.len(),
-        Message::Assistant { text, calls } => {
+        Message::Assistant {
+            text,
+            calls,
+            carried,
+        } => {
             let arguments: usize = calls.iter().map(|c| c.arguments.to_string().len()).sum();
-            text.as_deref().map_or(0, str::len) + arguments
+            let kept: usize = carried.iter().map(|kept| kept.to_string().len()).sum();
+            text.as_deref().map_or(0, str::len) + arguments + kept
         }
         Message::ToolResult { content, .. } => content.len(),
         Message::Image { .. } => return IMAGE,

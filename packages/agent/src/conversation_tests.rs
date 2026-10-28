@@ -108,6 +108,7 @@ fn calls_left_unanswered_are_closed_before_the_conversation_goes_on() {
     conversation.push(Message::Assistant {
         text: None,
         calls: vec![call("a"), call("b")],
+        carried: vec![],
     });
     conversation.failure("a", "refused");
     conversation.close_open_calls();

@@ -54,6 +54,7 @@ impl Chat for ChatModel {
         Ok(Completion {
             text,
             calls,
+            carried: vec![],
             usage: Usage {
                 model: value["model"].as_str().unwrap_or(model).to_string(),
                 cost: value
@@ -152,7 +153,8 @@ fn wire(message: &Message) -> Value {
     match message {
         Message::System(text) => json!({"role": "system", "content": text}),
         Message::User(text) => json!({"role": "user", "content": text}),
-        Message::Assistant { text, calls } => {
+        // What another provider carries is its own: chat completions has no place for it.
+        Message::Assistant { text, calls, .. } => {
             let mut out = json!({"role": "assistant", "content": text});
             if !calls.is_empty() {
                 out["tool_calls"] = calls

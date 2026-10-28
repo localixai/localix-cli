@@ -15,6 +15,9 @@ pub enum Message {
     Assistant {
         text: Option<String>,
         calls: Vec<ToolCall>,
+        /// What the provider asked to have sent back with this turn, as it gave it, opaque to
+        /// everyone else: a model's reasoning, sealed, that it would otherwise lose between turns.
+        carried: Vec<Value>,
     },
     /// What a tool call returned, for the call with `id`; `failed` when it did nothing useful.
     ToolResult {
@@ -44,6 +47,8 @@ pub struct ToolCall {
 pub struct Completion {
     pub text: Option<String>,
     pub calls: Vec<ToolCall>,
+    /// What goes back with this turn (`Message::Assistant::carried`).
+    pub carried: Vec<Value>,
     pub usage: Usage,
 }
 
@@ -53,6 +58,7 @@ impl Completion {
         Message::Assistant {
             text: self.text.clone(),
             calls: self.calls.clone(),
+            carried: self.carried.clone(),
         }
     }
 }

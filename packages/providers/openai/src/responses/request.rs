@@ -10,7 +10,9 @@ use serde_json::{Value, json};
 pub(crate) fn body(selection: &Selection, request: Request) -> Value {
     let mut body = json!({
         "model": selection.model().id,
-        "input": request.conversation.iter().flat_map(items).collect::<Vec<_>>(),
+        "input": (request.conversation.iter())
+            .flat_map(|message| items(message, &selection.model().id))
+            .collect::<Vec<_>>(),
         "store": false,
         "stream": true,
         "include": [],
@@ -25,6 +27,8 @@ pub(crate) fn body(selection: &Selection, request: Request) -> Value {
             effort.name()
         };
         body["reasoning"] = json!({"effort": name});
+        // The reasoning comes back sealed, to be sent with the next request (`items`).
+        body["include"] = json!(["reasoning.encrypted_content"]);
     }
     if !request.tools.is_empty() {
         body["tools"] = request.tools.iter().map(function).collect();
@@ -61,15 +65,24 @@ fn cache_key(selection: &Selection, request: &Request) -> String {
     provider_kit::cache::key(model.chain(tools).chain(rules))
 }
 
-/// A message as the Responses API's input items.
-pub(super) fn items(message: &Message) -> Vec<Value> {
+/// A message as the Responses API's input items, for `model`: a reasoning another model sealed
+/// (before `/model` switched) is left out, as that model alone can open it.
+pub(super) fn items(message: &Message, model: &str) -> Vec<Value> {
     let text = |role: &str, kind: &str, text: &str| json!({"type": "message", "role": role, "content": [{"type": kind, "text": text}]});
     match message {
         Message::System(rules) => vec![text("developer", "input_text", rules)],
         Message::User(said) => vec![text("user", "input_text", said)],
-        Message::Assistant { text: said, calls } => said
-            .iter()
-            .map(|said| text("assistant", "output_text", said))
+        Message::Assistant {
+            text: said,
+            calls,
+            carried,
+        } => (carried.iter())
+            .filter(|kept| kept["model"] == model)
+            .map(|kept| kept["item"].clone())
+            .chain(
+                said.iter()
+                    .map(|said| text("assistant", "output_text", said)),
+            )
             .chain(calls.iter().map(|call| {
                 let arguments = (call.arguments.as_str())
                     .map_or_else(|| call.arguments.to_string(), str::to_string);

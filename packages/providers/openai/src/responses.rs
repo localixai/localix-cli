@@ -10,7 +10,7 @@ use contracts::chat::{Chat, ChatError, Completion, Request, ToolCall, Usage};
 use provider_kit::http::{Http, HttpError};
 use provider_kit::retry::{Attempt, PAUSE, TRANSIENT, retried};
 use provider_kit::{App, oauth, sse};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::auth;
 use crate::tokens::{self, Tokens};
@@ -206,6 +206,13 @@ pub(crate) fn read(body: &str, model: &str) -> Result<Completion, ChatError> {
                             .filter_map(|part| part["text"].as_str().map(str::to_string)),
                     ),
                     Some("function_call") => completion.calls.extend(call(item)),
+                    // Nothing is stored at the backend: only a sealed reasoning can go back, and
+                    // only to the model that sealed it.
+                    Some("reasoning") if item["encrypted_content"].is_string() => {
+                        completion
+                            .carried
+                            .push(json!({"model": model, "item": item}));
+                    }
                     _ => {}
                 }
             }

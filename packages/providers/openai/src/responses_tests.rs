@@ -118,6 +118,7 @@ fn conversation() -> Vec<Message> {
                 name: "read".into(),
                 arguments: json!({"path": "a"}),
             }],
+            carried: vec![],
         },
         Message::ToolResult {
             id: "c1".into(),
@@ -350,10 +351,13 @@ fn a_picture_goes_in_as_a_user_message_with_an_input_image() {
         width: 2,
         height: 1,
     };
-    let item = &items(&Message::Image {
-        caption: "The screenshot".into(),
-        image,
-    })[0];
+    let item = &items(
+        &Message::Image {
+            caption: "The screenshot".into(),
+            image,
+        },
+        "gpt-6-sol",
+    )[0];
     assert_eq!(item["role"], "user");
     assert_eq!(item["content"][0]["text"], "The screenshot");
     assert_eq!(item["content"][1]["type"], "input_image");
@@ -434,4 +438,61 @@ fn sessions_with_the_same_prompt_and_tools_share_the_prompt_cache_and_others_do_
     assert_eq!(key(&tools, "rules"), key(&tools, "rules"));
     assert_ne!(key(&tools, "rules"), key(&tools[..1], "rules"));
     assert_ne!(key(&tools, "rules"), key(&tools, "other rules"));
+}
+
+#[test]
+fn the_models_reasoning_goes_back_with_the_next_request() {
+    // With nothing stored at the backend, a turn's reasoning is lost unless it is sent back: the
+    // model would think the task through again at every turn.
+    let reasoning = json!({"type": "reasoning", "id": "rs_1", "summary": [],
+        "encrypted_content": "sealed"});
+    let reply = streamed(&[
+        json!({"type": "response.output_item.done", "item": reasoning}),
+        json!({"type": "response.output_item.done", "item": {"type": "reasoning", "id": "rs_2"}}),
+        json!({"type": "response.output_item.done", "item": {"type": "function_call",
+            "call_id": "c2", "name": "read", "arguments": "{}"}}),
+        completed(),
+    ]);
+    let completion = read(&reply, "gpt-6-sol").unwrap();
+    let conversation = vec![
+        Message::User("goal".into()),
+        completion.message(),
+        Message::ToolResult {
+            id: "c2".into(),
+            content: "text".into(),
+            failed: false,
+        },
+    ];
+    let request = Request {
+        conversation: &conversation,
+        tools: &[],
+        may_call: true,
+    };
+    let body = body(&Selection::new(entry("gpt-6-sol")), request);
+    assert_eq!(body["include"], json!(["reasoning.encrypted_content"]));
+    let input = body["input"].as_array().unwrap();
+    // Only the sealed one: an item the backend did not keep cannot be named by its id alone.
+    assert_eq!(input[1], reasoning);
+    assert_eq!(input[2]["type"], "function_call");
+    assert_eq!(input.len(), 4);
+
+    // After `/model` switched, the reasoning another model sealed stays out: it cannot open it.
+    let request = Request {
+        conversation: &conversation,
+        tools: &[],
+        may_call: true,
+    };
+    let other = super::body(&Selection::new(entry("gpt-6-luna")), request);
+    assert_eq!(other["input"][1]["type"], "function_call");
+
+    // A model that does not reason is asked for nothing.
+    let bare = Request {
+        conversation: &[],
+        tools: &[],
+        may_call: true,
+    };
+    assert_eq!(
+        super::body(&Selection::new(entry("gpt-next")), bare)["include"],
+        json!([])
+    );
 }

@@ -22,6 +22,7 @@ fn reading(reads: usize, chars: usize, same: bool) -> Conversation {
                 name: "look".into(),
                 arguments: json!({"path": path}),
             }],
+            carried: vec![],
         });
         conversation.result(
             &format!("c{n}"),
@@ -160,6 +161,7 @@ fn large_arguments_go_when_outputs_are_not_enough() {
                 name: "write".into(),
                 arguments: json!({"path": format!("f{n}"), "text": "y".repeat(4_000)}),
             }],
+            carried: vec![],
         });
         conversation.result(&format!("w{n}"), ToolOutput::default());
     }

@@ -17,7 +17,7 @@ and Localix (rule ids, ratchets, poke-then-pull sync).
 
 ## Bird's-eye view
 
-llx is a model in a loop over six tools, and a seventh, `exec`, a script through which the model reaches `read` and `bash` (X1-X6). The loop decides; it knows no technology. Tools, stores and providers are technology behind ports. One composition root wires
+llx is a model in a loop over four tools: `bash`, through which it reads, searches, changes files and runs the checks (B1-B4), `ask`, `agents` and `jobs`. The loop decides; it knows no technology. Tools, stores and providers are technology behind ports. One composition root wires
 them for a session. A session runs in a server, and an interface shows it through a protocol,
 in the same process today, over a socket once the daemon lands (`docs/daemon.md`). Nothing a
 person sees is known below the interface; nothing a model or a tool does is known above the
@@ -124,15 +124,15 @@ every new file already goes where its target crate will be.
 - **A1**: a tool asks the `Gate` before an effect outside the conversation, with a one-line
   summary that leaves nothing out. Only the app answers the gate; a tool never approves itself.
 - **A2**: a tool asks the person only through `Person`, answered only by the app.
-- **A3**: paths go through `Workspace` (`readable`, `writable`); a path the model wrote is never
-  opened without it.
+- **A3**: a path the model wrote (a command's `workdir`) goes through `Workspace` (`readable`),
+  never opened without it.
 - **A4**: one source of truth for models: every model fact comes from `providers/models`. No
   provider keeps its own list; no app code hard-codes a model, window or level. A default is a
   policy the app states by a catalog id.
 - **A5**: how to call a provider (wire, auth, retries) lives in its package; which provider a
   choice uses, in `apps/cli/src/providers.rs` (the server's, later) only.
 - **A6**: a data file (JSON, TOML) lives in the package that owns its meaning.
-- **A7**: a heavy dependency stays in the one adapter that needs it (TLS in the kit, QuickJS in `tools`); std first, and the release binary under 5 MiB.
+- **A7**: a heavy dependency stays in the one adapter that needs it (TLS in the kit); std first, and the release binary under 5 MiB.
 - **A8**, **A9**: (retired.)
 
 ## Composition rules (the apps)
@@ -147,9 +147,10 @@ every new file already goes where its target crate will be.
   one terminal of the daemon (or in sessions moved to the background) never holds another's.
 - **K4**: something that reaches a run from outside its calls is a kind in `arrivals.rs` (its
   policy and tag) posted to the lane's queue; the agent's inbox knows no source.
-- **K5**: a mode is a named set of rules (`allow`, `deny`), and nothing else: the built-in ones
-  (`default`, no rule; `plan`, `apply_patch` denied; `bypass`, everything allowed) and the person's,
-  from `<config>/llx/settings.json`, where one may replace a built-in. `--allow` and `--deny` add
+- **K5**: a mode is a named set of rules (`allow`, `deny`) and whether its commands may change
+  anything (`read_only`), and nothing else: the built-in ones (`default`, no rule; `plan`, read-only:
+  its commands run without asking, in the sandbox of B3; `bypass`, everything allowed) and the
+  person's, from `<config>/llx/settings.json`, where one may replace a built-in. `--allow` and `--deny` add
   to the mode's. A deny refuses in every mode; an allow runs without asking; what no rule settles
   is asked of the person, or refused when no one is there. Rules come from the command line and
   the person's settings only, never from the repository (a pull request would allow itself). A
@@ -182,38 +183,30 @@ every new file already goes where its target crate will be.
 - **W8**: one request's panic or failure never ends the server: it becomes that request's error.
 - **W9**: (retired.)
 
-## Script rules (`exec`)
+## Shell rules (`bash`)
 
-A model that writes one short script for a chain of calls (search, read what it found, keep what
-matters; run the checks, keep the failures) spends one turn where it would spend many, and sends
-back only what the answer needs. llx runs the script in process, on QuickJS, for about half a
-MiB.
+The model works as a person at a terminal does: it reads with `cat`, `sed -n` and `rg`, changes
+files with a heredoc or a short script, and runs the checks, chaining what does not need a result
+first into one command. One tool, the shell, does what a read tool, a patch tool and a script
+engine did, in fewer turns and fewer tokens (measured in `evals/arena`, `benchmarks/arena`).
 
-- **X1**: `exec` is a tool in `tools` (`tools/src/script/`). It runs JavaScript on QuickJS
-  (`rquickjs`, synchronous, no `futures`: R1), a fresh runtime for each call, with no file system,
-  network, process or clock of its own: a script reaches the world only through
-  `tools.<name>(args)`.
-- **X2**: the functions a script calls are the run's own tools, the same instances the agent
-  holds, given to `exec` as `&dyn Tool` by the composition root: a call from a script asks the
-  gate, goes through `Workspace`, is checkpointed for `/rewind` and brings a directory's
-  instructions exactly as a direct call does (A1, A3, L3: `exec` knows the `Tool` port, never
-  another tool). A script never reaches a tool the run does not offer, nor `exec` itself. The
-  model reaches `read` and `bash` only through a script; files change by `apply_patch`, a call of
-  its own as free text (X4), never from a script, where a patch's quotes, backticks and `${`
-  would have to be escaped.
-- **X3**: a script runs within the run's limits: its stop and deadline reach the engine's
-  interrupt (C2, R10), its memory is bounded, and what it returns or prints is cut as a command's
-  output is. A script that throws is a failed call with its message, never the run's end.
-- **X4**: its input is the script's text, not JSON (no string to escape): where a provider takes a
-  tool of free text (the Responses API's custom tools) it is offered so, with a grammar; elsewhere
-  as a function with one string argument. `ToolSpec` says which; the providers render it (L5:
-  the agent knows neither).
-- **X5**: what a script does is seen: each call it makes reaches the observer, the interface, the
-  log and the `--json` events as a call of its own, under the `exec` call that made it.
-- **X6**: when to write a script is the tool description's and the prompt's to say, in general
-  terms (C7): a chain where each call needs the last result, or a result far larger than what the
-  answer needs; not one call, not independent calls (they go in one turn), not a file's whole
-  content carried in a string.
+- **B1**: the model's only tool for files and commands is `bash` (`tools/src/shell/`). No tool
+  reads, writes or patches a file for it; a capability is a command, or a program the shell has.
+- **B2**: what the shell offers is the app's context to say, found on the session's `PATH` (the
+  client's, in the daemon) without running anything: the runtimes a script can be written in
+  (`python3`, `node`, `bun`), named only when present. How to change a file well (a heredoc for a
+  whole file; for a part, a script that checks the old text occurs once) is the prompt's, in
+  general terms (C7).
+- **B3**: a read-only command (a `read_only` mode's, K5; the gate's `Verdict::ReadOnly`) runs in
+  the operating system's sandbox, never a check of its text: on macOS Seatbelt (`sandbox-exec`,
+  closed by default), on Linux Landlock with a seccomp filter. It reads every file but the app's
+  own (the workspace's denied paths: its keys and sessions; on macOS only, as Landlock cannot take
+  a path out of what it lets read), writes only
+  `/dev/null` and a temporary directory of its own, opens no network or local socket and reaches
+  no other process (no Apple events, no launchd, no daemon of ours). Where no sandbox can be set
+  up, the command is refused with the reason, never run open.
+- **B4**: a changed file is the gate's to allow, as any command is (A1): the summary is the whole
+  command. Nothing records a command's files: `/rewind` goes back in the conversation only.
 
 ## Concurrency and errors
 
@@ -295,9 +288,8 @@ MiB.
 - **A provider:** an entry in the catalog (`providers/models`, from models.dev), a wire in a
   provider package if none fits, one arm in `providers.rs`.
 - **A model:** nothing in llx: it arrives with the catalog's refresh.
-- **A tool capability:** an `action` of an existing tool, or the shell; what is done by chaining
-  the tools is `exec`'s (X1-X6). A new tool is a decision
-  recorded here.
+- **A tool capability:** an `action` of an existing tool, or the shell (B1). A new tool is a
+  decision recorded here.
 - **Something that reaches a run:** a kind in `arrivals.rs` and a post to the lane's queue (K4).
 - **A CI integration:** the GitHub Action is `action.yml` at the repository's root, composite
   shell steps only (no Node, no MCP server, no GitHub tool): it installs the release its own tag

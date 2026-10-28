@@ -58,15 +58,20 @@ Add a task when a real failure shows something general the suite does not cover 
 
 ## The arena: llx beside other agents
 
-`evals/arena/arena.py` gives one reference task (`ledger-web`: a Bun, React and Vite app whose CSV
-report misreads its spec) to llx and to Codex on the same model and level, and judges each the same
-way: the visible tests unchanged, then hidden tests (`evals/arena/hidden/`) copied in only after the
-agent is done, `tsc` and `vite build` (`evals/arena/check.sh`).
+`evals/arena/arena.py` gives a reference task to llx and to Codex on the same model and level, and
+judges each the same way: the files the task keeps unchanged, then hidden tests
+(`evals/arena/hidden/`) copied in only after the agent is done, `tsc` and `vite build`
+(`evals/arena/check.sh`). Two tasks, both Bun, React and Vite apps (`--task`):
+
+- `ledger-web` (the benchmark's): a CSV report that misreads its spec, fixed to match it.
+- `phone-shop`: a small landing page that sells a shop's phones in Cyprus, built from its brief
+  (prices, WhatsApp orders, stock, a brand filter, the contact block); open its `dist/` to see it.
 
 ```bash
 cargo build --release
 python3 evals/arena/arena.py --agents llx,codex --model gpt-6-luna --effort low --repeat 5
 python3 evals/arena/arena.py --agents llx,codex --repeat 3 --record   # kept in benchmarks/arena/
+python3 evals/arena/arena.py --agents llx,codex --task phone-shop --model gpt-6-luna --repeat 2
 ```
 
 Each run is a fresh copy of the fixture (a git repository, its packages installed) and a fresh home

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""The arena: one reference task, done by llx, Codex and Claude Code, each in a folder of its own.
+"""The arena: a reference task, done by llx, Codex and Claude Code, each in a folder of its own.
 
-Each run copies evals/fixtures/ledger-web into a new folder outside any repository (so no
-AGENTS.md or CLAUDE.md reaches an agent), makes it a git repository, installs its packages, then
-gives the agent TASK word for word, fully automatic, with no user configuration: no rules, no
+Each run copies the task's fixture (evals/fixtures/<task>) into a new folder outside any repository
+(so no AGENTS.md or CLAUDE.md reaches an agent), makes it a git repository, installs its packages,
+then gives the agent the task's prompt word for word, fully automatic, with no user configuration: no rules, no
 plugins, no MCP servers. The agent's JSON stream becomes one row: whether check.sh passed, the
 wall time, the turns and tool calls, the tokens, and the cost priced from one table (PRICES, the
 catalog's), API-equivalent: all three run on subscriptions here.
@@ -14,6 +14,7 @@ rotating each repeat. Usage:
   python3 evals/arena/arena.py                      # each agent once
   python3 evals/arena/arena.py --repeat 3 --record  # the benchmark: rows into benchmarks/arena/
   python3 evals/arena/arena.py --agents llx,codex   # some of them
+  python3 evals/arena/arena.py --task phone-shop    # another task (TASKS)
 """
 import argparse
 import datetime
@@ -30,16 +31,27 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = ROOT / "evals" / "arena"
-FIXTURE = ROOT / "evals" / "fixtures" / "ledger-web"
 KEEP = ROOT / "benchmarks" / "arena"
 CACHE = Path.home() / ".cache" / "llx-arena"
 TIMEOUT = 900
 
-TASK = (
-    "The ledger app's tests fail and its report does not do what docs/SPEC.md says. Make the app "
-    "match the spec, the month picker included. Do not change the existing tests. Check your work "
-    "with `bun test`, `bunx tsc --noEmit` and `bunx vite build`."
-)
+CHECKS = "Check your work with `bun test`, `bunx tsc --noEmit` and `bunx vite build`."
+# Each task: its prompt, and the files the agent must leave as they are (check.sh compares them).
+# ledger-web fixes an app against its spec; phone-shop builds a small landing page from a brief.
+TASKS = {
+    "ledger-web": (
+        "The ledger app's tests fail and its report does not do what docs/SPEC.md says. Make the app "
+        "match the spec, the month picker included. Do not change the existing tests. " + CHECKS,
+        ["src/lib/csv.test.ts", "src/lib/report.test.ts"],
+    ),
+    "phone-shop": (
+        "Build the landing page docs/BRIEF.md describes, for the phones in src/phones.ts. Do not "
+        "change the existing test or src/phones.ts. " + CHECKS,
+        ["src/App.test.tsx", "src/phones.ts"],
+    ),
+}
+TASK_NAME = "ledger-web"
+TASK, KEPT = TASKS[TASK_NAME]
 
 # $ per million tokens, from models.dev (the catalog llx reads): input, cache read, cache write, output.
 PRICES = {
@@ -171,7 +183,7 @@ def measure(agent, events):
 
 def prepare(parent, agent):
     work = parent / agent
-    shutil.copytree(FIXTURE, work, ignore=shutil.ignore_patterns("node_modules", "dist"))
+    shutil.copytree(ROOT / "evals" / "fixtures" / TASK_NAME, work, ignore=shutil.ignore_patterns("node_modules", "dist"))
     quiet = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "check": True}
     subprocess.run(["git", "init", "-q"], cwd=work, **quiet)
     subprocess.run(["git", "add", "-A"], cwd=work, **quiet)
@@ -198,7 +210,7 @@ def run(agent, parent, logs):
             events.append(json.loads(line))
         except ValueError:
             pass
-    check = subprocess.run(["sh", str(HERE / "check.sh"), str(work)], capture_output=True, text=True)
+    check = subprocess.run(["sh", str(HERE / "check.sh"), TASK_NAME, str(work), *KEPT], capture_output=True, text=True)
     row = {"agent": agent, "exit": code, "seconds": seconds, **measure(agent, events),
            "passed": check.returncode == 0, "check": check.stdout.strip().splitlines()}
     row["cost"] = round(row["cost"], 4)
@@ -228,10 +240,13 @@ def main():
     parser.add_argument("--record", action="store_true", help="append the rows to benchmarks/arena/")
     parser.add_argument("--model", help="the OpenAI model llx and Codex both use (default gpt-6.1-terra)")
     parser.add_argument("--effort", default=EFFORT)
+    parser.add_argument("--task", default=TASK_NAME, choices=sorted(TASKS))
     args = parser.parse_args()
     if args.model:
         MODEL["llx"] = MODEL["codex"] = args.model
     globals()["EFFORT"] = args.effort
+    globals()["TASK_NAME"] = args.task
+    globals()["TASK"], globals()["KEPT"] = TASKS[args.task]
     agents = args.agents.split(",")
     stamp = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     logs = ROOT / "evals" / "results" / f"arena-{stamp}"
@@ -252,8 +267,8 @@ def main():
             print(f"{agent:7} {'pass' if row['passed'] else 'FAIL'} {row['seconds']:>6}s "
                   f"{row['turns']:>3} turns {row['tools']:>3} tools {row['input']:>9,} in "
                   f"{row['output']:>7,} out ${row['cost']:.4f}  {'; '.join(row['check'][:3])}", flush=True)
-    hidden = hashlib.sha256((HERE / "hidden" / "ledger-web.test.tsx").read_bytes()).hexdigest()
-    result = {"hidden_sha256": hidden, "at": stamp, "task": "ledger-web", "prompt": TASK, "effort": EFFORT, "models": MODEL, "versions": versions(), "rows": rows}
+    hidden = hashlib.sha256((HERE / "hidden" / f"{TASK_NAME}.test.tsx").read_bytes()).hexdigest()
+    result = {"hidden_sha256": hidden, "at": stamp, "task": TASK_NAME, "prompt": TASK, "effort": EFFORT, "models": MODEL, "versions": versions(), "rows": rows}
     (logs / "summary.json").write_text(json.dumps(result, indent=1))
     if args.record:
         KEEP.mkdir(parents=True, exist_ok=True)

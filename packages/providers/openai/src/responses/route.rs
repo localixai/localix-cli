@@ -45,6 +45,23 @@ impl Routes {
     }
 }
 
+/// The session a conversation is, as the backend keeps it apart: its first words (the session's
+/// context and first goal, or an agent's brief), the same at every later request of it. Its
+/// requests go where its cache is (`session-id`, the prompt cache's key); another session, an
+/// agent's too, to where its own is, so no one machine takes every session's requests.
+pub(super) fn session(conversation: &[Message]) -> String {
+    let first = (conversation.iter())
+        .filter_map(|message| match message {
+            Message::User(said) => Some(said.as_str()),
+            Message::System(_)
+            | Message::Assistant { .. }
+            | Message::Image { .. }
+            | Message::ToolResult { .. } => None,
+        })
+        .take(2);
+    provider_kit::cache::key(first)
+}
+
 /// The task a conversation is at: its first words (the session's context and goal), how many
 /// times the person spoke, and what they said last. A task begins with each of their messages.
 pub(super) fn task(conversation: &[Message]) -> String {

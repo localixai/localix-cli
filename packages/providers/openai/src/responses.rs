@@ -9,7 +9,7 @@ use contracts::catalog::Selection;
 use contracts::chat::{Chat, ChatError, Completion, Request, ToolCall, Usage};
 use provider_kit::http::{Http, HttpError};
 use provider_kit::retry::{Attempt, PAUSE, TRANSIENT, retried};
-use provider_kit::{App, oauth, sse};
+use provider_kit::{App, sse};
 use serde_json::{Value, json};
 
 use crate::auth;
@@ -54,8 +54,6 @@ pub struct ChatModel {
     tokens: Mutex<Held>,
     /// Rung when a refresh ends.
     renewed: Condvar,
-    /// One per process: the backend's `session_id`.
-    session: String,
     base: String,
     /// Each task's machine, as the backend named it.
     routes: route::Routes,
@@ -79,8 +77,6 @@ impl ChatModel {
                 refreshing: false,
             }),
             renewed: Condvar::new(),
-            // Only the session's id: without randomness, the time is unique enough.
-            session: oauth::random(16).unwrap_or_else(|_| format!("llx-{}", tokens::now())),
             base: BASE.into(),
             routes: route::Routes::default(),
         }
@@ -134,6 +130,7 @@ impl ChatModel {
 impl Chat for ChatModel {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let task = route::task(request.conversation);
+        let session = route::session(request.conversation);
         let body = body(&self.selection, request).to_string();
         let address = format!("{}/responses", self.base);
         let started = std::time::Instant::now();
@@ -147,7 +144,7 @@ impl Chat for ChatModel {
                 ("Authorization", format!("Bearer {}", tokens.access)),
                 ("chatgpt-account-id", tokens.account),
                 ("originator", self.app.slug.to_string()),
-                ("session_id", self.session.clone()),
+                ("session-id", session.clone()),
                 ("Content-Type", "application/json".into()),
                 ("Accept", "text/event-stream".into()),
             ];

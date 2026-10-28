@@ -16,7 +16,7 @@ pub(crate) fn body(selection: &Selection, request: Request) -> Value {
         "store": false,
         "stream": true,
         "include": [],
-        "prompt_cache_key": cache_key(selection, &request),
+        "prompt_cache_key": super::route::session(request.conversation),
     });
     // Off is said: a request without the field reasons at the backend's own default.
     if !selection.model().efforts.is_empty() {
@@ -40,27 +40,6 @@ pub(crate) fn body(selection: &Selection, request: Request) -> Value {
     body
 }
 
-/// The prompt cache's key: the model, the tools and the system prompt, the start every request
-/// of every session with them shares. The backend sends requests with one key to where that start
-/// is cached, so a new session (an agent's too) reads it from the cache instead of afresh.
-fn cache_key(selection: &Selection, request: &Request) -> String {
-    let tools = request.tools.iter().map(|spec| tool(spec).to_string());
-    let rules = request
-        .conversation
-        .iter()
-        .map_while(|message| match message {
-            Message::System(rules) => Some(rules.clone()),
-            Message::User(_)
-            | Message::Assistant { .. }
-            | Message::Image { .. }
-            | Message::ToolResult { .. } => None,
-        });
-    let model = std::iter::once(selection.model().id.clone());
-    provider_kit::cache::key(model.chain(tools).chain(rules))
-}
-
-/// A message as the Responses API's input items, for `model`: a reasoning another model sealed
-/// (before `/model` switched) is left out, as that model alone can open it.
 /// A tool as the request's `tools` list it.
 fn tool(spec: &ToolSpec) -> Value {
     json!({"type": "function", "name": spec.name, "description": spec.description,

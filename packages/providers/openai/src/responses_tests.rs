@@ -413,33 +413,61 @@ fn a_request_that_never_went_out_is_sent_again() {
 }
 
 #[test]
-fn sessions_with_the_same_prompt_and_tools_share_the_prompt_cache_and_others_do_not() {
-    let spec = |name: &str| ToolSpec {
-        name: name.into(),
-        description: "A tool".into(),
-        parameters: json!({"type": "object"}),
+fn each_conversation_is_a_session_of_its_own_at_the_backend_all_its_requests_one() {
+    // The backend sends a session's requests where its cache is by the `session-id` header (a
+    // proxy may drop `session_id`) and the prompt cache's key; one shared by every session puts
+    // them all on one machine, past what it takes, and the rest read the conversation afresh.
+    let (model, http, _) = model(vec![(200, streamed(&[completed()])); 4], tokens(LATER));
+    let start = |goal: &str| {
+        vec![
+            Message::System("rules".into()),
+            Message::User("<context>".into()),
+            Message::User(goal.into()),
+        ]
     };
-    let key = |tools: &[ToolSpec], rules: &str| {
-        let (model, http, _) = model(vec![(200, streamed(&[completed()]))], tokens(LATER));
-        let conversation = vec![
-            Message::System(rules.into()),
-            Message::User("a goal of its own".into()),
-        ];
+    let ask = |conversation: &[Message]| {
         let request = Request {
-            conversation: &conversation,
-            tools,
+            conversation,
+            tools: &[],
             may_call: true,
         };
         model.complete(request).unwrap();
-        let body: Value = serde_json::from_str(&http.sent()[0].body).unwrap();
-        body["prompt_cache_key"].as_str().unwrap().to_string()
     };
-    let tools = [spec("read"), spec("bash")];
-    // Two sessions (two models made), each its own goal: one key, so the backend sends both to
-    // where the prompt and the tools are cached already.
-    assert_eq!(key(&tools, "rules"), key(&tools, "rules"));
-    assert_ne!(key(&tools, "rules"), key(&tools[..1], "rules"));
-    assert_ne!(key(&tools, "rules"), key(&tools, "other rules"));
+    let mut later = start("fix the parser");
+    ask(&later);
+    later.push(Message::Assistant {
+        text: Some("Looking.".into()),
+        calls: vec![],
+        carried: vec![],
+    });
+    later.push(Message::User("and the tests".into()));
+    ask(&later);
+    ask(&start("write the docs"));
+    ask(&start("You are `scout`, an agent: map the code"));
+    let sent = http.sent();
+    let session = |at: usize| {
+        let body: Value = serde_json::from_str(&sent[at].body).unwrap();
+        let header = sent[at].header("session-id").unwrap().to_string();
+        assert_eq!(body["prompt_cache_key"], json!(header), "one key for both");
+        assert!(
+            sent[at]
+                .headers
+                .iter()
+                .all(|(name, _)| name != "session_id")
+        );
+        header
+    };
+    assert_eq!(
+        session(0),
+        session(1),
+        "a session's later task stays where it was"
+    );
+    assert_ne!(
+        session(0),
+        session(2),
+        "another session goes where its own cache is"
+    );
+    assert_ne!(session(2), session(3), "and so does an agent");
 }
 
 #[test]

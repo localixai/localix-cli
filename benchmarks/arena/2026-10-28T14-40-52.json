@@ -1,0 +1,181 @@
+{
+ "hidden_sha256": "fdd65039f2cd592d2ac1684b9a8781809076d9c7d9b2ac5ec2a91de4fe75b763",
+ "at": "2026-10-28T14-40-52",
+ "task": "ledger-web",
+ "prompt": "The ledger app's tests fail and its report does not do what docs/SPEC.md says. Make the app match the spec, the month picker included. Do not change the existing tests. Check your work with `bun test`, `bunx tsc --noEmit` and `bunx vite build`.",
+ "effort": "low",
+ "models": {
+  "llx": "gpt-6-luna",
+  "codex": "gpt-6-luna",
+  "claude": "claude-sonnet-5-5"
+ },
+ "versions": {
+  "llx": "llx 0.2.0",
+  "codex": "codex-cli 0.163.0",
+  "claude": "2.1.312 (Claude Code)",
+  "bun": "1.4.4",
+  "machine": "Darwin arm64 26.6.2"
+ },
+ "rows": [
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 26.1,
+   "model": "gpt-6-luna",
+   "turns": 8,
+   "tools": 7,
+   "input": 58283,
+   "cached": 40320,
+   "output": 1564,
+   "cost": 0.003,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 43.2,
+   "model": "gpt-6-luna",
+   "turns": 1,
+   "tools": 17,
+   "input": 211346,
+   "cached": 191104,
+   "output": 2579,
+   "cost": 0.0052,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 56.6,
+   "model": "gpt-6-luna",
+   "turns": 1,
+   "tools": 17,
+   "input": 229332,
+   "cached": 208256,
+   "output": 2586,
+   "cost": 0.0055,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 29.0,
+   "model": "gpt-6-luna",
+   "turns": 9,
+   "tools": 8,
+   "input": 65405,
+   "cached": 40960,
+   "output": 1669,
+   "cost": 0.0037,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 28.6,
+   "model": "gpt-6-luna",
+   "turns": 7,
+   "tools": 6,
+   "input": 47334,
+   "cached": 26496,
+   "output": 1426,
+   "cost": 0.0031,
+   "passed": false,
+   "check": [
+    "FAIL bun test: 4 failing (a DD.MM.YYYY date counts in its own month;a refund counts against its own category;the whole sample, month by month;the month picker)"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 44.8,
+   "model": "gpt-6-luna",
+   "turns": 1,
+   "tools": 13,
+   "input": 215076,
+   "cached": 187136,
+   "output": 2336,
+   "cost": 0.0058,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 33.0,
+   "model": "gpt-6-luna",
+   "turns": 1,
+   "tools": 12,
+   "input": 177950,
+   "cached": 161664,
+   "output": 2257,
+   "cost": 0.0044,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 28.6,
+   "model": "gpt-6-luna",
+   "turns": 5,
+   "tools": 4,
+   "input": 33459,
+   "cached": 15104,
+   "output": 1254,
+   "cost": 0.0026,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "llx",
+   "exit": 0,
+   "seconds": 28.6,
+   "model": "gpt-6-luna",
+   "turns": 6,
+   "tools": 5,
+   "input": 39424,
+   "cached": 18816,
+   "output": 1611,
+   "cost": 0.0031,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  },
+  {
+   "agent": "codex",
+   "exit": 0,
+   "seconds": 37.7,
+   "model": "gpt-6-luna",
+   "turns": 1,
+   "tools": 12,
+   "input": 178302,
+   "cached": 159360,
+   "output": 2512,
+   "cost": 0.0047,
+   "passed": true,
+   "check": [
+    "PASS"
+   ]
+  }
+ ]
+}

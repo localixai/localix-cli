@@ -63,14 +63,14 @@ llx is a minimal agent runtime: a model in a loop over a few plain tools, on any
 
 ## Benchmark
 
-One task: make a Bun, React and Vite app match its spec, checked by 9 tests. llx and Codex on the same model, low reasoning; medians of 5 runs each.
+One task: make a Bun, React and Vite app match its spec, checked by 9 tests. llx and Codex in turns on the same model, low reasoning; medians of 5 runs each.
 
 | Model | Agent | Context | Time | Cost | Passed |
 | --- | --- | --- | --- | --- | --- |
-| GPT-6 Luna | llx | **49k** | **21.5 s** | **$0.0025** | 4/5 |
-| | Codex | 199k | 28.5 s | $0.0045 | 5/5 |
-| GPT-6.1 Terra | llx | **62k** | **22.1 s** | $0.032 | 5/5 |
-| | Codex | 82k | 24.1 s | **$0.020** | 5/5 |
+| GPT-6 Luna | llx | **47k** | **28.6 s** | **$0.0031** | 4/5 |
+| | Codex | 211k | 43.2 s | $0.0052 | **5/5** |
+| GPT-6.1 Terra | llx | **33k** | **25.2 s** | **$0.019** | 5/5 |
+| | Codex | 81k | 31.4 s | $0.021 | 5/5 |
 
 The runs: [benchmarks/arena](benchmarks/arena); the task and its checks: [evals/arena](evals/arena/arena.py).
 

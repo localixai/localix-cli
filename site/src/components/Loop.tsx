@@ -17,15 +17,15 @@ const EXAMPLES = `${GITHUB}/blob/main/examples`;
 const CARDS: Card[] = [
   {
     title: 'Less context, same model',
-    text: 'One task: make a Bun, React and Vite app match its spec, checked by 9 tests. llx and Codex on the same model, low reasoning; medians of 5 runs each.',
+    text: 'One task: make a Bun, React and Vite app match its spec, checked by 9 tests. llx and Codex in turns on the same model, low reasoning; medians of 5 runs each.',
     link: { href: `${GITHUB}/tree/main/benchmarks/arena`, label: 'the runs' },
     lines: [
       [['dim', '                    Luna 6           Terra 6.1']],
       [['dim', '              llx    Codex        llx    Codex']],
-      [['', 'context '], ['ok', '      49k'], ['', '     199k'], ['ok', '        62k'], ['', '      82k']],
-      [['', 'time    '], ['ok', '    21.5s'], ['', '    28.5s'], ['ok', '      22.1s'], ['', '    24.1s']],
-      [['', 'cost    '], ['ok', '  $0.0025'], ['', '  $0.0045'], ['', '     $0.032'], ['ok', '   $0.020']],
-      [['', 'passed  '], ['', '      4/5'], ['', '      5/5'], ['', '        5/5'], ['', '      5/5']],
+      [['', 'context '], ['ok', '      47k'], ['', '     211k'], ['ok', '        33k'], ['', '      81k']],
+      [['', 'time    '], ['ok', '    28.6s'], ['', '    43.2s'], ['ok', '      25.2s'], ['', '    31.4s']],
+      [['', 'cost    '], ['ok', '  $0.0031'], ['', '  $0.0052'], ['ok', '     $0.019'], ['', '   $0.021']],
+      [['', 'passed  '], ['', '      4/5'], ['ok', '      5/5'], ['', '        5/5'], ['', '      5/5']],
     ],
   },
   {

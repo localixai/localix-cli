@@ -73,29 +73,48 @@ impl Rules {
         }
     }
 
-    /// The rules as the model reads them in its context, or `None` with none given.
+    /// Whether every tool is allowed whole: then nothing is left to ask or refuse.
+    pub(crate) fn allows_every_tool(&self) -> bool {
+        TOOLS.iter().all(|(tool, _)| {
+            (self.allow.iter()).any(|rule| rule.tool == *tool && rule.pattern.is_none())
+        })
+    }
+
+    /// The rules as the model reads them in its context, or `None` with none given. A tool
+    /// allowed whole is not held to a pattern; one allowed by a pattern is, part by part.
     pub(crate) fn describe(&self) -> Option<String> {
         if self.allow.is_empty() && self.deny.is_empty() {
             return None;
         }
-        let list = |rules: &[Rule]| {
+        let list = |rules: Vec<&Rule>| {
             rules
                 .iter()
                 .map(|rule| format!("`{}`", rule.text))
                 .collect::<Vec<_>>()
                 .join(", ")
         };
+        let (whole, patterned): (Vec<&Rule>, Vec<&Rule>) =
+            self.allow.iter().partition(|rule| rule.pattern.is_none());
         let mut said = vec![];
-        if !self.allow.is_empty() {
+        if !whole.is_empty() {
+            said.push(format!(
+                "Allowed without asking, whatever they do: {}.",
+                list(whole)
+            ));
+        }
+        if !patterned.is_empty() {
             said.push(format!(
                 "Allowed without asking: {}. A command is allowed only when every part of it \
                  (split at `&&`, `||`, `;`, `|`) matches one, with no `$(…)`, backticks or \
                  redirect to a file.",
-                list(&self.allow)
+                list(patterned)
             ));
         }
         if !self.deny.is_empty() {
-            said.push(format!("Always refused: {}.", list(&self.deny)));
+            said.push(format!(
+                "Always refused: {}.",
+                list(self.deny.iter().collect())
+            ));
         }
         Some(said.join(" "))
     }

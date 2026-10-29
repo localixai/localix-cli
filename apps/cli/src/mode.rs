@@ -113,9 +113,10 @@ const NO_ANSWER: &str = "no answer came from the terminal";
 /// own. `terminal`: someone can approve at the terminal. `asks`: the `ask` tool is offered.
 pub(crate) fn describe(mode: &Mode, more: &Rules, terminal: bool, asks: bool) -> String {
     let mut text = format!("{}: {}", mode.name(), mode.hint());
-    if let Some(rules) = mode.rules().with(more).describe() {
+    let rules = mode.rules().with(more);
+    if let Some(said) = rules.describe() {
         text.push(' ');
-        text.push_str(&rules);
+        text.push_str(&said);
     }
     if mode.reach() == Reach::ReadOnly {
         text.push_str(
@@ -125,13 +126,16 @@ pub(crate) fn describe(mode: &Mode, more: &Rules, terminal: bool, asks: bool) ->
         );
         return text;
     }
-    text.push_str(match terminal {
-        true => " Anything else is asked of the person, who may refuse it; a refusal says why.",
-        false => {
-            " Anything else that changes something (a command, a file) is refused: no one \
-             is at a terminal to approve it. Reading files works."
-        }
-    });
+    // With every tool allowed whole there is nothing else to ask or refuse.
+    if !rules.allows_every_tool() {
+        text.push_str(match terminal {
+            true => " Anything else is asked of the person, who may refuse it; a refusal says why.",
+            false => {
+                " Anything else that changes something (a command, a file) is refused: no one \
+                 is at a terminal to approve it. Reading files works."
+            }
+        });
+    }
     if asks && terminal {
         text.push_str(
             " Ask the person with `ask` only when a decision is theirs and the tools cannot \

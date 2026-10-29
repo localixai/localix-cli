@@ -150,6 +150,25 @@ fn the_context_states_the_rules_and_what_becomes_of_the_rest() {
 }
 
 #[test]
+fn a_mode_that_allows_every_tool_refuses_nothing_in_its_text() {
+    let none = Rules::default();
+    for terminal in [true, false] {
+        let text = describe(&built("bypass"), &none, terminal, false);
+        assert!(
+            text.starts_with("bypass:") && text.contains("whatever they do"),
+            "{text}"
+        );
+        assert!(
+            !text.contains("is asked")
+                && !text.contains("is refused")
+                && !text.contains("every part"),
+            "{text}"
+        );
+    }
+    assert!(describe(&built("bypass"), &none, true, true).contains("`ask`"));
+}
+
+#[test]
 fn a_read_only_mode_tells_the_model_its_commands_change_nothing() {
     let none = Rules::default();
     for terminal in [true, false] {

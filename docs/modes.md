@@ -13,7 +13,7 @@ What llx asks before it acts, how to stop it, and what it does and does not prot
 
 1. A **deny** rule that matches refuses, and the refusal names the rule.
 2. An **allow** rule that matches runs it without asking.
-3. Anything else is asked of the person at the terminal; with no one there (`exec`, CI), it is refused, and the agent is told how the person can allow it.
+3. Anything else is asked of the person at the terminal; with no one there (`exec`, CI), it is refused, and the agent is told how the person can allow it. Where every tool is allowed whole (`bypass`), there is nothing else: the model is told so, and nothing about refusals.
 
 A **mode** is a named set of those rules (`allow`, `deny`), and whether its commands may change anything (`read_only`). Three are built in:
 

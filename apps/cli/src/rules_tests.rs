@@ -366,3 +366,21 @@ fn the_rules_read_back_for_the_model() {
         "{text}"
     );
 }
+
+#[test]
+fn a_tool_allowed_whole_is_not_held_to_a_pattern() {
+    let text = rules(&["bash", "jobs"], &[]).describe().unwrap();
+    assert!(text.contains("whatever they do: `bash`, `jobs`"), "{text}");
+    assert!(!text.contains("every part"), "{text}");
+    let mixed = rules(&["jobs", "bash(cargo test *)"], &[])
+        .describe()
+        .unwrap();
+    assert!(mixed.contains("whatever they do: `jobs`"), "{mixed}");
+    assert!(
+        mixed.contains("`bash(cargo test *)`") && mixed.contains("every part"),
+        "{mixed}"
+    );
+    assert!(!rules(&["bash", "jobs"], &[]).allows_every_tool());
+    assert!(rules(&["bash", "apply_patch", "jobs"], &[]).allows_every_tool());
+    assert!(!rules(&["bash(cargo *)", "apply_patch", "jobs"], &[]).allows_every_tool());
+}

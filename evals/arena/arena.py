@@ -13,7 +13,7 @@ repeat; with --parallel every run starts at once, so all of them meet the backen
 minutes (its cache varies over the day), at the price of slower wall times on a shared machine. Usage:
 
   python3 evals/arena/arena.py                      # each agent once
-  python3 evals/arena/arena.py --repeat 3 --record  # the benchmark: rows into benchmarks/arena/
+  python3 evals/arena/arena.py --repeat 3 --record  # the benchmark: rows into benchmarks/<task>/runs/
   python3 evals/arena/arena.py --agents llx,codex   # some of them
   python3 evals/arena/arena.py --task phone-shop    # another task (TASKS)
 
@@ -28,10 +28,13 @@ import json
 import os
 import platform
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -39,9 +42,9 @@ import score as scoring
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = ROOT / "evals" / "arena"
-KEEP = ROOT / "benchmarks" / "arena"
 CACHE = Path.home() / ".cache" / "llx-arena"
 TIMEOUT = 900
+HANDBACK = threading.Lock()  # parallel runs hand sign-ins back one at a time
 
 CHECKS = "Check your work with `bun test`, `bunx tsc --noEmit` and `bunx vite build`."
 # Each task: its prompt, and the files the agent must leave as they are (check.sh compares them).
@@ -78,7 +81,9 @@ PRICES = {
     "gpt-6-luna": None,  # filled from the catalog at start (price_of)
     "claude-sonnet-5-5": (2.0, 0.1, 2.5, 10.0),
 }
-MODEL = {"llx": "gpt-6.1-terra", "codex": "gpt-6.1-terra", "claude": "claude-sonnet-5-5"}
+# llx-openrouter: llx on the same model through OpenRouter (its key, not the ChatGPT sign-in).
+MODEL = {"llx": "gpt-6.1-terra", "llx-openrouter": "openai/gpt-6.1-terra", "codex": "gpt-6.1-terra",
+         "claude": "claude-sonnet-5-5"}
 EFFORT = "low"
 
 
@@ -93,9 +98,9 @@ def fresh_home(parent, agent):
     """A home of the run's own, beside its project and removed with it: only the sign-in and the
     model catalog are copied in, so no session, memory or log of an earlier run is there."""
     home = parent / f"home-{agent}"
-    if agent == "llx":
+    if agent.startswith("llx"):
         mine, theirs = Path.home() / ".config" / "llx", home / ".config" / "llx"
-        files = ("openai.json", "models.json")
+        files = ("credentials" if agent == "llx-openrouter" else "openai.json", "models.json")
     else:
         mine, theirs = Path.home() / ".codex", home / ".codex"
         files = ("auth.json", "models_cache.json")
@@ -103,23 +108,31 @@ def fresh_home(parent, agent):
     for name in files:
         if (mine / name).exists():
             shutil.copy2(mine / name, theirs / name)
-    return mine / files[0], theirs / files[0]
+    # The original's bytes as copied: hand_back must know whether anyone refreshed it since.
+    snapshot = (mine / files[0]).read_bytes() if (mine / files[0]).exists() else None
+    return mine / files[0], theirs / files[0], snapshot
 
 
-def hand_back(original, copy):
+def hand_back(original, copy, snapshot):
     """A refresh token is spent once it is used: a sign-in the run refreshed goes back to the
-    person's own, or their sign-in would stop working."""
-    if copy.exists() and copy.read_bytes() != original.read_bytes():
-        shutil.copy2(copy, original)
+    person's own, or their sign-in would stop working. With parallel homes cloned from one
+    sign-in, only a copy that changed is written, and only over the very bytes it was cloned from:
+    if the original differs, another run already refreshed it, and that newer one stays."""
+    if snapshot is None or not copy.exists():
+        return
+    with HANDBACK:
+        if copy.read_bytes() != snapshot and original.exists() and original.read_bytes() == snapshot:
+            shutil.copy2(copy, original)
 
 
 def command(agent, work, home):
     model = MODEL[agent]
-    if agent == "llx":
+    if agent.startswith("llx"):
         llx = os.environ.get("LLX_BIN", str(ROOT / "target" / "release" / "llx"))
+        provider = "openrouter" if agent == "llx-openrouter" else "openai"
         # openai=debug: each reply's routing in the log, kept beside the run (see `one`)
         env = {**plain_env(home), "LLX_NO_DAEMON": "1", "RUST_LOG": "warn,llx=info,openai=debug"}
-        args = [llx, "exec", "--json", "-y", "-C", str(work), "--provider", "openai", "-m", model,
+        args = [llx, "exec", "--json", "-y", "-C", str(work), "--provider", provider, "-m", model,
                 "--reasoning", EFFORT, "--timeout", str(LONG.get(TASK_NAME, TIMEOUT)),
                 # Codex and Claude Code count no turns: the time limit alone bounds a run.
                 "--max-turns", "10000", TASK]
@@ -161,7 +174,7 @@ def cost(model, fresh, read, write, out):
 def measure(agent, events):
     """One row's numbers from the agent's own events. Input counts every token sent."""
     row = {"model": None, "turns": 0, "tools": 0, "input": 0, "cached": 0, "output": 0, "cost": 0.0}
-    if agent == "llx":
+    if agent.startswith("llx"):
         # What the cache could give at most: each request what the one before it sent. A request
         # that reads less than its share was answered where its session's cache is not.
         # Past 100%: a first request found another session's start (the prompt, the tools).
@@ -178,7 +191,9 @@ def measure(agent, events):
             elif e.get("type") == "run.completed":
                 spent = e["usage"]["agent"]
                 row.update(input=spent["input_tokens"], cached=spent["cached_tokens"], output=spent["output_tokens"])
-        row["cost"] = cost(MODEL[agent], row["input"] - row["cached"], row["cached"], 0, row["output"])
+                row["reported_cost"] = e["usage"].get("cost_usd")
+        # At the API's prices, as Codex's: OpenRouter's own bill is reported_cost.
+        row["cost"] = cost(MODEL[agent].removeprefix("openai/"), row["input"] - row["cached"], row["cached"], 0, row["output"])
         row["requests"] = row["turns"]
     elif agent == "codex":
         row["model"] = MODEL[agent]  # codex exec --json does not name it; -m chose it
@@ -232,8 +247,9 @@ def run(agent, parent, logs):
     started = time.monotonic()
     with open(log, "w") as out, open(log.with_suffix(".stderr"), "w") as err:
         try:
-            code = subprocess.run(args, cwd=work, env=env, stdin=subprocess.DEVNULL, stdout=out,
-                                  stderr=err, timeout=LONG.get(TASK_NAME, TIMEOUT) + 60).returncode
+            # Its own session: on a timeout the whole group dies, not only the agent's first process.
+            code = scoring.run_group(args, LONG.get(TASK_NAME, TIMEOUT) + 60, cwd=work, env=env,
+                                     stdin=subprocess.DEVNULL, stdout=out, stderr=err).returncode
         except subprocess.TimeoutExpired:
             code = "timeout"
     seconds = round(time.monotonic() - started, 1)
@@ -282,10 +298,17 @@ def record_runs(stamp, logs, rows):
         name = f"{row['agent']}-{counts[row['agent']]}"
         source = logs / "work" / row["work"]
         target = home / model / name
-        shutil.copytree(source, target)
-        stat = (source.parent / f"{row['work']}.diffstat").read_text()
-        (target / "RESULT.md").write_text(result_page(row, stat))
         row["folder"] = f"{model}/{name}"
+        if not source.is_dir():  # a crash before the work was kept must not lose the other runs
+            target.mkdir(parents=True)
+            (target / "MISSING.md").write_text(
+                f"# {row['agent']}: no work folder\n\nThe run ended (exit {row['exit']}) before its "
+                f"work was kept, so there is nothing to show; its numbers are in result.json.\n")
+            continue
+        shutil.copytree(source, target)
+        diffstat = source.parent / f"{row['work']}.diffstat"
+        stat = diffstat.read_text() if diffstat.exists() else ""
+        (target / "RESULT.md").write_text(result_page(row, stat))
     return home
 
 
@@ -314,21 +337,89 @@ def versions():
 def one(n, agent, logs):
     """One run in a folder and home of its own, its row printed as soon as it ends."""
     parent = Path(tempfile.mkdtemp(prefix=f"llx-arena-{n}-"))
-    original, copy = fresh_home(parent, agent) if agent in ("llx", "codex") else (None, None)
+    original = copy = snapshot = None
     try:
+        if agent != "claude":
+            original, copy, snapshot = fresh_home(parent, agent)
         row = run(agent, parent, logs)
-    finally:  # a refreshed sign-in goes back; the copy never stays behind, even when a run breaks
+    finally:  # a refreshed sign-in goes back; nothing stays behind, even when a run breaks
         if copy:
-            hand_back(original, copy)
+            hand_back(original, copy, snapshot)
         kept = parent / f"home-{agent}" / ".config" / "llx" / "logs" / "llx.log"
         if kept.exists():
             shutil.copy2(kept, logs / f"{agent}-{parent.name}.log")
-        shutil.rmtree(parent / f"home-{agent}", ignore_errors=True)
-    print(f"{n} {agent:7} {'pass' if row['passed'] else 'FAIL'} {row['seconds']:>6}s "
+        # The whole parent, work folder included: run() has kept what is kept (keep_work) by now.
+        shutil.rmtree(parent, ignore_errors=True)
+    scored = f"{row['score']}/{row['total']:<3} " if "score" in row else ""
+    print(f"{n} {agent:14} {scored}{status(row):7} {row['seconds']:>6}s "
           f"{row['turns']:>3} turns {row['tools']:>3} tools {row['input']:>9,} in "
           f"{row['uncached']:>7,} afresh {row['output']:>7,} out ${row['cost']:.4f}{reach(row)}  "
           f"{'; '.join(row['check'][:3])}", flush=True)
     return row
+
+
+def status(row):
+    """crash: the agent did not end well (exit not 0, or the timeout); pass: everything passed;
+    partial: it ended, but not everything passed."""
+    if row["exit"] != 0:
+        return "crash"
+    return "pass" if row["passed"] and row.get("score", row.get("total")) == row.get("total") else "partial"
+
+
+def median(values):
+    return statistics.median(values)
+
+
+def verdict(rows):
+    """One line per agent over its rows (and, for a scored task, its most failing tests)."""
+    lines = []
+    for agent in dict.fromkeys(r["agent"] for r in rows):
+        mine = [r for r in rows if r["agent"] == agent]
+        crashes = sum(status(r) == "crash" for r in mine)
+        scores = [r["score"] for r in mine if "score" in r]
+        if scores:
+            head = f"score mean {statistics.mean(scores):.1f} median {median(scores):g} min {min(scores)}"
+        else:
+            head = f"pass {sum(status(r) == 'pass' for r in mine)}/{len(mine)}"
+        lines.append(f"{agent} n={len(mine)} {head} | time median {median([r['seconds'] for r in mine]):.0f}s"
+                     f" | cost mean ${statistics.mean([r['cost'] for r in mine]):.3f} | crashes {crashes}/{len(mine)}")
+        failing = Counter(name for r in mine for name in r.get("failing", []))
+        if failing:
+            lines.append("  fails most: " + "; ".join(f"{name} x{k}" for name, k in failing.most_common(3)))
+    return lines
+
+
+def delta(rows, previous):
+    """Each agent's change against an earlier result (its `rows`), as medians and means."""
+    lines = []
+    for agent in dict.fromkeys(r["agent"] for r in rows):
+        now = [r for r in rows if r["agent"] == agent]
+        before = [r for r in previous["rows"] if r["agent"] == agent]
+        if not before:
+            continue
+        parts = []
+        scores, was = [r["score"] for r in now if "score" in r], [r["score"] for r in before if "score" in r]
+        if scores and was:
+            parts.append(f"median {median(scores) - median(was):+g}, mean {statistics.mean(scores) - statistics.mean(was):+.1f}")
+        parts.append(f"time {median([r['seconds'] for r in now]) - median([r['seconds'] for r in before]):+.0f}s")
+        parts.append(f"crashes {sum(status(r) == 'crash' for r in before)} -> {sum(status(r) == 'crash' for r in now)}")
+        lines.append(f"{agent} vs {previous['at']}: " + ", ".join(parts))
+    return lines
+
+
+def previous_result(task, effort, model, hidden):
+    """The newest recorded result of the same task, effort, model and hidden tests, else why none."""
+    found = sorted((ROOT / "benchmarks" / task / "runs").glob("*/result.json"))
+    if not found:
+        return None, f"no recorded runs under benchmarks/{task}/runs/ to compare with"
+    for path in reversed(found):
+        try:
+            old = json.loads(path.read_text())
+        except ValueError:
+            continue
+        if (old.get("task"), old.get("effort"), old.get("models", {}).get("llx"), old.get("hidden_sha256")) == (task, effort, model, hidden):
+            return old, ""
+    return None, f"{len(found)} recorded run(s), none with the same effort, model and hidden tests"
 
 
 def reach(row):
@@ -342,14 +433,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--agents", default="llx,codex,claude")
     parser.add_argument("--repeat", type=int, default=1)
-    parser.add_argument("--record", action="store_true", help="append the rows to benchmarks/arena/")
+    parser.add_argument("--record", action="store_true", help="keep the rows under benchmarks/<task>/runs/")
     parser.add_argument("--model", help="the OpenAI model llx and Codex both use (default gpt-6.1-terra)")
     parser.add_argument("--effort", default=EFFORT)
     parser.add_argument("--task", default=TASK_NAME, choices=sorted(TASKS))
     parser.add_argument("--parallel", action="store_true", help="start every run at once")
+    parser.add_argument("--verdict", action="store_true", help="summarize each agent's rows (default with --repeat 2 or more)")
+    parser.add_argument("--no-verdict", action="store_true", help="no summary after the table")
     args = parser.parse_args()
     if args.model:
         MODEL["llx"] = MODEL["codex"] = args.model
+        MODEL["llx-openrouter"] = f"openai/{args.model}"
     globals()["EFFORT"] = args.effort
     globals()["TASK_NAME"] = args.task
     globals()["TASK"], globals()["KEPT"] = TASKS[args.task]
@@ -359,25 +453,41 @@ def main():
     logs.mkdir(parents=True)
     runs = [(n, agent) for n in range(args.repeat)
             for agent in agents[n % len(agents):] + agents[: n % len(agents)]]
-    if args.parallel:
-        with ThreadPoolExecutor(max_workers=len(runs)) as pool:
-            rows = list(pool.map(lambda r: one(*r, logs), runs))
-    else:
-        rows = [one(n, agent, logs) for n, agent in runs]
     if TASK_NAME in SCORED:
         files = sorted((HERE / "hidden" / TASK_NAME).iterdir())
         hidden = hashlib.sha256(b"".join(f.read_bytes() for f in files)).hexdigest()
     else:
         hidden = hashlib.sha256((HERE / "hidden" / f"{TASK_NAME}.test.tsx").read_bytes()).hexdigest()
-    result = {"hidden_sha256": hidden, "at": stamp, "task": TASK_NAME, "parallel": args.parallel, "prompt": TASK, "effort": EFFORT, "models": MODEL, "versions": versions(), "rows": rows}
+
+    def summary(done):
+        return {"hidden_sha256": hidden, "at": stamp, "task": TASK_NAME, "parallel": args.parallel, "prompt": TASK, "effort": EFFORT, "models": MODEL, "versions": versions(), "rows": done}
+    finished, lock = [], threading.Lock()
+
+    def tracked(n, agent):
+        row = one(n, agent, logs)
+        with lock:  # every finished row is on disk at once: Ctrl-C keeps what ended
+            finished.append(row)
+            (logs / "summary.json").write_text(json.dumps(summary(finished), indent=1))
+        return row
+    if args.parallel:
+        with ThreadPoolExecutor(max_workers=len(runs)) as pool:
+            rows = list(pool.map(lambda r: tracked(*r), runs))
+    else:
+        rows = [tracked(n, agent) for n, agent in runs]
+    result = summary(rows)
     (logs / "summary.json").write_text(json.dumps(result, indent=1))
+    if not args.no_verdict and (args.verdict or args.repeat >= 2):
+        print("\n".join(verdict(rows)))
+        old, why = previous_result(TASK_NAME, EFFORT, MODEL["llx"], hidden)
+        print("\n".join(delta(rows, old)) if old else why)
     if args.record and TASK_NAME in SCORED:
         home = record_runs(stamp, logs, rows)
         (home / "result.json").write_text(json.dumps(result, indent=1) + "\n")
         print(f"recorded: {home}")
     elif args.record:
-        KEEP.mkdir(parents=True, exist_ok=True)
-        (KEEP / f"{stamp}.json").write_text(json.dumps(result, indent=1) + "\n")
+        keep = ROOT / "benchmarks" / TASK_NAME / "runs"
+        keep.mkdir(parents=True, exist_ok=True)
+        (keep / f"{stamp}.json").write_text(json.dumps(result, indent=1) + "\n")
     print(f"logs: {logs}")
 
 

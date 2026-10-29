@@ -70,7 +70,7 @@ judges each the same way: the files the task keeps unchanged, then hidden tests
 ```bash
 cargo build --release
 python3 evals/arena/arena.py --agents llx,codex --model gpt-6-luna --effort low --repeat 5
-python3 evals/arena/arena.py --agents llx,codex --repeat 3 --record   # kept in benchmarks/arena/
+python3 evals/arena/arena.py --agents llx,codex --repeat 3 --record   # kept in benchmarks/<task>/runs/
 python3 evals/arena/arena.py --agents llx,codex --task phone-shop --repeat 5 --parallel --record   # every run at once
 ```
 
@@ -81,5 +81,18 @@ memory or setting of yours or of an earlier run is there. Both agents use the Ch
 run costs no API money; the cost shown is what the same tokens would cost at the API's prices. Codex
 reports one turn per run, and reads several files in one command: compare pass, time, tokens and
 cost, not turns or calls. `summary.json` names the hidden tests' SHA-256, so runs on another version
-of them do not compare. Claude Code takes part with a configuration directory of its own, signed in
+of them do not compare. `llx-openrouter` is llx on the same model through OpenRouter, with the key
+`/login` saved (`<config>/llx/credentials`) instead of the sign-in; its row keeps OpenRouter's bill as
+`reported_cost`. Claude Code takes part with a configuration directory of its own, signed in
 once: `CLAUDE_CONFIG_DIR=~/.cache/llx-arena/claude-config claude /login`.
+
+Each result line starts with a status: `pass` (everything passed; full score on a scored task, shown
+first as `score/total`), `partial` (the agent ended, but not everything passed) or `crash` (its
+exit was not 0, or it hit the timeout). With `--repeat 2` or more a verdict follows the table
+(`--no-verdict` turns it off, `--verdict` forces it): one line per agent with the score's mean,
+median and minimum, the median time, the mean cost and the crashes, then its three most failing
+tests; and, when `benchmarks/<task>/runs/*/result.json` holds an earlier recorded result with the
+same task, effort, model and hidden tests, the change against the newest one (else one line says
+why none matches). `summary.json` is rewritten after every finished run, so Ctrl-C keeps what
+ended. `seconds` is measured under load when runs are parallel, and model latency dominates it: run
+without `--parallel` for timing.

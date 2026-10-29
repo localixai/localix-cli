@@ -10,6 +10,7 @@ less of fewer. Prints one line per part, then `SCORE passed/total`; exit 0 when 
 import filecmp
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -39,13 +40,31 @@ def same(a, b):
     return all(same(a / d, b / d) for d in compared.common_dirs)
 
 
+def run_group(args, timeout, **kwargs):
+    """subprocess.run in a session of its own: on a timeout the whole process group is killed, so
+    a test runner's children do not outlive it (run() kills only the child, and waits on its pipes)."""
+    kwargs.setdefault("stdout", subprocess.PIPE)
+    kwargs.setdefault("stderr", subprocess.PIPE)
+    proc = subprocess.Popen(args, start_new_session=True, **kwargs)
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        proc.communicate()
+        raise
+    return subprocess.CompletedProcess(args, proc.returncode, out, err)
+
+
 def outcomes(work, suite):
     """Each test of `suite` (a path under `work`) by name: whether it passed."""
     with tempfile.TemporaryDirectory() as scratch:
         report = Path(scratch) / "report.xml"
         try:
-            subprocess.run(["bun", "test", f"./{suite}", "--timeout", "5000", "--reporter=junit",
-                            f"--reporter-outfile={report}"], cwd=work, capture_output=True, timeout=300)
+            run_group(["bun", "test", f"./{suite}", "--timeout", "5000", "--reporter=junit",
+                       f"--reporter-outfile={report}"], cwd=work, timeout=300)
         except subprocess.TimeoutExpired:
             return {}
         if not report.exists():
@@ -93,7 +112,7 @@ def score(task, work):
         result["hidden"] = min(sum(hidden.values()), hidden_total)
         result["failing"] = sorted(n for n, ok in {**public, **hidden}.items() if not ok)
         try:
-            types = subprocess.run(["bunx", "tsc", "--noEmit"], cwd=work, capture_output=True, timeout=300)
+            types = run_group(["bunx", "tsc", "--noEmit"], cwd=work, timeout=300)
             result["types"] = types.returncode == 0
         except subprocess.TimeoutExpired:
             pass

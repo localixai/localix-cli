@@ -64,12 +64,31 @@
   display: block;
   white-space: pre;
 }
-.t-dim { color: #6b6b6b; }
+.t-dim { color: var(--tk-dim); }
 .t-hi { color: #fff; font-weight: 600; }
-.t-ok { color: #8bd49c; }
-.t-bad { color: #ef7a6d; }
-.t-acc { color: #7fd0d6; }
+.t-ok { color: var(--tk-ok); }
+.t-bad { color: var(--tk-bad); }
+.t-acc { color: var(--tk-var); }
 .t-sel { color: #fff; font-weight: 600; }
+
+/* A table: the grid holds the columns, each row takes them over, so they line up. */
+.loop-grid {
+  display: grid;
+  column-gap: 2ch;
+  width: max-content;
+}
+.loop-grid + .loop-row,
+.loop-row + .loop-grid {
+  margin-top: 0.6rem;
+}
+.loop-cells {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+.loop-cells .r {
+  text-align: right;
+}
 
 @media (min-width: 60rem) {
   .loop-card {

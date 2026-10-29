@@ -1,5 +1,7 @@
 import { Check, Copy } from "./icons";
 import "./InstallCommand.css";
+import { Tokens } from "./Code";
+import { shellLine } from "./highlight";
 import { useEffect, useRef, useState } from "react";
 
 /** The install commands as one block with one Copy, in the ghost-button measure of the hero; a
@@ -51,8 +53,8 @@ export function InstallCommand({
         <code>
           {commands.map((command) => (
             <span key={command} className="install-line">
-              <span aria-hidden="true">$ </span>
-              {command}
+              <span className="tk-prompt" aria-hidden="true">$ </span>
+              <Tokens line={shellLine(command, false)} />
             </span>
           ))}
         </code>

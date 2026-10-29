@@ -26,9 +26,6 @@
 .install-line {
   white-space: nowrap;
 }
-.install-line > span {
-  color: var(--muted);
-}
 .install-copy {
   display: inline-flex;
   align-items: center;

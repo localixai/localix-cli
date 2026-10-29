@@ -62,10 +62,10 @@ jq -c 'select(.type == "run.completed") | {status, data}' events.jsonl
 
 One task, llx and Codex on the same model (GPT-6 Luna, medium reasoning), every run started at once: build a task tracker's API on Bun from its tests, scored out of 199 (132 public tests, 66 hidden ones, the types). Medians.
 
-| Agent | Runs | Score | Time | Cost | Finished |
+| Agent | Runs | Score (median) | Range | Time | Cost |
 | --- | --- | --- | --- | --- | --- |
-| llx | 6 | 195 | 170 s | $0.026 | 6/6 |
-| Codex | 3 | 197 | 143 s | $0.025 | 3/3 |
+| llx | 6 | 195 | 194–197 | 170 s | $0.026 |
+| Codex | 3 | 197 | 196–198 | 143 s | $0.025 |
 
 The runs: [benchmarks/task-tracker/runs](benchmarks/task-tracker/runs); the task and its checks: [evals/arena](evals/arena/arena.py).
 

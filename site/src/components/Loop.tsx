@@ -11,38 +11,32 @@ type Card = { title: string; text: string; lines: Line[]; link?: { href: string;
 const EXAMPLES = `${GITHUB}/blob/main/examples`;
 
 /** What each step printed in the recorded runs (public/demo-llx.cast and its takes), shortened; the
- *  benchmark cards are benchmarks/arena's runs (medians: ledger-web, then phone-shop); the review card is examples/github/review.yml, the API card examples/breaking-changes' recorded
+ *  benchmark cards are benchmarks/task-tracker's runs (medians); the review card is examples/github/review.yml, the API card examples/breaking-changes' recorded
  *  run (demo/output.txt); the rules card is put together from llx's own wording of a refusal
  *  (packages/tools/src/lib.rs). */
 const CARDS: Card[] = [
   {
-    title: 'Less context, same model',
-    text: 'One task: make a Bun, React and Vite app match its spec, checked by 9 tests. llx and Codex on the same model, low reasoning, every run at once; medians of 5 runs each.',
-    link: { href: `${GITHUB}/tree/main/benchmarks/arena`, label: 'the runs' },
+    title: 'Beside Codex, on the same model',
+    text: "One task: build a task tracker's API on Bun from its tests, scored out of 199 (132 public tests, 66 hidden ones, the types). llx and Codex on the same model, GPT-6 Luna at medium reasoning, every run at once; medians.",
+    link: { href: `${GITHUB}/tree/main/benchmarks/task-tracker/runs`, label: 'the runs' },
     lines: [
-      [['dim', '                    Luna 6           Terra 6.1']],
-      [['dim', '              llx    Codex        llx    Codex']],
-      [['', 'context '], ['ok', '      23k'], ['', '     181k'], ['ok', '        31k'], ['', '      63k']],
-      [['', 'time    '], ['ok', '    23.5s'], ['', '    36.8s'], ['', '      28.2s'], ['ok', '    26.5s']],
-      [['', 'cost    '], ['ok', '  $0.0020'], ['', '  $0.0042'], ['', '     $0.024'], ['ok', '   $0.019']],
-      [['', 'passed  '], ['', '      5/5'], ['', '      5/5'], ['', '        5/5'], ['', '      5/5']],
+      [['dim', '            runs   score    time     cost  finished']],
+      [['', 'llx     '], ['', '     6'], ['', '     195'], ['', '    170s'], ['', '  $0.026'], ['', '       6/6']],
+      [['', 'Codex   '], ['', '     3'], ['', '     197'], ['', '    143s'], ['', '  $0.025'], ['', '       3/3']],
     ],
   },
   {
-    title: 'Builds a page from a brief',
-    text: "A second task: a phone shop's landing page from its brief, checked by 8 tests. Every run at once, the same model, low reasoning; medians of 5 runs each.",
-    link: { href: `${GITHUB}/tree/main/benchmarks/arena`, label: 'the runs' },
+    title: 'Ends every task with a result',
+    text: 'The agent ends a task by calling result: achieved or not, a summary, what blocked it, and data matching your JSON Schema. Text alone never ends a task. The exit code says how it ended.',
     lines: [
-      [['dim', '                    Luna 6           Terra 6.1']],
-      [['dim', '              llx    Codex        llx    Codex']],
-      [['', 'context '], ['ok', '      45k'], ['', '     181k'], ['ok', '        32k'], ['', '      87k']],
-      [['', 'time    '], ['ok', '    49.7s'], ['', '    76.7s'], ['', '      66.8s'], ['', '    66.9s']],
-      [['', 'cost    '], ['ok', '  $0.0045'], ['', '  $0.0080'], ['ok', '     $0.042'], ['', '   $0.045']],
-      [['', 'passed  '], ['ok', '      5/5'], ['', '      3/5'], ['', '        5/5'], ['', '      5/5']],
+      [['dim', '0  '], ['ok', 'achieved    '], ['dim', 'the goal was reached']],
+      [['dim', '1  '], ['bad', 'not_achieved'], ['dim', ' blocked_by says why']],
+      [['dim', '2  '], ['', 'exhausted    '], ['dim', 'out of turns or time']],
+      [['dim', '3  '], ['', 'error        '], ['dim', 'no key, no network']],
+      [['dim', '130 '], ['', 'interrupted  '], ['dim', 'Ctrl-C or SIGTERM']],
     ],
   },
-  {
-    title: 'Any model, any provider',
+  {    title: 'Any model, any provider',
     text: 'Pick a provider and a model with /model: a ChatGPT sign-in, OpenRouter, Anthropic, xAI, DeepSeek. The reasoning level with ← →, saved for every run after.',
     lines: [
       [['hi', '[OpenAI 2]'], ['dim', ' · Anthropic 0 · OpenRouter 5 · xAI 0 · DeepSeek 0']],
@@ -108,8 +102,8 @@ const CARDS: Card[] = [
     ],
   },
   {
-    title: 'Decides and writes in a second',
-    text: 'llx decide picks one of the options you give, alone on stdout. A short exec writes the commit message, the label, the note.',
+    title: 'For other agents: decide in a second',
+    text: 'Claude Code, another agent or a script can call llx from its shell. llx decide picks one of the options you give, alone on stdout; llx exec hands a task to a helper on any model.',
     lines: [
       [['dim', '$ '], ['', 'git diff | llx decide --choices patch,minor,major \\']],
       [['', '    "Which version bump?"']],

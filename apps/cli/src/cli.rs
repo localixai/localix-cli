@@ -22,7 +22,9 @@ monitors (a background command whose lines come back) and schedules (a prompt at
 
 With no command, llx opens a session at the terminal: PROMPT, when given, is its first message, \
 and each line you type goes on from the last. `llx exec` (or -p) runs one task without a session \
-and exits, with the answer alone on stdout: for scripts, CI and pipes.
+and exits, with the answer alone on stdout: for scripts, CI and pipes. Every task ends with the \
+agent's `result` call (achieved or not, a summary, and data matching `--schema`); text alone never \
+ends it. The exit code says how it ended.
 
 To sign in, type /login in a session: choose a provider (OpenAI, signed in with ChatGPT in \
 your browser, or OpenRouter, with a key), then one of its models and a reasoning level that \

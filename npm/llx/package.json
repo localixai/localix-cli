@@ -1,7 +1,7 @@
 {
   "name": "@localixai/llx",
   "version": "0.2.0",
-  "description": "The agent runtime other agents build on: helpers on any model, decisions for scripts and CI, and a minimal agent for the terminal",
+  "description": "An autonomous agent runtime for CI and scripts: one task, a structured end, an exit code to branch on, and a minimal agent for the terminal",
   "license": "MIT",
   "author": "rsaryev",
   "homepage": "https://llx.sh",

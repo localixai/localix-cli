@@ -14,10 +14,11 @@ Only the latest release is supported.
 llx is an agent: a language model decides what its tools do. Run it where you would run the
 commands yourself.
 
-- **Read** files in the working tree.
-- **Edit** files, and **run shell commands** (bash) with your user's rights. Each of these goes
-  through an approval gate first: the tool describes the effect in one line (the command, or the
-  file and its changed lines), and it runs only when allowed. A denied effect is reported back to
+- **Run shell commands** (`bash`) with your user's rights, and **change files** (`apply_patch`).
+  Each of these goes through an approval gate first: the tool describes the effect in one line
+  (the whole command, or the patch's files and what it does to each), and it runs only when
+  allowed. In `plan` mode commands run without asking inside the system's sandbox, which cannot
+  write a file or open a socket, and a patch is refused. A denied effect is reported back to
   the model, which can try another way. Allowing everything up front (`--yes`) skips the gate:
   use it only in a sandbox, a container or a throwaway checkout.
 

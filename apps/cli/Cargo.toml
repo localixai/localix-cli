@@ -1,6 +1,6 @@
 [package]
 name = "llx"
-description = "A minimal agent runtime: a coding agent for the terminal, helpers on any model, and decisions for scripts and CI"
+description = "An autonomous agent runtime for CI and scripts, and a minimal agent for the terminal"
 homepage = "https://llx.sh"
 repository = "https://github.com/rsaryev/llx"
 keywords = ["agent", "agent-runtime", "coding-agent", "cli", "llm"]

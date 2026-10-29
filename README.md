@@ -5,11 +5,11 @@
 <h1 align="center">llx</h1>
 
 <p align="center">
-  <strong>More hands for the agent you already use</strong>
+  <strong>An autonomous agent runtime for CI and scripts</strong>
 </p>
 
 <p align="center">
-  One binary under 4 MB that Claude Code, another agent, a script or CI calls from its shell: helpers on any model, one task for CI, and a choice made in a second. With a minimal agent of its own.
+  One task, a structured end every time, and an exit code to branch on. One binary under 4 MB, on any model. A minimal agent at your terminal, too.
 </p>
 
 <p align="center">
@@ -22,8 +22,8 @@
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="docs/usage.md">Documentation</a> ·
-  <a href="#in-other-agents">In other agents</a> ·
   <a href="#in-ci-and-scripts">In CI</a> ·
+  <a href="#in-other-agents">In other agents</a> ·
   <a href="https://llx.sh">llx.sh</a>
 </p>
 
@@ -33,13 +33,13 @@
   </a>
 </p>
 
-llx is a minimal agent runtime: a model in a loop over a few plain tools, on any provider. llx runs three ways, from the same binary:
+llx is a model in a loop over five tools, on any provider: `bash`, `apply_patch`, `ask`, `agents` and `jobs`. Every task ends with a `result` call: whether the goal was achieved, a summary, what blocked it if not, and data matching your JSON Schema. Text alone never ends a task. One binary, three uses:
 
 | Who calls | Command | What they get |
 | --- | --- | --- |
-| **You** | `llx` | A minimal agent at your terminal, with five tools: `bash`, `apply_patch`, `ask`, `agents`, `jobs` |
-| **Your scripts and CI** | `llx exec --json --schema …` | One task, then exit: JSON events, an answer in the shape you define, exit codes to branch on |
-| **Your other agents** | `llx exec` · `llx decide` | Commands they run from their shell: helpers on any model, quick decisions. They extend the agent you use, never replace it |
+| **Your CI and scripts** | `llx exec --json --schema …` | One task, then exit: the answer in the shape you define, JSON events, an exit code to branch on |
+| **You** | `llx` | A minimal agent at your terminal |
+| **Your other agents** | `llx exec` · `llx decide` | Commands they run from their shell: a helper on any model, a quick decision. They extend the agent you use, never replace it |
 
 <table>
   <tr>
@@ -54,8 +54,8 @@ llx is a minimal agent runtime: a model in a loop over a few plain tools, on any
       <a href="MODELS.md">Models →</a>
     </td>
     <td valign="top">
-      <strong>Reading never asks</strong><br>
-      Every command and file change asks first, unless a rule allows it: <code>--allow 'bash(cargo test *)'</code>, or a mode of your own.<br>
+      <strong>Rules, not trust</strong><br>
+      Every command and file change asks first, unless a rule allows it: <code>--allow 'bash(cargo test *)'</code>, or a mode of your own. <code>plan</code> runs read-only in the system's sandbox.<br>
       <a href="docs/modes.md">Modes →</a>
     </td>
   </tr>
@@ -86,13 +86,9 @@ llx                                    # a session: /login first, then a task
 llx doctor                             # sign-ins, models, the shell
 ```
 
-## In other agents
-
-llx extends the agent you already use: it calls llx from its shell, as its task needs. `llx exec` hands a task to a helper on any provider and model, so the agent's own tokens go where they matter; `llx decide` answers a yes or no about some text in a second. See [docs/agents.md](docs/agents.md).
-
 ## In CI and scripts
 
-In CI llx is the same agent as at your terminal. It works through the plain filesystem and primitive commands: `bash` with `gh`, `git`, `jq` and your project's own tools. There is no MCP server, no GitHub tool and no built-in prompt. Your workflow owns the prompt and the posting, so the same task runs on GitHub, GitLab or any runner with a shell. The job that runs the model holds a read-only token, and a second job posts what it answered: the write token is never near the model.
+In CI llx is the same agent as at your terminal, given one task. It works through the plain filesystem and primitive commands: `bash` with `gh`, `git`, `jq` and your project's own tools. There is no MCP server, no GitHub tool and no built-in prompt. Your workflow owns the prompt and the posting, so the same task runs on GitHub, GitLab or any runner with a shell. The job that runs the model holds a read-only token, and a second job posts what it answered: the write token is never near the model.
 
 ```yaml
 # a step of a job, after actions/checkout
@@ -111,13 +107,29 @@ In CI llx is the same agent as at your terminal. It works through the plain file
       before you report it.
 ```
 
-The answer is `steps.llx.outputs.result`, JSON matching your schema; the spend and the exit code are outputs too. For a choice among a few options, `llx decide` asks a small decision model about stdin, in under a second for a fraction of a cent:
+The answer is `steps.llx.outputs.result`, JSON matching your schema; the status, the spend and the exit code are outputs too.
+
+How a task ends is a contract a pipeline can read. The exit code says it, and `--json` ends with a `run.completed` event carrying the same `status`:
+
+| Exit code | `status` | Meaning |
+| --- | --- | --- |
+| 0 | `achieved` | `result` said the goal was reached |
+| 1 | `not_achieved` | `result` said it was not (`blocked_by` says why), or its data did not match `--schema` |
+| 2 | `exhausted` | Turns (`--max-turns`) or time (`--timeout`) ran out before a `result` |
+| 3 | `error` | No key, no network, a model error, a bad argument |
+| 130 | `interrupted` | Ctrl-C or SIGTERM |
+
+For a choice among a few options, `llx decide` asks a small decision model about stdin, in under a second for a fraction of a cent:
 
 ```console
 $ git diff origin/main... | llx decide "Does this change break the public API?" --expect no
 ```
 
 Ready-made GitHub workflows, each run for real: [pull request review](examples/github/review.yml) with inline comments, [`@llx` in any comment, issue or review thread](examples/github/llx.yml), [issue triage](examples/github/triage.yml), [a failed run explained](examples/github/ci-failure.yml), [a described pull request](examples/github/describe.yml), [a draft release](examples/github/release.yml) and [a weekly audit](examples/github/audit.yml): [examples/](examples/README.md). The action, the two-job pattern, rules, keys, limits, security and GitLab: [docs/ci.md](docs/ci.md). Shell recipes with `gh` and `glab`: [docs/recipes.md](docs/recipes.md).
+
+## In other agents
+
+Claude Code, another agent or a script of yours can call llx from its shell, as its task needs. `llx exec` hands a task to a helper on any provider and model, so the agent's own tokens go where they matter; `llx decide` answers a yes or no about some text in a second. See [docs/agents.md](docs/agents.md).
 
 ## Documentation
 

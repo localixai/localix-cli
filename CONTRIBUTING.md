@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. llx is meant to stay small and fast: six tools (`read`, `apply_patch`, `bash`,
+Thanks for helping. llx is meant to stay small and fast: five tools (`bash`, `apply_patch`,
 `ask`, `agents`, `jobs`), synchronous code, no async runtime, and a release binary under
 4 MB. A change that adds a dependency has to earn its size.
 
@@ -39,9 +39,7 @@ in Claude Code run `scripts/check --fast` when they end a turn (`.claude/setting
 
 Under it are the usual commands, which you can still run alone: `cargo fmt --all --check`,
 `cargo clippy --workspace --all-targets -- -D warnings` (then, on libraries and binaries,
-`-D unused_crate_dependencies`), `cargo test --workspace` (on a Linux
-server with no display, `scripts/check` runs the tests under `xvfb-run`), the same two without
-default features (the headless build), the release binary's size (under 5 MiB, warned above
+`-D unused_crate_dependencies`), `cargo test --workspace`, the release binary's size (under 5 MiB, warned above
 4 MB), the site's build, the action's tests, and the linters: shellcheck, actionlint, the example
 workflows' conventions and the Markdown's relative links, at pinned versions it downloads once.
 Run these yourself before a release: the minimum Rust version
@@ -49,7 +47,7 @@ Run these yourself before a release: the minimum Rust version
 (`scripts/check --only coverage`, or `scripts/coverage.sh`).
 The code stays under 50,000 lines of working code and 300 per file (ARCHITECTURE.md S1, S2).
 
-For changes to the loop, the page probe or the instructions, run the live evals too
+For changes to the loop, the prompt, the tools or the instructions, run the live evals too
 (`python3 evals/run.py --repeat 3`; paid, a few cents) and put the result in the pull request.
 
 ## Code

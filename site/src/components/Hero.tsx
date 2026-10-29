@@ -9,11 +9,11 @@ export function Hero() {
     <section className="hero wrap">
       <div className="hero-copy">
         <h1>
-          <span className="hero-chip">Ultrafast</span>, lightweight agent runtime
+          <span className="hero-chip">Autonomous</span> agent runtime for CI and scripts
         </h1>
         <p className="lede">
-          One small binary that Claude Code, another agent, a script or CI calls from its shell: a task done on any model, a
-          choice made in a second.
+          One task, a structured end every time, and an exit code to branch on. One small binary on any model, with a minimal
+          agent for your terminal, and commands other agents can call.
         </p>
         <InstallCommand tabs={INSTALL} />
         <p className="hero-under">

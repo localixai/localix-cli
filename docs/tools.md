@@ -1,6 +1,6 @@
 # Tools
 
-llx has five tools. The set is deliberately minimal: a new capability goes into one of them (as
+llx has five tools, and `result`, which ends every task. The set is deliberately minimal: a new capability goes into one of them (as
 an `action`), or is left to the shell. The model works as you do at a terminal: it reads with `cat`,
 `sed -n` and `rg` and runs the checks in the shell, and changes files with a patch, as free text with
 nothing to escape. Its context names the script runtimes found on the session's `PATH` (`python3`, `node`, `bun`, only
@@ -13,12 +13,13 @@ those present) in a `Runtimes:` line.
 | [`ask`](#ask) | A question to you |
 | [`agents`](#agents) | Other agents, in parallel |
 | [`jobs`](#jobs) | Monitors and schedules |
+| [`result`](#result) | Ends the task: achieved or not, a summary, and the data of `--schema` |
 
 ## bash
 
 - `sh -c` in the workspace or a `workdir`, with stdin closed. On Unix it runs in its own session, with no terminal, so a program that prompts fails at once; git and pagers are told not to prompt or page.
 - A timeout (120 s by default, at most 600 s) or Ctrl-C kills it with everything it started.
-- Each stream keeps its first and last 5,000 bytes. A non-zero exit is a normal result. It asks the gate. In a read-only mode its commands run in an operating system sandbox instead ([modes](modes.md#modes)); a command that writes a file fails there.
+- Each stream keeps about 40,000 characters: the first 8,000 and the last 32,000, cut at lines. A non-zero exit is a normal result. It asks the gate. In a read-only mode its commands run in an operating system sandbox instead ([modes](modes.md#modes)); a command that writes a file fails there.
 - The key variables of the provider in use (as the catalog names them, such as `DEEPSEEK_API_KEY`) and `OPENROUTER_API_KEY` are left out of a command's environment; other providers' variables stay, so a project's own tests can use them; a provider chosen later with `/login` has its variables left out too, from the next command on. That is no barrier, since a command can still read llx's own environment (`ps -E` on macOS; on Linux llx marks itself non-dumpable, so only root can read `/proc/<llx pid>/environ`, and a hosted CI runner gives passwordless `sudo`) and the saved key file. Where `bash` runs on input from strangers, see [CI security](ci.md#security).
 
 ## apply_patch
@@ -37,7 +38,7 @@ Starts other agents and works with them, in parallel:
 
 - `spawn` (a task, and a short name) starts one on a thread of its own and returns at once; `send` tells one more (read at its next step while it works, or a new task once it is done); `wait` (some or all, `timeout_ms`, 30 s by default) returns the answers that came; `list` shows them; `close` ends one (at most 6 open).
 - An agent's answer, its last message, reaches the main agent by itself at its next step as an `<agent_result>` message; a task does not end while its agents work.
-- An agent is a session of its own whose parent is the main one: its conversation opens with the same context, it has the same tools but `agents` and `ask` (one level, and nobody to answer it), and asks the same gate, its approvals marked `[agent name]` and asked one at a time. It sees nothing of the main conversation.
+- An agent is a session of its own whose parent is the main one: its conversation opens with the same context, it has the same tools but `agents`, `ask` and `jobs` (one level, and nobody to answer it), and asks the same gate, its approvals marked `[agent name]` and asked one at a time. It sees nothing of the main conversation.
 - It stops with the task (Ctrl-C, the time limit) or alone (`x` on its row), and what it spends counts in the task's turns and cost (and in `--json`'s `turn` events and `usage`).
 - Its tasks are saved as a session that names its parent; `llx sessions` lists the main ones with how many agents each started, and `resume` never picks an agent's.
 
@@ -49,3 +50,6 @@ Work that comes back later.
 - `schedule` gives a `prompt` back as a task of its own at a time: `in` (`45m`, `2h`) or a 5-field `cron` in local time (`*/10 * * * *`, `0 9 * * 1-5`; both day fields restricted match either), once or `recurring` (for 7 days at most). It runs between tasks, behind what you queued, while the session is open (not in `exec`; not restored by `resume`; no jitter).
 - At most 8 monitors and 50 jobs. `list`, `stop`.
 
+## result
+
+Ends the task, once: `achieved` (whether the goal was reached), a `summary` for a person who did not follow the work, `blocked_by` when it was not (what outside the agent's reach stops it; work left to do is not a block), and `data` matching the JSON Schema when `--schema` is given. Data that does not match goes back to the agent to fix. Text alone never ends a task: the agent is told so until it calls `result`, or `--max-turns` or `--timeout` ends the run (exit 2). The call sets the exit code and the `status` of `--json` ([reference](reference.md#exit-codes)).

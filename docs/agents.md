@@ -4,7 +4,7 @@ llx extends the agent you already use (Claude Code, another agent, a script of y
 
 | Block | What your agent gets | Command |
 | --- | --- | --- |
-| **helpers** | A whole task handed to an agent on any provider and model, in the background and in parallel, with an answer in your JSON shape | `llx exec` |
+| **helpers** | A whole task handed to an agent on any provider and model, in the background and in parallel, with a `result` in your JSON shape | `llx exec` |
 | **decide** | A quick, cheap choice about some text: yes or no, or one of your options | `llx decide` |
 | **sessions** | The same helper again, with its conversation | `llx exec resume ID` |
 
@@ -32,4 +32,4 @@ git diff | llx decide "Does this change touch the public API?"           # yes o
 llx decide --choices patch,minor,major "Which version bump?" < CHANGES.md
 ```
 
-The rules behind it are W9 and K7 in [ARCHITECTURE.md](../ARCHITECTURE.md).
+It needs an OpenRouter key. Its options are in the [reference](reference.md#llx-decide).

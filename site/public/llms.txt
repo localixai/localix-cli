@@ -1,9 +1,11 @@
 # llx
 
-> llx is the agent runtime other agents build on, one binary under 4 MB. It runs three ways from one
-> binary: `llx`, a minimal agent at the terminal with six tools; `llx exec`, one task for scripts
-> and CI (JSON events, `--schema` answers, exit codes as a contract); and `llx decide`, a quick
-> choice about stdin. It works with any model of the models.dev catalog and runs on macOS and Linux.
+> llx is an autonomous agent runtime for CI and scripts, one binary under 4 MB. `llx exec` runs one
+> task and ends with a `result`: achieved or not, a summary, and data matching your JSON Schema, with
+> an exit code and `--json` events as a contract. The same binary is a minimal agent at the terminal
+> (`llx`, five tools: `bash`, `apply_patch`, `ask`, `agents`, `jobs`) and a quick choice about stdin
+> for other agents (`llx decide`). It works with any model of the models.dev catalog and runs on
+> macOS and Linux.
 
 ## Install
 
@@ -14,9 +16,10 @@
 
 - `llx` opens a session at the terminal; `llx "<task>"` opens one that starts with that task.
 - `llx exec "<task>"` (or `llx -p "<task>"`) runs one task and exits: the answer alone on stdout.
-- `llx exec --json` prints one JSON event per line; `--schema` ends with data matching a JSON Schema.
+- Every task ends with the agent's `result` call (achieved, a summary, `blocked_by`, and `data` matching `--schema`); text alone never ends it.
+- `llx exec --json` prints one JSON event per line, ending with `run.completed` and its `status`.
 - `llx decide "<question>"` asks the decision model one question about stdin and prints the option it picked (`--choices`, `--expect`).
-- Exit codes: 0 achieved, 1 not achieved, 2 out of turns or time, 3 environment or usage, 130 interrupted.
+- Exit codes: 0 achieved, 1 not achieved, 2 out of turns or time (`exhausted`), 3 environment or usage (`error`), 130 interrupted.
 
 ## In CI
 

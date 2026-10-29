@@ -1,6 +1,6 @@
 # llx in CI and scripts
 
-In CI llx is the same agent as at your terminal: `llx exec`, with `bash`. It reaches GitHub, GitLab or anything else the way you would, with `gh`, `git`, `jq` and your project's own commands in its shell. There is no MCP server, no GitHub tool and no built-in review prompt. The prompt is yours, in your workflow, where you can read it, and so is what gets posted.
+In CI llx is the same agent as at your terminal, given one task: `llx exec`, with `bash`. The task ends with a `result` call (achieved or not, a summary, and data matching your schema), and the exit code says which. It reaches GitHub, GitLab or anything else the way you would, with `gh`, `git`, `jq` and your project's own commands in its shell. There is no MCP server, no GitHub tool and no built-in review prompt. The prompt is yours, in your workflow, where you can read it, and so is what gets posted.
 
 That is why it is flexible and why it is safer:
 
@@ -89,7 +89,7 @@ One of `prompt` and `prompt-file` is needed. The rest are optional.
 
 | Output | What it is |
 | --- | --- |
-| `result` | The final answer, or the JSON data with `schema`. An output is cut at 900 KB: past that it is empty. |
+| `result` | The summary the agent ended with, or the JSON data with `schema`. An output is cut at 900 KB: past that it is empty. |
 | `result-file` | The file holding the whole answer, under `RUNNER_TEMP`. |
 | `exit-code` | `0`, `1`, `2`, `3` or `130` ([the contract](#answers-and-exit-codes)). |
 | `status` | `achieved`, `not-achieved`, `out-of-budget`, `not-ready` or `interrupted` (`failed` for any other code). |
@@ -221,7 +221,7 @@ Rules come from the workflow and your settings, never from the repository: a pul
 
 | Flag | What it gives |
 | --- | --- |
-| (none) | The final answer alone on stdout |
+| (none) | The `result`'s summary alone on stdout |
 | `--schema SCHEMA` | Data matching the JSON Schema (inline or `@file`), alone on stdout |
 | `-o FILE` | The answer (or the data) also written to FILE |
 | `--json` | One JSON event per line instead: calls, turns with their `cost_usd`, and `run.completed` with the usage ([reference](reference.md#json-events)) |
@@ -232,13 +232,13 @@ The action takes `schema` for `--schema` and gives the answer as `result` and `r
 jq -r 'select(.type == "run.completed") | .usage.cost_usd' events.jsonl
 ```
 
-The exit code says how the task ended, and is a public contract:
+Every task ends with the agent's `result` call: `achieved`, a `summary`, `blocked_by` when it is not achieved, and `data` matching `--schema` when one is given. Text alone never ends a task; the agent is told so until it calls `result` or turns or time run out. The exit code says how the task ended, and is a public contract (the `--json` `status` is in [the reference](reference.md#json-events)):
 
 | Code | `status` of the action | Meaning |
 | --- | --- | --- |
-| 0 | `achieved` | The agent's `result` said the goal was reached |
-| 1 | `not-achieved` | Its `result` said it was not (the answer names what blocks it), or the data did not match `--schema`, or it ended in text without `result` |
-| 2 | `out-of-budget` | Turns or time ran out before an answer |
+| 0 | `achieved` | Its `result` said the goal was reached |
+| 1 | `not-achieved` | Its `result` said it was not (the answer names what blocks it), or the data did not match `--schema` |
+| 2 | `out-of-budget` | Turns or time ran out before a `result` |
 | 3 | `not-ready` | No key, no network, a model error, a bad argument |
 | 130 | `interrupted` | Interrupted, or the runner cancelled the job |
 

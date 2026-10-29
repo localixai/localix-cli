@@ -17,7 +17,7 @@ and Localix (rule ids, ratchets, poke-then-pull sync).
 
 ## Bird's-eye view
 
-llx is a model in a loop over four tools: `bash`, through which it reads, searches, changes files and runs the checks (B1-B4), `ask`, `agents` and `jobs`. The loop decides; it knows no technology. Tools, stores and providers are technology behind ports. One composition root wires
+llx is a model in a loop over five tools: `bash`, through which it reads, searches and runs the checks, `apply_patch`, through which it changes files (B1-B5), `ask`, `agents` and `jobs`. The loop decides; it knows no technology. Tools, stores and providers are technology behind ports. One composition root wires
 them for a session. A session runs in a server, and an interface shows it through a protocol,
 in the same process today, over a socket once the daemon lands (`docs/daemon.md`). Nothing a
 person sees is known below the interface; nothing a model or a tool does is known above the
@@ -149,7 +149,7 @@ every new file already goes where its target crate will be.
   policy and tag) posted to the lane's queue; the agent's inbox knows no source.
 - **K5**: a mode is a named set of rules (`allow`, `deny`) and whether its commands may change
   anything (`read_only`), and nothing else: the built-in ones (`default`, no rule; `plan`, read-only:
-  its commands run without asking, in the sandbox of B3; `bypass`, everything allowed) and the
+  its commands run without asking, in the sandbox of B3, and its patches are refused (B5); `bypass`, everything allowed) and the
   person's, from `<config>/llx/settings.json`, where one may replace a built-in. `--allow` and `--deny` add
   to the mode's. A deny refuses in every mode; an allow runs without asking; what no rule settles
   is asked of the person, or refused when no one is there. Rules come from the command line and
@@ -183,20 +183,22 @@ every new file already goes where its target crate will be.
 - **W8**: one request's panic or failure never ends the server: it becomes that request's error.
 - **W9**: (retired.)
 
-## Shell rules (`bash`)
+## Shell and patch rules (`bash`, `apply_patch`)
 
-The model works as a person at a terminal does: it reads with `cat`, `sed -n` and `rg`, changes
-files with a heredoc or a short script, and runs the checks, chaining what does not need a result
-first into one command. One tool, the shell, does what a read tool, a patch tool and a script
-engine did, in fewer turns and fewer tokens (measured in `evals/arena`, `benchmarks/arena`).
+The model works as a person at a terminal does: it reads with `cat`, `sed -n` and `rg` and runs
+the checks, chaining what does not need a result first into one command; it changes files with a
+patch, as free text, with nothing to escape. A large file written through a command line, a
+heredoc inside a JSON string, is where a model breaks: its quotes and newlines go wrong, or the
+command is cut (measured in `benchmarks/task-tracker`).
 
-- **B1**: the model's only tool for files and commands is `bash` (`tools/src/shell/`). No tool
-  reads, writes or patches a file for it; a capability is a command, or a program the shell has.
+- **B1**: the model's tools for files and commands are `bash` (`tools/src/shell/`), for reading,
+  searching and running, and `apply_patch` (`tools/src/fs/patch/`), for every file it adds,
+  changes, deletes or moves. No other tool reads or writes a file for it; a capability is a
+  command, or a program the shell has.
 - **B2**: what the shell offers is the app's context to say, found on the session's `PATH` (the
   client's, in the daemon) without running anything: the runtimes a script can be written in
-  (`python3`, `node`, `bun`), named only when present. How to change a file well (a heredoc for a
-  whole file; for a part, a script that checks the old text occurs once) is the prompt's, in
-  general terms (C7).
+  (`python3`, `node`, `bun`), named only when present. How to change a file well is the tools'
+  descriptions' and the prompt's to say, in general terms (C7).
 - **B3**: a read-only command (a `read_only` mode's, K5; the gate's `Verdict::ReadOnly`) runs in
   the operating system's sandbox, never a check of its text: on macOS Seatbelt (`sandbox-exec`,
   closed by default), on Linux Landlock with a seccomp filter. It reads every file but the app's
@@ -206,7 +208,13 @@ engine did, in fewer turns and fewer tokens (measured in `evals/arena`, `benchma
   no other process (no Apple events, no launchd, no daemon of ours). Where no sandbox can be set
   up, the command is refused with the reason, never run open.
 - **B4**: a changed file is the gate's to allow, as any command is (A1): the summary is the whole
-  command. Nothing records a command's files: `/rewind` goes back in the conversation only.
+  command, or the patch's files and what it does to each. Nothing records a command's or a
+  patch's files: `/rewind` goes back in the conversation only.
+- **B5**: `apply_patch` takes the patch's text, not JSON: where a provider takes a tool of free
+  text (the Responses API's custom tools, for a model the catalog says takes a grammar) it is
+  offered so, with its grammar; elsewhere as a function with one string argument. `ToolSpec`
+  says which; the providers render it (L5: the agent knows neither). A read-only verdict refuses
+  a patch: a file written cannot be sandboxed.
 
 ## Concurrency and errors
 

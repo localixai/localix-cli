@@ -32,7 +32,7 @@
 
 <p align="center">
   <a href="https://llx.sh">
-    <img src="docs/assets/demo.gif" alt="llx at a terminal: /login picks OpenRouter and a model, Shift+Tab switches to bypass mode, then it fixes the failing median tests in stats.py and shows the diff, in 8 seconds for $0.002" width="880">
+    <img src="docs/assets/demo.gif" alt="llx at a terminal: Shift+Tab switches to bypass mode, the goal is to fix the failing median test in stats.py; it reads the file, patches median(), runs python3 -m unittest (4 tests pass) and ends with a result, in 14 seconds for $0.0006 on GPT-6 Luna" width="880">
   </a>
 </p>
 

@@ -1,5 +1,5 @@
 /**
- * An asciinema v3 recording (scripts/record-llx.exp, polished by scripts/polish-cast.py) read
+ * An asciinema v3 recording (scripts/demo/record.py) read
  * into a timeline: its size, what it printed and when, and its chapters.
  */
 export type Frame = { at: number; data: string };

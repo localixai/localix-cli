@@ -47,6 +47,8 @@ struct Router {
     slow: Vec<&'static str>,
     /// How long: longer where the main agent must make many turns while they think.
     slow_for: Duration,
+    /// Slow agents think until the main agent's script is spent, however long its turns take.
+    hold: bool,
     met: Mutex<(usize, usize)>,
     arrived: Condvar,
     /// The agents that met another one thinking.
@@ -180,6 +182,17 @@ impl Chat for Router {
             self.main_turn(&request);
         }
         if self.slow.contains(&key.as_str()) {
+            let spent = || {
+                self.scripts
+                    .lock()
+                    .unwrap()
+                    .get("main")
+                    .is_none_or(VecDeque::is_empty)
+            };
+            let until = std::time::Instant::now() + Duration::from_secs(20);
+            while self.hold && !spent() && std::time::Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(10));
+            }
             std::thread::sleep(self.slow_for);
         }
         if self.fails.contains(&key.as_str()) {
@@ -452,9 +465,8 @@ fn eight_agents_work_at_most_even_when_some_are_closed() {
     }
     let mut chat = Router::new(&[("main", script)]);
     chat.slow = names.to_vec();
-    // Fifteen main turns happen while the first six think: under a loaded test run they take
-    // longer than the usual pause.
-    chat.slow_for = Duration::from_secs(2);
+    // Fifteen main turns happen while the first six think: they hold until the last is asked.
+    chat.hold = true;
     composed_with(crate::modes::built("bypass"), true, &chat, |rig| {
         rig.task("a crowd");
         let results = results(rig);

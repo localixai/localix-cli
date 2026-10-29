@@ -42,7 +42,6 @@ jobs:
         with:
           model: anthropic/claude-haiku-5.5
           allow: bash(git *)
-          max-turns: '30'
           prompt: |
             Prepare the next release of this project. The last release: $LAST. The commits since
             are git log --no-merges $RANGE; read a commit with git show where its subject is not

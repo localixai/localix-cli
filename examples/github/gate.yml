@@ -32,8 +32,6 @@ jobs:
         with:
           model: anthropic/claude-haiku-5.5
           mode: plan # read-only, in the system's sandbox
-          max-turns: '40'
-          timeout: '900'
           schema: |
             {"type":"object","properties":{"missing":{"type":"array","items":{"type":"string"}}},"required":["missing"]}
           prompt: |

@@ -10,7 +10,7 @@ recipe is one line you can run as is; the outputs below are from real runs.
 - `llx exec --allow bash`: the agent may run commands to explore and confirm, without asking.
 - `llx exec -y`: the agent may act (pages, commands, edits). Only on input you trust.
 
-`exec` ends with an exit code ([the contract](reference.md#exit-codes)): in a script, `set -o pipefail` keeps a pipe from posting what a failed run left, and `--max-turns` and `--timeout` bound a run.
+`exec` ends with an exit code ([the contract](reference.md#exit-codes)): in a script, `set -o pipefail` keeps a pipe from posting what a failed run left.
 
 Both need `OPENROUTER_API_KEY` (`exec` takes any provider: [docs/ci.md](ci.md#keys-and-models)).
 

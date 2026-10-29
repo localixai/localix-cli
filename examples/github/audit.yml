@@ -46,8 +46,6 @@ jobs:
         with:
           model: anthropic/claude-haiku-5.5
           allow: bash
-          max-turns: '80'
-          timeout: '1800'
           prompt: |
             Audit this repository of $GH_REPO as a maintainer who has just joined would. Read its
             docs and its layout; run its tests and linters (its notes say how); then look for real

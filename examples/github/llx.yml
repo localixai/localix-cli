@@ -130,8 +130,6 @@ jobs:
           ASKER: ${{ github.event.comment.user.login || github.event.sender.login }}
         with:
           model: anthropic/claude-haiku-5.5
-          max-turns: '80'
-          timeout: '1500'
           allow: |
             bash
           deny: |

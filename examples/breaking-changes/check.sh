@@ -21,7 +21,7 @@ llx exec \
   --allow 'bash(git diff *)' --allow 'bash(git show *)' --allow 'bash(git log *)' \
   --allow 'bash(git status *)' --allow 'bash(ls *)' --allow 'bash(grep *)' \
   --allow 'bash(cat *)' --allow 'bash(head *)' --allow 'bash(rg *)' \
-  --max-turns 30 --timeout 300 --schema "@$here/schema.json" -o "$out" "$prompt" </dev/null >/dev/null ||
+  --schema "@$here/schema.json" -o "$out" "$prompt" </dev/null >/dev/null ||
   { echo "llx could not finish: exit $?" >&2; exit 2; }
 
 jq -r '.changes[] | "\(if .breaking then "BREAKS" else "safe  " end)  \(if .kind == "semantic" then "semantic  " else "structural" end)  \(.endpoint): \(.change)"' "$out"

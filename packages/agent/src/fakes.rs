@@ -3,7 +3,7 @@
 
 use std::sync::Mutex;
 
-use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
+use contracts::chat::{Calling, Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
 use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::{Value, json};
 
@@ -13,9 +13,9 @@ use crate::observer::Observer;
 
 /// A chat model that replies from a script, and remembers what each request allowed.
 pub(crate) struct Scripted {
-    replies: Mutex<Vec<Completion>>,
-    /// Whether each request let the model call tools.
-    pub(crate) may_call: Mutex<Vec<bool>>,
+    pub(crate) replies: Mutex<Vec<Completion>>,
+    /// What each request let the model call: `any`, `nothing`, or the one tool's name.
+    pub(crate) calling: Mutex<Vec<String>>,
     /// The last user message of each request.
     pub(crate) last_user: Mutex<Vec<String>>,
 }
@@ -24,7 +24,7 @@ impl Scripted {
     pub(crate) fn new(replies: Vec<Completion>) -> Self {
         Self {
             replies: Mutex::new(replies.into_iter().rev().collect()),
-            may_call: Mutex::new(vec![]),
+            calling: Mutex::new(vec![]),
             last_user: Mutex::new(vec![]),
         }
     }
@@ -40,7 +40,11 @@ impl Chat for Scripted {
         reason = "a test picks out the variant it checks"
     )]
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
-        self.may_call.lock().unwrap().push(request.may_call);
+        self.calling.lock().unwrap().push(match request.calling {
+            Calling::Any => "any".into(),
+            Calling::Nothing => "nothing".into(),
+            Calling::Only(name) => name.into(),
+        });
         let user = request
             .conversation
             .iter()
@@ -101,20 +105,14 @@ pub(crate) fn says(text: &str) -> Completion {
     }
 }
 
-/// The model ends the task well: a `result` call with `summary`.
-pub(crate) fn done(summary: &str) -> Completion {
-    calls(
-        crate::schema::TOOL,
-        serde_json::json!({"achieved": true, "summary": summary}),
-    )
+/// The model ends the task: a message with no call, its answer.
+pub(crate) fn done(answer: &str) -> Completion {
+    says(answer)
 }
 
-/// The model ends the task blocked: a `result` call naming `why`.
-pub(crate) fn blocked(summary: &str, why: &str) -> Completion {
-    calls(
-        crate::schema::TOOL,
-        serde_json::json!({"achieved": false, "summary": summary, "blocked_by": why}),
-    )
+/// The `result` call of `--schema`, with `data`.
+pub(crate) fn data(data: &Value) -> Completion {
+    calls(crate::schema::TOOL, serde_json::json!({ "data": data }))
 }
 
 pub(crate) fn calls(name: &str, arguments: Value) -> Completion {

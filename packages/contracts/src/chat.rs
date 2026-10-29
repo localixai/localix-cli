@@ -142,10 +142,21 @@ pub struct Request<'a> {
     pub conversation: &'a [Message],
     /// Offered on every request, so the conversation's earlier calls stay valid.
     pub tools: &'a [ToolSpec],
-    /// Whether the model may call them now; `false` asks for an answer.
-    pub may_call: bool,
+    /// Which of them it may call now.
+    pub calling: Calling<'a>,
     /// The latest moment the caller still wants an answer; `None`: the provider's own limit.
     pub deadline: Option<std::time::Instant>,
+}
+
+/// What a request lets the model call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Calling<'a> {
+    /// Any of the tools, or none: the model decides.
+    Any,
+    /// None: the request asks for an answer.
+    Nothing,
+    /// The one tool named, and nothing else: the reply is that call.
+    Only(&'a str),
 }
 
 pub trait Chat: Send + Sync {

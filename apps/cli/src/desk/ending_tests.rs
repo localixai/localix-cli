@@ -41,7 +41,7 @@ fn stopping_lane_b_leaves_lane_a_running() {
         person.until("A ends", |app| ended(app, &lane_a));
         assert_eq!(
             state(&person.app, &lane_a),
-            AgentState::Ended("achieved".into())
+            AgentState::Ended("done".into())
         );
     });
 }

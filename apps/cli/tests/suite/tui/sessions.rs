@@ -207,7 +207,7 @@ fn a_session_is_titled_in_the_background_and_listed_and_saved_so() {
 fn a_resumed_session_shows_its_earlier_tasks() {
     let model = Model::start(vec![]);
     let turns = r#"[
-        {"goal": "fix the parser", "answer": "Fixed the **parser**.", "status": "achieved", "at": 1},
+        {"goal": "fix the parser", "answer": "Fixed the **parser**.", "status": "done", "at": 1},
         {"goal": "and the lexer", "answer": "", "status": "interrupted", "at": 2}
     ]"#;
     let term = Term::resuming(&model, "1700000000-ab12", turns);
@@ -227,8 +227,7 @@ fn a_resumed_session_shows_its_earlier_tasks() {
 fn a_session_resumed_from_another_directory_says_so_on_the_screen() {
     // Served by the daemon, a note on stderr would go to its log, not to the person.
     let model = Model::start(vec![]);
-    let turns =
-        r#"[{"goal": "fix the parser", "answer": "Fixed.", "status": "achieved", "at": 1}]"#;
+    let turns = r#"[{"goal": "fix the parser", "answer": "Fixed.", "status": "done", "at": 1}]"#;
     let term = Term::resuming_from(&model, "1700000000-ef56", turns, Some("/elsewhere/repo"));
     let screen = term.wait_for("ran in /elsewhere/repo", LONG);
     assert!(screen.contains("session 1700000000-ef56"), "{screen}");
@@ -241,7 +240,7 @@ fn a_session_resumed_from_another_directory_says_so_on_the_screen() {
 fn a_resumed_session_shows_what_it_spent_before() {
     let model = Model::start(vec![]);
     let turns = r#"[
-        {"goal": "fix the parser", "answer": "Fixed.", "status": "achieved", "at": 1, "steps": [
+        {"goal": "fix the parser", "answer": "Fixed.", "status": "done", "at": 1, "steps": [
             {"what": "model", "at_ms": 0, "ms": 900, "spent": {"input_tokens": 20000,
                 "cached_tokens": 21000, "output_tokens": 1000, "cost": 0.04}},
             {"what": "bash", "at_ms": 900, "ms": 100},

@@ -4,7 +4,7 @@ llx extends the agent you already use (Claude Code, another agent, a script of y
 
 | Block | What your agent gets | Command |
 | --- | --- | --- |
-| **helpers** | A whole task handed to an agent on any provider and model, in the background and in parallel, with a `result` in your JSON shape | `llx exec` |
+| **helpers** | A whole task handed to an agent on any provider and model, in the background and in parallel, with an answer in your JSON shape | `llx exec` |
 | **decide** | A quick, cheap choice about some text: yes or no, or one of your options | `llx decide` |
 | **sessions** | The same helper again, with its conversation | `llx exec resume ID` |
 

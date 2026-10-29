@@ -4,7 +4,7 @@
 //! own API the prompt cache's key.
 
 use contracts::catalog::{Effort, Selection};
-use contracts::chat::{Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
+use contracts::chat::{Calling, Chat, ChatError, Completion, Message, Request, ToolCall, Usage};
 use contracts::tool::{Image, ToolSpec};
 use serde_json::{Value, json};
 
@@ -143,7 +143,11 @@ fn body(host: Wire, selection: &Selection, request: &Request) -> Value {
     }
     if !request.tools.is_empty() {
         body["tools"] = request.tools.iter().map(function).collect();
-        body["tool_choice"] = json!(if request.may_call { "auto" } else { "none" });
+        body["tool_choice"] = match request.calling {
+            Calling::Any => json!("auto"),
+            Calling::Nothing => json!("none"),
+            Calling::Only(name) => json!({"type": "function", "function": {"name": name}}),
+        };
         // Several calls in one turn: independent reads and searches cost one turn, not many.
         // The agent runs together only the calls whose tools allow it, the rest in order.
         body["parallel_tool_calls"] = json!(true);

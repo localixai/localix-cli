@@ -48,7 +48,7 @@ fn a_task_leaves_its_blocks_in_order() {
     app.event(Event::Answer("One file: `README.md`.".into()), now);
     app.event(
         Event::TaskEnded {
-            status: "achieved".into(),
+            status: "done".into(),
             millis: 3_000,
             turns: 2,
             cost: 0.001,
@@ -697,7 +697,7 @@ fn a_long_history_shows_its_last_tasks_and_counts_the_rest() {
         .map(|n| protocol::Turn {
             goal: format!("task {n}"),
             answer: format!("answer {n}"),
-            status: "achieved".into(),
+            status: "done".into(),
         })
         .collect();
     app.event(Event::Earlier(turns), now);

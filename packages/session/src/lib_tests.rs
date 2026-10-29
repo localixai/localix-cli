@@ -38,7 +38,7 @@ fn a_session_round_trips_and_the_newest_comes_first() {
     new.record(Turn {
         goal: "find a quiz".into(),
         answer: "Done.".into(),
-        status: "achieved".into(),
+        status: "done".into(),
         at: now(),
         steps: vec![],
     });
@@ -101,7 +101,7 @@ fn what_a_task_spent_is_kept_and_an_older_session_without_it_still_loads() {
     session.record(Turn {
         goal: "fix it".into(),
         answer: "Fixed.".into(),
-        status: "achieved".into(),
+        status: "done".into(),
         at: now(),
         steps: vec![turn.clone(), call],
     });

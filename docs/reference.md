@@ -4,13 +4,13 @@ How a task ends, the exit codes, the `--json` events and `llx decide`. Both the 
 
 ## Exit codes
 
-Every task ends with the agent's `result` call: `achieved`, a `summary`, `blocked_by` when it is not achieved, and `data` matching `--schema` when one is given. Text alone never ends a task. The `answer` of a run is that summary, or with `--schema` the data.
+A task ends when the model replies with a message and no tool call: that message is the `answer`. With `--schema`, llx then asks the same model once more, on the same conversation, for the `result` call (`tool_choice` forced to it), and the `answer` is its data. Data that does not match the schema goes back to be fixed, up to two times.
 
 | Code | Meaning |
 | --- | --- |
-| 0 | The task was achieved: its `result` said so |
-| 1 | Its `result` said the task was not achieved (`blocked_by` says why), or the data did not match `--schema` |
-| 2 | Turns, time or budget ran out before a `result` |
+| 0 | Done: the model answered, and with `--schema` its data matched |
+| 1 | Only with `--schema`: no data matched it |
+| 2 | Turns, time or budget ran out before the model answered |
 | 3 | The environment or the command line is not ready: no key, no network, a model error, a bad argument |
 | 130 | Interrupted: Ctrl-C (or SIGTERM) |
 
@@ -22,11 +22,11 @@ With `--json`, a closed stdout (`llx --json ... | head -1`) ends the run quietly
 
 | Event | Fields |
 | --- | --- |
-| `run.started` | `schema` (6), `goal`, `session`, `model`, `workspace` |
+| `run.started` | `schema` (7), `goal`, `session`, `model`, `workspace` |
 | `tool.call` | `id`, `name`, `arguments` |
 | `tool.result` | `id`, `name`, `failed`, `fatal`, `output`, and `state` when the tool left one |
 | `turn` | One model turn: `model`, `input_tokens`, `cached_tokens`, `output_tokens`, `cost_usd`, `model_ms` |
-| `run.completed` | `status` (`achieved`, `not_achieved`, `exhausted`, `error`, `interrupted`), `exit_code`, `answer`, `data` or `data_error`, `error`, `session`, `usage` {`agent`, `cost_usd`}, `duration_ms` |
+| `run.completed` | `status` (`done`, `no_data`, `exhausted`, `error`, `interrupted`), `exit_code`, `answer`, `data` or `data_error`, `error`, `session`, `usage` {`agent`, `cost_usd`}, `duration_ms` |
 
 The exit codes and these events are a public contract. A breaking change bumps `schema` and is listed in [CHANGELOG.md](../CHANGELOG.md).
 

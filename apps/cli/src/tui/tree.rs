@@ -224,13 +224,8 @@ pub(super) fn tokens(count: u64) -> String {
 /// and what its transcript's line says it did.
 pub(crate) fn ending(status: &str) -> (Style, &'static str, &'static str, &'static str) {
     match status {
-        "achieved" => (style::done(), "✓", "done", "finished"),
-        "not_achieved" => (
-            style::failed(),
-            "✗",
-            "not achieved",
-            "finished, not achieved",
-        ),
+        "done" => (style::done(), "✓", "done", "finished"),
+        "no_data" => (style::failed(), "✗", "no data", "finished with no data"),
         "exhausted" => (style::failed(), "✗", "out of turns", "ran out of turns"),
         "interrupted" => (style::waiting(), "■", "stopped", "was stopped"),
         _ => (style::failed(), "✗", "failed", "failed"),

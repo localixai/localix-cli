@@ -166,8 +166,8 @@ finish() {
   if [ -n "${INPUT_INSTALL_ONLY:-}" ] && [ "${PREPARED:-}" = success ]; then exit 0; fi
   code=$(ended)
   case "$code" in
-    0) status="achieved" ;;
-    1) status="not-achieved" ;;
+    0) status="done" ;;
+    1) status="no-data" ;;
     2) status="out-of-budget" ;;
     3) status="not-ready" ;;
     130) status="interrupted" ;;

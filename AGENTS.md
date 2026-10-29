@@ -24,11 +24,11 @@ Packages and an app. Every dependency points inward (rules L1-L5 below).
   - `history.rs`: sessions, `History`, whose `save` and `load` fail with `HistoryError`.
   - `inbox.rs`: what reaches a run between its turns, `Inbox`.
 - `packages/agent`: the agent.
-  - `agent.rs`: the loop: a turn's calls (those that may, at once: `calls.rs`), the inbox between turns, the stop conditions: a task ends with a `result` call (always offered, `schema.rs`), never with text; a text-only reply is a note, answered each time with the line that only `result` ends the task, until it does or the turns run out; a `result` while an agent's answer or a job is still to come is refused until it is read. `Agent::context` is the app's environment block, sent before the first goal; `Agent::tell` is what the app says between goals (a changed mode), naming no tool. `agent/handling.rs`: a turn's calls carried out, answered and counted; a `result` checked against its schema.
+  - `agent.rs`: the loop: a turn's calls (those that may, at once: `calls.rs`), the inbox between turns, the stop conditions: a task ends with the model's message with no call, as Codex's does; no tool ends it and nothing invites it to stop (an answer while an agent's answer or a job is still to come waits for it); with `--schema` the data is then asked for in one more request with the `result` call forced (`schema.rs`). `Agent::context` is the app's environment block, sent before the first goal; `Agent::tell` is what the app says between goals (a changed mode), naming no tool. `agent/handling.rs`: a turn's calls carried out and answered.
   - `observer.rs`: what a run shows as it goes: calls, results, turns.
   - `conversation.rs`: messages that only grow. Older states are dropped past a budget, and open calls are closed; `truncate` for a rewind. A picture stays only when the person attached it.
   - `history.rs`: how a conversation is prepared before each request, a `Strategy` the app chooses (it uses `Pipeline`: stages `outputs`, `arguments`, behind a 90%→60% gate of the model's limit, a protected tail, elisions that stay: made for the prompt cache; `Keep`, which sends it as it is, is a test strategy). `history_tests.rs` simulates a 300-turn dialogue.
-  - `schema.rs`: the `result` tool: `achieved`, `summary`, `blocked_by` when not achieved, and `data` matching `--schema` when there is one.
+  - `schema.rs`: the `result` call of `--schema`: `data` matching the schema, asked for after the answer with the call forced, checked, a mismatch sent back twice at most.
   - `prompt.md`: the system prompt.
   - `fakes.rs`: test-only fakes: a scripted chat, an echo tool, a recorder.
 - `packages/tools`: the tools, a module each.

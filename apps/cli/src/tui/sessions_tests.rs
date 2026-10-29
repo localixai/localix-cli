@@ -22,7 +22,7 @@ fn three(now: Instant) -> App {
     app.frame(from("A", Event::Note("A's own transcript".into())), now);
     app.frame(from("A", Event::TaskStarted("refactor it".into())), now);
     let ended = Event::TaskEnded {
-        status: "achieved".into(),
+        status: "done".into(),
         millis: 1000,
         turns: 1,
         cost: 0.0,
@@ -186,7 +186,7 @@ fn a_finished_hidden_session_is_marked_unseen_in_the_list() {
     app.show("B");
     app.show("A");
     let ended = Event::TaskEnded {
-        status: "achieved".into(),
+        status: "done".into(),
         millis: 188_000,
         turns: 3,
         cost: 0.0,

@@ -1,5 +1,5 @@
 use contracts::catalog::{Effort, ModelEntry, Selection};
-use contracts::chat::Request;
+use contracts::chat::{Calling, Request};
 
 use super::super::{request, route};
 use super::*;
@@ -79,7 +79,7 @@ fn sent(texts: Texts) -> Value {
     let request = Request {
         conversation: &conversation,
         tools: &tools,
-        may_call: true,
+        calling: Calling::Any,
         deadline: None,
     };
     request_body(&selection(), request, texts)

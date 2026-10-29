@@ -109,7 +109,7 @@ fn selection_of(id: &str, efforts: Vec<Effort>, effort: Effort) -> Selection {
     Selection::new(model).with_effort(effort).unwrap()
 }
 
-fn request_body(wire: Wire, selection: &Selection, may_call: bool) -> Value {
+fn request_body(wire: Wire, selection: &Selection, calling: Calling) -> Value {
     let conversation = [
         Message::System("rules".into()),
         Message::User("context".into()),
@@ -123,7 +123,7 @@ fn request_body(wire: Wire, selection: &Selection, may_call: bool) -> Value {
     let request = Request {
         conversation: &conversation,
         tools: &tools,
-        may_call,
+        calling,
         deadline: None,
     };
     body(wire, selection, &request)
@@ -135,7 +135,7 @@ fn openrouter_is_sent_its_reasoning_object_the_usage_report_and_cache_marks() {
     let sent = request_body(
         Wire::OpenRouter,
         &selection_of("marked/claude-x", levels.clone(), Effort::High),
-        true,
+        Calling::Any,
     );
     assert_eq!(sent["reasoning"], json!({"effort": "high"}));
     assert_eq!(sent["usage"], json!({"include": true}));
@@ -146,27 +146,49 @@ fn openrouter_is_sent_its_reasoning_object_the_usage_report_and_cache_marks() {
     assert!(sent.get("reasoning_effort").is_none());
     assert_eq!(sent["tool_choice"], "auto");
     assert_eq!(sent["parallel_tool_calls"], true);
-    let off = request_body(Wire::OpenRouter, &selection(levels, Effort::Off), false);
+    let off = request_body(
+        Wire::OpenRouter,
+        &selection(levels.clone(), Effort::Off),
+        Calling::Nothing,
+    );
     assert_eq!(off["reasoning"], json!({"enabled": false}));
-    assert_eq!(off["tool_choice"], "none", "the wrap-up turn calls nothing");
+    assert_eq!(off["tool_choice"], "none", "an answer is asked for");
+    // The `result` call with `--schema`'s data is asked for by name: the reply is that call.
+    let only = request_body(
+        Wire::OpenRouter,
+        &selection(levels, Effort::Off),
+        Calling::Only("result"),
+    );
+    assert_eq!(
+        only["tool_choice"],
+        json!({"type": "function", "function": {"name": "result"}})
+    );
 }
 
 #[test]
 fn a_model_with_no_levels_is_sent_no_reasoning_field_on_openrouter_either() {
-    let sent = request_body(Wire::OpenRouter, &selection(vec![], Effort::Off), true);
+    let sent = request_body(
+        Wire::OpenRouter,
+        &selection(vec![], Effort::Off),
+        Calling::Any,
+    );
     assert!(sent.get("reasoning").is_none(), "{sent}");
-    let generic = request_body(Wire::Plain, &selection(vec![], Effort::Off), true);
+    let generic = request_body(Wire::Plain, &selection(vec![], Effort::Off), Calling::Any);
     assert!(generic.get("reasoning_effort").is_none());
 }
 
 #[test]
 fn another_host_is_sent_reasoning_effort_by_name_and_no_openrouter_fields() {
     let levels = vec![Effort::Off, Effort::Low, Effort::High];
-    let sent = request_body(Wire::Plain, &selection(levels.clone(), Effort::Low), true);
+    let sent = request_body(
+        Wire::Plain,
+        &selection(levels.clone(), Effort::Low),
+        Calling::Any,
+    );
     assert_eq!(sent["reasoning_effort"], "low");
     assert!(sent.get("reasoning").is_none() && sent.get("usage").is_none());
     assert_eq!(sent["messages"][0]["content"], "rules", "no cache marks");
-    let off = request_body(Wire::Plain, &selection(levels, Effort::Off), true);
+    let off = request_body(Wire::Plain, &selection(levels, Effort::Off), Calling::Any);
     assert_eq!(off["reasoning_effort"], "none");
 }
 
@@ -182,7 +204,7 @@ fn openai_itself_is_sent_one_cache_key_for_every_session_with_the_same_start_and
         let request = Request {
             conversation: &conversation,
             tools,
-            may_call: true,
+            calling: Calling::Any,
             deadline: None,
         };
         body(wire, &selection(vec![], Effort::Off), &request)["prompt_cache_key"].clone()
@@ -233,7 +255,7 @@ fn cache_marks_go_only_to_the_models_that_take_explicit_breakpoints() {
         let sent = request_body(
             Wire::OpenRouter,
             &selection_of(id, vec![], Effort::Off),
-            true,
+            Calling::Any,
         );
         sent.to_string().contains("cache_control")
     };
@@ -243,7 +265,7 @@ fn cache_marks_go_only_to_the_models_that_take_explicit_breakpoints() {
     let sent = request_body(
         Wire::OpenRouter,
         &selection_of("lab/plain", vec![], Effort::Off),
-        true,
+        Calling::Any,
     );
     assert_eq!(
         sent["messages"][0]["content"], "rules",
@@ -266,7 +288,7 @@ fn a_script_is_offered_as_a_function_with_one_string_argument() {
     let request = Request {
         conversation: &conversation,
         tools: &tools,
-        may_call: true,
+        calling: Calling::Any,
         deadline: None,
     };
     let body = body(Wire::OpenRouter, &selection(vec![], Effort::Off), &request);

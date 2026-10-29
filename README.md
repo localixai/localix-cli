@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <code>llx exec</code> runs one task and ends with a <code>result</code> and an exit code your pipeline can branch on. One binary under 4 MB, on any model. A minimal agent at your terminal, too.
+  <code>llx exec</code> runs one task and ends with an answer and an exit code your pipeline can branch on. One binary under 4 MB, on any model. A minimal agent at your terminal, too.
 </p>
 
 <p align="center">
@@ -36,7 +36,7 @@
   </a>
 </p>
 
-llx is a model in a loop over five tools, on any provider: `bash`, `apply_patch`, `ask`, `agents` and `jobs`. Every task ends with a `result` call: whether the goal was achieved, a summary, what blocked it if not, and data matching your JSON Schema. Text alone never ends a task. One binary, three uses:
+llx is a model in a loop over five tools, on any provider: `bash`, `apply_patch`, `ask`, `agents` and `jobs`. A task ends when the model replies with a message and no tool call: that message is the answer. With `--schema`, llx then asks the model once more for data matching your JSON Schema. One binary, three uses:
 
 | Who calls | Command | What they get |
 | --- | --- | --- |
@@ -53,9 +53,9 @@ npm install -g @localixai/llx                # or the curl installer, below
 cd your-project && llx                       # a session: /login first, then a task
 echo '{"type":"object","properties":{"bump":{"enum":["patch","minor","major"]},"ship":{"type":"boolean"}},"required":["bump","ship"]}' > ship.json
 git diff main... | llx exec --json --mode plan --schema @ship.json "Safe to ship? Which bump?" > events.jsonl
-echo $?                                      # 0 achieved, 1 not achieved, 2 exhausted, 3 error
+echo $?                                      # 0 done, 1 no data, 2 exhausted, 3 error
 jq -c 'select(.type == "run.completed") | {status, data}' events.jsonl
-# {"status":"achieved","data":{"bump":"patch","ship":true}}
+# {"status":"done","data":{"bump":"patch","ship":true}}
 ```
 
 ## Benchmark
@@ -64,8 +64,8 @@ One task, llx and Codex on the same model (GPT-6 Luna, medium reasoning), every 
 
 | Agent | Runs | Score (median) | Range | Time | Cost |
 | --- | --- | --- | --- | --- | --- |
-| llx | 6 | 196 | 188–197 | 165 s | $0.031 |
-| Codex | 6 | 196 | 192–198 | 141 s | $0.028 |
+| llx | 6 | 196 | 48–197 | 126 s | $0.018 |
+| Codex | 6 | 197 | 195–198 | 165 s | $0.031 |
 
 The runs: [benchmarks/task-tracker/runs](benchmarks/task-tracker/runs); the task and its checks: [evals/arena](evals/arena/arena.py).
 
@@ -104,9 +104,9 @@ How a task ends is a contract a pipeline can read. The exit code says it, and `-
 
 | Exit code | `status` | Meaning |
 | --- | --- | --- |
-| 0 | `achieved` | `result` said the goal was reached |
-| 1 | `not_achieved` | `result` said it was not (`blocked_by` says why), or its data did not match `--schema` |
-| 2 | `exhausted` | Turns (`--max-turns`), time (`--timeout`) or money (`--budget`) ran out before a `result`: the first reached ends the task |
+| 0 | `done` | The model answered (with `--schema`, its data matched) |
+| 1 | `no_data` | Only with `--schema`: the data did not match it, after two tries to fix it |
+| 2 | `exhausted` | Turns (`--max-turns`), time (`--timeout`) or money (`--budget`) ran out before the model answered: the first reached ends the task |
 | 3 | `error` | No key, no network, a model error, a bad argument |
 | 130 | `interrupted` | Ctrl-C or SIGTERM |
 

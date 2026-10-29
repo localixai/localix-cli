@@ -228,14 +228,10 @@ pub(crate) fn quiet() -> Output {
     )
 }
 
-/// An answer that says `text` and ends the task well: a `result` call.
+/// An answer that says `text` and ends the task: a message with no call.
 pub(crate) fn says(text: &str) -> Completion {
     Completion {
-        calls: vec![scripted(
-            "result",
-            "result",
-            serde_json::json!({"achieved": true, "summary": text}),
-        )],
+        text: Some(text.into()),
         ..Completion::default()
     }
 }

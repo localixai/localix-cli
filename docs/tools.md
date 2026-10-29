@@ -1,6 +1,6 @@
 # Tools
 
-llx has five tools, and `result`, which ends every task. The set is deliberately minimal: a new capability goes into one of them (as
+llx has five tools. The set is deliberately minimal: a new capability goes into one of them (as
 an `action`), or is left to the shell. The model works as you do at a terminal: it reads with `cat`,
 `sed -n` and `rg` and runs the checks in the shell, and changes files with a patch, as free text with
 nothing to escape. Its context names the script runtimes found on the session's `PATH` (`python3`, `node`, `bun`, only
@@ -13,7 +13,7 @@ those present) in a `Runtimes:` line.
 | [`ask`](#ask) | A question to you |
 | [`agents`](#agents) | Other agents, in parallel |
 | [`jobs`](#jobs) | Monitors and schedules |
-| [`result`](#result) | Ends the task: achieved or not, a summary, and the data of `--schema` |
+| [`result`](#result) | Only with `--schema`, after the work: the data in your shape |
 
 ## bash
 
@@ -37,7 +37,7 @@ One to three questions to you, in a session only (not in `exec`). Each is shown 
 Starts other agents and works with them, in parallel:
 
 - `spawn` (a task, and a short name) starts one on a thread of its own and returns at once; `send` tells one more (read at its next step while it works, or a new task once it is done); `wait` (some or all, `timeout_ms`, 30 s by default) returns the answers that came; `list` shows them; `close` ends one (at most 6 open).
-- An agent's answer, the summary of its `result` call, reaches the main agent by itself at its next step as an `<agent_result>` message; a task does not end while its agents work.
+- An agent's answer, its final message, reaches the main agent by itself at its next step as an `<agent_result>` message; a task does not end while its agents work.
 - An agent is a session of its own whose parent is the main one: its conversation opens with the same context, it has the same tools but `agents`, `ask` and `jobs` (one level, and nobody to answer it), and asks the same gate, its approvals marked `[agent name]` and asked one at a time. It sees nothing of the main conversation.
 - It stops with the task (Ctrl-C, the time limit) or alone (`x` on its row), and what it spends counts in the task's turns and cost (and in `--json`'s `turn` events and `usage`).
 - Its tasks are saved as a session that names its parent; `llx sessions` lists the main ones with how many agents each started, and `resume` never picks an agent's.
@@ -52,4 +52,4 @@ Work that comes back later.
 
 ## result
 
-Ends the task, once: `achieved` (whether the goal was reached), a `summary` for a person who did not follow the work, `blocked_by` when it was not (what outside the agent's reach stops it; work left to do is not a block), and `data` matching the JSON Schema when `--schema` is given. Data that does not match goes back to the agent to fix. A `result` not achieved that names no block is a progress report: it is refused with one line, the task goes on, and nothing is asked for. Text alone never ends a task: the agent is told so until it calls `result`, or `--max-turns` or `--timeout` ends the run (exit 2). The call sets the exit code and the `status` of `--json` ([reference](reference.md#exit-codes)).
+Not offered while the model works: a task ends when it replies with a message and no tool call. With `--schema`, llx then asks the same model once more, on the same conversation, for a `result` call carrying `data` that matches the JSON Schema, with `tool_choice` forced to it. Data that does not match goes back to be fixed, up to two times; then the run ends `no_data` (exit 1). See the [reference](reference.md#exit-codes).

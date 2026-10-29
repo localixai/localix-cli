@@ -164,7 +164,7 @@ pub(crate) enum AgentState {
     /// Started, and given nothing yet.
     Idle,
     Working,
-    /// Its last task ended so (`achieved`, `error`, …).
+    /// Its last task ended so (`done`, `error`, …).
     Ended(String),
     Closed,
 }

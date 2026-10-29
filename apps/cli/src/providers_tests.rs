@@ -41,7 +41,7 @@ fn a_request_with_no_billed_amount_is_priced_from_the_catalog() {
     let request = Request {
         conversation: &[],
         tools: &[],
-        may_call: false,
+        calling: contracts::chat::Calling::Nothing,
         deadline: None,
     };
     let cost = priced.complete(request).unwrap().usage.cost;
@@ -141,7 +141,7 @@ fn openrouters_address_is_read_from_the_sessions_environment() {
     let request = Request {
         conversation: &[],
         tools: &[],
-        may_call: false,
+        calling: contracts::chat::Calling::Nothing,
         deadline: None,
     };
     let _ = chat.complete(request);

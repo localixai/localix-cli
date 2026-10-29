@@ -102,8 +102,7 @@ fn a_task_on_the_command_line_is_run_where_sessions_wait_in_the_background() {
 #[test]
 fn a_session_open_at_one_terminal_is_not_opened_at_another() {
     let model = Model::start(vec![]);
-    let turns =
-        r#"[{"goal": "fix the parser", "answer": "Fixed.", "status": "achieved", "at": 1}]"#;
+    let turns = r#"[{"goal": "fix the parser", "answer": "Fixed.", "status": "done", "at": 1}]"#;
     let first = Term::resuming(&model, "1700000000-ab12", turns);
     let mut second = first.next_to(&model, &["resume", "1700000000-ab12"]);
     let screen = second.wait_for("open at another terminal", LONG);

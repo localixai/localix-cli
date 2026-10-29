@@ -9,7 +9,7 @@ fn summary<'a>(
     data: Option<&'a Result<serde_json::Value, String>>,
 ) -> Summary<'a> {
     Summary {
-        status: "not_achieved",
+        status: "no_data",
         code: 1,
         answer: "The tests still fail.\n",
         data,

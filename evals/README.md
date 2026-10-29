@@ -69,10 +69,16 @@ judges each the same way: the files the task keeps unchanged, then hidden tests
 
 ```bash
 cargo build --release
-python3 evals/arena/arena.py --agents llx,codex --model gpt-6-luna --effort low --repeat 5
-python3 evals/arena/arena.py --agents llx,codex --repeat 3 --record   # kept in benchmarks/<task>/runs/
-python3 evals/arena/arena.py --agents llx,codex --task phone-shop --repeat 5 --parallel --record   # every run at once
+python3 evals/arena/arena.py --agents llx --model gpt-6-luna --effort medium --repeat 6 --parallel
+python3 evals/arena/arena.py --agents llx --repeat 6 --parallel --record   # kept in benchmarks/<task>/runs/
+python3 evals/arena/arena.py --agents llx,codex --task phone-shop --repeat 5 --parallel --record   # Codex too
 ```
+
+While the task stays `task-tracker` (its prompt, fixture and hidden tests unchanged, `summary.json`
+names their SHA-256), Codex is not run again: its 30 runs of 2026-10-29 in
+[benchmarks/task-tracker/runs](../benchmarks/task-tracker/runs) (median 197, range 192–199, no run
+ended with work left) are the baseline every llx batch of six is read against. Run `llx` alone, six
+at once, at `medium`; one run proves nothing.
 
 Each run is a fresh copy of the fixture (a git repository, its packages installed) and a fresh home
 of its own beside it: only the ChatGPT sign-in and the model catalog are copied in (llx's, Codex's),

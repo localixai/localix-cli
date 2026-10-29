@@ -15,7 +15,7 @@ else it needs, if anything, and what to change to make it yours: the model, the 
 | [ci-failure.yml](github/ci-failure.yml) | the tests fail on a pull request | reads the failed log, finds the cause in the code, says whether it is flaky; one comment it updates, and one rerun of the failed jobs when flaky | your tests workflow's `name:` on the line marked in the file |
 | [describe.yml](github/describe.yml) | a pull request opens | writes a summary, each change, the risk and the testing below the author's text, in a block it replaces | |
 | [release.yml](github/release.yml) | run by hand | picks the version bump and writes the notes in one answer; drafts a release a person publishes | tags like `v1.2.3`; with none, the first draft is `v0.1.0` |
-| [gate.yml](github/gate.yml) | daily, or by hand | checks a rule you state (here, that what the docs name exists in the code), read-only, and fails the job when `result` says it is not met | |
+| [gate.yml](github/gate.yml) | daily, or by hand | checks a rule you state (here, that what the docs name exists in the code), read-only, and fails the job when the listed data shows it is not met | |
 | [audit.yml](github/audit.yml) | weekly, or by hand | explores the repository, runs its tests and linters, and opens or updates one issue labeled `llx-audit` when it finds something worth a maintainer's time | |
 
 ## Beyond GitHub workflows

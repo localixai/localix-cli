@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 use crate::agent::Agent;
 use crate::fakes::Silent;
-use crate::fakes::{Recorder, Scripted, blocked, done, says, users};
+use crate::fakes::{Recorder, Scripted, done, says, users};
 
 /// Where the calls of a test's tools run, whichever tool they belong to: how many run now,
 /// the most that ever ran at once, and the order they started and ended in.
@@ -343,7 +343,7 @@ fn an_answer_while_work_is_still_to_come_waits_for_it_and_goes_on() {
 }
 
 #[test]
-fn a_result_while_work_is_still_to_come_is_refused_and_the_run_waits_for_it() {
+fn an_answer_while_work_is_still_to_come_waits_for_it() {
     // An agent's answer or a monitor's lines are still to come: ending now would lose them, so
     // the call is answered with why, and the run goes on with what came.
     let mail = Mail::default();
@@ -360,8 +360,10 @@ fn a_result_while_work_is_still_to_come_is_refused_and_the_run_waits_for_it() {
         users(run.conversation.messages()),
         ["Goal: delegate", "<agent_result>found it</agent_result>"]
     );
-    let refused = results(run.conversation.messages());
-    assert!(refused[0].1.contains("still to come"), "{refused:?}");
+    assert!(
+        results(run.conversation.messages()).is_empty(),
+        "an answer is a message: nothing is refused, the agent's answer is just delivered"
+    );
 }
 
 /// A chat model that answers from a script, and puts a message in the inbox while it answers
@@ -381,7 +383,7 @@ impl contracts::chat::Chat for Interrupted<'_> {
         request: contracts::chat::Request,
     ) -> Result<Completion, contracts::chat::ChatError> {
         let reply = self.script.complete(request);
-        if self.script.may_call.lock().unwrap().len() == 1 {
+        if self.script.calling.lock().unwrap().len() == 1 {
             self.mail
                 .now
                 .lock()
@@ -422,13 +424,13 @@ fn a_message_that_comes_with_the_answer_is_not_lost() {
 fn an_answer_on_the_last_turn_is_kept_and_nothing_is_waited_for() {
     let mail = Mail::default();
     mail.waiting.store(true, Ordering::SeqCst);
-    let chat = Scripted::new(vec![blocked("Here is what I have.", "blocked")]);
+    let chat = Scripted::new(vec![says("Here is what I have.")]);
     let run = Agent {
         max_turns: 1,
         ..agent(&chat, &[], Some(&mail))
     }
     .run("delegate");
     assert_eq!(mail.waits.load(Ordering::SeqCst), 0, "no wait");
-    assert_eq!(run.answer, "Here is what I have.\n\nBlocked by: blocked");
-    assert_eq!(run.status, crate::agent::Status::NotAchieved);
+    assert_eq!(run.answer, "Here is what I have.");
+    assert_eq!(run.status, crate::agent::Status::Done);
 }

@@ -28,7 +28,7 @@ impl Chat for Namer {
         let asked = (
             request.conversation.to_vec(),
             request.tools.len(),
-            request.may_call,
+            request.calling == Calling::Nothing,
         );
         self.asked.lock().unwrap().push(asked);
         match &self.text {
@@ -47,8 +47,8 @@ fn the_model_is_asked_once_with_no_tools_for_the_task_it_names() {
     let title = ask(&namer, "the jobs test fails one run in ten, find out why");
     assert_eq!(title.as_deref(), Some("Fix the flaky jobs test"));
     let asked = namer.asked.lock().unwrap();
-    let (conversation, tools, may_call) = &asked[0];
-    assert_eq!((asked.len(), *tools, *may_call), (1, 0, false));
+    let (conversation, tools, answer_only) = &asked[0];
+    assert_eq!((asked.len(), *tools, *answer_only), (1, 0, true));
     let Message::User(said) = &conversation[1] else {
         panic!("{conversation:?}")
     };

@@ -36,46 +36,33 @@ fn checks_types_required_enums_and_nesting() {
 #[test]
 fn a_result_call_is_checked_against_its_schema() {
     let schema = json!({"type": "object", "required": ["price"], "properties": {"price": {"type": "number"}}});
-    let call = json!({"data": {"price": 93}, "summary": "€93", "achieved": true});
+    let call = json!({"data": {"price": 93}});
+    assert_eq!(take(&call, &schema), Ok(json!({"price": 93})));
+    let wrong = json!({"data": {"price": "93"}});
     assert_eq!(
-        take(&call, Some(&schema)),
-        Ok(Finished {
-            data: Some(json!({"price": 93})),
-            summary: "€93".into(),
-            achieved: true
-        })
-    );
-    let wrong = json!({"data": {"price": "93"}, "summary": "", "achieved": true});
-    assert_eq!(
-        take(&wrong, Some(&schema)),
-        Err(Refused::Mismatch("data.price must be number".into()))
+        take(&wrong, &schema),
+        Err("data.price must be number".into())
     );
 }
 
 #[test]
-fn fields_put_beside_achieved_instead_of_inside_data_are_the_data() {
+fn fields_put_beside_data_instead_of_inside_it_are_the_data() {
     // The schema has a `summary` of its own, as a pull request's description does: the model
-    // wrote its fields at the top of the call, next to `achieved`, with no `data`.
+    // wrote its fields at the top of the call, with no `data`.
     let schema = json!({"type": "object", "required": ["summary", "risk"], "properties": {
         "summary": {"type": "string"}, "risk": {"enum": ["low", "medium", "high"]}
     }});
-    let flat = json!({"summary": "Adds a cache.", "risk": "low", "achieved": true});
+    let flat = json!({"summary": "Adds a cache.", "risk": "low"});
     assert_eq!(
-        take(&flat, Some(&schema)),
-        Ok(Finished {
-            data: Some(json!({"summary": "Adds a cache.", "risk": "low"})),
-            summary: String::new(),
-            achieved: true
-        })
+        take(&flat, &schema),
+        Ok(json!({"summary": "Adds a cache.", "risk": "low"}))
     );
 }
 
 #[test]
 fn a_call_with_no_data_says_where_the_fields_go() {
     let schema = json!({"type": "object", "required": ["price"], "properties": {"price": {"type": "number"}}});
-    let call = json!({"summary": "€93", "achieved": true});
-    let Err(Refused::Mismatch(error)) = take(&call, Some(&schema)) else {
-        panic!("a schema mismatch");
-    };
+    let call = json!({"summary": "€93"});
+    let error = take(&call, &schema).unwrap_err();
     assert!(error.contains("inside `data`"), "{error}");
 }

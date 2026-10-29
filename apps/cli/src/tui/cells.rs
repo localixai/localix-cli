@@ -50,8 +50,7 @@ pub(crate) fn agent(text: &str, width: usize) -> Vec<Line<'static>> {
 
 /// How a task ended.
 pub(crate) struct End<'a> {
-    /// As the run reports it: `achieved`, `not_achieved`, `exhausted`, `error`,
-    /// `interrupted`.
+    /// As the run reports it: `done`, `no_data`, `exhausted`, `error`, `interrupted`.
     pub status: &'a str,
     pub millis: u64,
     pub turns: u64,
@@ -65,7 +64,6 @@ pub(crate) fn end(end: &End, width: usize) -> Vec<Line<'static>> {
         "error" => "Failed after",
         // A limit of turns or of time: the error line under it says which.
         "exhausted" => "Ran out after",
-        "not_achieved" => "Not achieved after",
         _ => "Worked for",
     };
     let turns = count(end.turns, "turn");
@@ -98,7 +96,7 @@ pub(crate) fn earlier(turns: &[protocol::Turn], width: usize) -> Vec<Vec<Line<'s
         if !turn.answer.trim().is_empty() {
             out.push(agent(&turn.answer, width));
         }
-        if turn.status != "achieved" {
+        if turn.status != "done" {
             let (style, mark, word, _) = super::tree::ending(&turn.status);
             out.push(vec![Line::from(vec![
                 Span::styled(format!("{mark} "), style),

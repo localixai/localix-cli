@@ -203,7 +203,7 @@ fn keep(
              it, or leave it."
                 .to_string()
         }
-        Status::Achieved | Status::NotAchieved | Status::Error(_) => run.answer.trim().to_string(),
+        Status::Done | Status::Error(_) => run.answer.trim().to_string(),
     };
     if !unread.is_empty() {
         let _ = write!(

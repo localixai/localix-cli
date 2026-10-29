@@ -11,7 +11,7 @@ fn session(goals: &[&str]) -> Session {
             .map(|goal| Turn {
                 goal: goal.to_string(),
                 answer: String::new(),
-                status: "achieved".into(),
+                status: "done".into(),
                 at: 0,
                 steps: vec![],
             })

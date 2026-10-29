@@ -16,7 +16,7 @@ fn plain(lines: &[Line<'static>]) -> Vec<String> {
 
 fn ended() -> Event {
     Event::TaskEnded {
-        status: "achieved".into(),
+        status: "done".into(),
         millis: 10,
         turns: 1,
         cost: 0.0,

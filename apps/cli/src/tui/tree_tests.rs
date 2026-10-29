@@ -45,7 +45,7 @@ fn each_session_is_a_row_the_shown_one_marked() {
     app.frame(agent(Event::TaskStarted("run them".into())), now);
     app.frame(agent(call("c2", "bash", &ran("cargo test"))), now);
     let ended = Event::TaskEnded {
-        status: "achieved".into(),
+        status: "done".into(),
         millis: 1,
         turns: 1,
         cost: 0.0,
@@ -164,7 +164,7 @@ fn tree_shows_lane_rows_with_time_and_tokens() {
         now,
     );
     let ended = Event::TaskEnded {
-        status: "achieved".into(),
+        status: "done".into(),
         millis: 242_000,
         turns: 3,
         cost: 0.0,

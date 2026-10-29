@@ -44,7 +44,7 @@ fn with_inbox(output: &Output, work: impl FnOnce(&MainInbox, &Registry, &Jobs, &
 }
 
 fn answer(registry: &Registry, text: &str) {
-    (registry.queue).post(crate::arrivals::report("a", "s1", "achieved", text));
+    (registry.queue).post(crate::arrivals::report("a", "s1", "done", text));
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn the_waiting_line_is_said_once_until_the_task_ends() {
         Box::new(said.clone()),
     );
     with_inbox(&output, |inbox, registry, _, _| {
-        let rendered = |text: &str| crate::arrivals::report("a", "s1", "achieved", text).render();
+        let rendered = |text: &str| crate::arrivals::report("a", "s1", "done", text).render();
         answer(registry, "one");
         assert_eq!(inbox.wait(), [rendered("one")]);
         answer(registry, "two");

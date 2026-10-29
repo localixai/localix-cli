@@ -1,113 +1,46 @@
-//! The `result` tool: how every run ends. The model calls it once, when the goal is reached or
-//! something outside its reach blocks it; text alone never ends a run, so a progress note sent
-//! as a reply does not stop the work. With `--schema` the call also carries `data` matching the
-//! schema, checked here: a mismatch goes back to the model to fix, and what is returned always
-//! matches or the run says it has no data. The tool is offered from the first turn, so every
-//! request carries the same tools and the prompt cache holds.
+//! The `result` call of `--schema`: once the work has ended, the model is asked once more, on the
+//! same conversation, for `data` matching the schema, with the call forced (`Calling::Only`), so
+//! the data comes as a call, deterministically. Data that does not match goes back to be fixed,
+//! and what is returned always matches or the run says it has no data. While the work goes on,
+//! no such tool is offered: the task ends with the model's final message, and nothing invites it
+//! to stop early.
 
 use contracts::tool::{Input, ToolSpec};
 use serde_json::{Value, json};
 
 pub(crate) const TOOL: &str = "result";
 
-/// The `result` tool, with `data` for `schema` when there is one.
-pub(crate) fn spec(schema: Option<&Value>) -> ToolSpec {
-    let mut properties = json!({
-        "achieved": {"type": "boolean", "description": "Whether the goal was reached."},
-        "summary": {"type": "string", "description": "For a person who did not follow the work, self-contained: the outcome first, then what changed, how it was verified, what remains."},
-        "blocked_by": {"type": "string", "description": "When not achieved: what outside your reach blocks the goal (missing access, a contradiction in the goal, a refused action). Work left to do is not a block."}
-    });
-    let mut required = vec!["achieved", "summary"];
-    let mut description = String::from(
-        "End the task. Call it once: when the goal is reached, or when something outside your          reach blocks it. Text alone does not end the task.",
-    );
-    if let Some(schema) = schema {
-        properties["data"] = schema.clone();
-        required.push("data");
-        description.push_str(
-            " Return what you found as `data`, matching its schema exactly: copy numbers,              names and dates from what the tools showed, null only where the schema allows it              and no value was shown; gather every field it needs as you go.",
-        );
-    }
+/// The `result` tool carrying `data` for `schema`.
+pub(crate) fn spec(schema: &Value) -> ToolSpec {
     ToolSpec {
         name: TOOL.into(),
-        description,
-        input: Input::Json(
-            json!({"type": "object", "required": required, "properties": properties}),
-        ),
+        description: "The result of the task as `data`, matching its schema exactly: copy \
+            numbers, names and dates from what the tools showed, null only where the schema \
+            allows it and no value was shown."
+            .into(),
+        input: Input::Json(json!({
+            "type": "object",
+            "required": ["data"],
+            "properties": {"data": schema.clone()},
+        })),
     }
 }
 
-/// A `result` call: whether the goal was reached, the summary, and the data when a schema asks.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Finished {
-    pub data: Option<Value>,
-    pub summary: String,
-    pub achieved: bool,
-}
-
-/// Why a `result` call is not taken.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Refused {
-    /// Not achieved, and nothing outside the model's reach named: a progress report. The work
-    /// goes on; the call is not asked for again.
-    Unblocked,
-    /// The data breaks the schema: what to fix, and the call comes again.
-    Mismatch(String),
-}
-
-/// Said for a `result` that is a progress report: the task goes on, nothing is asked for.
-pub(crate) const UNBLOCKED: &str = "Not taken: nothing outside your reach blocks the goal, so \
-    the task goes on. What is left to do is not a block; `result` is for the end.";
-
-/// A `result` call read, or why not.
-pub(crate) fn take(args: &Value, schema: Option<&Value>) -> Result<Finished, Refused> {
-    let achieved = args["achieved"].as_bool().unwrap_or(true);
-    // A `summary` the schema owns, written beside `achieved`, is the data's, not the call's.
-    let taken = schema.is_some_and(|schema| schema.pointer("/properties/summary").is_some())
-        && args.get("data").is_none();
-    let mut summary = match taken {
-        true => String::new(),
-        false => args["summary"].as_str().unwrap_or("").trim().to_string(),
-    };
-    if !achieved {
-        // A block is named, or the call goes back: what is left to do is no block.
-        let why = args["blocked_by"].as_str().map(str::trim).unwrap_or("");
-        if why.is_empty() {
-            return Err(Refused::Unblocked);
-        }
-        summary = format!("{summary}\n\nBlocked by: {why}");
-    }
-    let Some(schema) = schema else {
-        return Ok(Finished {
-            data: None,
-            summary,
-            achieved,
-        });
-    };
+/// The data of a `result` call, checked against `schema`; or what to fix.
+pub(crate) fn take(args: &Value, schema: &Value) -> Result<Value, String> {
     let data = match args.get("data") {
         Some(data) => data.clone(),
-        None => beside(args, schema).map_err(Refused::Mismatch)?,
+        None => beside(args, schema)?,
     };
-    check(schema, &data).map_err(Refused::Mismatch)?;
-    Ok(Finished {
-        data: Some(data),
-        summary,
-        achieved,
-    })
+    check(schema, &data)?;
+    Ok(data)
 }
 
-/// A call whose fields sit beside `achieved` instead of inside `data`. Models do it when the
-/// schema has a field the call has too (a description's `summary`): the fields are the data when
-/// they match the schema, and otherwise the model is told where they go.
+/// The schema's fields written at the top of the call instead of inside `data` (a schema with a
+/// `summary` of its own, as a pull request's description has): the fields are the data when they
+/// match the schema, and otherwise the model is told where they go.
 fn beside(args: &Value, schema: &Value) -> Result<Value, String> {
-    let mut fields = args.as_object().cloned().unwrap_or_default();
-    for own in ["achieved", "blocked_by"] {
-        fields.remove(own);
-    }
-    if schema.pointer("/properties/summary").is_none() {
-        fields.remove("summary");
-    }
-    let data = Value::Object(fields);
+    let data = Value::Object(args.as_object().cloned().unwrap_or_default());
     check(schema, &data)
         .map_err(|why| format!("no `data`: put the schema's fields inside `data` ({why})"))?;
     Ok(data)

@@ -60,9 +60,11 @@ impl Ended {
                 exit::EXHAUSTED,
                 Some("out of turns before an answer (raise them with --max-turns)".into()),
             ),
-            (None, Status::NotAchieved) => ended("not_achieved", exit::FAILED, None),
-            (None, _) if matches!(data, Some(Err(_))) => ended("not_achieved", exit::FAILED, None),
-            (None, Status::Achieved) => ended("achieved", exit::OK, None),
+            // `--schema` asked for data and none matched: the one way an answer fails.
+            (None, Status::Done) if matches!(data, Some(Err(_))) => {
+                ended("no_data", exit::FAILED, None)
+            }
+            (None, Status::Done) => ended("done", exit::OK, None),
         }
     }
 }

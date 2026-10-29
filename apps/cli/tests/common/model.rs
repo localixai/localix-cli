@@ -32,17 +32,14 @@ impl Reply {
         Self::Call(name.into(), arguments)
     }
 
-    /// The model ends the task well, with `summary` as its answer.
-    pub(crate) fn done(summary: &str) -> Self {
-        Self::call("result", json!({"achieved": true, "summary": summary}))
+    /// The model ends the task: a message with no call, its answer.
+    pub(crate) fn done(answer: &str) -> Self {
+        Self::Text(answer.into())
     }
 
-    /// The model ends the task blocked by `why`.
-    pub(crate) fn blocked(summary: &str, why: &str) -> Self {
-        Self::call(
-            "result",
-            json!({"achieved": false, "summary": summary, "blocked_by": why}),
-        )
+    /// The `result` call of `--schema`, with `data`.
+    pub(crate) fn data(data: &Value) -> Self {
+        Self::call("result", json!({ "data": data }))
     }
 
     /// The model makes the file `path` holding `text`, with a patch.
@@ -184,13 +181,8 @@ fn answer(stream: TcpStream, shared: &Mutex<Shared>) {
                     "function": {"name": name, "arguments": arguments.to_string()}});
                 json!({"role": "assistant", "content": null, "tool_calls": [call]})
             }
-            // Past the script: the task ends well.
-            None => {
-                let arguments = json!({"achieved": true, "summary": "Done."}).to_string();
-                let call = json!({"id": format!("call_{n}"), "type": "function",
-                    "function": {"name": "result", "arguments": arguments}});
-                json!({"role": "assistant", "content": null, "tool_calls": [call]})
-            }
+            // Past the script: the task ends with an answer.
+            None => json!({"role": "assistant", "content": "Done."}),
         };
         break (200, completion(&message, n, &request));
     };

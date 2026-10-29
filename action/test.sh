@@ -84,7 +84,7 @@ summary() { cat "$tmp/run/summary"; }
 args() { tr '\n' '\001' <"$tmp/run/args"; }
 
 # Every exit code of the contract: the outputs are written, and the script exits with llx's code.
-for pair in 0:achieved 1:not-achieved 2:out-of-budget 3:not-ready 130:interrupted 137:failed; do
+for pair in 0:done 1:no-data 2:out-of-budget 3:not-ready 130:interrupted 137:failed; do
   code=${pair%%:*} want=${pair#*:}
   run_action STUB_CODE="$code"
   eq "exit $code: the script's own code" "$code" "$rc"
@@ -113,7 +113,7 @@ eq "llx takes the place of the step's shell (exec)" "$shell" "$(cat "$tmp/run/pi
 run_action STUB_NO_EVENTS=1 STUB_CODE=3 STUB_ANSWER=
 eq "no event, a failure: not ready" "3 not-ready" "$rc $(output status)"
 run_action STUB_NO_EVENTS=1 STUB_CODE=0
-eq "no event, a success: achieved" "0 achieved" "$rc $(output status)"
+eq "no event, a success: done" "0 done" "$rc $(output status)"
 
 # An error from the run is in the summary; the result is only what llx wrote with -o.
 run_action STUB_CODE=3 STUB_ANSWER= STUB_ERROR='"no key"'
@@ -137,9 +137,9 @@ eq "a bad schema: the status is still an output" not-ready "$(output status)"
 if [ -e "$tmp/run/args" ]; then fail "a bad schema: llx ran"; else pass "a bad schema: llx never ran"; fi
 
 # The answer cannot add outputs or end its own.
-printf 'x\nstatus=achieved\nexit-code=0\nresult<<EOF\nEOF\nowned=1\nllx_deadbeef\n' >"$tmp/forged"
+printf 'x\nstatus=done\nexit-code=0\nresult<<EOF\nEOF\nowned=1\nllx_deadbeef\n' >"$tmp/forged"
 run_action STUB_CODE=1 STUB_ANSWER_FILE="$tmp/forged"
-eq "forged: the status is llx's" not-achieved "$(output status)"
+eq "forged: the status is llx's" no-data "$(output status)"
 eq "forged: the exit code is llx's" 1 "$(output exit-code)"
 eq "forged: no extra output" "cost-usd events-file exit-code result result-file status turns " "$(names)"
 eq "forged: the result is whole" "$(cat "$tmp/forged")" "$(output result)"

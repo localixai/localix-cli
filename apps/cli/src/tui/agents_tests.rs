@@ -245,7 +245,7 @@ fn an_agent_ends_is_closed_and_is_cleared_with_its_conversation() {
         &mut app,
         "s1",
         Event::TaskEnded {
-            status: "achieved".into(),
+            status: "done".into(),
             millis: 10,
             turns: 2,
             cost: 0.0,
@@ -493,7 +493,7 @@ fn hidden_lane_done_sets_unseen_and_notes_it() {
     let from = |event| in_session("B", event);
     app.frame(from(Event::TaskStarted("fix it".into())), now);
     let ended = Event::TaskEnded {
-        status: "achieved".into(),
+        status: "done".into(),
         millis: 188_000,
         turns: 3,
         cost: 0.0,

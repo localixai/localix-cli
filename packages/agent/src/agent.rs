@@ -1,18 +1,17 @@
-//! The agent's loop: the chat model reads the goal and calls tools until it calls `result`
-//! ([`crate::schema`]), bounded by `max_turns` (unlimited unless the app sets one). A reply
-//! without a call is a note, not the end: the model is told that only `result` ends the task,
-//! each time, until it calls it or its turns (or the app's time) run out. Nothing else pushes the
-//! model on: a failed call goes back to it with its reason, and on the last of its turns it is
-//! asked for `result`.
+//! The agent's loop: the chat model reads the goal and calls tools until it answers with a
+//! message and no call, bounded by `max_turns` (unlimited unless the app sets one). That message
+//! is the answer; with `--schema`, the data is then asked for in one more request with the
+//! `result` call forced ([`crate::schema`]). Nothing pushes the model on or invites it to stop: a
+//! failed call goes back to it with its reason, and no tool ends the task.
 //! The calls of one turn that may run together do ([`crate::calls`]). Before each turn, what
 //! came into the inbox is said; an answer while something is still to come waits for it, and the
 //! run goes on.
 
 mod handling;
 
-use contracts::chat::{Chat, Completion, Message, Request, Spend};
+use contracts::chat::{Calling, Chat, ChatError, Completion, Message, Request, Spend};
 use contracts::inbox::Inbox;
-use contracts::tool::{Image, Tool, ToolError, ToolSpec};
+use contracts::tool::{Image, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
 use crate::conversation::Conversation;
@@ -23,14 +22,10 @@ use crate::schema;
 const SYSTEM: &str = include_str!("prompt.md");
 /// Times a `result` that breaks its schema goes back to be fixed.
 const MAX_FIXES: usize = 2;
-/// Said when a reply ends without a call: text does not end the task.
-const RESULT_NOW: &str = "Text does not end the task. Go on with the work, and call `result` \
-    when the goal is reached or something outside your reach blocks it.";
+/// Asked once the work has ended, with `--schema`: the request that forces the `result` call.
+const DATA_NOW: &str = "Return the data the schema asks for, as `result`.";
 /// The result a matching `result` call gets, so a follow-up finds no call left open.
 const RETURNED: &str = "The result was returned.";
-/// A `result` answered while an agent's answer or a job's lines are still to come.
-const NOT_YET: &str = "Not taken: something you started is still to come. Read it, then call \
-    `result` again.";
 
 pub struct Agent<'a> {
     pub chat: &'a dyn Chat,
@@ -56,11 +51,9 @@ pub struct Agent<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Status {
-    /// `result` said the goal was reached.
-    Achieved,
-    /// `result` said it was not, and what blocks it.
-    NotAchieved,
-    /// Turns ran out before `result`.
+    /// The model answered: a message with no call.
+    Done,
+    /// Turns ran out before an answer.
     Exhausted,
     /// The model, or what a tool depends on, could not be reached.
     Error(String),
@@ -76,13 +69,6 @@ pub struct Run {
     pub conversation: Conversation,
     /// The tokens the conversation took at its last turn.
     pub used: u64,
-}
-
-/// What one goal has used of its second chances.
-#[derive(Default)]
-struct Tally {
-    /// `result` calls sent back to be fixed.
-    fixes: usize,
 }
 
 impl Agent<'_> {
@@ -146,8 +132,7 @@ impl Agent<'_> {
     }
 
     fn reach(&self, conversation: Conversation) -> Run {
-        let mut specs: Vec<ToolSpec> = self.tools.iter().map(|tool| tool.spec()).collect();
-        specs.push(schema::spec(self.schema));
+        let specs: Vec<ToolSpec> = self.tools.iter().map(|tool| tool.spec()).collect();
         let mut run = Run {
             status: Status::Exhausted,
             answer: String::new(),
@@ -156,7 +141,6 @@ impl Agent<'_> {
             conversation,
             used: 0,
         };
-        let mut tally = Tally::default();
         // Real tokens per estimated one, from the last answer's usage.
         let mut ratio = 1.0;
         // The specs go with every request: they count in the usage the ratio is taken from, and
@@ -180,63 +164,117 @@ impl Agent<'_> {
                 self.observer.fitted(&report);
             }
             let estimate = run.conversation.tokens();
-            let last = turn + 1 == self.max_turns;
-            if last {
-                Self::remind(&mut run);
-            }
             let request = Request {
                 conversation: run.conversation.messages(),
                 tools: &specs,
-                may_call: true,
+                calling: Calling::Any,
                 deadline: None,
             };
-            let completion = match self.chat.complete(request) {
-                Ok(completion) => completion,
-                Err(error) => {
-                    run.status = Status::Error(error.to_string());
-                    return run;
-                }
+            let answered = self.chat.complete(request);
+            let Some(completion) = self.kept(answered, &mut run) else {
+                return run;
             };
-            self.observer.turn(&completion.usage);
-            run.spend.add(&completion.usage);
-            run.used = completion.usage.input_tokens + completion.usage.output_tokens;
             if completion.usage.input_tokens > 0 && estimate > 0 {
                 let input = completion.usage.input_tokens as f64;
                 ratio = (input / (estimate + fixed) as f64).clamp(0.3, 4.0);
             }
-            if completion.calls.is_empty() && completion.text.as_deref().is_none_or(str::is_empty) {
-                // Nothing said and nothing called: kept, it is a message some hosts reject.
-                self.observer.said("");
-            } else {
-                run.conversation.push(completion.message());
-            }
-            // An answer (no call, or `result` alone) waits for what is still to come.
-            if !last && self.awaited(&completion, &mut run) {
+            // An answer waits for what is still to come (not on the last turn: then it stands).
+            if turn + 1 < self.max_turns && self.awaited(&completion, &mut run) {
                 continue;
+            }
+            if completion.calls.is_empty() {
+                // A message with no call is the answer: the task ends with it, as a person's
+                // final message ends their turn.
+                run.status = Status::Done;
+                run.answer = completion.text.unwrap_or_default().trim().to_string();
+                self.conclude(&mut run);
+                return run;
             }
             self.say(&completion);
-            if completion.calls.is_empty() {
-                // Text alone is a note: the model is told, each time, that only `result` ends
-                // the task. The run does not pass prose off as the result a pipeline expects;
-                // its turns and the app's time limit bound it.
-                Self::remind(&mut run);
-                continue;
-            }
-            if self.handle_all(&completion.calls, &specs, &mut run, &mut tally) {
+            if self.handle_all(&completion.calls, &specs, &mut run) {
                 return run;
             }
         }
         run
     }
 
-    /// Whether an answer (no call, or `result` alone) was held for what reached the run
-    /// meanwhile, or is still to come: then it was delivered and the run goes on. Whether more is
-    /// to come is asked before taking: a source that is done posts its last entry before it says
-    /// so, so nothing it sent is left behind. On the last turn the answer stands (the caller
-    /// skips this), and what is still to come waits for the next goal.
+    /// A request's answer counted and kept in the conversation. `None` when the model could not
+    /// be reached: the run has ended with the error.
+    fn kept(&self, answered: Result<Completion, ChatError>, run: &mut Run) -> Option<Completion> {
+        let completion = match answered {
+            Ok(completion) => completion,
+            Err(error) => {
+                run.status = Status::Error(error.to_string());
+                return None;
+            }
+        };
+        self.observer.turn(&completion.usage);
+        run.spend.add(&completion.usage);
+        run.used = completion.usage.input_tokens + completion.usage.output_tokens;
+        if completion.calls.is_empty() && completion.text.as_deref().is_none_or(str::is_empty) {
+            // Nothing said and nothing called: kept, it is a message some hosts reject.
+            self.observer.said("");
+        } else {
+            run.conversation.push(completion.message());
+        }
+        Some(completion)
+    }
+
+    /// With `--schema`, once the work has ended: the `result` call asked for and forced, its data
+    /// checked; a mismatch goes back to be fixed, until the fixes run out and the run has none.
+    fn conclude(&self, run: &mut Run) {
+        let Some(schema) = self.schema else {
+            return;
+        };
+        let specs = [schema::spec(schema)];
+        run.conversation.push(Message::User(DATA_NOW.into()));
+        let mut problems = String::from("no `result` call came");
+        for _ in 0..=MAX_FIXES {
+            let request = Request {
+                conversation: run.conversation.messages(),
+                tools: &specs,
+                calling: Calling::Only(schema::TOOL),
+                deadline: None,
+            };
+            let answered = self.chat.complete(request);
+            let Some(completion) = self.kept(answered, run) else {
+                return;
+            };
+            let Some(call) = (completion.calls.iter()).find(|call| call.name == schema::TOOL)
+            else {
+                break;
+            };
+            self.observer.call(call);
+            match schema::take(&call.arguments, schema) {
+                Ok(data) => {
+                    let outcome = Ok(ToolOutput::from(RETURNED.to_string()));
+                    self.observer.result(call, &outcome);
+                    run.conversation
+                        .result(&call.id, ToolOutput::from(RETURNED.to_string()));
+                    run.data = Some(Ok(data));
+                    return;
+                }
+                Err(why) => {
+                    let said = format!("The result is not taken: {why}.");
+                    let outcome = Err(ToolError::Failed(said.clone()));
+                    self.observer.result(call, &outcome);
+                    run.conversation.failure(&call.id, &said);
+                    problems = why;
+                }
+            }
+        }
+        run.data = Some(Err(format!(
+            "the result did not match the schema: {problems}"
+        )));
+    }
+
+    /// Whether an answer (a message with no call) was held for what reached the run meanwhile,
+    /// or is still to come: then it was delivered and the run goes on. Whether more is to come is
+    /// asked before taking: a source that is done posts its last entry before it says so, so
+    /// nothing it sent is left behind. On the last turn the answer stands (the caller skips
+    /// this), and what is still to come waits for the next goal.
     fn awaited(&self, completion: &Completion, run: &mut Run) -> bool {
-        let ending = (completion.calls.iter()).all(|call| call.name == schema::TOOL);
-        if !ending {
+        if !completion.calls.is_empty() {
             return false;
         }
         let expecting = self.expecting();
@@ -244,12 +282,6 @@ impl Agent<'_> {
         let waits = came.is_empty() && expecting;
         if waits || !came.is_empty() {
             self.say(completion);
-            // A `result` before what is still to come is not taken: it is answered.
-            for call in &completion.calls {
-                let early = ToolError::Failed(NOT_YET.into());
-                self.observer.result(call, &Err(early));
-                run.conversation.failure(&call.id, NOT_YET);
-            }
         }
         let came = match waits {
             true => self.inbox.map(|inbox| inbox.wait()).unwrap_or_default(),
@@ -282,15 +314,6 @@ impl Agent<'_> {
     fn deliver(run: &mut Run, came: Vec<String>) {
         for message in came {
             run.conversation.push(Message::User(message));
-        }
-    }
-
-    /// Tell the model that only `result` ends the task, unless it was just told.
-    fn remind(run: &mut Run) {
-        let told = matches!(run.conversation.messages().last(),
-            Some(Message::User(text)) if text == RESULT_NOW);
-        if !told {
-            run.conversation.push(Message::User(RESULT_NOW.into()));
         }
     }
 }

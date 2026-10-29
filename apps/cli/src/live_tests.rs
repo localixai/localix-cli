@@ -5,7 +5,7 @@ fn ask(chat: &dyn Chat) -> Result<Completion, ChatError> {
     chat.complete(Request {
         conversation: &[],
         tools: &[],
-        may_call: false,
+        calling: contracts::chat::Calling::Nothing,
         deadline: None,
     })
 }

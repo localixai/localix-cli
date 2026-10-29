@@ -82,7 +82,7 @@ impl Home {
         std::fs::create_dir_all(&dir).unwrap();
         let session = format!(
             r#"{{"id":"{id}","created":1700000000,"updated":{updated},"workspace":"{workspace}",
-            "turns":[{{"goal":"fix the parser","answer":"Fixed.","status":"achieved","at":1700000000}}]}}"#
+            "turns":[{{"goal":"fix the parser","answer":"Fixed.","status":"done","at":1700000000}}]}}"#
         );
         std::fs::write(dir.join(format!("{id}.json")), session).unwrap();
     }

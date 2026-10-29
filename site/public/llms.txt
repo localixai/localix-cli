@@ -1,7 +1,7 @@
 # llx
 
 > llx is an ultrafast, lightweight agent runtime for coding and CI, one binary under 4 MB. `llx exec` runs one
-> task and ends with a `result`: achieved or not, a summary, and data matching your JSON Schema, with
+> task and ends with the model's answer, and with `--schema` data matching your JSON Schema, with
 > an exit code and `--json` events as a contract. The same binary is a minimal agent at the terminal
 > (`llx`, five tools: `bash`, `apply_patch`, `ask`, `agents`, `jobs`) and a quick choice about stdin
 > for other agents (`llx decide`). It works with any model of the models.dev catalog and runs on
@@ -16,10 +16,10 @@
 
 - `llx` opens a session at the terminal; `llx "<task>"` opens one that starts with that task.
 - `llx exec "<task>"` (or `llx -p "<task>"`) runs one task and exits: the answer alone on stdout.
-- Every task ends with the agent's `result` call (achieved, a summary, `blocked_by`, and `data` matching `--schema`); text alone never ends it.
+- A task ends when the model replies with no tool call; with `--schema`, llx asks once more for `data` matching it (two fixes at most).
 - `llx exec --json` prints one JSON event per line, ending with `run.completed` and its `status`.
 - `llx decide "<question>"` asks the decision model one question about stdin and prints the option it picked (`--choices`, `--expect`).
-- Exit codes: 0 achieved, 1 not achieved, 2 out of turns, time or money (`exhausted`; `--max-turns`, `--timeout`, `--budget`), 3 environment or usage (`error`), 130 interrupted.
+- Exit codes: 0 done, 1 no data (`no_data`, `--schema` only), 2 out of turns, time or money (`exhausted`; `--max-turns`, `--timeout`, `--budget`), 3 environment or usage (`error`), 130 interrupted.
 
 ## In CI
 

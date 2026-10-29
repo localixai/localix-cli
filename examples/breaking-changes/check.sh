@@ -23,7 +23,7 @@ llx exec \
   --allow 'bash(cat *)' --allow 'bash(head *)' --allow 'bash(rg *)' \
   --schema "@$here/schema.json" -o "$out" "$prompt" </dev/null >/dev/null || {
     code=$?
-    # 1: the agent could not judge the change (its result says what blocked it); 2: out of turns,
+    # 1: no data matched the schema, so the change was not judged; 2: out of turns,
     # time or budget; 3: no key, no network. None is a verdict on the change.
     case $code in
       1) echo "llx could not judge the change: $(cat "$out")" >&2 ;;

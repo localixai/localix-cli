@@ -10,11 +10,12 @@ const BOUNDS: Bounds = Bounds {
 };
 
 #[test]
-fn an_answer_ends_with_the_code_its_result_line_says() {
+fn an_answer_ends_well_and_running_out_or_failing_says_so() {
     let ended = |status: Status| Ended::of(&status, None, None, BOUNDS);
-    assert_eq!(ended(Status::Achieved).code, exit::OK);
-    assert_eq!(ended(Status::NotAchieved).code, exit::FAILED);
-    assert_eq!(ended(Status::NotAchieved).status, "not_achieved");
+    assert_eq!(
+        (ended(Status::Done).code, ended(Status::Done).status),
+        (exit::OK, "done")
+    );
     let exhausted = ended(Status::Exhausted);
     assert_eq!(exhausted.code, exit::EXHAUSTED);
     assert!(exhausted.error.unwrap().contains("--max-turns"));
@@ -32,11 +33,11 @@ fn an_answer_ends_with_the_code_its_result_line_says() {
 #[test]
 fn data_that_does_not_match_fails_the_run() {
     let mismatch = Err("the result did not match the schema".to_string());
-    let ended = Ended::of(&Status::Achieved, Some(&mismatch), None, BOUNDS);
-    assert_eq!(ended.code, exit::FAILED);
+    let ended = Ended::of(&Status::Done, Some(&mismatch), None, BOUNDS);
+    assert_eq!((ended.code, ended.status), (exit::FAILED, "no_data"));
     let data = Ok(json!({"n": 1}));
     assert_eq!(
-        Ended::of(&Status::Achieved, Some(&data), None, BOUNDS).code,
+        Ended::of(&Status::Done, Some(&data), None, BOUNDS).code,
         exit::OK
     );
 }
@@ -80,7 +81,7 @@ fn a_halt_decides_the_status_and_exit_code() {
 
 #[test]
 fn a_spent_budget_exhausts_the_task_and_says_how_to_raise_it() {
-    let ended = Ended::of(&Status::Achieved, None, Some(Halt::OverBudget), BOUNDS);
+    let ended = Ended::of(&Status::Done, None, Some(Halt::OverBudget), BOUNDS);
     assert_eq!(ended.code, exit::EXHAUSTED);
     assert_eq!(ended.status, "exhausted");
     assert_eq!(

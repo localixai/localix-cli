@@ -31,7 +31,7 @@ fn a_task_from_question_to_end() {
     out.push(Line::default());
     out.extend(end(
         &End {
-            status: "achieved",
+            status: "done",
             millis: 48_200,
             turns: 6,
             cost: 0.0087,
@@ -117,7 +117,7 @@ fn the_header_stays_one_row_and_cuts_the_folder_from_the_start() {
 }
 
 #[test]
-fn the_end_rule_says_a_limit_ran_out_and_a_goal_was_not_achieved() {
+fn the_end_rule_says_a_limit_ran_out_or_how_long_the_work_took() {
     let verb = |status: &str| {
         let rule = end(
             &End {
@@ -132,8 +132,7 @@ fn the_end_rule_says_a_limit_ran_out_and_a_goal_was_not_achieved() {
     };
     // A timeout ends as `exhausted` too: the error line under it says which limit.
     assert!(verb("exhausted").starts_with("─ Ran out after 3.0s"));
-    assert!(verb("not_achieved").starts_with("─ Not achieved after 3.0s"));
-    assert!(verb("achieved").starts_with("─ Worked for 3.0s"));
+    assert!(verb("done").starts_with("─ Worked for 3.0s"));
 }
 
 #[test]

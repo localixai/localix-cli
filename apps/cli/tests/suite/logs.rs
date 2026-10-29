@@ -11,8 +11,7 @@ use crate::suite::exec::exec;
 fn a_failing_call() -> Model {
     Model::start(vec![
         Reply::call("bash", json!({"command": ""})),
-        Reply::blocked("Nothing ran.", "blocked"),
-        Reply::blocked("Nothing can run.", "blocked"),
+        Reply::done("Nothing ran."),
     ])
 }
 
@@ -24,7 +23,7 @@ fn log(home: &Home) -> Option<String> {
 fn a_task_leaves_each_call_with_its_arguments_its_failure_and_how_it_ended_in_the_log() {
     let (home, model) = (Home::new(), a_failing_call());
     let out = exec(&home, &model, &["exec", "-y", "run nothing"], "");
-    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(out.status.code(), Some(0));
     let log = log(&home).expect("the log is written");
     // The call as the model made it: what a bug report needs, and what the screen leaves out.
     assert!(log.contains(r#"bash {"command":""}"#), "{log}");
@@ -32,7 +31,7 @@ fn a_task_leaves_each_call_with_its_arguments_its_failure_and_how_it_ended_in_th
         .lines()
         .find(|line| line.contains("no command was given"));
     assert!(failed.is_some_and(|line| line.contains(" WARN ")), "{log}");
-    assert!(log.contains("not_achieved"), "{log}");
+    assert!(log.contains("done"), "{log}");
     // One event a line, each with its time and level first, as env_logger writes them.
     for line in log.lines() {
         assert!(line.starts_with("[20") && line.contains("Z "), "{line}");

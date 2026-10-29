@@ -52,7 +52,7 @@ fn request(conversation: &[Message]) -> Request<'_> {
     Request {
         conversation,
         tools: &[],
-        may_call: true,
+        calling: contracts::chat::Calling::Any,
         deadline: None,
     }
 }

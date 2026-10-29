@@ -57,7 +57,7 @@ fn copy_takes_the_last_answer_that_says_something() {
     let turn = |answer: &str| contracts::history::Turn {
         goal: "x".into(),
         answer: answer.into(),
-        status: "achieved".into(),
+        status: "done".into(),
         at: 0,
         steps: vec![],
     };

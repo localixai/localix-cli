@@ -16,7 +16,7 @@ fn call() -> ToolCall {
 
 fn summary(agent: &Spend) -> Summary<'_> {
     Summary {
-        status: "achieved",
+        status: "done",
         code: 0,
         answer: "All tests pass.",
         data: None,

@@ -19,7 +19,7 @@ fn turn(goal: &str) -> Turn {
     Turn {
         goal: goal.into(),
         answer: String::new(),
-        status: "achieved".into(),
+        status: "done".into(),
         at: 1,
         steps: vec![],
     }

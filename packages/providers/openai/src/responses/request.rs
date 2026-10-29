@@ -2,7 +2,7 @@
 //! level, and the prompt cache's key.
 
 use contracts::catalog::Selection;
-use contracts::chat::{Message, Request};
+use contracts::chat::{Calling, Message, Request};
 use serde_json::{Value, json};
 
 use super::offer::Offer;
@@ -28,7 +28,11 @@ pub(super) fn body(selection: &Selection, request: Request, offer: &Offer, sessi
     }
     if !request.tools.is_empty() {
         body["tools"] = request.tools.iter().map(|spec| offer.tool(spec)).collect();
-        body["tool_choice"] = json!(if request.may_call { "auto" } else { "none" });
+        body["tool_choice"] = match request.calling {
+            Calling::Any => json!("auto"),
+            Calling::Nothing => json!("none"),
+            Calling::Only(name) => json!({"type": "function", "name": name}),
+        };
         // Several calls in one turn: independent reads and searches cost one turn, not many. The
         // agent runs together only the calls whose tools allow it, the rest in order.
         body["parallel_tool_calls"] = json!(true);

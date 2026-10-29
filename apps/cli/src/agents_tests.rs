@@ -243,7 +243,7 @@ fn a_spawned_agent_works_in_the_background_and_its_answer_comes_by_itself() {
             .iter()
             .find(|m| m.starts_with("<agent_result"))
             .expect("delivered");
-        assert!(result.contains("agent=\"scout\"") && result.contains("status=\"achieved\""));
+        assert!(result.contains("agent=\"scout\"") && result.contains("status=\"done\""));
         assert!(
             result.contains("The parser is in src/parse.rs:10."),
             "{result}"
@@ -252,7 +252,7 @@ fn a_spawned_agent_works_in_the_background_and_its_answer_comes_by_itself() {
         let child = saved.iter().find(|s| s.is_agent()).expect("its session");
         assert_eq!(child.parent.as_deref(), Some(rig.session.id.as_str()));
         assert_eq!(child.name, "scout");
-        assert_eq!(child.turns[0].status, "achieved");
+        assert_eq!(child.turns[0].status, "done");
         0
     });
 }

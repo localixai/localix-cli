@@ -45,7 +45,7 @@ fn the_run_completes_with_its_status_usage_and_data() {
     };
     let data = Ok(json!({"n": 1}));
     let summary = Summary {
-        status: "achieved",
+        status: "done",
         code: 0,
         answer: "Done.",
         data: Some(&data),
@@ -56,7 +56,7 @@ fn the_run_completes_with_its_status_usage_and_data() {
     };
     let event = completed(&summary);
     assert_eq!(event["type"], "run.completed");
-    assert_eq!(event["status"], "achieved");
+    assert_eq!(event["status"], "done");
     assert_eq!(event["exit_code"], 0);
     assert_eq!(event["data"], json!({"n": 1}));
     // evals/run.py reads these: a rename must fail here, not report zeros there.

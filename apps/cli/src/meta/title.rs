@@ -3,7 +3,7 @@
 //! waits for it; a failure only leaves the session named by its task.
 
 use contracts::catalog::Selection;
-use contracts::chat::{Chat, Message, Request};
+use contracts::chat::{Calling, Chat, Message, Request};
 
 use super::Update;
 use crate::compose::Rig;
@@ -74,7 +74,7 @@ fn ask(chat: &dyn Chat, goal: &str) -> Option<String> {
     let request = Request {
         conversation: &conversation,
         tools: &[],
-        may_call: false,
+        calling: Calling::Nothing,
         deadline: None,
     };
     clean(chat.complete(request).ok()?.text.as_deref()?)

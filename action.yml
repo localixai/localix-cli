@@ -94,7 +94,7 @@ outputs:
     description: llx's exit code, 0, 1, 2, 3 or 130.
     value: ${{ steps.finish.outputs.exit-code }}
   status:
-    description: achieved, not-achieved, out-of-budget, not-ready or interrupted (failed for any other code).
+    description: done, no-data, out-of-budget, not-ready or interrupted (failed for any other code).
     value: ${{ steps.finish.outputs.status }}
   cost-usd:
     description: What the run cost, in US dollars, from the run.completed event.

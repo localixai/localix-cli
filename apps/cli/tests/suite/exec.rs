@@ -48,6 +48,13 @@ fn exec_as(home: &Home, mut command: std::process::Command, stdin: &str) -> Outp
     child.wait_with_output().unwrap()
 }
 
+/// The tools a request offered, by name.
+fn names(request: &Value) -> Vec<String> {
+    (request["tools"].as_array().unwrap().iter())
+        .map(|tool| tool["function"]["name"].as_str().unwrap().to_string())
+        .collect()
+}
+
 /// A task that runs one command, then answers.
 fn one_command() -> Model {
     Model::start(vec![
@@ -129,10 +136,11 @@ fn o_writes_the_answer_and_schema_prints_the_data_alone() {
     assert_eq!(written, "All good.\n");
     let schema =
         r#"{"type":"object","properties":{"version":{"type":"string"}},"required":["version"]}"#;
-    let model = Model::start(vec![Reply::call(
-        "result",
-        json!({"data": {"version": "1.2"}, "summary": "Found it.", "achieved": true}),
-    )]);
+    // The work ends with a message; then the data is asked for, with the `result` call forced.
+    let model = Model::start(vec![
+        Reply::done("It is 1.2."),
+        Reply::data(&json!({"version": "1.2"})),
+    ]);
     let args = [
         "exec",
         "--schema",
@@ -146,43 +154,70 @@ fn o_writes_the_answer_and_schema_prints_the_data_alone() {
     assert_eq!(text(&out.stdout), "{\"version\":\"1.2\"}\n");
     let written = std::fs::read_to_string(home.path().join("data.json")).unwrap();
     assert_eq!(written, "{\"version\":\"1.2\"}\n");
+    let requests = model.requests();
+    assert_eq!(requests.len(), 2);
+    assert!(
+        requests[0]["tool_choice"] == "auto"
+            && !names(&requests[0]).iter().any(|name| name == "result")
+    );
+    assert_eq!(names(&requests[1]), ["result"]);
+    assert_eq!(
+        requests[1]["tool_choice"],
+        json!({"type": "function", "function": {"name": "result"}})
+    );
 }
 
 #[test]
-fn not_achieved_exits_one_and_out_of_turns_exits_two() {
+fn no_data_exits_one_and_out_of_turns_exits_two() {
     let home = Home::new();
-    // The answer stands: nothing sends it back.
-    let model = Model::start(vec![Reply::blocked("Could not.", "blocked")]);
-    let out = exec(&home, &model, &["exec", "x"], "");
+    // `--schema`, and the data never matches: two fixes, then the run ends with none.
+    let schema =
+        r#"{"type":"object","properties":{"version":{"type":"string"}},"required":["version"]}"#;
+    let script = vec![
+        Reply::done("Could not."),
+        Reply::data(&json!({})),
+        Reply::data(&json!({})),
+        Reply::data(&json!({})),
+    ];
+    let out = exec(
+        &home,
+        &Model::start(script),
+        &["exec", "--schema", schema, "x"],
+        "",
+    );
     assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
-    assert_eq!(model.requests().len(), 1);
+    assert_eq!(text(&out.stdout), "", "no prose where data is expected");
     let model = Model::start(vec![Reply::call("bash", json!({"command": "echo hi"}))]);
     let out = exec(&home, &model, &["exec", "-y", "--max-turns", "1", "x"], "");
     assert_eq!(out.status.code(), Some(2), "{}", text(&out.stderr));
 }
 
 #[test]
-fn text_alone_is_reminded_until_result_ends_the_run() {
+fn a_message_with_no_call_ends_the_run_and_the_model_hears_only_the_goal() {
     let home = Home::new();
-    // A progress note sent as a reply: told that only `result` ends the task, each time, so a
-    // pipeline reading the exit code never takes prose for success.
+    // No tool ends the task and nothing invites the model to stop: its first message with no
+    // call is the answer, and the only user messages it ever saw are the context and the goal.
     let model = Model::start(vec![
-        Reply::text("Working on it."),
+        Reply::call("bash", json!({"command": "echo hi"})),
         Reply::text("Done, I think."),
-        Reply::done("Done."),
+        Reply::text("never asked for"),
     ]);
-    let out = exec(&home, &model, &["exec", "--json", "x"], "");
+    let out = exec(&home, &model, &["exec", "-y", "--json", "x"], "");
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
-    assert_eq!(model.requests().len(), 3);
-    for at in 1..3 {
-        assert!(
-            said(&model, at).contains("call `result`"),
-            "{}",
-            said(&model, at)
-        );
-    }
+    let requests = model.requests();
+    assert_eq!(requests.len(), 2);
+    let users = requests[1]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|message| message["role"] == "user")
+        .count();
+    assert_eq!(users, 2, "the context and the goal: {}", requests[1]);
     let last: Value = serde_json::from_str(text(&out.stdout).lines().last().unwrap()).unwrap();
-    assert_eq!(last["status"], "achieved");
+    assert_eq!(
+        (last["status"].as_str(), last["answer"].as_str()),
+        (Some("done"), Some("Done, I think."))
+    );
 }
 
 #[test]
@@ -290,11 +325,6 @@ fn the_time_limit_ends_a_command_that_is_still_running() {
 
 #[test]
 fn an_agent_is_offered_the_tools_of_the_main_session() {
-    let names = |request: &Value| -> Vec<String> {
-        (request["tools"].as_array().unwrap().iter())
-            .map(|tool| tool["function"]["name"].as_str().unwrap().to_string())
-            .collect()
-    };
     let home = Home::new();
     let model = Model::start(vec![Reply::call(
         "agents",
@@ -309,7 +339,7 @@ fn an_agent_is_offered_the_tools_of_the_main_session() {
         requests.len()
     );
     let main = names(&requests[0]);
-    assert_eq!(main, ["bash", "apply_patch", "agents", "jobs", "result"]);
+    assert_eq!(main, ["bash", "apply_patch", "agents", "jobs"]);
     for request in &requests {
         assert_eq!(names(request), main, "one list, one prompt cache");
     }

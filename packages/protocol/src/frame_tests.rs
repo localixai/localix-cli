@@ -46,7 +46,7 @@ fn every_frame_to_the_interface_comes_back_the_same_through_json() {
             },
         }),
         event(Event::TaskEnded {
-            status: "achieved".into(),
+            status: "done".into(),
             millis: 1200,
             turns: 2,
             cost: 0.01,
@@ -60,7 +60,7 @@ fn every_frame_to_the_interface_comes_back_the_same_through_json() {
         event(Event::Earlier(vec![Turn {
             goal: "a".into(),
             answer: "b".into(),
-            status: "achieved".into(),
+            status: "done".into(),
         }])),
         event(Event::Updated(crate::Update {
             title: Some("Fix".into()),

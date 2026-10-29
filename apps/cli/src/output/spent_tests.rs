@@ -43,7 +43,7 @@ fn a_resumed_session_begins_from_what_its_tasks_spent_and_grows_with_each_turn()
     session.turns.push(Turn {
         goal: "fix it".into(),
         answer: String::new(),
-        status: "achieved".into(),
+        status: "done".into(),
         at: 0,
         steps: vec![
             step("model", spent(10_000, 8_000, 200, 0.01)),

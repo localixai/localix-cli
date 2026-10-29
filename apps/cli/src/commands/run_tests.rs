@@ -133,19 +133,17 @@ fn a_composed_task_reports_in_order_writes_its_answer_and_is_saved() {
             "tool.call",
             "tool.result",
             "turn",
-            "tool.call",
-            "tool.result",
             "run.completed"
         ]
     );
-    let completed = &done.events[7];
-    assert_eq!(completed["status"], "achieved");
+    let completed = &done.events[5];
+    assert_eq!(completed["status"], "done");
     assert_eq!(completed["exit_code"], done.code);
     assert_eq!(done.code, exit::OK);
     assert!(done.made, "the command ran");
     assert_eq!(done.last, "Done.\n");
     assert_eq!(done.session.turns.len(), 1);
-    assert_eq!(done.session.turns[0].status, "achieved");
+    assert_eq!(done.session.turns[0].status, "done");
 }
 
 #[test]
@@ -174,7 +172,7 @@ fn a_failed_answer_file_is_in_the_exit_code_the_report_gives() {
 
 #[test]
 fn with_a_schema_and_no_data_the_answer_file_holds_no_prose() {
-    // The model answers in text until its turns run out: reminded each time, no data.
+    // The model answers, then answers the forced `result` request with prose again: no data.
     let prose = Completion {
         text: Some("Done.".into()),
         ..Completion::default()
@@ -189,7 +187,7 @@ fn with_a_schema_and_no_data_the_answer_file_holds_no_prose() {
         done.last, "",
         "prose where data is expected would break the reader"
     );
-    assert_eq!(done.code, exit::EXHAUSTED);
+    assert_eq!(done.code, exit::FAILED);
 }
 
 #[test]

@@ -4,7 +4,7 @@ use contracts::catalog::{Effort, ModelEntry, Selection};
 use provider_kit::http::Reply;
 use serde_json::{Value, json};
 
-use contracts::chat::Message;
+use contracts::chat::{Calling, Message};
 use contracts::tool::{Input, ToolSpec};
 
 use super::offer::Offer;
@@ -154,7 +154,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
     let request = Request {
         conversation: &conversation,
         tools: std::slice::from_ref(&spec),
-        may_call: true,
+        calling: Calling::Any,
         deadline: None,
     };
     let selection = Selection::new(entry("gpt-6-sol"))
@@ -200,7 +200,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
     let request = Request {
         conversation: &[],
         tools: &[],
-        may_call: true,
+        calling: Calling::Any,
         deadline: None,
     };
     assert_eq!(
@@ -208,11 +208,23 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
         json!({"effort": "none"})
     );
 
+    // The `result` call with `--schema`'s data is asked for by name: the reply is that call.
+    let only = Request {
+        conversation: &[],
+        tools: std::slice::from_ref(&spec),
+        calling: Calling::Only("result"),
+        deadline: None,
+    };
+    assert_eq!(
+        request_body(&off, only, Texts::Functions)["tool_choice"],
+        json!({"type": "function", "name": "result"})
+    );
+
     // A model with no level is sent none, and a request with no tools names none.
     let bare = Request {
         conversation: &[],
         tools: &[],
-        may_call: false,
+        calling: Calling::Nothing,
         deadline: None,
     };
     let body = request_body(&Selection::new(entry("gpt-next")), bare, Texts::Functions);
@@ -265,7 +277,7 @@ fn a_request_names_the_account_and_the_token() {
     let request = Request {
         conversation: &conversation,
         tools: &[],
-        may_call: false,
+        calling: Calling::Nothing,
         deadline: None,
     };
     model.complete(request).unwrap();
@@ -294,7 +306,7 @@ fn a_token_about_to_lapse_is_refreshed_and_kept_first() {
     let request = Request {
         conversation: &[],
         tools: &[],
-        may_call: false,
+        calling: Calling::Nothing,
         deadline: None,
     };
     model.complete(request).unwrap();
@@ -338,7 +350,7 @@ fn a_refused_token_is_refreshed_once_then_the_refusal_is_said() {
     let request = Request {
         conversation: &[],
         tools: &[],
-        may_call: false,
+        calling: Calling::Nothing,
         deadline: None,
     };
     let refused = model.complete(request).unwrap_err().to_string();
@@ -358,7 +370,7 @@ fn a_usage_limit_says_so() {
     let request = Request {
         conversation: &[],
         tools: &[],
-        may_call: false,
+        calling: Calling::Nothing,
         deadline: None,
     };
     let refused = model.complete(request).unwrap_err().to_string();
@@ -395,7 +407,7 @@ fn a_stream_that_went_out_unanswered_is_sent_once_more_and_no_further() {
     let request = Request {
         conversation: &[],
         tools: &[],
-        may_call: false,
+        calling: Calling::Nothing,
         deadline: None,
     };
     let (model, http, _) = model_of(
@@ -456,7 +468,7 @@ fn a_request_that_never_went_out_is_sent_again() {
     let request = Request {
         conversation: &[],
         tools: &[],
-        may_call: false,
+        calling: Calling::Nothing,
         deadline: None,
     };
     assert!(model.complete(request).is_ok());
@@ -480,7 +492,7 @@ fn each_conversation_is_a_session_of_its_own_at_the_backend_all_its_requests_one
         let request = Request {
             conversation,
             tools: &[],
-            may_call: true,
+            calling: Calling::Any,
             deadline: None,
         };
         model.complete(request).unwrap();
@@ -548,7 +560,7 @@ fn a_note_the_model_wrote_beside_its_calls_goes_back_in_its_phase() {
     let request = Request {
         conversation: &conversation,
         tools: &[],
-        may_call: true,
+        calling: Calling::Any,
         deadline: None,
     };
     let body = request_body(
@@ -590,7 +602,7 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
     let request = Request {
         conversation: &conversation,
         tools: &[],
-        may_call: true,
+        calling: Calling::Any,
         deadline: None,
     };
     let body = request_body(
@@ -609,7 +621,7 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
     let request = Request {
         conversation: &conversation,
         tools: &[],
-        may_call: true,
+        calling: Calling::Any,
         deadline: None,
     };
     let other = request_body(
@@ -623,7 +635,7 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
     let bare = Request {
         conversation: &[],
         tools: &[],
-        may_call: true,
+        calling: Calling::Any,
         deadline: None,
     };
     assert_eq!(
@@ -645,7 +657,7 @@ fn ask_with(model: &ChatModel, spec: &ToolSpec) -> Completion {
     let request = Request {
         conversation: &conversation,
         tools: std::slice::from_ref(spec),
-        may_call: true,
+        calling: Calling::Any,
         deadline: None,
     };
     model.complete(request).unwrap()
@@ -719,7 +731,7 @@ fn the_routing_token_a_reply_gives_goes_back_within_its_task_and_no_further() {
             .complete(Request {
                 conversation,
                 tools: &[],
-                may_call: true,
+                calling: Calling::Any,
                 deadline: None,
             })
             .unwrap();
@@ -768,7 +780,7 @@ fn the_deadline_of_a_request_reaches_the_http_client() {
         .complete(Request {
             conversation: &conversation,
             tools: &[],
-            may_call: false,
+            calling: Calling::Nothing,
             deadline: Some(at),
         })
         .unwrap();

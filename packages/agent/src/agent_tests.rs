@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::fakes::Silent;
-use crate::fakes::{Echo, Recorder, Scripted, blocked, calls, done, ok, says, users};
+use crate::fakes::{Echo, Recorder, Scripted, calls, data, done, ok, says, users};
 
 fn agent<'a>(
     chat: &'a Scripted,
@@ -43,7 +43,7 @@ fn results(run: &Run) -> Vec<(String, bool)> {
 }
 
 #[test]
-fn a_reply_without_a_call_is_the_answer_and_its_result_line_the_status() {
+fn a_reply_without_a_call_is_the_answer_and_ends_the_run() {
     let chat = Scripted::new(vec![
         calls("echo", json!({})),
         Completion {
@@ -57,15 +57,10 @@ fn a_reply_without_a_call_is_the_answer_and_its_result_line_the_status() {
     let echo = Echo::new(vec![ok("opened")]);
     let recorder = Recorder::default();
     let run = agent(&chat, &[&echo], None, &recorder).run("Find the price");
-    assert_eq!(run.status, Status::Achieved);
+    assert_eq!(run.status, Status::Done);
     assert_eq!(run.answer, "Price is 93 EUR.");
-    assert_eq!(
-        results(&run),
-        [
-            ("opened\n\nstate".to_string(), false),
-            (RETURNED.to_string(), false)
-        ]
-    );
+    assert_eq!(results(&run), [("opened\n\nstate".to_string(), false)]);
+    assert_eq!(run.data, None, "no schema, no data step");
     assert_eq!(run.spend.calls, 2);
     assert_eq!(
         run.spend.output_tokens, 7,
@@ -73,14 +68,7 @@ fn a_reply_without_a_call_is_the_answer_and_its_result_line_the_status() {
     );
     assert_eq!(
         recorder.events(),
-        [
-            "turn 0",
-            "call echo",
-            "ok echo: opened",
-            "turn 7",
-            "call result",
-            &format!("ok result: {RETURNED}")
-        ],
+        ["turn 0", "call echo", "ok echo: opened", "turn 7",],
         "each turn is reported with what it took"
     );
 }
@@ -108,8 +96,8 @@ fn failed_calls_go_back_to_the_model_which_keeps_its_tools_however_many_fail() {
         ..agent(&chat, &[&echo], None, &recorder)
     }
     .run("Do it");
-    assert_eq!(run.status, Status::Achieved);
-    assert_eq!(*chat.may_call.lock().unwrap(), [true; 7]);
+    assert_eq!(run.status, Status::Done);
+    assert_eq!(*chat.calling.lock().unwrap(), ["any"; 7]);
     assert_eq!(users(run.conversation.messages()), ["Goal: Do it"]);
     let failures = recorder.events();
     let failures: Vec<&String> = failures
@@ -120,102 +108,23 @@ fn failed_calls_go_back_to_the_model_which_keeps_its_tools_however_many_fail() {
 }
 
 #[test]
-fn text_without_a_call_is_a_note_the_model_is_reminded_once_and_result_ends_the_run() {
-    // A progress note sent as a reply does not end the task: the model is told once that only
-    // `result` does, and goes on; its words are shown as they came.
+fn nothing_is_said_to_the_model_but_the_goal_and_its_calls_results() {
+    // No reminder, no nudge, no tool that ends the task: the model's first message with no call
+    // is the answer, whatever it says.
     let chat = Scripted::new(vec![
-        says("Next: app.ts."),
         calls("echo", json!({})),
-        done("Split."),
+        says("130 of 132 pass; the split is left."),
+        says("never asked for"),
     ]);
     let echo = Echo::new(vec![ok("ran")]);
     let recorder = Recorder::default();
     let run = agent(&chat, &[&echo], None, &recorder).run("Split app.ts");
     assert_eq!(
         (run.status, run.answer.as_str()),
-        (Status::Achieved, "Split.")
+        (Status::Done, "130 of 132 pass; the split is left.")
     );
-    assert_eq!(run.data, None);
-    assert_eq!(
-        users(run.conversation.messages()),
-        ["Goal: Split app.ts", RESULT_NOW]
-    );
-    assert!(recorder.events().contains(&"said Next: app.ts.".into()));
-}
-
-#[test]
-fn text_is_reminded_each_time_until_result_ends_the_run() {
-    let chat = Scripted::new(vec![
-        says("Half done."),
-        says("Still half done."),
-        done("Done."),
-    ]);
-    let run = agent(&chat, &[], None, &Silent).run("Do it");
-    assert_eq!(
-        (run.status, run.answer.as_str()),
-        (Status::Achieved, "Done.")
-    );
-    assert_eq!(
-        users(run.conversation.messages()),
-        ["Goal: Do it", RESULT_NOW, RESULT_NOW]
-    );
-}
-
-#[test]
-fn a_result_not_achieved_names_what_blocks_it_or_goes_back() {
-    let chat = Scripted::new(vec![
-        calls(
-            schema::TOOL,
-            json!({"achieved": false, "summary": "Two checks fail."}),
-        ),
-        blocked("Two checks fail.", "the registry refuses the token"),
-        says("never asked for"),
-    ]);
-    let recorder = Recorder::default();
-    let run = agent(&chat, &[], None, &recorder).run("Make the checks pass");
-    assert_eq!(run.status, Status::NotAchieved);
-    assert_eq!(
-        run.answer,
-        "Two checks fail.\n\nBlocked by: the registry refuses the token"
-    );
-    assert_eq!(results(&run)[0], (schema::UNBLOCKED.to_string(), true));
-    assert_eq!(
-        users(run.conversation.messages()),
-        ["Goal: Make the checks pass"]
-    );
-}
-
-#[test]
-fn a_progress_report_through_result_is_refused_without_ending_or_asking_for_another() {
-    // A `result` not achieved that names no block is the model reporting progress, not ending:
-    // the run goes on, however often, and the refusal asks for the work, never for the call.
-    let report = || {
-        calls(
-            schema::TOOL,
-            json!({"achieved": false, "summary": "130 of 132 pass; the split is left."}),
-        )
-    };
-    let chat = Scripted::new(vec![
-        report(),
-        report(),
-        report(),
-        calls("echo", json!({"text": "split"})),
-        done("All 132 pass."),
-    ]);
-    let echo = Echo::new(vec![ok("split")]);
-    let recorder = Recorder::default();
-    let run = agent(&chat, &[&echo], None, &recorder).run("Make the checks pass");
-    assert_eq!(run.status, Status::Achieved);
-    assert_eq!(run.answer, "All 132 pass.");
-    let refusals: Vec<_> = results(&run).into_iter().take(3).collect();
-    for (why, failed) in &refusals {
-        assert!(*failed);
-        assert!(why.contains("goes on"), "{why}");
-        assert!(
-            !why.contains("again"),
-            "a refusal that asks for the call again gets one: {why}"
-        );
-    }
+    assert_eq!(users(run.conversation.messages()), ["Goal: Split app.ts"]);
+    assert_eq!(chat.replies.lock().unwrap().len(), 1, "no third request");
 }
 
 #[test]
@@ -224,7 +133,7 @@ fn an_empty_reply_is_not_kept_in_the_conversation() {
     // assistant message with no content.
     let chat = Scripted::new(vec![Completion::default(), done("Done.")]);
     let run = agent(&chat, &[], None, &Silent).run("Do it");
-    assert_eq!(run.status, Status::Achieved);
+    assert_eq!(run.status, Status::Done);
     let empty = run.conversation.messages().iter().any(|message| {
         matches!(message, Message::Assistant { text, calls, .. } if text.is_none() && calls.is_empty())
     });
@@ -236,7 +145,7 @@ fn bad_arguments_and_unknown_tools_are_answered_without_calling_anything() {
     let chat = Scripted::new(vec![
         calls("echo", json!("not an object")),
         calls("nothing", json!({})),
-        blocked("Could not.", "no tool"),
+        says("Could not."),
     ]);
     let echo = Echo::new(vec![]);
     let recorder = Recorder::default();
@@ -264,79 +173,81 @@ fn a_fatal_call_ends_the_run_and_is_answered_for_a_follow_up() {
 }
 
 #[test]
-fn turns_run_out_with_one_last_request_for_an_answer() {
+fn turns_run_out_without_a_last_request_for_an_answer() {
     let chat = Scripted::new((0..5).map(|_| calls("echo", json!({}))).collect());
     let echo = Echo::new((0..5).map(|_| ok("again")).collect());
     let run = agent(&chat, &[&echo], None, &Silent).run("Loop forever");
     assert_eq!(run.status, Status::Exhausted);
-    assert_eq!(
-        *chat.may_call.lock().unwrap(),
-        [true; 5],
-        "result is a call"
-    );
-    assert_eq!(chat.last_user.lock().unwrap()[4], RESULT_NOW);
+    assert_eq!(*chat.calling.lock().unwrap(), ["any"; 5]);
+    assert_eq!(chat.last_user.lock().unwrap()[4], "Goal: Loop forever");
 }
 
 #[test]
-fn with_a_schema_the_run_ends_in_matching_data() {
+fn with_a_schema_the_data_is_asked_for_after_the_answer_with_the_call_forced() {
     let schema = json!({"type": "object", "required": ["price"], "properties": {"price": {"type": "number"}}});
     let chat = Scripted::new(vec![
-        says("The price is 93."),
-        calls(
-            schema::TOOL,
-            json!({"data": {"price": "93"}, "summary": "", "achieved": true}),
-        ),
-        calls(
-            schema::TOOL,
-            json!({"data": {"price": 93}, "summary": "93 EUR", "achieved": true}),
-        ),
+        says("The price is 93 EUR."),
+        data(&json!({"price": "93"})),
+        data(&json!({"price": 93})),
     ]);
     let recorder = Recorder::default();
     let run = agent(&chat, &[], Some(&schema), &recorder).run("Find the price");
+    // The work's requests offer no `result`; the data's requests force it.
     assert_eq!(
-        chat.last_user.lock().unwrap()[1],
-        RESULT_NOW,
-        "text alone is not the end"
+        *chat.calling.lock().unwrap(),
+        ["any", schema::TOOL, schema::TOOL]
     );
+    assert_eq!(chat.last_user.lock().unwrap()[1], DATA_NOW);
     assert!(results(&run)[0].0.contains("data.price must be number"));
     assert_eq!(results(&run)[1], (RETURNED.to_string(), false));
     assert_eq!(run.data, Some(Ok(json!({"price": 93}))));
     assert_eq!(
         (run.status, run.answer.as_str()),
-        (Status::Achieved, "93 EUR")
+        (Status::Done, "The price is 93 EUR.")
     );
     let events = recorder.events();
-    assert_eq!(events[1], "said The price is 93.", "the note is shown");
     assert!(
-        events[4].contains("data.price must be number"),
-        "{}",
-        events[4]
+        events[3].contains("data.price must be number"),
+        "{events:?}"
     );
-    assert_eq!(events[7], format!("ok result: {RETURNED}"));
+    assert_eq!(events[6], format!("ok result: {RETURNED}"));
 }
 
 #[test]
-fn a_result_that_keeps_breaking_its_schema_ends_the_run_without_data() {
+fn a_result_that_keeps_breaking_its_schema_leaves_the_run_without_data() {
     let schema = json!({"type": "object", "required": ["price"], "properties": {"price": {"type": "number"}}});
-    let wrong = || {
-        calls(
-            schema::TOOL,
-            json!({"data": {}, "summary": "", "achieved": true}),
-        )
-    };
-    let chat = Scripted::new(vec![wrong(), wrong(), wrong()]);
+    let wrong = || data(&json!({}));
+    let chat = Scripted::new(vec![says("93."), wrong(), wrong(), wrong(), wrong()]);
     let recorder = Recorder::default();
     let run = agent(&chat, &[], Some(&schema), &recorder).run("Find the price");
-    assert_eq!(run.status, Status::NotAchieved);
+    assert_eq!((run.status, run.answer.as_str()), (Status::Done, "93."));
     assert_eq!(
         run.data,
         Some(Err(
             "the result did not match the schema: data is missing \"price\"".into()
         ))
     );
+    assert_eq!(
+        chat.replies.lock().unwrap().len(),
+        1,
+        "two fixes, then no more"
+    );
     let failed = recorder.events();
     let failed = failed.iter().filter(|event| event.starts_with("failed"));
     assert_eq!(failed.count(), 3, "every call gets its result event");
+}
+
+#[test]
+fn with_a_schema_a_reply_that_is_not_the_call_leaves_the_run_without_data() {
+    let schema = json!({"type": "object"});
+    let chat = Scripted::new(vec![says("93."), says("Here it is.")]);
+    let run = agent(&chat, &[], Some(&schema), &Silent).run("Find the price");
+    assert_eq!(
+        run.data,
+        Some(Err(
+            "the result did not match the schema: no `result` call came".into()
+        ))
+    );
 }
 
 #[test]
@@ -369,15 +280,14 @@ fn the_context_opens_a_new_conversation_only_when_given() {
 }
 
 #[test]
-fn with_a_schema_text_until_the_turns_run_out_leaves_no_data() {
+fn with_a_schema_turns_that_run_out_leave_no_data_and_no_data_step() {
     let schema = json!({"type": "object"});
-    let chat = Scripted::new((0..5).map(|_| says("The price is 93.")).collect());
-    let run = agent(&chat, &[], Some(&schema), &Silent).run("Find the price");
-    // Reminded each turn, and not twice in a row before the last request.
-    assert_eq!(chat.last_user.lock().unwrap()[1..], [RESULT_NOW; 4]);
+    let chat = Scripted::new((0..5).map(|_| calls("echo", json!({}))).collect());
+    let echo = Echo::new((0..5).map(|_| ok("again")).collect());
+    let run = agent(&chat, &[&echo], Some(&schema), &Silent).run("Find the price");
     assert_eq!(run.status, Status::Exhausted);
     assert_eq!(run.data, None);
-    assert_eq!(run.answer, "");
+    assert_eq!(chat.calling.lock().unwrap().len(), 5);
 }
 
 #[test]
@@ -451,8 +361,8 @@ fn a_turn_whose_calls_all_fail_counts_once() {
     ]);
     let echo = Echo::new(vec![failed(), failed(), failed(), ok("found")]);
     let run = agent(&chat, &[&echo], None, &Silent).run("Find the manifest");
-    assert_eq!(*chat.may_call.lock().unwrap(), [true, true, true]);
-    assert_eq!(run.status, Status::Achieved);
+    assert_eq!(*chat.calling.lock().unwrap(), ["any", "any", "any"]);
+    assert_eq!(run.status, Status::Done);
 }
 
 #[test]
@@ -475,8 +385,6 @@ fn what_the_model_says_beside_its_calls_is_shown() {
             "call echo",
             "ok echo: opened",
             "turn 0",
-            "call result",
-            &format!("ok result: {RETURNED}")
         ],
         "the final answer is the run's, not a said event"
     );
@@ -504,7 +412,7 @@ impl Tool for Wordy {
             input: Input::Json(json!({"type": "object"})),
         }
     }
-    fn call(&self, _: &Value) -> Result<contracts::tool::ToolOutput, ToolError> {
+    fn call(&self, _: &Value) -> Result<ToolOutput, ToolError> {
         ok("opened")
     }
 }
@@ -530,7 +438,7 @@ fn the_tool_specs_count_in_the_ratio_and_against_the_ceiling() {
         ..agent(&chat, &[&Wordy], None, &Silent)
     }
     .run("Open it");
-    assert_eq!(run.status, Status::Achieved);
+    assert_eq!(run.status, Status::Done);
     let seen = strategy.0.into_inner().unwrap();
     let (first, second) = (seen[0], seen[1]);
     assert!(

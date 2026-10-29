@@ -3,7 +3,7 @@ use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
 use contracts::catalog::{Effort, ModelEntry, Selection};
-use contracts::chat::{Chat, Message, Request};
+use contracts::chat::{Calling, Chat, Message, Request};
 use provider_kit::http::Reply;
 use serde_json::json;
 
@@ -143,7 +143,7 @@ fn openrouter_at_another_address_is_still_sent_openrouters_fields() {
     let request = Request {
         conversation: &conversation,
         tools: &[],
-        may_call: true,
+        calling: Calling::Any,
         deadline: None,
     };
     assert_eq!(chat.complete(request).unwrap().text.as_deref(), Some("hi"));

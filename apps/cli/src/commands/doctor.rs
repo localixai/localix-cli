@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::process::Stdio;
 
-use contracts::chat::{Chat, Message, Request};
+use contracts::chat::{Calling, Chat, Message, Request};
 use contracts::model::{Decider, Question};
 use serde_json::json;
 
@@ -100,7 +100,7 @@ fn agent_model(chat: &dyn Chat, model: &str) -> (Mark, String) {
     let request = Request {
         conversation: &hello,
         tools: &[],
-        may_call: false,
+        calling: Calling::Nothing,
         deadline: None,
     };
     match chat.complete(request) {

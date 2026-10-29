@@ -27,14 +27,14 @@ const out = (text: string, tone: Tone = 'hi'): Block => ({ out: text, tone });
  *  (packages/tools/src/lib.rs). */
 export const CARDS: Card[] = [
   {
-    title: 'Ends every task with a result',
-    text: 'The agent ends a task by calling result: achieved or not, a summary, what blocked it, and data matching your JSON Schema. Text alone never ends a task. The exit code says how it ended.',
+    title: 'Ends every task with an exit code',
+    text: 'A task ends when the model answers; with --schema, llx asks it once more for data matching your JSON Schema. The exit code says how it ended.',
     link: { href: CI_DOCS, label: 'The CI guide' },
     panel: [
       {
         grid: [
-          [['dim', '0'], ['ok', 'achieved'], ['dim', 'the goal was reached']],
-          [['dim', '1'], ['bad', 'not_achieved'], ['dim', 'it was not, or the data missed the schema']],
+          [['dim', '0'], ['ok', 'done'], ['dim', 'the model answered']],
+          [['dim', '1'], ['bad', 'no_data'], ['dim', 'the data missed the schema']],
           [['dim', '2'], 'exhausted', ['dim', 'out of turns, time or money']],
           [['dim', '3'], 'error', ['dim', 'no key, no network, a bad argument']],
           [['dim', '130'], 'interrupted', ['dim', 'Ctrl-C or SIGTERM (128 + the signal, as shells report it)']],
@@ -57,7 +57,7 @@ export const CARDS: Card[] = [
       {
         lang: 'json',
         text: `{
-  "status": "achieved",
+  "status": "done",
   "exit_code": 0,
   "data": { "bump": "patch", "ship": true },
   "cost_usd": 0.0041
@@ -134,8 +134,8 @@ export const CARDS: Card[] = [
       {
         grid: [
           [['dim', 'agent'], ['dim', 'runs'], ['dim', 'score (median)'], ['dim', 'range'], ['dim', 'time'], ['dim', 'cost']],
-          [['hi', 'llx'], ['hi', '6'], ['hi', '196'], '188–197', '165 s', '$0.031'],
-          ['Codex', '6', '196', '192–198', '141 s', '$0.028'],
+          [['hi', 'llx'], ['hi', '6'], ['hi', '196'], '48–197', '126 s', '$0.018'],
+          ['Codex', '6', '197', '195–198', '165 s', '$0.031'],
         ],
         align: 'lrrrrr',
       },
@@ -166,7 +166,7 @@ export const CARDS: Card[] = [
           [['hi', 'ask'], ['dim', 'a question to the person']],
           [['hi', 'agents'], ['dim', 'other agents, in parallel']],
           [['hi', 'jobs'], ['dim', 'monitors and schedules']],
-          [['acc', 'result'], ['dim', 'how every task ends']],
+          [['acc', 'result'], ['dim', 'the data of --schema, asked for at the end']],
         ],
       },
     ],

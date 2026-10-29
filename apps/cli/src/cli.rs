@@ -22,9 +22,9 @@ monitors (a background command whose lines come back) and schedules (a prompt at
 
 With no command, llx opens a session at the terminal: PROMPT, when given, is its first message, \
 and each line you type goes on from the last. `llx exec` (or -p) runs one task without a session \
-and exits, with the answer alone on stdout: for scripts, CI and pipes. Every task ends with the \
-agent's `result` call (achieved or not, a summary, and data matching `--schema`); text alone never \
-ends it. The exit code says how it ended.
+and exits, with the answer alone on stdout: for scripts, CI and pipes. A task ends with the \
+agent's final message; with `--schema`, the data is then asked for as a `result` call, forced. \
+The exit code says how it ended.
 
 To sign in, type /login in a session: choose a provider (OpenAI, signed in with ChatGPT in \
 your browser, or OpenRouter, with a key), then one of its models and a reasoning level that \
@@ -73,8 +73,8 @@ const EXAMPLES: &str = "Examples:
       \"which version is this crate?\"
   llx exec resume --last now update the README
 
-Exit codes: 0 achieved, 1 not achieved, 2 out of turns or time, 3 environment or usage,
-130 interrupted.
+Exit codes: 0 done, 1 no data matched --schema, 2 out of turns, time or budget, 3 environment
+or usage, 130 interrupted.
 
 Environment: OPENROUTER_API_KEY (else the key /login saved), LLX_PROVIDER, LLX_MODEL,
 LLX_REASONING, LLX_DECISION_MODEL, LLX_MODELS_REFRESH (0: no background catalog refresh),

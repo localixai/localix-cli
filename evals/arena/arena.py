@@ -20,6 +20,9 @@ minutes (its cache varies over the day), at the price of slower wall times on a 
 A scored task (SCORED: task-tracker) starts from benchmarks/<task>/original instead, is judged by
 score.py (public and hidden tests passed, out of all), and keeps each run's folder in the logs;
 --record puts the folders and the rows under benchmarks/<task>/runs/<stamp>/.
+
+While task-tracker stays as it is, Codex is not run again on it: its recorded runs are the baseline
+(evals/README.md), and a batch is `--agents llx --repeat 6 --parallel`.
 """
 import argparse
 import datetime

@@ -135,7 +135,7 @@ fn a_resumed_session_tells_what_was_asked_before() {
     let turn = |goal: &str, answer: &str| Turn {
         goal: goal.into(),
         answer: answer.into(),
-        status: "achieved".into(),
+        status: "done".into(),
         at: 1,
         steps: vec![],
     };
@@ -149,7 +149,7 @@ fn a_resumed_session_tells_what_was_asked_before() {
     };
     let text = going_on(scratch.path(), &session);
     assert!(text.contains("<previous_session id=\"1-ab\">"));
-    assert!(text.contains("1. Task: fix the parser\n   Ended: achieved\n   Answer: Fixed it."));
+    assert!(text.contains("1. Task: fix the parser\n   Ended: done\n   Answer: Fixed it."));
     assert!(text.contains("2. Task: add a test"));
     let empty = Session::default();
     assert!(!going_on(scratch.path(), &empty).contains("previous_session"));
@@ -159,7 +159,7 @@ fn turn(goal: &str, answer: &str) -> Turn {
     Turn {
         goal: goal.into(),
         answer: answer.into(),
-        status: "achieved".into(),
+        status: "done".into(),
         at: 1,
         steps: vec![],
     }

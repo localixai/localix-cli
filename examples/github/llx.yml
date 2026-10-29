@@ -239,7 +239,7 @@ jobs:
 
           reply=$(jq -r '.reply | select(length > 0) // "llx returned no reply."' "$out/reply.json")
           title=$(jq -r '.title | .[0:70]' "$out/reply.json")
-          if [ "$STATUS" != achieved ]; then
+          if [ "$STATUS" != "done" ]; then
             say "$reply"$'\n\n'"llx did not finish ($STATUS), so nothing was applied."$'\n\n'"$footer"; exit 0
           fi
           if [ "$(jq -r .changed "$out/reply.json")" != true ] || [ ! -s "$out/change.patch" ]; then

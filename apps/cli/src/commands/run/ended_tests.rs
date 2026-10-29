@@ -8,7 +8,6 @@ use crate::exit;
 fn an_answer_ends_with_the_code_its_result_line_says() {
     let ended = |status: Status| Ended::of(&status, None, None, 60);
     assert_eq!(ended(Status::Achieved).code, exit::OK);
-    assert_eq!(ended(Status::Unstated).code, exit::OK);
     assert_eq!(ended(Status::NotAchieved).code, exit::FAILED);
     assert_eq!(ended(Status::NotAchieved).status, "not_achieved");
     let exhausted = ended(Status::Exhausted);

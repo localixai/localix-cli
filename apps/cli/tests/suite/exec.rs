@@ -52,7 +52,7 @@ fn exec_as(home: &Home, mut command: std::process::Command, stdin: &str) -> Outp
 fn one_command() -> Model {
     Model::start(vec![
         Reply::call("bash", json!({"command": "echo hi"})),
-        Reply::text("All good.\nRESULT: achieved"),
+        Reply::done("All good."),
     ])
 }
 
@@ -98,7 +98,7 @@ fn with_no_terminal_a_command_runs_only_with_yes_or_in_bypass_mode() {
         let _ = std::fs::remove_file(&made);
         let model = Model::start(vec![
             Reply::call("bash", json!({"command": "echo hi > made.txt"})),
-            Reply::text("Done.\nRESULT: achieved"),
+            Reply::done("Done."),
         ]);
         let args = [&["exec"], flags, &["make it"]].concat();
         let out = exec(&home, &model, &args, "");
@@ -151,17 +151,38 @@ fn o_writes_the_answer_and_schema_prints_the_data_alone() {
 #[test]
 fn not_achieved_exits_one_and_out_of_turns_exits_two() {
     let home = Home::new();
-    // The first such answer goes back once: the second stands.
-    let model = Model::start(vec![
-        Reply::text("Could not.\nRESULT: not achieved"),
-        Reply::text("Still could not.\nRESULT: not achieved"),
-    ]);
+    // The answer stands: nothing sends it back.
+    let model = Model::start(vec![Reply::blocked("Could not.", "blocked")]);
     let out = exec(&home, &model, &["exec", "x"], "");
     assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
-    assert_eq!(model.requests().len(), 2);
+    assert_eq!(model.requests().len(), 1);
     let model = Model::start(vec![Reply::call("bash", json!({"command": "echo hi"}))]);
     let out = exec(&home, &model, &["exec", "-y", "--max-turns", "1", "x"], "");
     assert_eq!(out.status.code(), Some(2), "{}", text(&out.stderr));
+}
+
+#[test]
+fn text_alone_is_reminded_until_result_ends_the_run() {
+    let home = Home::new();
+    // A progress note sent as a reply: told that only `result` ends the task, each time, so a
+    // pipeline reading the exit code never takes prose for success.
+    let model = Model::start(vec![
+        Reply::text("Working on it."),
+        Reply::text("Done, I think."),
+        Reply::done("Done."),
+    ]);
+    let out = exec(&home, &model, &["exec", "--json", "x"], "");
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert_eq!(model.requests().len(), 3);
+    for at in 1..3 {
+        assert!(
+            said(&model, at).contains("call `result`"),
+            "{}",
+            said(&model, at)
+        );
+    }
+    let last: Value = serde_json::from_str(text(&out.stdout).lines().last().unwrap()).unwrap();
+    assert_eq!(last["status"], "achieved");
 }
 
 #[test]
@@ -170,7 +191,7 @@ fn a_task_has_no_turn_limit_but_the_one_given() {
     let mut script: Vec<Reply> = (0..60)
         .map(|_| Reply::call("bash", json!({"command": "true"})))
         .collect();
-    script.push(Reply::text("Done.\nRESULT: achieved"));
+    script.push(Reply::done("Done."));
     let model = Model::start(script);
     let out = exec(&home, &model, &["exec", "-y", "x"], "");
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
@@ -217,7 +238,7 @@ fn the_time_limit_holds_while_the_task_waits_on_a_quiet_monitor() {
             "jobs",
             json!({"action": "monitor", "name": "quiet", "command": "sleep 30"}),
         ),
-        Reply::text("Watching it.\nRESULT: achieved"),
+        Reply::done("Watching it."),
     ]);
     let started = std::time::Instant::now();
     let out = exec(&home, &model, &["exec", "-y", "--timeout", "2", "x"], "");
@@ -252,7 +273,7 @@ fn an_agent_is_offered_the_tools_of_the_main_session() {
         requests.len()
     );
     let main = names(&requests[0]);
-    assert_eq!(main, ["bash", "apply_patch", "agents", "jobs"]);
+    assert_eq!(main, ["bash", "apply_patch", "agents", "jobs", "result"]);
     for request in &requests {
         assert_eq!(names(request), main, "one list, one prompt cache");
     }

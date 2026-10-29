@@ -12,7 +12,7 @@ fn esc_stops_the_task_running() {
     let command = "for i in $(seq 200); do [ -e go ] && break; sleep 0.05; done";
     let model = Model::start(vec![
         Reply::call("bash", json!({"command": command})),
-        Reply::text("Done.\nRESULT: achieved"),
+        Reply::done("Done."),
     ]);
     let mut term = Term::start(&model, &["-y"]);
     term.type_text("wait a little").press(key::ENTER);

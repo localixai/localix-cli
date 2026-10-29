@@ -8,7 +8,7 @@ use crate::common::term::{Term, key};
 fn slash_down_enter_opens_model_which_applies_the_one_chosen() {
     // The bug a person hit: "/" alone, Down to a command, Enter said "unknown command /".
     // `/model` is the second command offered: Down marks it, Enter opens its picker.
-    let model = Model::start(vec![Reply::text("Hi.\nRESULT: achieved")]);
+    let model = Model::start(vec![Reply::done("Hi.")]);
     let mut term = Term::start(&model, &[]);
     term.press("/");
     term.wait_for("/model", LONG);

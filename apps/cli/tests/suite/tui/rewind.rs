@@ -10,7 +10,7 @@ use crate::common::term::{Term, key};
 fn esc_esc_rewinds_the_conversation_and_leaves_the_files() {
     let model = Model::start(vec![
         Reply::call("bash", json!({"command": "echo hello > notes.txt"})),
-        Reply::text("Created notes.txt.\nRESULT: achieved"),
+        Reply::done("Created notes.txt."),
     ]);
     let mut term = Term::start(&model, &["-y"]);
     term.type_text("create notes.txt").press(key::ENTER);

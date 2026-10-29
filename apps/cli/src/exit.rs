@@ -1,9 +1,10 @@
 //! Exit codes: the contract scripts, CI jobs and other agents read. Changing one is a breaking
 //! change (see CHANGELOG.md).
 
-/// The goal was reached (or the agent answered without saying it was not).
+/// `result` said the goal was reached.
 pub(crate) const OK: i32 = 0;
-/// The agent answered that the goal was not reached, or the data did not match `--schema`.
+/// `result` said it was not, or its data did not match `--schema`, or the agent ended in text
+/// without calling `result`.
 pub(crate) const FAILED: i32 = 1;
 /// Turns or the time limit ran out before an answer.
 pub(crate) const EXHAUSTED: i32 = 2;

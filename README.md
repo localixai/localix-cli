@@ -63,27 +63,14 @@ llx is a minimal agent runtime: a model in a loop over a few plain tools, on any
 
 ## Benchmark
 
-Two tasks on a Bun, React and Vite app, llx and Codex on the same model, low reasoning, every run of a model started at once; medians of 5 runs each.
+One task, llx and Codex on the same model (GPT-6 Luna, medium reasoning), every run started at once: build a task tracker's API on Bun from its tests, scored out of 199 (132 public tests, 66 hidden ones, the types). Medians.
 
-Make the app match its spec, checked by 9 tests:
-
-| Model | Agent | Context | Time | Cost | Passed |
+| Agent | Runs | Score | Time | Cost | Finished |
 | --- | --- | --- | --- | --- | --- |
-| GPT-6 Luna | llx | **23k** | **23.5 s** | **$0.0020** | 5/5 |
-| | Codex | 181k | 36.8 s | $0.0042 | 5/5 |
-| GPT-6.1 Terra | llx | **31k** | 28.2 s | $0.024 | 5/5 |
-| | Codex | 63k | **26.5 s** | **$0.019** | 5/5 |
+| llx | 6 | 195 | 170 s | $0.026 | 6/6 |
+| Codex | 3 | 197 | 143 s | $0.025 | 3/3 |
 
-Build a phone shop's landing page from its brief, checked by 8 tests:
-
-| Model | Agent | Context | Time | Cost | Passed |
-| --- | --- | --- | --- | --- | --- |
-| GPT-6 Luna | llx | **45k** | **49.7 s** | **$0.0045** | **5/5** |
-| | Codex | 181k | 76.7 s | $0.0080 | 3/5 |
-| GPT-6.1 Terra | llx | **32k** | 66.8 s | **$0.042** | 5/5 |
-| | Codex | 87k | 66.9 s | $0.045 | 5/5 |
-
-The runs: [benchmarks/arena](benchmarks/arena); the task and its checks: [evals/arena](evals/arena/arena.py).
+The runs: [benchmarks/task-tracker/runs](benchmarks/task-tracker/runs); the task and its checks: [evals/arena](evals/arena/arena.py).
 
 ## Install
 

@@ -39,7 +39,7 @@ fn stderr_width() -> Option<usize> {
 }
 
 /// The `--json` event schema: a public contract (see CHANGELOG.md).
-pub(crate) const SCHEMA: u32 = 5;
+pub(crate) const SCHEMA: u32 = 6;
 
 /// What a run starts with, as `run.started` reports it.
 pub(crate) struct Start<'a> {
@@ -51,7 +51,7 @@ pub(crate) struct Start<'a> {
 
 /// How a run ended, as the closing lines and `run.completed` report it.
 pub(crate) struct Summary<'a> {
-    /// `achieved`, `not_achieved`, `unstated`, `exhausted`, `error`, `interrupted`.
+    /// `achieved`, `not_achieved`, `exhausted`, `error`, `interrupted`.
     pub status: &'a str,
     pub code: i32,
     pub answer: &'a str,

@@ -236,8 +236,8 @@ The exit code says how the task ended, and is a public contract:
 
 | Code | `status` of the action | Meaning |
 | --- | --- | --- |
-| 0 | `achieved` | Achieved, or answered without saying it was not |
-| 1 | `not-achieved` | The agent said it was not achieved, or the data did not match `--schema` |
+| 0 | `achieved` | The agent's `result` said the goal was reached |
+| 1 | `not-achieved` | Its `result` said it was not (the answer names what blocks it), or the data did not match `--schema`, or it ended in text without `result` |
 | 2 | `out-of-budget` | Turns or time ran out before an answer |
 | 3 | `not-ready` | No key, no network, a model error, a bad argument |
 | 130 | `interrupted` | Interrupted, or the runner cancelled the job |

@@ -37,7 +37,7 @@ pub(super) fn status_with(term: &Term, words: &str) -> String {
 fn a_session_s_commands_run_in_the_daemon_it_started() {
     let model = Model::start(vec![
         Reply::call("bash", json!({"command": "echo $PPID > parent"})),
-        Reply::text("It ran there.\nRESULT: achieved"),
+        Reply::done("It ran there."),
     ]);
     let mut term = Term::start(&model, &["-y"]);
     term.type_text("where do you run").press(key::ENTER);
@@ -72,7 +72,7 @@ fn serve_stop_ends_the_daemon_and_its_terminals() {
 
 #[test]
 fn no_daemon_and_exec_never_start_one() {
-    let model = Model::start(vec![Reply::text("Done.\nRESULT: achieved")]);
+    let model = Model::start(vec![Reply::done("Done.")]);
     let flag = ("LLX_NO_DAEMON", "1");
     for (args, env) in [(&["--no-daemon"][..], &[][..]), (&[], &[flag])] {
         let term = Term::spawn(&model, args, env);
@@ -132,8 +132,8 @@ fn moved_to_the_background_the_work_goes_on_and_the_next_terminal_shows_it() {
     let wait = "until [ -e go ]; do sleep 0.1; done; echo went";
     let model = Model::start(vec![
         Reply::call("bash", json!({"command": wait})),
-        Reply::text("Finished while you were away.\nRESULT: achieved"),
-        Reply::text("And this too.\nRESULT: achieved"),
+        Reply::done("Finished while you were away."),
+        Reply::done("And this too."),
     ]);
     let mut first = Term::start(&model, &["-y"]);
     first.type_text("a long task").press(key::ENTER);

@@ -6,7 +6,7 @@ use crate::common::term::{Term, key};
 
 #[test]
 fn login_finds_a_provider_by_typing_and_enter_takes_it() {
-    let model = Model::start(vec![Reply::text("Hi.\nRESULT: achieved")]);
+    let model = Model::start(vec![Reply::done("Hi.")]);
     let mut term = Term::start(&model, &[]);
     term.type_text("/login").press(key::ENTER);
     term.wait_for("Search: ▏", LONG);
@@ -20,7 +20,7 @@ fn login_finds_a_provider_by_typing_and_enter_takes_it() {
 
 #[test]
 fn escape_in_login_goes_back_one_step_and_at_the_first_ends_it() {
-    let model = Model::start(vec![Reply::text("Hi.\nRESULT: achieved")]);
+    let model = Model::start(vec![Reply::done("Hi.")]);
     let mut term = Term::start(&model, &[]);
     term.type_text("/login").press(key::ENTER);
     term.wait_for("Login › Provider", LONG);

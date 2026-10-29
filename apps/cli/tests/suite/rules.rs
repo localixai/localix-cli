@@ -12,7 +12,7 @@ use crate::suite::exec::exec;
 fn running(command: &str) -> Model {
     Model::start(vec![
         Reply::call("bash", json!({"command": command})),
-        Reply::text("Done.\nRESULT: achieved"),
+        Reply::done("Done."),
     ])
 }
 
@@ -136,7 +136,7 @@ fn an_apply_patch_rule_allows_the_paths_it_names_and_no_others() {
     let model = Model::start(vec![
         Reply::create("docs/a.md", "a"),
         Reply::create("src/b.rs", "b"),
-        Reply::text("Done.\nRESULT: achieved"),
+        Reply::done("Done."),
     ]);
     let args = ["exec", "--allow", "apply_patch(docs/**)", "x"];
     let out = exec(&home, &model, &args, "");
@@ -148,10 +148,7 @@ fn an_apply_patch_rule_allows_the_paths_it_names_and_no_others() {
 #[test]
 fn yes_lets_a_patch_change_files() {
     let home = Home::new();
-    let model = Model::start(vec![
-        Reply::create("a.md", "a"),
-        Reply::text("Done.\nRESULT: achieved"),
-    ]);
+    let model = Model::start(vec![Reply::create("a.md", "a"), Reply::done("Done.")]);
     let out = exec(&home, &model, &["exec", "-y", "x"], "");
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
     assert!(home.path().join("a.md").exists(), "{}", said(&model, 1));
@@ -160,10 +157,7 @@ fn yes_lets_a_patch_change_files() {
 #[test]
 fn plan_mode_refuses_a_patch_whatever_is_allowed() {
     let home = Home::new();
-    let model = Model::start(vec![
-        Reply::create("a.md", "a"),
-        Reply::text("Done.\nRESULT: achieved"),
-    ]);
+    let model = Model::start(vec![Reply::create("a.md", "a"), Reply::done("Done.")]);
     let args = ["exec", "--mode", "plan", "--allow", "apply_patch", "x"];
     let out = exec(&home, &model, &args, "");
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));

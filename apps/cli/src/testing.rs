@@ -166,12 +166,7 @@ impl Prompter for &Typed {
 
 /// `n` answers that end a task well.
 pub(crate) fn answers(n: usize) -> Vec<Completion> {
-    (0..n)
-        .map(|_| Completion {
-            text: Some("Done.\nRESULT: achieved".into()),
-            ..Completion::default()
-        })
-        .collect()
+    (0..n).map(|_| says("Done.")).collect()
 }
 
 /// Compose a run that starts in `mode` around a scripted model, in a fresh workspace, and run
@@ -233,10 +228,14 @@ pub(crate) fn quiet() -> Output {
     )
 }
 
-/// An answer that says `text` and ends the task well.
+/// An answer that says `text` and ends the task well: a `result` call.
 pub(crate) fn says(text: &str) -> Completion {
     Completion {
-        text: Some(format!("{text}\nRESULT: achieved")),
+        calls: vec![scripted(
+            "result",
+            "result",
+            serde_json::json!({"achieved": true, "summary": text}),
+        )],
         ..Completion::default()
     }
 }

@@ -101,6 +101,22 @@ pub(crate) fn says(text: &str) -> Completion {
     }
 }
 
+/// The model ends the task well: a `result` call with `summary`.
+pub(crate) fn done(summary: &str) -> Completion {
+    calls(
+        crate::schema::TOOL,
+        serde_json::json!({"achieved": true, "summary": summary}),
+    )
+}
+
+/// The model ends the task blocked: a `result` call naming `why`.
+pub(crate) fn blocked(summary: &str, why: &str) -> Completion {
+    calls(
+        crate::schema::TOOL,
+        serde_json::json!({"achieved": false, "summary": summary, "blocked_by": why}),
+    )
+}
+
 pub(crate) fn calls(name: &str, arguments: Value) -> Completion {
     Completion {
         calls: vec![ToolCall {

@@ -1,11 +1,11 @@
-//! A turn's calls carried out and answered in the conversation, counted in the goal's tally; a
-//! `result` call checked against its schema.
+//! A turn's calls carried out and answered in the conversation; a `result` call read, and its
+//! data checked against the schema.
 
 use contracts::chat::ToolCall;
 use contracts::tool::{ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
-use super::{Agent, MAX_FIXES, RETURNED, Run, Status, Tally, Went};
+use super::{Agent, MAX_FIXES, RETURNED, Run, Status, Tally};
 use crate::calls::{self, Outcome};
 use crate::schema;
 
@@ -22,7 +22,6 @@ impl Agent<'_> {
             |call: &ToolCall| call.name != schema::TOOL && calls::parallel(self.tools, specs, call);
         let mut ends = false;
         let mut start = 0;
-        tally.turn = Went::Nothing;
         while start < calls.len() && !ends {
             let end = calls::batch_end(calls, start, parallel);
             if end - start == 1 {
@@ -31,15 +30,10 @@ impl Agent<'_> {
                 let batch = &calls[start..end];
                 let outcomes = calls::together(batch, self.tools, specs, self.observer);
                 for (call, outcome) in batch.iter().zip(outcomes) {
-                    ends |= Self::record(call, outcome, run, tally);
+                    ends |= Self::record(call, outcome, run);
                 }
             }
             start = end;
-        }
-        match tally.turn {
-            Went::Succeeded => tally.failures = 0,
-            Went::Failed => tally.failures += 1,
-            Went::Nothing => {}
         }
         ends
     }
@@ -53,25 +47,26 @@ impl Agent<'_> {
         tally: &mut Tally,
     ) -> bool {
         self.observer.call(call);
-        if let (schema::TOOL, Some(schema)) = (call.name.as_str(), self.schema) {
-            let (outcome, ends) = take_result(call, schema, run, &mut tally.fixes);
+        if call.name == schema::TOOL {
+            let (outcome, ends) = take_result(call, self.schema, run, &mut tally.fixes);
             self.observer.result(call, &outcome);
             answer_call(run, call, outcome);
             return ends;
         }
         let outcome = calls::invoke(self.tools, specs, call);
         self.observer.result(call, &outcome);
-        Self::record(call, outcome, run, tally)
+        Self::record(call, outcome, run)
     }
 
-    /// Count `outcome` and answer `call` with it; whether the run ends with it.
-    fn record(call: &ToolCall, outcome: Outcome, run: &mut Run, tally: &mut Tally) -> bool {
-        match &outcome {
-            Ok(_) => tally.turn = Went::Succeeded,
-            Err(ToolError::Failed(_)) => tally.turn = tally.turn.max(Went::Failed),
-            Err(ToolError::Fatal(why)) => run.status = Status::Error(why.clone()),
-        }
-        let ends = matches!(outcome, Err(ToolError::Fatal(_)));
+    /// Answer `call` with `outcome`; whether the run ends with it (a fatal failure).
+    fn record(call: &ToolCall, outcome: Outcome, run: &mut Run) -> bool {
+        let ends = match &outcome {
+            Ok(_) | Err(ToolError::Failed(_)) => false,
+            Err(ToolError::Fatal(why)) => {
+                run.status = Status::Error(why.clone());
+                true
+            }
+        };
         answer_call(run, call, outcome);
         ends
     }
@@ -89,7 +84,7 @@ fn answer_call(run: &mut Run, call: &ToolCall, outcome: Outcome) {
 /// fixes run out and the run ends without data. Returns its outcome and whether the run ends.
 fn take_result(
     call: &ToolCall,
-    schema: &Value,
+    schema: Option<&Value>,
     run: &mut Run,
     fixes: &mut usize,
 ) -> (Result<ToolOutput, ToolError>, bool) {
@@ -101,14 +96,12 @@ fn take_result(
                 Status::NotAchieved
             };
             run.answer = done.summary;
-            run.data = Some(Ok(done.data));
+            run.data = done.data.map(Ok);
             (Ok(ToolOutput::from(RETURNED.to_string())), true)
         }
         Err(problems) if *fixes < MAX_FIXES => {
             *fixes += 1;
-            let why = format!(
-                "The data does not match its schema: {problems}. Call `result` again with it fixed."
-            );
+            let why = format!("The result is not taken: {problems}. Call `result` again.");
             (Err(ToolError::Failed(why)), false)
         }
         Err(problems) => {

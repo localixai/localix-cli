@@ -24,7 +24,7 @@ With `--json`, a closed stdout (`llx --json ... | head -1`) ends the run quietly
 | `tool.call` | `id`, `name`, `arguments` |
 | `tool.result` | `id`, `name`, `failed`, `fatal`, `output`, and `state` when the tool left one |
 | `turn` | One model turn: `model`, `input_tokens`, `cached_tokens`, `output_tokens`, `cost_usd`, `model_ms` |
-| `run.completed` | `status` (`achieved`, `not_achieved`, `unstated`, `exhausted`, `error`, `interrupted`), `exit_code`, `answer`, `data` or `data_error`, `error`, `session`, `usage` {`agent`, `cost_usd`}, `duration_ms` |
+| `run.completed` | `status` (`achieved`, `not_achieved`, `exhausted`, `error`, `interrupted`), `exit_code`, `answer`, `data` or `data_error`, `error`, `session`, `usage` {`agent`, `cost_usd`}, `duration_ms` |
 
 The exit codes and these events are a public contract. A breaking change bumps `schema` and is listed in [CHANGELOG.md](../CHANGELOG.md).
 

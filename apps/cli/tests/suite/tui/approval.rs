@@ -14,7 +14,7 @@ use crate::common::term::{Term, key};
 fn a_command_is_asked_about_and_runs_once_approved() {
     let model = Model::start(vec![
         Reply::call("bash", json!({"command": "echo approved-and-ran"})),
-        Reply::text("It ran.\nRESULT: achieved"),
+        Reply::done("It ran."),
     ]);
     let mut term = Term::start(&model, &[]);
     term.type_text("run it").press(key::ENTER);

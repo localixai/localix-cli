@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 use crate::agent::Agent;
 use crate::fakes::Silent;
-use crate::fakes::{Recorder, Scripted, says, users};
+use crate::fakes::{Recorder, Scripted, blocked, done, says, users};
 
 /// Where the calls of a test's tools run, whichever tool they belong to: how many run now,
 /// the most that ever ran at once, and the order they started and ended in.
@@ -155,14 +155,14 @@ fn calls_that_may_run_together_do_and_answer_in_the_models_order() {
     };
     let chat = Scripted::new(vec![
         turn(vec![call("a", "look"), call("b", "look")]),
-        says("Done.\nRESULT: achieved"),
+        done("Done."),
     ]);
     let tools: [&dyn Tool; 1] = [&look];
     let run = agent(&chat, &tools, None).run("look twice");
     assert_eq!(room.peak(), 2, "both ran at once");
     let results = results(run.conversation.messages());
     assert_eq!(
-        results,
+        results[..2],
         [
             ("a".to_string(), "a together".to_string()),
             ("b".to_string(), "b together".to_string())
@@ -184,7 +184,7 @@ fn a_call_that_may_not_runs_alone_between_the_others() {
             call("x", "change"),
             call("b", "look"),
         ]),
-        says("Done.\nRESULT: achieved"),
+        done("Done."),
     ]);
     let tools: [&dyn Tool; 2] = [&look, &change];
     let run = agent(&chat, &tools, None).run("look, change, look");
@@ -195,7 +195,7 @@ fn a_call_that_may_not_runs_alone_between_the_others() {
     );
     let results: Vec<(String, String)> = results(run.conversation.messages());
     assert_eq!(
-        results,
+        results[..3],
         [
             ("a".to_string(), "a alone".to_string()),
             ("x".to_string(), "x alone".to_string()),
@@ -210,7 +210,7 @@ fn a_batch_is_watched_call_by_call() {
     let look = look(&room);
     let chat = Scripted::new(vec![
         turn(vec![call("a", "look"), call("b", "look")]),
-        says("Done."),
+        done("Done."),
     ]);
     let recorder = Recorder::default();
     let tools: [&dyn Tool; 1] = [&look];
@@ -271,7 +271,7 @@ fn a_text_tool_is_called_with_its_text_and_a_json_tool_refuses_text() {
                 arguments: json!("path"),
             },
         ]),
-        says("Done."),
+        done("Done."),
     ]);
     let tools: [&dyn Tool; 2] = [&Script, &look];
     let run = agent(&chat, &tools, None).run("go");
@@ -315,10 +315,7 @@ fn what_comes_in_is_said_before_the_next_turn() {
         .lock()
         .unwrap()
         .push("also check the README".into());
-    let chat = Scripted::new(vec![
-        turn(vec![call("a", "look")]),
-        says("Done.\nRESULT: achieved"),
-    ]);
+    let chat = Scripted::new(vec![turn(vec![call("a", "look")]), done("Done.")]);
     let tools: [&dyn Tool; 1] = [&look];
     let run = agent(&chat, &tools, Some(&mail)).run("look");
     assert_eq!(
@@ -335,10 +332,7 @@ fn an_answer_while_work_is_still_to_come_waits_for_it_and_goes_on() {
         .lock()
         .unwrap()
         .push("<agent_result>found it</agent_result>".into());
-    let chat = Scripted::new(vec![
-        says("Waiting for the agent."),
-        says("It found it.\nRESULT: achieved"),
-    ]);
+    let chat = Scripted::new(vec![says("Waiting for the agent."), done("It found it.")]);
     let run = agent(&chat, &[], Some(&mail)).run("delegate");
     assert_eq!(mail.waits.load(Ordering::SeqCst), 1);
     assert_eq!(run.answer, "It found it.");
@@ -346,6 +340,28 @@ fn an_answer_while_work_is_still_to_come_waits_for_it_and_goes_on() {
         users(run.conversation.messages()),
         ["Goal: delegate", "<agent_result>found it</agent_result>"]
     );
+}
+
+#[test]
+fn a_result_while_work_is_still_to_come_is_refused_and_the_run_waits_for_it() {
+    // An agent's answer or a monitor's lines are still to come: ending now would lose them, so
+    // the call is answered with why, and the run goes on with what came.
+    let mail = Mail::default();
+    mail.waiting.store(true, Ordering::SeqCst);
+    mail.later
+        .lock()
+        .unwrap()
+        .push("<agent_result>found it</agent_result>".into());
+    let chat = Scripted::new(vec![done("Nothing found."), done("It found it.")]);
+    let run = agent(&chat, &[], Some(&mail)).run("delegate");
+    assert_eq!(mail.waits.load(Ordering::SeqCst), 1);
+    assert_eq!(run.answer, "It found it.");
+    assert_eq!(
+        users(run.conversation.messages()),
+        ["Goal: delegate", "<agent_result>found it</agent_result>"]
+    );
+    let refused = results(run.conversation.messages());
+    assert!(refused[0].1.contains("still to come"), "{refused:?}");
 }
 
 /// A chat model that answers from a script, and puts a message in the inbox while it answers
@@ -380,10 +396,7 @@ impl contracts::chat::Chat for Interrupted<'_> {
 fn a_message_that_comes_with_the_answer_is_not_lost() {
     let mail = Mail::default();
     let chat = Interrupted {
-        script: Scripted::new(vec![
-            says("Done.\nRESULT: achieved"),
-            says("Done, with the tests too.\nRESULT: achieved"),
-        ]),
+        script: Scripted::new(vec![says("Done."), done("Done, with the tests too.")]),
         mail: &mail,
     };
     let agent = Agent {
@@ -409,13 +422,13 @@ fn a_message_that_comes_with_the_answer_is_not_lost() {
 fn an_answer_on_the_last_turn_is_kept_and_nothing_is_waited_for() {
     let mail = Mail::default();
     mail.waiting.store(true, Ordering::SeqCst);
-    let chat = Scripted::new(vec![says("Here is what I have.\nRESULT: not achieved")]);
+    let chat = Scripted::new(vec![blocked("Here is what I have.", "blocked")]);
     let run = Agent {
         max_turns: 1,
         ..agent(&chat, &[], Some(&mail))
     }
     .run("delegate");
     assert_eq!(mail.waits.load(Ordering::SeqCst), 0, "no wait");
-    assert_eq!(run.answer, "Here is what I have.");
+    assert_eq!(run.answer, "Here is what I have.\n\nBlocked by: blocked");
     assert_eq!(run.status, crate::agent::Status::NotAchieved);
 }

@@ -244,9 +244,8 @@ mod dialogue {
             };
             if turn >= TURNS {
                 return Ok(Completion {
-                    text: Some("Done.\nRESULT: achieved".into()),
                     usage,
-                    ..Completion::default()
+                    ..crate::fakes::done("Done.")
                 });
             }
             // A file of 37 read in turn: some are read again.

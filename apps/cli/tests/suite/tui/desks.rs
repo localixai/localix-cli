@@ -62,7 +62,7 @@ fn a_daemon_of_another_build_is_kept_while_a_terminal_is_attached() {
 fn a_daemon_of_another_build_is_kept_while_it_keeps_sessions_moved_away() {
     let model = Model::start(vec![
         Reply::call("bash", json!({"command": WAIT})),
-        Reply::text("Finished.\nRESULT: achieved"),
+        Reply::done("Finished."),
     ]);
     let mut older = Term::spawn(&model, &["-y"], &[("LLX_BUILD", "0.0.0+older")]);
     older.wait_for("❯", LONG);
@@ -84,7 +84,7 @@ fn a_daemon_of_another_build_is_kept_while_it_keeps_sessions_moved_away() {
 fn a_task_on_the_command_line_is_run_where_sessions_wait_in_the_background() {
     let model = Model::start(vec![
         Reply::call("bash", json!({"command": WAIT})),
-        Reply::text("Fresh.\nRESULT: achieved"),
+        Reply::done("Fresh."),
     ]);
     let mut first = Term::start(&model, &["-y"]);
     backgrounded(&mut first);

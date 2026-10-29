@@ -7,7 +7,7 @@ use crate::common::term::{Term, key};
 
 #[test]
 fn ctrl_z_stops_llx_and_fg_draws_the_prompt_again_with_the_draft() {
-    let model = Model::start(vec![Reply::text("The sky is blue.\nRESULT: achieved")]);
+    let model = Model::start(vec![Reply::done("The sky is blue.")]);
     // In a shell with job control: llx's own child would be an orphaned group, where a stop is
     // discarded.
     let mut term = Term::in_shell(&model);

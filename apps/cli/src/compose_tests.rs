@@ -174,7 +174,7 @@ fn a_provider_chosen_later_has_its_key_kept_from_commands_too() {
             .map(|(_, report)| report)
             .collect();
         assert!(shown[0].contains("key=csk-test"), "{shown:?}");
-        assert!(shown[1].contains("key=none"), "{shown:?}");
+        assert!(shown[2].contains("key=none"), "{shown:?}");
         0
     });
 }

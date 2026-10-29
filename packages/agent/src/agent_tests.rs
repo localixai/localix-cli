@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::fakes::Silent;
-use crate::fakes::{Echo, Recorder, Scripted, calls, ok, says, users};
+use crate::fakes::{Echo, Recorder, Scripted, blocked, calls, done, ok, says, users};
 
 fn agent<'a>(
     chat: &'a Scripted,
@@ -51,7 +51,7 @@ fn a_reply_without_a_call_is_the_answer_and_its_result_line_the_status() {
                 output_tokens: 7,
                 ..Usage::default()
             },
-            ..says("Price is 93 EUR.\nRESULT: achieved")
+            ..done("Price is 93 EUR.")
         },
     ]);
     let echo = Echo::new(vec![ok("opened")]);
@@ -59,7 +59,13 @@ fn a_reply_without_a_call_is_the_answer_and_its_result_line_the_status() {
     let run = agent(&chat, &[&echo], None, &recorder).run("Find the price");
     assert_eq!(run.status, Status::Achieved);
     assert_eq!(run.answer, "Price is 93 EUR.");
-    assert_eq!(results(&run), [("opened\n\nstate".to_string(), false)]);
+    assert_eq!(
+        results(&run),
+        [
+            ("opened\n\nstate".to_string(), false),
+            (RETURNED.to_string(), false)
+        ]
+    );
     assert_eq!(run.spend.calls, 2);
     assert_eq!(
         run.spend.output_tokens, 7,
@@ -67,114 +73,133 @@ fn a_reply_without_a_call_is_the_answer_and_its_result_line_the_status() {
     );
     assert_eq!(
         recorder.events(),
-        ["turn 0", "call echo", "ok echo: opened", "turn 7"],
+        [
+            "turn 0",
+            "call echo",
+            "ok echo: opened",
+            "turn 7",
+            "call result",
+            &format!("ok result: {RETURNED}")
+        ],
         "each turn is reported with what it took"
     );
 }
 
 #[test]
-fn failed_calls_go_back_to_the_model_and_too_many_ask_for_an_answer() {
+fn failed_calls_go_back_to_the_model_which_keeps_its_tools_however_many_fail() {
+    // A patch that does not apply, a command refused: the model reads why and tries another way.
+    // Nothing takes its tools away; a run is bounded by its turns and its time.
     let failed = || Err(ToolError::Failed("the tool refused".into()));
-    let chat = Scripted::new(vec![
-        calls("echo", json!({})),
-        calls("echo", json!({})),
-        calls("echo", json!({})),
-        says("Could not.\nRESULT: not achieved"),
+    let mut script: Vec<Completion> = (0..5).map(|_| calls("echo", json!({}))).collect();
+    script.push(calls("echo", json!({})));
+    script.push(done("Done."));
+    let chat = Scripted::new(script);
+    let echo = Echo::new(vec![
+        failed(),
+        failed(),
+        failed(),
+        failed(),
+        failed(),
+        ok("worked"),
     ]);
-    let echo = Echo::new(vec![failed(), failed(), failed()]);
     let recorder = Recorder::default();
-    let run = agent(&chat, &[&echo], None, &recorder).run("Do it");
-    assert_eq!(run.status, Status::NotAchieved);
-    assert!(results(&run).iter().all(|(_, failed)| *failed));
-    assert_eq!(*chat.may_call.lock().unwrap(), [true, true, true, false]);
-    assert_eq!(chat.last_user.lock().unwrap()[3], ANSWER_NOW);
+    let run = Agent {
+        max_turns: 20,
+        ..agent(&chat, &[&echo], None, &recorder)
+    }
+    .run("Do it");
+    assert_eq!(run.status, Status::Achieved);
+    assert_eq!(*chat.may_call.lock().unwrap(), [true; 7]);
+    assert_eq!(users(run.conversation.messages()), ["Goal: Do it"]);
     let failures = recorder.events();
     let failures: Vec<&String> = failures
         .iter()
         .filter(|event| event.starts_with("failed"))
         .collect();
-    assert_eq!(failures, ["failed echo: the tool refused"; 3]);
+    assert_eq!(failures, ["failed echo: the tool refused"; 5]);
 }
 
 #[test]
-fn an_answer_that_the_goal_is_not_reached_goes_back_once_and_the_work_goes_on() {
+fn text_without_a_call_is_a_note_the_model_is_reminded_once_and_result_ends_the_run() {
+    // A progress note sent as a reply does not end the task: the model is told once that only
+    // `result` does, and goes on; its words are shown as they came.
     let chat = Scripted::new(vec![
-        says("Half the tests fail.\nRESULT: not achieved"),
+        says("Next: app.ts."),
         calls("echo", json!({})),
-        says("All pass.\nRESULT: achieved"),
+        done("Split."),
     ]);
-    let echo = Echo::new(vec![ok("fixed")]);
+    let echo = Echo::new(vec![ok("ran")]);
     let recorder = Recorder::default();
-    let run = agent(&chat, &[&echo], None, &recorder).run("Make the tests pass");
-    assert_eq!(run.status, Status::Achieved);
-    assert_eq!(run.answer, "All pass.");
-    assert_eq!(chat.last_user.lock().unwrap()[1], GO_ON);
-    assert!(
-        recorder
-            .events()
-            .contains(&"said Half the tests fail.\nRESULT: not achieved".into())
-    );
-}
-
-#[test]
-fn an_answer_after_calls_that_does_not_say_the_goal_is_reached_goes_back_once() {
-    let chat = Scripted::new(vec![
-        calls("echo", json!({})),
-        says("Six tests still fail."),
-        calls("echo", json!({})),
-        says("All pass.\nRESULT: achieved"),
-    ]);
-    let echo = Echo::new(vec![ok("ran"), ok("fixed")]);
-    let run = agent(&chat, &[&echo], None, &Silent).run("Make the tests pass");
-    assert_eq!(run.status, Status::Achieved);
-    assert_eq!(chat.last_user.lock().unwrap()[2], GO_ON);
-    // A reply with no call before it is an answer as it is: a question asked, a greeting.
-    let chat = Scripted::new(vec![says("Hello.")]);
-    let run = agent(&chat, &[], None, &Silent).run("Hi");
+    let run = agent(&chat, &[&echo], None, &recorder).run("Split app.ts");
     assert_eq!(
         (run.status, run.answer.as_str()),
-        (Status::Unstated, "Hello.")
+        (Status::Achieved, "Split.")
     );
-}
-
-#[test]
-fn an_answer_after_more_work_goes_back_again_up_to_a_limit() {
-    let mut script = vec![];
-    for _ in 0..4 {
-        script.push(calls("echo", json!({})));
-        script.push(says("Two checks still fail.\nRESULT: not achieved"));
-    }
-    let chat = Scripted::new(script);
-    let echo = Echo::new((0..4).map(|_| ok("ran")).collect());
-    let run = Agent {
-        max_turns: 20,
-        ..agent(&chat, &[&echo], None, &Silent)
-    }
-    .run("Make the checks pass");
-    assert_eq!(run.status, Status::NotAchieved);
-    let sent = users(run.conversation.messages())
-        .iter()
-        .filter(|text| *text == GO_ON)
-        .count();
-    assert_eq!(sent, MAX_GO_ON);
-}
-
-#[test]
-fn a_second_answer_that_the_goal_is_not_reached_stands() {
-    let chat = Scripted::new(vec![
-        says("The key is missing.\nRESULT: not achieved"),
-        says("The key is still missing.\nRESULT: not achieved"),
-    ]);
-    let run = agent(&chat, &[], None, &Silent).run("Call the API");
-    assert_eq!(run.status, Status::NotAchieved);
-    assert_eq!(run.answer, "The key is still missing.");
+    assert_eq!(run.data, None);
     assert_eq!(
-        users(run.conversation.messages())
-            .iter()
-            .filter(|text| *text == GO_ON)
-            .count(),
-        1
+        users(run.conversation.messages()),
+        ["Goal: Split app.ts", RESULT_NOW]
     );
+    assert!(recorder.events().contains(&"said Next: app.ts.".into()));
+}
+
+#[test]
+fn text_is_reminded_each_time_until_result_ends_the_run() {
+    let chat = Scripted::new(vec![
+        says("Half done."),
+        says("Still half done."),
+        done("Done."),
+    ]);
+    let run = agent(&chat, &[], None, &Silent).run("Do it");
+    assert_eq!(
+        (run.status, run.answer.as_str()),
+        (Status::Achieved, "Done.")
+    );
+    assert_eq!(
+        users(run.conversation.messages()),
+        ["Goal: Do it", RESULT_NOW, RESULT_NOW]
+    );
+}
+
+#[test]
+fn a_result_not_achieved_names_what_blocks_it_or_goes_back() {
+    let chat = Scripted::new(vec![
+        calls(
+            schema::TOOL,
+            json!({"achieved": false, "summary": "Two checks fail."}),
+        ),
+        blocked("Two checks fail.", "the registry refuses the token"),
+        says("never asked for"),
+    ]);
+    let recorder = Recorder::default();
+    let run = agent(&chat, &[], None, &recorder).run("Make the checks pass");
+    assert_eq!(run.status, Status::NotAchieved);
+    assert_eq!(
+        run.answer,
+        "Two checks fail.\n\nBlocked by: the registry refuses the token"
+    );
+    assert!(
+        results(&run)[0].0.contains("blocked_by"),
+        "{:?}",
+        results(&run)[0]
+    );
+    assert_eq!(
+        users(run.conversation.messages()),
+        ["Goal: Make the checks pass"]
+    );
+}
+
+#[test]
+fn an_empty_reply_is_not_kept_in_the_conversation() {
+    // A refusal or a stray stop: nothing said, nothing called. Sent back, some hosts reject an
+    // assistant message with no content.
+    let chat = Scripted::new(vec![Completion::default(), done("Done.")]);
+    let run = agent(&chat, &[], None, &Silent).run("Do it");
+    assert_eq!(run.status, Status::Achieved);
+    let empty = run.conversation.messages().iter().any(|message| {
+        matches!(message, Message::Assistant { text, calls, .. } if text.is_none() && calls.is_empty())
+    });
+    assert!(!empty);
 }
 
 #[test]
@@ -182,7 +207,7 @@ fn bad_arguments_and_unknown_tools_are_answered_without_calling_anything() {
     let chat = Scripted::new(vec![
         calls("echo", json!("not an object")),
         calls("nothing", json!({})),
-        says("RESULT: not achieved"),
+        blocked("Could not.", "no tool"),
     ]);
     let echo = Echo::new(vec![]);
     let recorder = Recorder::default();
@@ -217,8 +242,10 @@ fn turns_run_out_with_one_last_request_for_an_answer() {
     assert_eq!(run.status, Status::Exhausted);
     assert_eq!(
         *chat.may_call.lock().unwrap(),
-        [true, true, true, true, false]
+        [true; 5],
+        "result is a call"
     );
+    assert_eq!(chat.last_user.lock().unwrap()[4], RESULT_NOW);
 }
 
 #[test]
@@ -250,8 +277,13 @@ fn with_a_schema_the_run_ends_in_matching_data() {
         (Status::Achieved, "93 EUR")
     );
     let events = recorder.events();
-    assert!(events[3].starts_with("failed result: The data does not match its schema"));
-    assert_eq!(events[6], format!("ok result: {RETURNED}"));
+    assert_eq!(events[1], "said The price is 93.", "the note is shown");
+    assert!(
+        events[4].contains("data.price must be number"),
+        "{}",
+        events[4]
+    );
+    assert_eq!(events[7], format!("ok result: {RETURNED}"));
 }
 
 #[test]
@@ -292,10 +324,7 @@ fn the_context_opens_a_new_conversation_only_when_given() {
         ("", &["Goal: First", "Goal: Second"]),
     ];
     for (context, expected) in cases {
-        let chat = Scripted::new(vec![
-            says("A.\nRESULT: achieved"),
-            says("B.\nRESULT: achieved"),
-        ]);
+        let chat = Scripted::new(vec![done("A."), done("B.")]);
         let agent = Agent {
             context,
             ..agent(&chat, &[], None, &Silent)
@@ -311,29 +340,26 @@ fn the_context_opens_a_new_conversation_only_when_given() {
 }
 
 #[test]
-fn with_a_schema_text_twice_ends_without_data() {
+fn with_a_schema_text_until_the_turns_run_out_leaves_no_data() {
     let schema = json!({"type": "object"});
-    let chat = Scripted::new(vec![
-        says("The price is 93.\nRESULT: achieved"),
-        says("It is 93, really.\nRESULT: achieved"),
-    ]);
+    let chat = Scripted::new((0..5).map(|_| says("The price is 93.")).collect());
     let run = agent(&chat, &[], Some(&schema), &Silent).run("Find the price");
-    assert_eq!(chat.last_user.lock().unwrap()[1], RESULT_NOW);
-    assert_eq!(run.status, Status::NotAchieved);
-    assert_eq!(run.data, Some(Err(NO_DATA.into())));
-    assert_eq!(run.answer, "It is 93, really.");
+    // Reminded each turn, and not twice in a row before the last request.
+    assert_eq!(chat.last_user.lock().unwrap()[1..], [RESULT_NOW; 4]);
+    assert_eq!(run.status, Status::Exhausted);
+    assert_eq!(run.data, None);
+    assert_eq!(run.answer, "");
 }
 
 #[test]
 fn a_note_goes_at_the_end_with_open_calls_closed_and_the_next_goal_follows() {
-    let chat = Scripted::new(vec![
-        says("A.\nRESULT: achieved"),
-        says("B.\nRESULT: achieved"),
-    ]);
+    let chat = Scripted::new(vec![done("A."), done("B.")]);
     let agent = agent(&chat, &[], None, &Silent);
     let mut first = agent.run("First").conversation;
     // A run that ended mid-turn leaves its call open.
-    first.push(calls("echo", json!({})).message());
+    let mut open = calls("echo", json!({}));
+    open.calls[0].id = "open".into();
+    first.push(open.message());
     let told = agent.tell(Some(first), "<note>changed</note>");
     let messages = told.messages();
     assert!(matches!(
@@ -353,7 +379,7 @@ fn a_note_goes_at_the_end_with_open_calls_closed_and_the_next_goal_follows() {
 
 #[test]
 fn a_note_before_any_goal_opens_with_the_context() {
-    let chat = Scripted::new(vec![says("A.\nRESULT: achieved")]);
+    let chat = Scripted::new(vec![done("A.")]);
     let agent = Agent {
         context: "Working directory: /work",
         ..agent(&chat, &[], None, &Silent)
@@ -392,7 +418,7 @@ fn a_turn_whose_calls_all_fail_counts_once() {
     let chat = Scripted::new(vec![
         turn_of(&["echo", "echo", "echo"]),
         calls("echo", json!({})),
-        says("Found it.\nRESULT: achieved"),
+        done("Found it."),
     ]);
     let echo = Echo::new(vec![failed(), failed(), failed(), ok("found")]);
     let run = agent(&chat, &[&echo], None, &Silent).run("Find the manifest");
@@ -407,7 +433,7 @@ fn what_the_model_says_beside_its_calls_is_shown() {
             text: Some("I will check the lockfile first.".into()),
             ..calls("echo", json!({}))
         },
-        says("Done.\nRESULT: achieved"),
+        done("Done."),
     ]);
     let echo = Echo::new(vec![ok("opened")]);
     let recorder = Recorder::default();
@@ -419,7 +445,9 @@ fn what_the_model_says_beside_its_calls_is_shown() {
             "said I will check the lockfile first.",
             "call echo",
             "ok echo: opened",
-            "turn 0"
+            "turn 0",
+            "call result",
+            &format!("ok result: {RETURNED}")
         ],
         "the final answer is the run's, not a said event"
     );
@@ -465,7 +493,7 @@ fn the_tool_specs_count_in_the_ratio_and_against_the_ceiling() {
             },
             ..calls("echo", json!({}))
         },
-        says("Done.\nRESULT: achieved"),
+        done("Done."),
     ]);
     let run = Agent {
         window: 128_000,

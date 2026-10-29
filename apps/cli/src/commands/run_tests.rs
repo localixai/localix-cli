@@ -25,6 +25,21 @@ struct Done {
 /// answer. Nothing but the models is faked.
 /// `unwritable`: `-o` names a file in a directory that does not exist.
 fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
+    compose_ending(
+        mode,
+        unwritable,
+        schema,
+        vec![crate::testing::says("Done.")],
+    )
+}
+
+/// `compose_one` with what the model replies after its command.
+fn compose_ending(
+    mode: Mode,
+    unwritable: bool,
+    schema: Option<Value>,
+    ending: Vec<Completion>,
+) -> Done {
     let scratch = Scratch::new();
     let work = scratch.path().join("work");
     std::fs::create_dir_all(&work).unwrap();
@@ -32,7 +47,15 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
         true => scratch.path().join("missing/last.txt"),
         false => scratch.path().join("last.txt"),
     };
-    let args = ["llx", "--json", "-o", last.to_str().unwrap(), "make a file"];
+    let args = [
+        "llx",
+        "--json",
+        "-o",
+        last.to_str().unwrap(),
+        "--max-turns",
+        "3",
+        "make a file",
+    ];
     let options = Cli::try_parse_from(args).unwrap().run;
     let history = Sessions {
         dir: scratch.path().join("sessions"),
@@ -56,16 +79,12 @@ fn compose_one(mode: Mode, unwritable: bool, schema: Option<Value>) -> Done {
         ui: None,
     };
     let call = crate::testing::scripted("c1", "bash", json!({"command": "echo hi > made.txt"}));
-    let chat = ScriptedChat::new(vec![
-        Completion {
-            calls: vec![call],
-            ..Completion::default()
-        },
-        Completion {
-            text: Some("Done.\nRESULT: achieved".into()),
-            ..Completion::default()
-        },
-    ]);
+    let mut script = vec![Completion {
+        calls: vec![call],
+        ..Completion::default()
+    }];
+    script.extend(ending);
+    let chat = ScriptedChat::new(script);
     let models = Models {
         chat: &chat,
         live: None,
@@ -114,10 +133,12 @@ fn a_composed_task_reports_in_order_writes_its_answer_and_is_saved() {
             "tool.call",
             "tool.result",
             "turn",
+            "tool.call",
+            "tool.result",
             "run.completed"
         ]
     );
-    let completed = &done.events[5];
+    let completed = &done.events[7];
     assert_eq!(completed["status"], "achieved");
     assert_eq!(completed["exit_code"], done.code);
     assert_eq!(done.code, exit::OK);
@@ -153,16 +174,22 @@ fn a_failed_answer_file_is_in_the_exit_code_the_report_gives() {
 
 #[test]
 fn with_a_schema_and_no_data_the_answer_file_holds_no_prose() {
-    let done = compose_one(
+    // The model answers in text until its turns run out: reminded each time, no data.
+    let prose = Completion {
+        text: Some("Done.".into()),
+        ..Completion::default()
+    };
+    let done = compose_ending(
         crate::modes::built("bypass"),
         false,
         Some(json!({"type": "object"})),
+        vec![prose.clone(), prose],
     );
     assert_eq!(
         done.last, "",
         "prose where data is expected would break the reader"
     );
-    assert_ne!(done.code, exit::OK);
+    assert_eq!(done.code, exit::EXHAUSTED);
 }
 
 #[test]

@@ -20,7 +20,7 @@ fn a_command_cannot_read_the_key_from_llxs_environment() {
     let command = "cat /proc/$PPID/environ 2>&1 | tr '\\0' '\\n'";
     let model = Model::start(vec![
         Reply::call("bash", json!({ "command": command })),
-        Reply::text("Done.\nRESULT: achieved"),
+        Reply::done("Done."),
     ]);
     let out = exec(&home, &model, &["exec", "-y", "look"], "");
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));

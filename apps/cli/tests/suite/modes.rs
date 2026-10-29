@@ -27,7 +27,7 @@ fn with_modes(modes: serde_json::Value) -> Home {
 fn running(command: &str) -> Model {
     Model::start(vec![
         Reply::call("bash", json!({"command": command})),
-        Reply::text("Done.\nRESULT: achieved"),
+        Reply::done("Done."),
     ])
 }
 

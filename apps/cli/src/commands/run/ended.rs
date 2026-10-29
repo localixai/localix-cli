@@ -45,7 +45,6 @@ impl Ended {
             (None, Status::NotAchieved) => ended("not_achieved", exit::FAILED, None),
             (None, _) if matches!(data, Some(Err(_))) => ended("not_achieved", exit::FAILED, None),
             (None, Status::Achieved) => ended("achieved", exit::OK, None),
-            (None, Status::Unstated) => ended("unstated", exit::OK, None),
         }
     }
 }

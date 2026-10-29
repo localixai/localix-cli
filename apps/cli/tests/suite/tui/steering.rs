@@ -13,7 +13,7 @@ fn a_message_sent_while_a_command_runs_reaches_the_task() {
     let command = "for i in $(seq 200); do [ -e go ] && break; sleep 0.05; done";
     let model = Model::start(vec![
         Reply::call("bash", json!({"command": command})),
-        Reply::text("Noted.\nRESULT: achieved"),
+        Reply::done("Noted."),
     ]);
     let mut term = Term::start(&model, &["-y"]);
     term.type_text("wait a little").press(key::ENTER);

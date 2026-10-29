@@ -46,8 +46,8 @@ fn new_session(term: &mut Term, shown: &str) {
 fn switch_away_while_a_task_runs() {
     let model = Model::start(vec![
         Reply::call("bash", json!({"command": until_file("go")})),
-        Reply::text("B is done.\nRESULT: achieved"),
-        Reply::text("A is done.\nRESULT: achieved"),
+        Reply::done("B is done."),
+        Reply::done("A is done."),
     ]);
     let mut term = Term::start(&model, &["-y"]);
     term.type_text("first task").press(key::ENTER);
@@ -88,7 +88,7 @@ fn approval_from_background_session_is_labelled() {
             gate.clone(),
             Box::new(Reply::call("bash", json!({"command": "echo from-a"}))),
         ),
-        Reply::text("A ran it.\nRESULT: achieved"),
+        Reply::done("A ran it."),
     ]);
     let mut term = Term::start(&model, &[]);
     term.type_text("first task").press(key::ENTER);
@@ -114,7 +114,7 @@ fn stop_shown_only() {
     let model = Model::start(vec![
         Reply::call("bash", json!({"command": until_file("go")})),
         Reply::call("bash", json!({"command": until_file("never")})),
-        Reply::text("A is done.\nRESULT: achieved"),
+        Reply::done("A is done."),
     ]);
     let mut term = Term::start(&model, &["-y"]);
     term.type_text("first task").press(key::ENTER);
@@ -181,10 +181,7 @@ fn quit_with_work_running_asks() {
     reason = "a test looks at the screen again until it is so, for a bounded time: there is no event to wait on"
 )]
 fn a_session_is_titled_in_the_background_and_listed_and_saved_so() {
-    let model = Model::titling(
-        vec![Reply::text("Fixed.\nRESULT: achieved")],
-        "Fix the parser",
-    );
+    let model = Model::titling(vec![Reply::done("Fixed.")], "Fix the parser");
     let mut term = Term::start(&model, &["-y"]);
     term.type_text("the parser drops the last token")
         .press(key::ENTER);

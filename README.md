@@ -5,7 +5,7 @@
 <h1 align="center">llx</h1>
 
 <p align="center">
-  <strong>An autonomous agent runtime for CI and scripts</strong>
+  <strong>An ultrafast, lightweight agent runtime for coding and CI</strong>
 </p>
 
 <p align="center">

@@ -9,7 +9,7 @@ export function Hero() {
     <section className="hero wrap">
       <div className="hero-copy">
         <h1>
-          <span className="hero-chip">Autonomous</span> agent runtime for CI and scripts
+          <span className="hero-chip">Ultrafast</span>, lightweight agent runtime for coding and CI
         </h1>
         <p className="lede">
           <code>llx exec</code> runs one task and ends with a result and an exit code your pipeline can branch on. One

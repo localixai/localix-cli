@@ -1,6 +1,6 @@
 # llx
 
-> llx is an autonomous agent runtime for CI and scripts, one binary under 4 MB. `llx exec` runs one
+> llx is an ultrafast, lightweight agent runtime for coding and CI, one binary under 4 MB. `llx exec` runs one
 > task and ends with a `result`: achieved or not, a summary, and data matching your JSON Schema, with
 > an exit code and `--json` events as a contract. The same binary is a minimal agent at the terminal
 > (`llx`, five tools: `bash`, `apply_patch`, `ask`, `agents`, `jobs`) and a quick choice about stdin

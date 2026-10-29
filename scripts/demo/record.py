@@ -20,6 +20,7 @@ import sys
 import termios
 import time
 import fcntl
+from contextlib import contextmanager
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 COLS, ROWS = 100, 30
@@ -36,18 +37,21 @@ class Terminal:
         self.events = []  # (gap, kind, data)
         self.last = time.monotonic()
         self.seen = b""
+        # Time runs faster while the model works: a demo shows the work, not the wait.
+        self.scale = 1.0
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(cwd)
             path = os.path.join(ROOT, "target/release") + ":" + os.environ["PATH"]
-            env = dict(os.environ, TERM="xterm-256color", LLX_NO_DAEMON="1", ZDOTDIR=home, PATH=path)
+            env = dict(os.environ, TERM="xterm-256color", LLX_NO_DAEMON="1", ZDOTDIR=home, PATH=path,
+                       HOME=home)
             os.execvpe("zsh", ["zsh", "-i"], env)
         self.fd = fd
         fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", ROWS, COLS, 0, 0))
 
     def record(self, kind, data):
         now = time.monotonic()
-        self.events.append((round(now - self.last, 3), kind, data))
+        self.events.append((round((now - self.last) / self.scale, 3), kind, data))
         self.last = now
 
     def drain(self, seconds):
@@ -85,7 +89,15 @@ class Terminal:
         os.write(self.fd, data.encode())
         self.drain(0.08)
 
-    def type(self, text, cps=14.0):
+    @contextmanager
+    def faster(self, times):
+        self.scale = times
+        try:
+            yield
+        finally:
+            self.scale = 1.0
+
+    def type(self, text, cps=28.0):
         for ch in text:
             os.write(self.fd, ch.encode())
             self.drain(random.uniform(0.6, 1.6) / cps)
@@ -118,7 +130,7 @@ def scenario(t):
     t.forget()
     t.enter()
     t.expect(r"Now openrouter", 10)
-    t.pause(1.2)
+    t.pause(1.0)
 
     t.marker("fix the tests")
     t.forget()
@@ -132,13 +144,14 @@ def scenario(t):
     t.pause(0.6)
     t.forget()
     t.enter()
-    t.expect(r"Worked for", 240)  # the rule under a task's end: how long, how much
-    t.pause(3.0)
+    with t.faster(3.0):
+        t.expect(r"Worked for", 240)  # the rule under a task's end: how long, how much
+    t.pause(2.5)
 
     t.marker("diff")
     t.type("/diff")
     t.enter()
-    t.pause(4.0)
+    t.pause(3.0)
 
     t.marker("in CI")
     t.type("/exit")
@@ -148,29 +161,41 @@ def scenario(t):
     t.type(EXEC)
     t.forget()
     t.enter()
-    t.expect(r"exit=\d", 240)
+    with t.faster(3.0):
+        t.expect(r"exit=\d", 240)
     t.pause(2.5)
 
     t.marker("decide")
     t.type(DECIDE)
     t.forget()
     t.enter()
-    t.expect(r"\n(yes|no)\r?\n", 60)
+    with t.faster(2.0):
+        t.expect(r"\n(yes|no)\r?\n", 60)
     t.pause(3.0)
 
 
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "site/public/demo-llx.cast")
-    # A fixed, short path: the trace names the directory a command ran in.
-    home = "/tmp/demo"
+    # A home of its own, at a short neutral path: the trace names the directory a command ran
+    # in, and `/model` says where it saved its choice. The keys are copied in, nothing else.
+    home = "/Users/Shared/demo" if sys.platform == "darwin" else "/tmp/demo"
     shutil.rmtree(home, ignore_errors=True)
-    os.makedirs(home)
+    config = os.path.join(home, ".config/llx")
+    os.makedirs(config)
+    mine = os.path.expanduser("~/.config/llx")
+    for name in ["credentials", "openai.json", "models.json", "models.etag"]:
+        if os.path.exists(os.path.join(mine, name)):
+            (shutil.copytree if os.path.isdir(os.path.join(mine, name)) else shutil.copy)(
+                os.path.join(mine, name), os.path.join(config, name))
+    with open(os.path.join(config, "settings.json"), "w") as settings:
+        json.dump({"provider": "openrouter", "model": "deepseek/deepseek-v4.1-flash-1017",
+                   "reasoning": "low"}, settings)
     work = os.path.join(home, "stats")
     shutil.copytree(os.path.join(ROOT, "evals/fixtures/fix-test"), work)
     os.system(f"cd {work} && git init -q && git add -A && "
               f"git -c user.name=demo -c user.email=demo@example.com commit -qm stats")
     with open(os.path.join(home, ".zshrc"), "w") as rc:
-        rc.write("unsetopt PROMPT_SP; setopt NO_BEEP\nPROMPT='%F{242}%2~%f $ '\nclear\n")
+        rc.write("unsetopt PROMPT_SP; setopt NO_BEEP\nPROMPT='%F{242}demo/stats%f $ '\nclear\n")
     t = Terminal(work, home)
     try:
         scenario(t)

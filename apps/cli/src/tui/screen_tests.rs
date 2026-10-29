@@ -42,7 +42,7 @@ fn history_goes_above_and_the_live_area_is_redrawn_in_place() {
     let mut screen = Screen::new(Vec::new(), false);
     screen
         .frame(
-            &[],
+            vec![],
             &lines(&["• Running cargo test", "", "❯ "]),
             Some(Cursor { row: 2, column: 2 }),
             ROWS as usize,
@@ -51,7 +51,7 @@ fn history_goes_above_and_the_live_area_is_redrawn_in_place() {
         .unwrap();
     screen
         .frame(
-            &lines(&["❯ fix the tests", ""]),
+            lines(&["❯ fix the tests", ""]),
             &lines(&["• Running cargo test", "", "❯ "]),
             Some(Cursor { row: 2, column: 2 }),
             ROWS as usize,
@@ -60,7 +60,7 @@ fn history_goes_above_and_the_live_area_is_redrawn_in_place() {
         .unwrap();
     screen
         .frame(
-            &lines(&["• Ran cargo test", "  └ ok", ""]),
+            lines(&["• Ran cargo test", "  └ ok", ""]),
             &lines(&["", "❯ next"]),
             Some(Cursor { row: 1, column: 6 }),
             ROWS as usize,
@@ -89,7 +89,7 @@ fn history_longer_than_the_screen_scrolls_into_the_scrollback() {
     let many: Vec<&str> = many.iter().map(String::as_str).collect();
     screen
         .frame(
-            &[],
+            vec![],
             &lines(&["❯ "]),
             Some(Cursor { row: 0, column: 2 }),
             ROWS as usize,
@@ -98,7 +98,7 @@ fn history_longer_than_the_screen_scrolls_into_the_scrollback() {
         .unwrap();
     screen
         .frame(
-            &lines(&many),
+            lines(&many),
             &lines(&["• Working", "❯ "]),
             None,
             ROWS as usize,
@@ -125,7 +125,7 @@ fn a_live_area_taller_than_the_screen_keeps_its_last_rows() {
     let tall: Vec<&str> = tall.iter().map(String::as_str).collect();
     screen
         .frame(
-            &[],
+            vec![],
             &lines(&tall),
             Some(Cursor { row: 19, column: 0 }),
             ROWS as usize,
@@ -134,7 +134,7 @@ fn a_live_area_taller_than_the_screen_keeps_its_last_rows() {
         .unwrap();
     screen
         .frame(
-            &[],
+            vec![],
             &lines(&["❯ "]),
             Some(Cursor { row: 0, column: 2 }),
             ROWS as usize,
@@ -151,7 +151,7 @@ fn clearing_leaves_the_history_and_a_shown_cursor() {
     let mut screen = Screen::new(Vec::new(), false);
     screen
         .frame(
-            &lines(&["• done"]),
+            lines(&["• done"]),
             &lines(&["", "❯ "]),
             None,
             ROWS as usize,
@@ -170,7 +170,13 @@ fn clearing_leaves_the_history_and_a_shown_cursor() {
 fn every_frame_is_one_synchronized_update() {
     let mut screen = Screen::new(Vec::new(), true);
     screen
-        .frame(&[], &lines(&["❯ "]), None, ROWS as usize, COLUMNS as usize)
+        .frame(
+            vec![],
+            &lines(&["❯ "]),
+            None,
+            ROWS as usize,
+            COLUMNS as usize,
+        )
         .unwrap();
     let text = String::from_utf8(screen.output().clone()).unwrap();
     assert!(
@@ -182,8 +188,8 @@ fn every_frame_is_one_synchronized_update() {
 #[test]
 fn consecutive_reads_form_a_compact_chain_even_when_they_finish_in_separate_frames() {
     use crate::tui::app::App;
-    use crate::tui::event::Event;
     use crate::tui::test_support::{Term, call, done, label, result};
+    use protocol::Event;
 
     let now = std::time::Instant::now();
     let mut app = App::new(60, 24, vec![]);
@@ -205,8 +211,8 @@ fn consecutive_reads_form_a_compact_chain_even_when_they_finish_in_separate_fram
 #[test]
 fn grouped_calls_keep_outputs_and_failures_and_approvals_break_the_chain() {
     use crate::tui::app::App;
-    use crate::tui::event::Event;
     use crate::tui::test_support::{Term, done, failed, ran, result};
+    use protocol::Event;
 
     let now = std::time::Instant::now();
     let mut app = App::new(60, 40, vec![]);
@@ -243,7 +249,7 @@ fn a_row_wider_than_the_terminal_is_redrawn_without_leaving_copies() {
     let live = lines(&["• Run this command?", &wide, "❯ 1. Yes", "  2. No"]);
     for _ in 0..3 {
         screen
-            .frame(&[], &live, None, ROWS as usize, COLUMNS as usize)
+            .frame(vec![], &live, None, ROWS as usize, COLUMNS as usize)
             .unwrap();
     }
     let mut parser = terminal();

@@ -14,8 +14,6 @@
 //! - the recent tail, `tail` tokens and at least `MIN_TAIL` messages, is left alone unless the
 //!   limit itself is passed.
 
-use std::collections::HashSet;
-
 use contracts::chat::Message;
 use serde_json::Value;
 
@@ -28,27 +26,30 @@ const AUTO: u64 = 272_000;
 const MIN_TAIL: usize = 4;
 /// Characters below which nothing is worth eliding.
 const MIN_CHARS: usize = 400;
-pub const MARKER: &str = "elided to save context";
+pub(crate) const MARKER: &str = "elided to save context";
 /// What a picture counts for, in tokens.
 const IMAGE: u64 = 1_500;
 
 /// The arithmetic of one request.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Frame {
-    /// The most the request may hold, in tokens.
-    pub ceiling: u64,
+pub(crate) struct Frame {
     /// Where a pass stops.
-    pub target: u64,
+    pub(crate) target: u64,
     /// Real tokens per estimated one, from the last answer's usage.
-    pub ratio: f64,
+    pub(crate) ratio: f64,
     /// Where the protected tail starts.
-    pub tail: usize,
+    pub(crate) tail: usize,
 }
 
 impl Frame {
-    /// The conversation's size in real tokens, as far as the estimate and the ratio tell.
-    pub fn size(&self, conversation: &Conversation) -> u64 {
-        whole(conversation.tokens() as f64 * self.ratio)
+    /// `estimate` tokens, estimated, in real tokens, as far as the ratio tells.
+    fn real(&self, estimate: u64) -> u64 {
+        whole(estimate as f64 * self.ratio)
+    }
+
+    /// The conversation's size in real tokens.
+    fn size(&self, conversation: &Conversation) -> u64 {
+        self.real(conversation.tokens())
     }
 }
 
@@ -70,30 +71,26 @@ pub trait Strategy: Send + Sync {
 
 /// One step of a pipeline: elides what it owns before `before`, oldest first, until the
 /// conversation is down to the frame's target; how much it elided.
-pub trait Stage: Send + Sync {
+pub(crate) trait Stage: Send + Sync {
     fn name(&self) -> &'static str;
     fn run(&self, conversation: &mut Conversation, frame: &Frame) -> usize;
 }
 
 /// Stages behind a gate, in order.
 pub struct Pipeline {
-    pub stages: Vec<Box<dyn Stage>>,
+    stages: Vec<Box<dyn Stage>>,
     /// Percent of the ceiling that opens the gate, and where a pass stops.
-    pub high: u64,
-    pub low: u64,
+    high: u64,
+    low: u64,
     /// Tokens of the recent tail left alone.
-    pub tail: u64,
+    tail: u64,
 }
 
 impl Default for Pipeline {
-    /// llx's: superseded outputs, old outputs, old arguments; the tail only past the ceiling.
+    /// llx's: old outputs, old arguments; the tail only past the ceiling.
     fn default() -> Self {
         Self {
-            stages: vec![
-                Box::new(Outputs { superseded: true }),
-                Box::new(Outputs { superseded: false }),
-                Box::new(Arguments),
-            ],
+            stages: vec![Box::new(Outputs), Box::new(Arguments)],
             high: 90,
             low: 60,
             tail: 16_384,
@@ -104,16 +101,16 @@ impl Default for Pipeline {
 impl Strategy for Pipeline {
     fn prepare(&self, conversation: &mut Conversation, ceiling: u64, ratio: f64) -> Report {
         let mut frame = Frame {
-            ceiling,
             target: ceiling * self.low / 100,
             ratio,
-            // The tail is counted in real tokens too.
-            tail: tail(conversation, whole(self.tail as f64 / ratio.max(0.01))),
+            tail: 0,
         };
         let mut report = Report::new();
         if frame.size(conversation) * 100 < ceiling * self.high {
             return report;
         }
+        // The tail is counted in real tokens too.
+        frame.tail = tail(conversation, whole(self.tail as f64 / ratio.max(0.01)));
         let mut run = |frame: &Frame, conversation: &mut Conversation| {
             for stage in &self.stages {
                 if frame.size(conversation) <= frame.target {
@@ -135,34 +132,19 @@ impl Strategy for Pipeline {
     }
 }
 
-/// Tool outputs: those a later call on the same `path` superseded, or any.
-pub struct Outputs {
-    pub superseded: bool,
-}
+/// Tool outputs, any worth eliding.
+pub(crate) struct Outputs;
 
 impl Stage for Outputs {
     fn name(&self) -> &'static str {
-        if self.superseded {
-            "superseded"
-        } else {
-            "outputs"
-        }
+        "outputs"
     }
 
     fn run(&self, conversation: &mut Conversation, frame: &Frame) -> usize {
-        let later = superseded(conversation.messages());
         let owned: Vec<usize> = conversation.messages()[..frame.tail]
             .iter()
             .enumerate()
-            .filter(|(_, message)| match message {
-                Message::ToolResult { id, content, .. } => {
-                    worth(content) && (!self.superseded || later.contains(id))
-                }
-                Message::System(_)
-                | Message::User(_)
-                | Message::Assistant { .. }
-                | Message::Image { .. } => false,
-            })
+            .filter(|(_, message)| matches!(message, Message::ToolResult { content, .. } if worth(content)))
             .map(|(at, _)| at)
             .collect();
         elide(conversation, frame, owned)
@@ -170,7 +152,7 @@ impl Stage for Outputs {
 }
 
 /// The large arguments of tool calls: what an edit wrote is on disk.
-pub struct Arguments;
+pub(crate) struct Arguments;
 
 impl Stage for Arguments {
     fn name(&self) -> &'static str {
@@ -191,14 +173,18 @@ impl Stage for Arguments {
     }
 }
 
-/// Elide the messages at `owned`, oldest first, until the frame's target.
+/// Elide the messages at `owned`, oldest first, until the frame's target. The size is counted
+/// once and kept by what each elision took out, not read again from the whole conversation.
 fn elide(conversation: &mut Conversation, frame: &Frame, owned: Vec<usize>) -> usize {
+    let mut estimate = conversation.tokens();
     let mut elided = 0;
     for at in owned {
-        if frame.size(conversation) <= frame.target {
+        if frame.real(estimate) <= frame.target {
             break;
         }
+        let before = tokens(&conversation.messages()[at]);
         elided += conversation.elide(at);
+        estimate = estimate - before + tokens(&conversation.messages()[at]);
     }
     elided
 }
@@ -217,30 +203,17 @@ fn tail(conversation: &Conversation, budget: u64) -> usize {
     start
 }
 
-/// The calls whose output a later call on the same `path` superseded.
-fn superseded(messages: &[Message]) -> HashSet<String> {
-    let (mut later, mut out) = (HashSet::new(), HashSet::new());
-    for message in messages.iter().rev() {
-        if let Message::Assistant { calls, .. } = message {
-            for call in calls {
-                let path = call.arguments.get("path").and_then(Value::as_str);
-                if path.is_some_and(|path| !later.insert(path.to_string())) {
-                    out.insert(call.id.clone());
-                }
-            }
-        }
-    }
-    out
-}
-
 pub(crate) fn worth(text: &str) -> bool {
     text.len() >= MIN_CHARS && !text.contains(MARKER)
 }
 
+/// Whether a call's arguments hold a text worth eliding: a value of its object, or the text
+/// itself for a text tool.
 fn large(arguments: &Value) -> bool {
-    arguments
-        .as_object()
-        .is_some_and(|map| map.values().any(|v| v.as_str().is_some_and(worth)))
+    arguments.as_object().map_or_else(
+        || arguments.as_str().is_some_and(worth),
+        |map| map.values().any(|v| v.as_str().is_some_and(worth)),
+    )
 }
 
 /// An estimate in whole tokens.
@@ -273,7 +246,7 @@ pub(crate) fn tokens(message: &Message) -> u64 {
 }
 
 /// The pointer left in place of an output of `chars` characters.
-pub fn pointer(chars: usize) -> String {
+pub(crate) fn pointer(chars: usize) -> String {
     format!(
         "[output {MARKER}: {chars} characters. Call the tool again if you still need it; if the \
          file changed since, read it again rather than relying on what was here]"
@@ -281,7 +254,7 @@ pub fn pointer(chars: usize) -> String {
 }
 
 /// The pointer left in place of an argument of `chars` characters.
-pub fn argument(chars: usize) -> String {
+pub(crate) fn argument(chars: usize) -> String {
     format!("[{MARKER}: {chars} characters]")
 }
 

@@ -1,14 +1,14 @@
 //! Where each of the server's events goes in the interface: the server's own (a lane started, the
-//! sessions listed, a lane shown, the end), a session's (`agents.rs`), what only a lane has, and
-//! what is the interface's as a whole. Each stage names what it passes on, so an event the
+//! sessions listed, a lane shown, the end), a session's (`agents.rs`), and what only a lane has
+//! or is the interface's as a whole. Each stage names what it passes on, so an event the
 //! protocol gains is placed in one of them, never dropped unseen (S10).
 
 use std::time::Instant;
 
 use super::app::{Action, App};
 use super::cells;
-use super::event::{Event, JobRow};
 use crate::tui::printable::printable;
+use protocol::{Event, JobRow};
 
 /// Rows of the latest steps shown under their call.
 const STEPS: usize = 3;
@@ -35,7 +35,7 @@ impl App {
                 None
             }
             Event::Saved(rows) => {
-                self.saved(rows.into_iter().map(|s| (s.id, s.title, s.meta)).collect());
+                self.saved(rows);
                 None
             }
             Event::Quit => Some(Action::Quit),
@@ -66,13 +66,57 @@ impl App {
         }
     }
 
-    /// What is the interface's as a whole: the jobs, the composer's words.
+    /// What only a lane has, and what is the interface's as a whole (the jobs, the composer's
+    /// words, a quit). An agent's view has no lane: its mode, steps and counts go unheard.
     /// `at` is the session the event came from.
-    pub(super) fn global(&mut self, at: usize, event: Event) -> Option<Action> {
-        let lane = self.lane_at(at);
+    pub(super) fn lane_event(&mut self, at: usize, event: Event) -> Option<Action> {
+        let lane = self.views.sessions[at].lane.as_deref_mut();
         match event {
+            Event::Mode(mode) => {
+                if let Some(lane) = lane {
+                    lane.mode = mode;
+                }
+            }
+            Event::Step(step) => {
+                if let Some(lane) = lane {
+                    lane.steps.push(step);
+                    let over = lane.steps.len().saturating_sub(STEPS);
+                    lane.steps.drain(..over);
+                }
+            }
+            Event::Context(left) => {
+                if let Some(lane) = lane {
+                    lane.context = Some(left);
+                }
+            }
+            Event::Total(total) => {
+                if let Some(lane) = lane {
+                    lane.total = Some(total);
+                }
+            }
+            Event::Queue {
+                ready,
+                steered,
+                queued,
+                background,
+            } => {
+                if let Some(lane) = lane {
+                    lane.ready = ready;
+                    lane.steered = steered;
+                    lane.queued = queued;
+                    lane.background = background;
+                }
+            }
+            // The task read what the person said to it: theirs now, in the transcript.
+            Event::Steered(texts) if lane.is_some() => {
+                for text in texts {
+                    let block = cells::user(&text, self.width);
+                    self.push(at, block);
+                }
+            }
             // Each session's jobs, in the order of the sessions.
             Event::Jobs(rows) => {
+                let lane = self.views.lane_of(at);
                 let id = self.views.sessions[lane].id.clone();
                 self.views.jobs.retain(|row| row.lane != id);
                 self.views.jobs.extend(rows.into_iter().map(|row| JobRow {
@@ -89,68 +133,10 @@ impl App {
             Event::Prefill(text) => self.composer.set(&text),
             Event::Copy(text) => return Some(Action::Copy(text)),
             Event::Quit => return Some(Action::Quit),
-            // A session's own events reach it through [`App::on`].
-            Event::Header(_)
-            | Event::Note(_)
-            | Event::Error(_)
-            | Event::Mode(_)
-            | Event::TaskStarted(_)
-            | Event::Call { .. }
-            | Event::Result { .. }
-            | Event::Step(_)
-            | Event::Answer(_)
-            | Event::TaskEnded { .. }
-            | Event::Earlier(_)
-            | Event::Updated(_)
-            | Event::LaneStarted { .. }
-            | Event::LaneEnded
-            | Event::Saved(_)
-            | Event::Show(_)
-            | Event::Started { .. }
-            | Event::Closed
-            | Event::Spent(_)
-            | Event::Total(_)
-            | Event::AgentsCleared
-            | Event::Context(_)
-            | Event::Queue { .. }
-            | Event::Steered(_) => {}
-        }
-        None
-    }
-
-    /// What only a lane has; anything else is the interface's.
-    pub(super) fn lane_event(&mut self, at: usize, event: Event) -> Option<Action> {
-        let Some(lane) = self.views.sessions[at].lane.as_deref_mut() else {
-            return self.global(at, event);
-        };
-        match event {
-            Event::Mode(mode) => lane.mode = mode,
-            Event::Step(step) => {
-                lane.steps.push(step);
-                let over = lane.steps.len().saturating_sub(STEPS);
-                lane.steps.drain(..over);
-            }
-            Event::Context(left) => lane.context = Some(left),
-            Event::Total(total) => lane.total = Some(total),
-            Event::Queue {
-                ready,
-                steered,
-                queued,
-                background,
-            } => {
-                lane.ready = ready;
-                lane.steered = steered;
-                lane.queued = queued;
-                lane.background = background;
-            }
-            // The task read what the person said to it: theirs now, in the transcript.
-            Event::Steered(texts) => {
-                for text in texts {
-                    let block = cells::user(&text, self.width);
-                    self.push(at, block);
-                }
-            }
-            event @ (Event::Header(_)
+            // A session's own events reach it through [`App::on`], the server's through
+            // [`App::event`].
+            Event::Steered(_)
+            | Event::Header(_)
             | Event::Note(_)
             | Event::Error(_)
             | Event::TaskStarted(_)
@@ -167,11 +153,7 @@ impl App {
             | Event::Started { .. }
             | Event::Closed
             | Event::Spent(_)
-            | Event::AgentsCleared
-            | Event::Prefill(_)
-            | Event::Jobs(_)
-            | Event::Copy(_)
-            | Event::Quit) => return self.global(at, event),
+            | Event::AgentsCleared => {}
         }
         None
     }

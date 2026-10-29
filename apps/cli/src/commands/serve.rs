@@ -1,7 +1,8 @@
 //! `llx serve`: the daemon (docs/daemon.md). It takes the lock of its config, binds the socket,
-//! says it is ready, and accepts clients until it is stopped; each client that attaches gets a desk of its own, built as a terminal's session is (`run::run`, `At::Served`)
-//! from the place and the command line the client gives. It never ends by itself:
-//! `llx serve stop` ends it. `llx serve status` says what it is.
+//! says it is ready, and accepts clients until it is stopped; each client that attaches gets a
+//! desk of its own, built as a terminal's session is (`run::run`, `At::Served`) from the place
+//! and the command line the client gives. It never ends by itself: `llx serve stop` ends it.
+//! `llx serve status` says what it is.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

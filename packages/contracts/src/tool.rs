@@ -17,24 +17,16 @@ pub struct ToolSpec {
 /// `Json`, a string (the text, as the model wrote it) for `Text`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Input {
-    /// Arguments, as a JSON Schema object: every tool but a script.
+    /// Arguments, as a JSON Schema object: every tool but a text one.
     Json(Value),
-    /// Free text (a script's source), with nothing to escape. A provider that takes such tools
-    /// offers it so; any other offers a function with one string argument ([`TEXT_ARGUMENT`]).
-    Text(Grammar),
-}
-
-/// What the text of a `Text` input looks like.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Grammar {
-    /// Any text.
-    Free,
-    /// A grammar in Lark syntax, for a provider that holds the model to it.
-    Lark(String),
+    /// Free text (a patch), with nothing to escape, in the Lark grammar given. A provider that
+    /// takes such tools offers it so, holding the model to the grammar; any other offers a
+    /// function with one string argument ([`TEXT_ARGUMENT`]).
+    Text(String),
 }
 
 /// The one argument of a text tool offered as a function.
-pub const TEXT_ARGUMENT: &str = "source";
+const TEXT_ARGUMENT: &str = "source";
 
 impl Input {
     /// The JSON Schema of the function that stands for this input.
@@ -86,15 +78,12 @@ impl Input {
 pub struct ToolOutput {
     /// What happened: kept for the rest of the conversation.
     pub report: String,
-    /// The state the call left (a view, a screen): only the newest one matters, so an agent may
-    /// drop older ones to keep the conversation short.
+    /// The state the call left: only the newest one matters, so an agent may drop older ones to
+    /// keep the conversation short.
     pub state: Option<String>,
-    /// A picture of what the call left (a screenshot), for a model that reads images: like a
-    /// state, only the newest few matter.
-    pub image: Option<Image>,
 }
 
-/// A report alone: most calls leave no state and no picture.
+/// A report alone: most calls leave no state.
 impl From<String> for ToolOutput {
     fn from(report: String) -> Self {
         Self {
@@ -119,7 +108,7 @@ pub struct Image {
 /// Why a call did nothing useful.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ToolError {
-    /// The call failed, but another call can do better (wrong arguments, a view that refused): the
+    /// The call failed, but another call can do better (wrong arguments, a refused patch): the
     /// model reads why.
     Failed(String),
     /// Nothing will work now (what the tool depends on is unreachable): the run ends.

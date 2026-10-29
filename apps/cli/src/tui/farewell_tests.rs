@@ -1,8 +1,8 @@
 use std::time::Instant;
 
 use super::*;
-use crate::tui::event::Event;
 use crate::tui::test_support::in_session as from;
+use protocol::Event;
 
 fn plain(lines: &[Line<'static>]) -> Vec<String> {
     let text = |line: &Line| {

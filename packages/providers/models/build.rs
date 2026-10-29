@@ -56,8 +56,7 @@ fn main() {
         let field = |key: &str| provider.get(key).cloned().unwrap_or(Value::Null);
         providers.insert(
             id.clone(),
-            json!({"id": id, "name": field("name"), "env": field("env"), "doc": field("doc"),
-                "models": models}),
+            json!({"id": id, "name": field("name"), "env": field("env"), "models": models}),
         );
     }
     // Deflated: 200 KB of JSON is 14 KB in the binary, inflated only by a run that reads it.
@@ -102,9 +101,6 @@ fn resolve(
         model["modalities"] = modalities.clone();
     }
     model["id"] = json!(id);
-    if let Some(base) = base {
-        model["canonical_id"] = base;
-    }
     if model.get("type").is_none() {
         model["type"] = json!("chat");
     }
@@ -213,7 +209,6 @@ fn kept(model: &Value) -> Value {
     let mut out = json!({});
     for path in [
         "/id",
-        "/canonical_id",
         "/name",
         "/type",
         "/release_date",

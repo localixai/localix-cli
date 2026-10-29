@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::fakes::Silent;
-use crate::fakes::{Echo, Recorder, Scripted, calls, ok, says};
+use crate::fakes::{Echo, Recorder, Scripted, calls, ok, says, users};
 
 fn agent<'a>(
     chat: &'a Scripted,
@@ -37,21 +37,6 @@ fn results(run: &Run) -> Vec<(String, bool)> {
             Message::ToolResult {
                 content, failed, ..
             } => Some((content.clone(), *failed)),
-            _ => None,
-        })
-        .collect()
-}
-
-#[expect(
-    clippy::wildcard_enum_match_arm,
-    reason = "a test picks out the variant it checks"
-)]
-fn users(run: &Run) -> Vec<String> {
-    run.conversation
-        .messages()
-        .iter()
-        .filter_map(|message| match message {
-            Message::User(text) => Some(text.clone()),
             _ => None,
         })
         .collect()
@@ -109,6 +94,87 @@ fn failed_calls_go_back_to_the_model_and_too_many_ask_for_an_answer() {
         .filter(|event| event.starts_with("failed"))
         .collect();
     assert_eq!(failures, ["failed echo: the tool refused"; 3]);
+}
+
+#[test]
+fn an_answer_that_the_goal_is_not_reached_goes_back_once_and_the_work_goes_on() {
+    let chat = Scripted::new(vec![
+        says("Half the tests fail.\nRESULT: not achieved"),
+        calls("echo", json!({})),
+        says("All pass.\nRESULT: achieved"),
+    ]);
+    let echo = Echo::new(vec![ok("fixed")]);
+    let recorder = Recorder::default();
+    let run = agent(&chat, &[&echo], None, &recorder).run("Make the tests pass");
+    assert_eq!(run.status, Status::Achieved);
+    assert_eq!(run.answer, "All pass.");
+    assert_eq!(chat.last_user.lock().unwrap()[1], GO_ON);
+    assert!(
+        recorder
+            .events()
+            .contains(&"said Half the tests fail.\nRESULT: not achieved".into())
+    );
+}
+
+#[test]
+fn an_answer_after_calls_that_does_not_say_the_goal_is_reached_goes_back_once() {
+    let chat = Scripted::new(vec![
+        calls("echo", json!({})),
+        says("Six tests still fail."),
+        calls("echo", json!({})),
+        says("All pass.\nRESULT: achieved"),
+    ]);
+    let echo = Echo::new(vec![ok("ran"), ok("fixed")]);
+    let run = agent(&chat, &[&echo], None, &Silent).run("Make the tests pass");
+    assert_eq!(run.status, Status::Achieved);
+    assert_eq!(chat.last_user.lock().unwrap()[2], GO_ON);
+    // A reply with no call before it is an answer as it is: a question asked, a greeting.
+    let chat = Scripted::new(vec![says("Hello.")]);
+    let run = agent(&chat, &[], None, &Silent).run("Hi");
+    assert_eq!(
+        (run.status, run.answer.as_str()),
+        (Status::Unstated, "Hello.")
+    );
+}
+
+#[test]
+fn an_answer_after_more_work_goes_back_again_up_to_a_limit() {
+    let mut script = vec![];
+    for _ in 0..4 {
+        script.push(calls("echo", json!({})));
+        script.push(says("Two checks still fail.\nRESULT: not achieved"));
+    }
+    let chat = Scripted::new(script);
+    let echo = Echo::new((0..4).map(|_| ok("ran")).collect());
+    let run = Agent {
+        max_turns: 20,
+        ..agent(&chat, &[&echo], None, &Silent)
+    }
+    .run("Make the checks pass");
+    assert_eq!(run.status, Status::NotAchieved);
+    let sent = users(run.conversation.messages())
+        .iter()
+        .filter(|text| *text == GO_ON)
+        .count();
+    assert_eq!(sent, MAX_GO_ON);
+}
+
+#[test]
+fn a_second_answer_that_the_goal_is_not_reached_stands() {
+    let chat = Scripted::new(vec![
+        says("The key is missing.\nRESULT: not achieved"),
+        says("The key is still missing.\nRESULT: not achieved"),
+    ]);
+    let run = agent(&chat, &[], None, &Silent).run("Call the API");
+    assert_eq!(run.status, Status::NotAchieved);
+    assert_eq!(run.answer, "The key is still missing.");
+    assert_eq!(
+        users(run.conversation.messages())
+            .iter()
+            .filter(|text| *text == GO_ON)
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -236,7 +302,11 @@ fn the_context_opens_a_new_conversation_only_when_given() {
         };
         let first = agent.run("First");
         let second = agent.follow_up(first.conversation, "Second");
-        assert_eq!(users(&second), expected, "context {context:?}");
+        assert_eq!(
+            users(second.conversation.messages()),
+            expected,
+            "context {context:?}"
+        );
     }
 }
 
@@ -276,7 +346,7 @@ fn a_note_goes_at_the_end_with_open_calls_closed_and_the_next_goal_follows() {
     );
     let second = agent.follow_up(told, "Second");
     assert_eq!(
-        users(&second),
+        users(second.conversation.messages()),
         ["Goal: First", "<note>changed</note>", "Goal: Second"]
     );
 }
@@ -291,7 +361,7 @@ fn a_note_before_any_goal_opens_with_the_context() {
     let told = agent.tell(None, "<note>changed</note>");
     let run = agent.follow_up(told, "First");
     assert_eq!(
-        users(&run),
+        users(run.conversation.messages()),
         [
             "<context>\nWorking directory: /work\n</context>",
             "<note>changed</note>",
@@ -314,54 +384,6 @@ fn turn_of(names: &[&str]) -> Completion {
             .collect(),
         ..Completion::default()
     }
-}
-
-#[test]
-#[expect(
-    clippy::wildcard_enum_match_arm,
-    reason = "a test picks out the variant it checks"
-)]
-fn a_picture_a_call_took_follows_every_result_of_its_turn() {
-    let chat = Scripted::new(vec![turn_of(&["echo", "echo"]), says("Seen.")]);
-    let picture = Image {
-        media_type: "image/png".into(),
-        data: "AA==".into(),
-        width: 1,
-        height: 1,
-    };
-    let echo = Echo::new(vec![
-        Ok(contracts::tool::ToolOutput {
-            report: "shot".into(),
-            state: None,
-            image: Some(picture),
-        }),
-        ok("read"),
-    ]);
-    let run = agent(&chat, &[&echo], None, &Silent).run("Look");
-    let kinds: Vec<&str> = run
-        .conversation
-        .messages()
-        .iter()
-        .map(|message| match message {
-            Message::ToolResult { .. } => "tool",
-            Message::Image { .. } => "image",
-            Message::Assistant { .. } => "assistant",
-            _ => "other",
-        })
-        .collect();
-    assert_eq!(
-        kinds,
-        [
-            "other",
-            "other",
-            "assistant",
-            "tool",
-            "tool",
-            "image",
-            "assistant"
-        ],
-        "no message comes between the results of one turn"
-    );
 }
 
 #[test]

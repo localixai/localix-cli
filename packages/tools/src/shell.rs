@@ -5,7 +5,7 @@
 mod bash;
 #[cfg(unix)]
 mod inherit;
-pub(crate) mod output;
+mod output;
 mod process;
 mod sandbox;
 #[cfg(unix)]
@@ -14,5 +14,5 @@ mod sweep;
 pub use bash::BashTool;
 #[cfg(unix)]
 pub use inherit::streams_only;
-pub use process::{Ending, Env, SHELL, kill, scoped, shell};
+pub use process::{Env, SHELL, kill, scoped, shell};
 pub use sandbox::{Held, Scope};

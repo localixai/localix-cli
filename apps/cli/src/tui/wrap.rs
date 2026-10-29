@@ -26,11 +26,11 @@ pub(crate) fn wrap(
     let mut rows: Vec<Line<'static>> = vec![];
     let mut row = first.clone();
     let mut used = line_width(first);
-    let room = width.max(line_width(rest) + 1);
+    let indent = line_width(rest);
+    let room = width.max(indent + 1);
     let mut pending_space: Option<Style> = None;
     let mut fresh = true;
-    for (word, style, space_after) in words(line) {
-        let mut word = word;
+    for (mut word, style, space_after) in words(line) {
         loop {
             let gap = usize::from(pending_space.is_some() && !fresh);
             let w = self::width(&word);
@@ -39,22 +39,22 @@ pub(crate) fn wrap(
                     row.spans
                         .push(Span::styled(" ", pending_space.unwrap_or_default()));
                 }
-                row.spans.push(Span::styled(word.clone(), style));
+                row.spans.push(Span::styled(word, style));
                 used += gap + w;
                 fresh = false;
                 break;
             }
             if !fresh {
                 rows.push(std::mem::replace(&mut row, rest.clone()));
-                used = line_width(rest);
+                used = indent;
                 fresh = true;
                 continue;
             }
-            let (head, tail) = split(&word, room.saturating_sub(used).max(1));
-            row.spans.push(Span::styled(head, style));
+            let tail = word.split_off(split(&word, room.saturating_sub(used).max(1)));
+            row.spans
+                .push(Span::styled(std::mem::replace(&mut word, tail), style));
             rows.push(std::mem::replace(&mut row, rest.clone()));
-            used = line_width(rest);
-            word = tail;
+            used = indent;
             if word.is_empty() {
                 break;
             }
@@ -92,39 +92,45 @@ fn words(line: &Line) -> Vec<(String, Style, bool)> {
     out
 }
 
-fn split(word: &str, columns: usize) -> (String, String) {
+/// The byte index where `word` is cut to fit `columns`: its length when it fits.
+fn split(word: &str, columns: usize) -> usize {
     let mut used = 0;
     for (at, c) in word.char_indices() {
         let w = c.width().unwrap_or(0);
         if used + w > columns && at > 0 {
-            let (head, tail) = word.split_at(at);
-            return (head.to_string(), tail.to_string());
+            return at;
         }
         used += w;
     }
-    (word.to_string(), String::new())
+    word.len()
 }
 
 /// `text` in rows of at most `columns`, broken anywhere and keeping its spaces: for code, whose
 /// indentation and alignment mean something.
 pub(crate) fn hard(text: &str, columns: usize) -> Vec<String> {
-    let mut rows = vec![];
-    let mut rest = text.to_string();
-    while width(&rest) > columns {
-        let (head, tail) = split(&rest, columns.max(1));
-        rows.push(head);
-        rest = tail;
+    let columns = columns.max(1);
+    let mut rows = vec![String::new()];
+    let mut used = 0;
+    for c in text.chars() {
+        let w = c.width().unwrap_or(0);
+        if used + w > columns && rows.last().is_some_and(|row| !row.is_empty()) {
+            rows.push(String::new());
+            used = 0;
+        }
+        if let Some(row) = rows.last_mut() {
+            row.push(c);
+        }
+        used += w;
     }
-    rows.push(rest);
     rows
 }
 
 /// `line` in rows of at most `columns`, broken anywhere with its styles kept: what the terminal
 /// would do to a row too wide, done first so the rows drawn are the rows counted.
-pub(crate) fn fit(line: &Line<'static>, columns: usize) -> Vec<Line<'static>> {
+pub(crate) fn fit(line: Line<'static>, columns: usize) -> Vec<Line<'static>> {
     let columns = columns.max(1);
-    if line_width(line) <= columns {
-        return vec![line.clone()];
+    if line_width(&line) <= columns {
+        return vec![line];
     }
     let mut rows = vec![Line::default()];
     let mut used = 0;

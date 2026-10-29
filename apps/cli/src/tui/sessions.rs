@@ -29,20 +29,18 @@ use super::app::{Action, App};
 use super::cells;
 use super::search::{stepped, window_start};
 use super::style;
+use super::tree::NAME;
 use super::views::AgentState;
-use protocol::Target;
+use protocol::{Saved, Target};
 
 /// Rows shown at once; a longer list scrolls with the row chosen.
 const WINDOW: usize = 14;
-/// Columns a name takes at most.
-const NAME: usize = 36;
-
 #[derive(Debug, Clone, PartialEq)]
 enum Row {
     Live(String),
     New,
-    /// A saved session's id, its first task, and when it ran and its tasks.
-    Saved(String, String, String),
+    /// A saved session: its id, its first task, and when it ran and its tasks.
+    Saved(Saved),
 }
 
 /// The list open, and the row chosen.
@@ -76,7 +74,7 @@ impl App {
     }
 
     /// The saved sessions came: the list open lists them, on the row it was on.
-    pub(super) fn saved(&mut self, saved: Vec<(String, String, String)>) {
+    pub(super) fn saved(&mut self, saved: Vec<Saved>) {
         self.saved = saved;
         let Some(list) = &self.listing else { return };
         let on = list.rows.get(list.at).cloned();
@@ -93,10 +91,14 @@ impl App {
         let lanes: Vec<usize> = (0..views.len())
             .filter(|&at| views[at].lane.is_some())
             .collect();
-        let rank = |at: usize| match () {
-            _ if views[at].busy.is_some() => 0,
-            _ if self.waits_for_person(at) => 1,
-            _ => 2,
+        let rank = |at: usize| {
+            if views[at].busy.is_some() {
+                0
+            } else if self.waits_for_person(at) {
+                1
+            } else {
+                2
+            }
         };
         let mut live = lanes;
         live.sort_by_key(|&at| rank(at));
@@ -108,10 +110,8 @@ impl App {
         let saved = self
             .saved
             .iter()
-            .filter(|(id, ..)| self.views.find(id).is_none());
-        rows.extend(
-            saved.map(|(id, title, meta)| Row::Saved(id.clone(), title.clone(), meta.clone())),
-        );
+            .filter(|saved| self.views.find(&saved.id).is_none());
+        rows.extend(saved.cloned().map(Row::Saved));
         rows
     }
 
@@ -132,7 +132,7 @@ impl App {
                 match row? {
                     Row::Live(id) => self.show(&id),
                     Row::New => self.opening(Target::New),
-                    Row::Saved(id, ..) => self.opening(Target::Saved(id)),
+                    Row::Saved(saved) => self.opening(Target::Saved(saved.id)),
                 }
             }
             KeyCode::Char('x') if key.modifiers.is_empty() => {
@@ -178,7 +178,7 @@ impl App {
                     .views
                     .find(id)
                     .map(|at| self.views.sessions[at].title()),
-                Row::Saved(_, title, _) => Some(title.as_str()),
+                Row::Saved(saved) => Some(saved.title.as_str()),
                 Row::New => None,
             })
             .map(super::wrap::width)
@@ -200,9 +200,9 @@ impl App {
             match row {
                 Row::Live(id) => spans.extend(self.live_row(id, names, now, spinner)),
                 Row::New => spans.push(Span::styled("+ New session", style::bold())),
-                Row::Saved(_, title, meta) => spans.extend(super::tree::columns(
-                    (Span::raw(" "), title, Style::default()),
-                    meta,
+                Row::Saved(saved) => spans.extend(super::tree::columns(
+                    (Span::raw(" "), &saved.title, Style::default()),
+                    &saved.meta,
                     (names, width.saturating_sub(2)),
                 )),
             }
@@ -243,7 +243,7 @@ impl App {
             }
             (AgentState::Ended(status), None) => {
                 let (style, mark, word, _) = super::tree::ending(status);
-                said.extend([word.to_string()]);
+                said.push(word.into());
                 if view.unseen {
                     said.push("unseen".into());
                 }

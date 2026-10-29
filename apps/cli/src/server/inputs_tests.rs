@@ -70,7 +70,7 @@ fn what_is_sent_to_a_lane_at_its_prompt_is_its_next_entry() {
     let (inputs, told) = inputs();
     let prompt = waiting(&inputs);
     assert!(last_queue(&told).0, "the interface is told the lane waits");
-    inputs.input(sent("fix the parser"));
+    inputs.input(sent("fix the parser"), false);
     assert_eq!(prompt.join().unwrap(), Some(Typed::from("fix the parser")));
     assert_eq!(last_queue(&told), (false, vec![], vec![], vec![]));
 }
@@ -78,37 +78,41 @@ fn what_is_sent_to_a_lane_at_its_prompt_is_its_next_entry() {
 #[test]
 fn words_sent_while_a_task_works_go_to_it_and_are_shown_as_theirs_when_read() {
     let (inputs, told) = inputs();
-    inputs.working("s1", true);
-    inputs.input(sent("use the cache"));
+    inputs.input(sent("use the cache"), true);
     assert_eq!(last_queue(&told).1, ["use the cache"]);
     assert_eq!(
-        inputs.steered("s1", true),
+        inputs.peek_steered("s1"),
         ["use the cache"],
         "a peek leaves them"
     );
-    assert_eq!(inputs.steered("s1", false), ["use the cache"]);
+    assert_eq!(inputs.steered("s1"), ["use the cache"]);
     assert!(
         told.lock()
             .unwrap()
             .iter()
             .any(|(_, e)| *e == Event::Steered(vec!["use the cache".into()]))
     );
-    assert!(inputs.steered("s1", false).is_empty());
+    assert!(inputs.steered("s1").is_empty());
 }
 
 #[test]
 fn a_command_a_picture_or_tab_waits_for_the_task_to_end() {
     let (inputs, told) = inputs();
-    inputs.working("s1", true);
-    inputs.input(sent("/diff"));
-    inputs.input(Input {
-        images: vec!["/tmp/a.png".into()],
-        ..sent("look")
-    });
-    inputs.input(Input {
-        later: true,
-        ..sent("then the docs")
-    });
+    inputs.input(sent("/diff"), true);
+    inputs.input(
+        Input {
+            images: vec!["/tmp/a.png".into()],
+            ..sent("look")
+        },
+        true,
+    );
+    inputs.input(
+        Input {
+            later: true,
+            ..sent("then the docs")
+        },
+        true,
+    );
     let (_, steered, queued, _) = last_queue(&told);
     assert!(steered.is_empty());
     assert_eq!(queued, ["/diff", "look", "then the docs"]);
@@ -117,9 +121,8 @@ fn a_command_a_picture_or_tab_waits_for_the_task_to_end() {
 #[test]
 fn what_the_task_did_not_read_is_the_next_thing_it_is_given() {
     let (inputs, _told) = inputs();
-    inputs.working("s1", true);
-    inputs.input(sent("/diff"));
-    inputs.input(sent("and faster"));
+    inputs.input(sent("/diff"), true);
+    inputs.input(sent("and faster"), true);
     assert_eq!(inputs.next("s1"), Some(Typed::from("and faster")));
     assert_eq!(inputs.next("s1"), Some(Typed::from("/diff")));
 }
@@ -127,7 +130,7 @@ fn what_the_task_did_not_read_is_the_next_thing_it_is_given() {
 #[test]
 fn words_sent_while_no_task_runs_wait_for_the_prompt() {
     let (inputs, told) = inputs();
-    inputs.input(sent("next, the docs"));
+    inputs.input(sent("next, the docs"), false);
     let (_, steered, queued, _) = last_queue(&told);
     assert!(steered.is_empty(), "no task to steer: {steered:?}");
     assert_eq!(queued, ["next, the docs"]);
@@ -137,10 +140,13 @@ fn words_sent_while_no_task_runs_wait_for_the_prompt() {
 fn the_background_waits_behind_the_person_and_reads_as_where_it_came_from() {
     let (inputs, told) = inputs();
     inputs.background("s1", "<monitor job=\"ticks\">\ntick 1\n</monitor>");
-    inputs.input(Input {
-        later: true,
-        ..sent("mine first")
-    });
+    inputs.input(
+        Input {
+            later: true,
+            ..sent("mine first")
+        },
+        false,
+    );
     assert_eq!(last_queue(&told).3, ["≋ ticks · tick 1"]);
     assert_eq!(inputs.next("s1"), Some(Typed::from("mine first")));
     assert!(
@@ -164,11 +170,10 @@ fn a_closed_lane_and_a_person_who_left_get_nothing_more() {
 #[test]
 fn reading_nothing_new_tells_the_interface_nothing() {
     let (inputs, told) = inputs();
-    inputs.working("s1", true);
-    inputs.input(sent("use the cache"));
+    inputs.input(sent("use the cache"), true);
     let before = told.lock().unwrap().len();
     for _ in 0..5 {
-        assert!(inputs.steered("s1", false).len() <= 1);
+        assert!(inputs.steered("s1").len() <= 1);
     }
     let after: Vec<Event> = (told.lock().unwrap().iter().skip(before))
         .map(|(_, event)| event.clone())
@@ -182,7 +187,7 @@ fn reading_nothing_new_tells_the_interface_nothing() {
 #[test]
 fn a_lane_that_ended_is_said_ended_and_closing_it_keeps_nothing() {
     let (inputs, told) = inputs();
-    inputs.input(sent("first"));
+    inputs.input(sent("first"), false);
     inputs.forget("s1");
     assert_eq!(
         told.lock().unwrap().last(),
@@ -206,9 +211,12 @@ fn a_prompt_that_comes_after_the_person_left_gets_nothing_until_one_comes_back()
     );
     inputs.back();
     let prompt = waiting_in(&inputs, "late");
-    inputs.input(Input {
-        session: "late".into(),
-        ..sent("here again")
-    });
+    inputs.input(
+        Input {
+            session: "late".into(),
+            ..sent("here again")
+        },
+        false,
+    );
     assert_eq!(prompt.join().unwrap(), Some(Typed::from("here again")));
 }

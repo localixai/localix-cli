@@ -1,10 +1,10 @@
 //! The history port: sessions of goals, kept by whatever store the app composes. A session is the
-//! goals asked one after another with the same tools, how each ended, and where the last one left
-//! its tool, so it can be listed and continued.
+//! goals asked one after another with the same tools, and how each ended, so it can be listed and
+//! continued.
 
 use serde::{Deserialize, Serialize};
 
-use crate::chat::Spend;
+use crate::chat::Usage;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Session {
@@ -16,10 +16,6 @@ pub struct Session {
     /// told apart from one continued in place. Empty in sessions saved before it was kept.
     #[serde(default)]
     pub workspace: String,
-    /// Where the last goal left its tool (its `Observation::location`): where a continued session
-    /// resumes.
-    #[serde(default)]
-    pub location: String,
     /// The session that started this one, when it is an agent another session's agent started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
@@ -51,7 +47,7 @@ pub struct Turn {
 pub struct Step {
     /// The tool's name, or `model` for a model turn.
     pub what: String,
-    /// What the call did, in a few words (`open w1 https://…`), or a turn's tokens.
+    /// What the call did, in a few words (`ls src`), or a turn's tokens.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub detail: String,
     /// Milliseconds from the task's start.
@@ -81,24 +77,21 @@ impl Spent {
     }
 }
 
-impl From<&Spend> for Spent {
-    fn from(spend: &Spend) -> Self {
+impl From<&Usage> for Spent {
+    fn from(usage: &Usage) -> Self {
         Self {
-            input_tokens: spend.input_tokens,
-            cached_tokens: spend.cached_tokens,
-            output_tokens: spend.output_tokens,
-            cost: spend.cost,
+            input_tokens: usage.input_tokens,
+            cached_tokens: usage.cached_tokens,
+            output_tokens: usage.output_tokens,
+            cost: usage.cost,
         }
     }
 }
 
 impl Session {
-    /// Record a finished goal, at `at` (Unix seconds).
-    pub fn record(&mut self, turn: Turn, location: Option<&str>) {
+    /// Record a finished goal; the session was updated when it ended.
+    pub fn record(&mut self, turn: Turn) {
         self.updated = turn.at;
-        if let Some(location) = location {
-            self.location = location.to_string();
-        }
         self.turns.push(turn);
     }
 
@@ -108,13 +101,42 @@ impl Session {
     }
 }
 
+/// Why a session was not saved or loaded; the causes are the store's words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HistoryError {
+    /// No session is saved at all.
+    Empty,
+    /// No session has this id.
+    NotFound(String),
+    /// The session `id` is there but could not be read.
+    Unreadable { id: String, why: String },
+    /// The session `id` was read but is not a session.
+    Corrupt { id: String, why: String },
+    /// The session could not be written.
+    Write(String),
+}
+
+impl std::fmt::Display for HistoryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Empty => f.write_str("no saved sessions"),
+            Self::NotFound(id) => write!(f, "no session {id}"),
+            Self::Unreadable { id, why } => write!(f, "session {id} cannot be read: {why}"),
+            Self::Corrupt { id, why } => write!(f, "session {id} is unreadable: {why}"),
+            Self::Write(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for HistoryError {}
+
 /// Where sessions are kept.
 pub trait History: Send + Sync {
     /// A new, empty session with a fresh id.
     fn start(&self) -> Session;
-    fn save(&self, session: &Session) -> Result<(), String>;
+    fn save(&self, session: &Session) -> Result<(), HistoryError>;
     /// The session with `id`, or the newest one for `None`.
-    fn load(&self, id: Option<&str>) -> Result<Session, String>;
+    fn load(&self, id: Option<&str>) -> Result<Session, HistoryError>;
     /// Every session, newest first.
     fn list(&self) -> Vec<Session>;
 }

@@ -25,8 +25,7 @@ pub enum Message {
         content: String,
         failed: bool,
     },
-    /// A picture a tool call left (a screenshot), shown to the model right after that call's
-    /// result: tool results carry text only on some providers. `caption` says what it shows.
+    /// A picture the person attached to their message. `caption` says what it shows.
     Image {
         caption: String,
         image: Image,
@@ -38,7 +37,8 @@ pub enum Message {
 pub struct ToolCall {
     pub id: String,
     pub name: String,
-    /// The arguments as the model wrote them: an object, or `{}` when they did not parse.
+    /// The arguments as the model wrote them: an object (the text itself for a text tool), or
+    /// the text itself when they did not parse.
     pub arguments: Value,
 }
 

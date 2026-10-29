@@ -1,5 +1,5 @@
 //! One queue for everything that reaches a session's run from outside its own calls: an agent's
-//! answer, a monitor's lines, what the person did in the window, and whatever comes later. The
+//! answer, a monitor's lines, a schedule's tick, and whatever comes later. The
 //! queue knows no source. Each entry carries its own policy, the one table every source
 //! answers: whether a running task takes it at its next step, and what becomes of it while no
 //! task runs. The reader (the agent's inbox) knows only entries.
@@ -16,10 +16,9 @@ use std::time::Duration;
 /// What becomes of an entry that comes while no task runs, or that a task ended without reading.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Idle {
-    /// It starts a task of its own (a monitor's lines).
+    /// It starts a task of its own (a monitor's lines); with no one to open it, it waits for the
+    /// next task and joins it at its first step.
     Opens,
-    /// It waits for the next task, and joins it at its first step (what the person did).
-    Waits,
     /// It was for the task that is over (an agent's late answer).
     Drops,
 }
@@ -36,12 +35,12 @@ pub struct Policy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     pub policy: Policy,
-    /// What it is, and the tag it is read in (`agent_result`, `monitor`, `window`); empty for a
+    /// What it is, and the tag it is read in (`agent_result`, `monitor`, `schedule`); empty for a
     /// line of the queue's own.
     pub tag: String,
     pub attrs: Vec<(String, String)>,
     pub body: String,
-    /// Its source (an agent's session, a job, a tab), to take or forget its entries by.
+    /// Its source (an agent's session, a job), to take or forget its entries by.
     pub key: Option<String>,
     /// A line before the tag: how to read it.
     pub preface: Option<String>,
@@ -148,7 +147,7 @@ impl Queue {
                     drop(state);
                     return open(entry);
                 }
-                _ => {}
+                (Idle::Opens, None) => {}
             }
         }
         if state.entries.len() >= self.capacity {
@@ -175,7 +174,7 @@ impl Queue {
             match (entry.policy.idle, &self.opener) {
                 (Idle::Drops, _) => {}
                 (Idle::Opens, Some(_)) => opening.push(entry),
-                _ => state.entries.push_back(entry),
+                (Idle::Opens, None) => state.entries.push_back(entry),
             }
         }
         drop(state);

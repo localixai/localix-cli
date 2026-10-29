@@ -93,9 +93,12 @@ pub(crate) struct Select {
 
 impl Select {
     pub(crate) fn new(title: Vec<Line<'static>>, choices: Vec<Choice>, escape: &str) -> Self {
-        let choices_len = choices.len();
+        let search = (choices.len() > WINDOW).then(|| {
+            let rows = choices.iter().map(|c| search::keys(&c.label, &c.detail));
+            Search::new(rows.collect(), &title)
+        });
         Self {
-            search: None,
+            search,
             adjustments: None,
             tabs: None,
             title,
@@ -108,7 +111,6 @@ impl Select {
             multiple: false,
             checked: vec![],
         }
-        .searchable(choices_len > WINDOW)
     }
 
     /// Each original row owns its value even when the search changes its position.
@@ -127,16 +129,6 @@ impl Select {
         self
     }
 
-    /// Letters filter the list, and no number picks.
-    pub(crate) fn searchable(mut self, on: bool) -> Self {
-        let rows = self
-            .choices
-            .iter()
-            .map(|c| search::keys(&c.label, &c.detail));
-        self.search = on.then(|| Search::new(rows.collect(), &self.title));
-        self
-    }
-
     /// The options that match, as positions in the whole list, best first.
     fn matching(&self) -> Vec<usize> {
         match &self.search {
@@ -147,11 +139,11 @@ impl Select {
 
     /// The options listed: those that match, of the tab shown.
     fn rows(&self) -> Vec<usize> {
-        let matching = self.matching();
-        match &self.tabs {
-            Some(tabs) => matching.into_iter().filter(|at| tabs.holds(*at)).collect(),
-            None => matching,
+        let mut rows = self.matching();
+        if let Some(tabs) = &self.tabs {
+            rows.retain(|at| tabs.holds(*at));
         }
+        rows
     }
 
     /// The marker on the best match of the query, in the tab shown when it has one, else in
@@ -215,16 +207,16 @@ impl Select {
             let back = key.code == KeyCode::Esc
                 || (key.code == KeyCode::Char('c')
                     && key.modifiers.contains(KeyModifiers::CONTROL));
-            return match key.code {
-                _ if back && self.direct => Some(Picked::Cancelled),
-                _ if back => {
-                    self.typing = None;
-                    None
+            if back {
+                if self.direct {
+                    return Some(Picked::Cancelled);
                 }
-                _ => match composer.key(key) {
-                    Edit::Sent(text) => Some(Picked::Typed(self.at, text.trim().to_string())),
-                    Edit::Changed | Edit::Ignored => None,
-                },
+                self.typing = None;
+                return None;
+            }
+            return match composer.key(key) {
+                Edit::Sent(text) => Some(Picked::Typed(self.at, text.trim().to_string())),
+                Edit::Changed | Edit::Ignored => None,
             };
         }
         let toggles = self.multiple && key.code == KeyCode::Char(' ');
@@ -259,7 +251,6 @@ impl Select {
             };
             return None;
         }
-        let last = self.choices.len().saturating_sub(1);
         let code = match key.code {
             KeyCode::Char('k') => KeyCode::Up,
             KeyCode::Char('j') => KeyCode::Down,
@@ -289,7 +280,7 @@ impl Select {
                 let numbered = c
                     .to_digit(10)
                     .map(|n| n as usize)
-                    .filter(|n| (1..=last + 1).contains(n));
+                    .filter(|n| (1..=self.choices.len()).contains(n));
                 if let Some(n) = numbered {
                     return self.pick(n - 1);
                 }

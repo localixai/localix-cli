@@ -83,7 +83,7 @@ pub(crate) fn invoke(tools: &[&dyn Tool], specs: &[ToolSpec], call: &ToolCall) -
     if !spec.input.accepts(&call.arguments) {
         return Err(ToolError::Failed(match spec.input {
             Input::Json(_) => "the arguments are not a JSON object (a reply cut short leaves \
-                them incomplete): call the tool again, and write a large file in parts"
+                them incomplete): call the tool again with less in one call"
                 .into(),
             Input::Text(_) => "this tool takes text, written as it is, not JSON arguments: \
                 call the tool again with the text alone"

@@ -17,6 +17,16 @@ fn denied(rule: &str, command: &str) -> bool {
 }
 
 #[test]
+fn a_long_command_that_does_not_match_a_many_wildcard_rule_is_judged_at_once() {
+    let command = "word ".repeat(400);
+    assert!(!allowed("bash(* * * * * * * * * x)", &command));
+    assert!(!denied("bash(* * * * * * * * * x)", &command));
+    let path = "a".repeat(2000);
+    let patch = rules(&["apply_patch(*a*a*a*a*a*a*a*a*b)"], &[]);
+    assert_eq!(patch.judge("apply_patch", &path), Ruling::Unsettled);
+}
+
+#[test]
 fn a_wildcard_stands_for_any_text_and_the_words_before_it_limit_the_rule() {
     // Claude Code's table of what a rule matches and what it does not.
     for (rule, yes, no) in [

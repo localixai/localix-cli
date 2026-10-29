@@ -256,10 +256,7 @@ impl Provider {
     /// How a patch is offered to model `id` over the ChatGPT backend: as a custom tool held to
     /// its grammar where the catalog says the model takes those, else as a function.
     fn texts(&self, id: &str) -> openai::responses::Texts {
-        let grammar = catalog()
-            .model(&self.0, id)
-            .is_some_and(|model| model.takes_lark(RESPONSES));
-        match grammar {
+        match catalog().takes_lark(&self.0, id, RESPONSES) {
             true => openai::responses::Texts::Custom,
             false => openai::responses::Texts::Functions,
         }

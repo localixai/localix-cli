@@ -1,5 +1,5 @@
 //! The interface's side of the seam (ARCHITECTURE.md W4): one [`Client`] whatever carries the
-//! frames. In process the frames go over channels; over a socket (D3) the same frames go as
+//! frames. In process the frames go over channels; over a socket the same frames go as
 //! lines. A command waits for what is done with it; everything else the server sends goes to the
 //! interface as it comes.
 
@@ -104,12 +104,6 @@ impl Client {
 
     /// `command`, and what was done with it, within `wait`.
     pub fn call(&self, command: Command, wait: Duration) -> Result<Done, CallError> {
-        self.begin(command)?.wait(wait)
-    }
-
-    /// `command` sent now, what is done with it waited for later: what is sent after it comes
-    /// after it, whoever waits.
-    fn begin(&self, command: Command) -> Result<Begun, CallError> {
         let (reply, done) = sync_channel(1);
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         {
@@ -123,11 +117,15 @@ impl Client {
             lock(&self.waiting).waiting.remove(&id);
             return Err(CallError::Gone);
         }
-        Ok(Begun {
-            id,
-            done,
-            waiting: Arc::clone(&self.waiting),
-        })
+        match done.recv_timeout(wait) {
+            Ok(Done::Failed { why }) => Err(CallError::Failed(why)),
+            Ok(done) => Ok(done),
+            Err(RecvTimeoutError::Timeout) => {
+                lock(&self.waiting).waiting.remove(&id);
+                Err(CallError::Timeout)
+            }
+            Err(RecvTimeoutError::Disconnected) => Err(CallError::Gone),
+        }
     }
 
     /// `command`, not waiting for what is done with it.
@@ -146,36 +144,6 @@ impl Client {
             return Err(CallError::Gone);
         }
         (self.to_server.send(frame)).map_err(|_gone| CallError::Gone)
-    }
-}
-
-/// A command sent, whose answer is still to come.
-struct Begun {
-    id: u64,
-    done: Receiver<Done>,
-    waiting: Arc<Waiting>,
-}
-
-impl Begun {
-    /// What was done with the command, within `wait`.
-    fn wait(self, wait: Duration) -> Result<Done, CallError> {
-        let done = match self.done.recv_timeout(wait) {
-            Ok(done) => done,
-            Err(RecvTimeoutError::Timeout) => {
-                lock(&self.waiting).waiting.remove(&self.id);
-                return Err(CallError::Timeout);
-            }
-            Err(RecvTimeoutError::Disconnected) => return Err(CallError::Gone),
-        };
-        match done {
-            Done::Failed { why } => Err(CallError::Failed(why)),
-            done @ (Done::Ok
-            | Done::Initialized { .. }
-            | Done::Interrupted { .. }
-            | Done::Work { .. }
-            | Done::Attached { .. }
-            | Done::Status { .. }) => Ok(done),
-        }
     }
 }
 

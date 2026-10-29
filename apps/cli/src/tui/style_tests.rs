@@ -33,3 +33,9 @@ fn a_line_goes_out_as_ansi_or_as_plain_text() {
         "\x1b[31mx\x1b[0m"
     );
 }
+
+#[test]
+fn struck_through_text_is_struck_through_on_the_terminal() {
+    let line = &crate::tui::markdown::render("~~gone~~", 40)[0];
+    assert_eq!(ansi(line, true), "\x1b[9mgone\x1b[0m");
+}

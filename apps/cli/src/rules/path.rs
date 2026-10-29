@@ -3,6 +3,8 @@
 //! A pattern with no `/` names a file at any depth (`*.md`); one with a `/` is anchored at the
 //! root, `*` staying within a directory and `**` crossing any number of them.
 
+use super::glob::{self, Wild};
+
 /// Why `pattern` cannot be an `apply_patch` rule, if it cannot: it must stay inside the workspace.
 pub(super) fn invalid(pattern: &str) -> Option<&'static str> {
     if pattern.starts_with('/') || pattern.starts_with('~') {
@@ -47,14 +49,5 @@ fn within(pattern: &[&str], path: &[&str]) -> bool {
 
 /// One name matched, `*` standing for any text in it and `?` for one character.
 fn segment(pattern: &[u8], name: &[u8]) -> bool {
-    match pattern.split_first() {
-        None => name.is_empty(),
-        Some((b'*', rest)) => (0..=name.len()).any(|at| segment(rest, &name[at..])),
-        Some((b'?', rest)) => name
-            .split_first()
-            .is_some_and(|(_, tail)| segment(rest, tail)),
-        Some((first, rest)) => name
-            .split_first()
-            .is_some_and(|(c, tail)| c == first && segment(rest, tail)),
-    }
+    glob::matches(|at| pattern.get(at).copied(), name, Wild::StarAndOne)
 }

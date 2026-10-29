@@ -5,7 +5,7 @@
 //! instead of changing the wrong place.
 
 use contracts::gate::Gate;
-use contracts::tool::{Grammar, Input, Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
 use crate::workspace::Workspace;
@@ -53,7 +53,7 @@ impl Tool for PatchTool<'_> {
         ToolSpec {
             name: NAME.into(),
             description: DESCRIPTION.into(),
-            input: Input::Text(Grammar::Lark(GRAMMAR.into())),
+            input: Input::Text(GRAMMAR.into()),
         }
     }
 

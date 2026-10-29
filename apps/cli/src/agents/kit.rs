@@ -2,7 +2,7 @@
 //! agent's own, on a gate that names it and a stop of its own (the task's, or the person's `x` on
 //! its row).
 
-use std::sync::Mutex;
+use std::sync::OnceLock;
 use std::sync::atomic::AtomicU64;
 
 use contracts::chat::Chat;
@@ -40,18 +40,12 @@ pub(crate) struct Kit<'a> {
     /// The mode the context states.
     pub started: Mode,
     /// The command line's rules, beside each mode's.
-    pub rules: crate::rules::Rules,
+    pub rules: &'a crate::rules::Rules,
     pub terminal: bool,
-    /// The tools the main session offers, as its last task offered them: an agent is offered the
+    /// The tools the main session offers, set once its tools are built: an agent is offered the
     /// same, so its requests start as the main session's do and read the provider's prompt cache
     /// from there.
-    pub main: Mutex<Vec<ToolSpec>>,
-}
-
-/// The parts an agent's tools borrow, made in its thread.
-pub(crate) struct Own<'a> {
-    pub gate: &'a dyn Gate,
-    pub stop: &'a (dyn Fn() -> bool + Sync),
+    pub main: OnceLock<Vec<ToolSpec>>,
 }
 
 /// A session's tools: `bash`, through which the model reads, searches and runs the checks, and
@@ -63,18 +57,22 @@ pub(crate) struct Tools<'a> {
 }
 
 impl<'a> Tools<'a> {
-    pub(crate) fn new(kit: &'a Kit<'a>, own: &'a Own<'a>) -> Self {
+    pub(crate) fn new(
+        kit: &'a Kit<'a>,
+        gate: &'a dyn Gate,
+        stop: &'a (dyn Fn() -> bool + Sync),
+    ) -> Self {
         Self {
             kit,
             bash: BashTool {
                 workspace: kit.workspace,
-                gate: own.gate,
+                gate,
                 hidden: kit.hidden,
-                stop: own.stop,
+                stop,
             },
             patch: PatchTool {
                 workspace: kit.workspace,
-                gate: own.gate,
+                gate,
             },
         }
     }
@@ -88,7 +86,7 @@ impl<'a> Tools<'a> {
     /// Run `work` with the tools as the main session offers them, in its order: an agent's own
     /// where it has one, the rest withheld. Before the main session's first task, its own alone.
     pub(crate) fn as_main<T>(&self, work: impl FnOnce(&[&dyn Tool]) -> T) -> T {
-        let main = crate::sync::lock(&self.kit.main).clone();
+        let main = self.kit.main.get().map_or(&[][..], Vec::as_slice);
         self.with(|own| {
             let withheld: Vec<Withheld> = (main.iter())
                 .filter(|spec| !own.iter().any(|tool| tool.spec().name == spec.name))

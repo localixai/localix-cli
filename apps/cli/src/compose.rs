@@ -1,7 +1,7 @@
 //! The composition root: the one place that builds the packages and hands them to the agent
 //! through its ports. [`compose`] builds the chat model; [`assemble`] builds the rest around any
-//! model: the brake, the workspace, the mode's gate, the person, and the tools: `bash`, and
-//! `ask` in a session. What it starts (threads, monitors) is closed when `assemble` returns,
+//! model: the brake, the workspace, the mode's gate, the person, and the tools: `bash`,
+//! `apply_patch`, `ask` in a session, `agents`, `jobs`. What it starts (threads, monitors) is closed when `assemble` returns,
 //! before `main` exits (which would skip their `Drop`).
 
 mod lane;
@@ -15,7 +15,7 @@ pub(crate) use rig::Rig;
 pub(crate) use setup::{Seat, Setup, Shared};
 
 use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use contracts::gate::Gate;
 use contracts::person::{Person, Question, Reply};
@@ -24,13 +24,13 @@ use tools::ask::AskTool;
 
 use crate::agents::Registry;
 use crate::agents::inbox::MainInbox;
-use crate::agents::kit::{Kit, Own, Tools};
+use crate::agents::kit::{Kit, Tools};
 use crate::brake::Brake;
 use crate::checkpoints::Checkpoints;
 use crate::gate::{Stoppable, Tty};
 use crate::interrupt::Interrupt;
 use crate::jobs::{self, Jobs};
-use crate::live::Live;
+use crate::live::LiveChat;
 use crate::mode::{ModeCell, ModeGate};
 use crate::output::Output;
 use crate::server::asking::{UiGate, UiPerson};
@@ -141,16 +141,12 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
         history,
         mode: base.mode,
         started: seat.mode.clone(),
-        rules: shared.rules.clone(),
+        rules: &shared.rules,
         terminal: *terminal,
-        main: Mutex::default(),
+        main: OnceLock::new(),
     };
     // The main session's tools are an agent's, on the session's own gate and stop.
-    let own = Own {
-        gate: base.gate,
-        stop: base.stopped,
-    };
-    let main_tools = Tools::new(&kit, &own);
+    let main_tools = Tools::new(&kit, base.gate, base.stopped);
     let registry = Registry::new(Arc::clone(&lane_queue));
     let jobs = Jobs::of(&seat.session.id);
     let jobs_kit = jobs::Kit {
@@ -165,7 +161,6 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
     let waiting = || (base.stopped)() || base.brake.due();
     let inbox = MainInbox {
         registry: &registry,
-        queue: &lane_queue,
         jobs: &jobs,
         jobs_kit: &jobs_kit,
         output,
@@ -179,8 +174,6 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
         jobs_kit: &jobs_kit,
         inbox: &inbox,
         checkpoints: &checkpoints,
-        window: &window,
-        strategy: &strategy,
         hidden: &hidden_names,
     };
     rig::drive(base, &lane, seat, work)
@@ -196,7 +189,7 @@ struct Base<'a> {
     gate: &'a dyn Gate,
     ask: &'a AskTool<'a>,
     stopped: &'a (dyn Fn() -> bool + Sync),
-    live: Option<&'a Live>,
+    live: Option<&'a LiveChat>,
 }
 
 /// What [`equip`] made around the base: the tools, the agents, the jobs and the inbox.
@@ -208,8 +201,6 @@ struct Lane<'a> {
     jobs_kit: &'a jobs::Kit<'a>,
     inbox: &'a MainInbox<'a>,
     checkpoints: &'a Checkpoints,
-    window: &'a AtomicU64,
-    strategy: &'a agent::history::Pipeline,
     hidden: &'a Mutex<Vec<String>>,
 }
 

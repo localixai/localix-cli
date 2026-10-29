@@ -2,6 +2,8 @@
 //! An allow rule needs every part to be one it can read for sure; a deny rule looks at every part
 //! it can find, inside substitutions too.
 
+use super::glob::{self, Wild};
+
 /// The commands of `line` an allow rule may judge, or `None` when it cannot be read for sure: a
 /// substitution, a here-document, a write to a file, an unclosed quote, a dangling operator, or a
 /// command that runs another (`eval`, `sh -c`).
@@ -22,28 +24,27 @@ pub(super) fn every(line: &str) -> Vec<String> {
 }
 
 /// `text` matched by `pattern`, where `*` stands for any text, spaces too. A pattern whose one
-/// `*` ends it after a space also matches the bare command: `ls *` matches `ls`.
+/// `*` ends it after a space also matches the bare command: `ls *` matches `ls`. The older
+/// `ls:*` reads as `ls *`.
 pub(super) fn matches(pattern: &str, text: &str) -> bool {
-    let pattern = pattern
+    let (head, tail) = pattern
         .strip_suffix(":*")
-        .map_or_else(|| pattern.to_string(), |head| format!("{head} *"));
-    if let Some(head) = pattern.strip_suffix(" *")
-        && !head.contains('*')
-        && text == head
-    {
+        .map_or((pattern, ""), |head| (head, " *"));
+    let bare = if tail.is_empty() {
+        pattern.strip_suffix(" *")
+    } else {
+        Some(head)
+    };
+    if bare.is_some_and(|bare| !bare.contains('*') && text == bare) {
         return true;
     }
-    glob(pattern.as_bytes(), text.as_bytes())
-}
-
-fn glob(pattern: &[u8], text: &[u8]) -> bool {
-    match pattern.split_first() {
-        None => text.is_empty(),
-        Some((b'*', rest)) => (0..=text.len()).any(|at| glob(rest, &text[at..])),
-        Some((first, rest)) => text
-            .split_first()
-            .is_some_and(|(c, tail)| c == first && glob(rest, tail)),
-    }
+    let (head, tail) = (head.as_bytes(), tail.as_bytes());
+    let at = |at: usize| {
+        let past = at.checked_sub(head.len());
+        head.get(at)
+            .or_else(|| past.and_then(|past| tail.get(past)))
+    };
+    glob::matches(|i| at(i).copied(), text.as_bytes(), Wild::Star)
 }
 
 /// A part with no assignment before it, its wrappers looked through; `None` when an assignment

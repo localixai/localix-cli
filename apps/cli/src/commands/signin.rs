@@ -14,7 +14,7 @@ use crate::providers::{Method, Provider, Vars};
 use crate::sync::lock;
 
 /// Sign in to `provider` with `method`; what was saved, in words with no secret in them.
-pub(crate) fn sign_in(
+pub(super) fn sign_in(
     provider: &Provider,
     method: Method,
     path: &str,
@@ -24,14 +24,14 @@ pub(crate) fn sign_in(
 ) -> Result<Option<String>, String> {
     if let (Method::Browser, Some(login)) = (method, provider.browser_login(vars)) {
         let login = login?;
-        let came = browser(
-            login.address(),
-            path,
-            terminal,
-            say,
-            &|t| login.wait(t),
-            &|p| login.pasted(p),
-        )?;
+        say(&format!(
+            "Opening the sign-in in your browser:\n  {}\n",
+            login.address()
+        ));
+        oauth::open(login.address());
+        let came = come_back(terminal, path, say, &|t| login.wait(t), &|p| {
+            login.pasted(p)
+        })?;
         return came.map(|code| login.finish(&code)).transpose();
     }
     let prompt = format!("{path} › API key: paste it and press Enter (it is not shown)");
@@ -51,27 +51,11 @@ pub(crate) fn sign_in(
     Ok(Some(said))
 }
 
-/// Open `address` in the system browser, and wait for it.
-fn browser(
-    address: &str,
-    path: &str,
-    terminal: &mut dyn Terminal,
-    say: &dyn Fn(&str),
-    wait: &dyn Fn(Duration) -> Option<Result<String, String>>,
-    pasted: &dyn Fn(&str) -> Result<String, String>,
-) -> Result<Option<String>, String> {
-    say(&format!(
-        "Opening the sign-in in your browser:\n  {address}\n"
-    ));
-    oauth::open(address);
-    come_back(terminal, path, say, wait, pasted)
-}
-
 /// Wait for the browser to come back, or for the address it ended on to be pasted (when it is
 /// on another machine); the authorization code. The line for the address closes by itself once
 /// the browser is back: nothing to press. It is read on this thread only, so
 /// nothing is left reading stdin once the sign-in ends. `None` when the person cancelled.
-pub(crate) fn come_back(
+fn come_back(
     terminal: &mut dyn Terminal,
     path: &str,
     say: &dyn Fn(&str),
@@ -111,7 +95,7 @@ pub(crate) fn come_back(
 }
 
 /// `llx logout`: forget every saved sign-in.
-pub(crate) fn logout() -> Result<i32, Failure> {
+pub(super) fn logout() -> Result<i32, Failure> {
     let mut any = false;
     let mut in_env = vec![];
     for provider in Provider::all() {

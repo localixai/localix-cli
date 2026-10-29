@@ -17,8 +17,6 @@ pub struct Provider {
     name: String,
     #[serde(default)]
     env: Vec<String>,
-    #[serde(default)]
-    doc: Option<String>,
     /// Its models as the document has them: one that does not read as a model is left out when
     /// it is asked for, not the whole catalog.
     #[serde(default)]
@@ -53,7 +51,6 @@ impl Provider {
         (!models.is_empty()).then(|| Kept {
             name: &self.name,
             env: &self.env,
-            doc: self.doc.as_deref(),
             models,
         })
     }
@@ -66,21 +63,11 @@ impl Provider {
     }
 }
 
-impl PartialEq for Provider {
-    /// The same when they say the same: the models compared as they read, not as they are written.
-    fn eq(&self, other: &Self) -> bool {
-        (&self.name, &self.env, &self.doc) == (&other.name, &other.env, &other.doc)
-            && self.models().eq(other.models())
-    }
-}
-
 /// A provider as a refresh keeps it, in the document's own shape.
 #[derive(Serialize)]
 pub(crate) struct Kept<'a> {
     name: &'a str,
     env: &'a [String],
-    #[serde(skip_serializing_if = "Option::is_none")]
-    doc: Option<&'a str>,
     models: BTreeMap<&'a str, &'a Model>,
 }
 
@@ -108,3 +95,7 @@ impl Slot {
         self.model.get_or_init(read).as_deref()
     }
 }
+
+#[cfg(test)]
+#[path = "provider_tests.rs"]
+mod tests;

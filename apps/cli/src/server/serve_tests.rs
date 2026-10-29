@@ -36,10 +36,9 @@ fn served_by(host: Option<Arc<Host>>) -> Served {
             max_lanes: 3,
             commands: vec![("help".into(), "the commands".into())],
             modes: vec![("plan".into(), "plan first".into())],
-            background: true,
             host,
         };
-        serve(&incoming, &theirs, &desk, &info);
+        serve(None, &incoming, &theirs, &desk, &info);
     });
     Served {
         to_server,
@@ -87,7 +86,7 @@ fn an_interface_that_attaches_is_told_what_the_server_allows() {
             max_lanes: 3,
             commands: vec![("help".into(), "the commands".into())],
             modes: vec![("plan".into(), "plan first".into())],
-            background: true,
+            background: false,
         }
     );
     let ui = Ui::new(Arc::clone(&served.peer));
@@ -123,6 +122,22 @@ fn what_the_person_types_is_the_lanes_next_entry() {
     assert_eq!(served.done(1), Done::Ok);
     let entry = served.peer.inputs.next("s1").unwrap();
     assert_eq!(entry.text, "fix it");
+}
+
+#[test]
+fn words_typed_while_the_lanes_task_runs_are_for_the_task() {
+    let served = served();
+    open(&served, "s1");
+    let lane = Ui::new(Arc::clone(&served.peer)).for_lane("s1");
+    lane.send(protocol::Event::TaskStarted("fix it".into()));
+    let input = Input {
+        session: "s1".into(),
+        text: "use the cache".into(),
+        ..Input::default()
+    };
+    served.call(1, Command::Input(input));
+    assert_eq!(served.done(1), Done::Ok);
+    assert_eq!(lane.peeked(), ["use the cache"]);
 }
 
 #[test]
@@ -224,7 +239,6 @@ fn another(served: &Served) -> (Sender<ToServer>, Receiver<ToClient>) {
             max_lanes: 3,
             commands: vec![],
             modes: vec![],
-            background: true,
             host: None,
         };
         // A later interface joins as the daemon makes it: attached at once, then its `Attach`.
@@ -336,7 +350,7 @@ fn the_person_is_given_up_on_only_when_the_last_connection_is_gone() {
     served.done(9);
     drop(served);
     let deadline = std::time::Instant::now() + WAIT;
-    while peer.attached() > 1 {
+    while peer.hub.attached() > 1 {
         assert!(
             std::time::Instant::now() < deadline,
             "the first never detached"
@@ -375,11 +389,14 @@ fn moved_to_the_background_the_connections_end_leaves_the_prompts_waiting() {
     drop(to_server);
     let asked: Vec<Request> = desk.iter().collect();
     assert_eq!(asked, [Request::Background]);
-    peer.inputs.input(Input {
-        session: "s1".into(),
-        text: "from the next interface".into(),
-        ..Input::default()
-    });
+    peer.inputs.input(
+        Input {
+            session: "s1".into(),
+            text: "from the next interface".into(),
+            ..Input::default()
+        },
+        false,
+    );
     let entry = peer.inputs.next("s1").map(|entry| entry.text);
     assert_eq!(entry.as_deref(), Some("from the next interface"));
 }

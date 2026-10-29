@@ -8,10 +8,10 @@ use std::time::Instant;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use protocol::{Label, Outcome};
 
-use protocol::{Asked, Command, Input as Sent};
+use protocol::{Asked, Command, Event, Input as Sent};
 
 use super::app::{Action, App};
-use super::event::{Event, Input, Out};
+use super::event::{Input, Out};
 use super::live;
 use super::screen::Screen;
 use super::style;
@@ -210,7 +210,7 @@ impl Term {
         let history = app.take_history();
         let (live, cursor) = live::render(app, now);
         self.screen
-            .frame(&history, &live, cursor, app.height, app.width)
+            .frame(history, &live, cursor, app.height, app.width)
             .unwrap();
         self.contents()
     }

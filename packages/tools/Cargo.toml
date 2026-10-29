@@ -1,6 +1,6 @@
 [package]
 name = "tools"
-description = "The agent's tools: files read and edited, shell commands, questions to the person"
+description = "The agent's tools: shell commands, patches to files, questions to the person"
 publish = false
 version.workspace = true
 edition.workspace = true

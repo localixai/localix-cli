@@ -84,6 +84,25 @@ fn lines_not_found_are_named_with_the_file() {
 }
 
 #[test]
+fn lines_not_found_come_back_with_the_nearest_lines_of_the_file() {
+    // The model copied a line as it remembered it: the file's own lines are given back, numbered,
+    // so the next patch needs no read first.
+    let file = "fn a() {}\nfn run(x: u32) {\n    go(x);\n}\nfn b() {}\n";
+    let why = applied(
+        file,
+        "@@\n fn run(x: i32) {\n-    go(x);\n+    go(x + 1);\n",
+    )
+    .unwrap_err();
+    assert!(
+        why.contains("nearest lines in f.txt, from line 2:\nfn run(x: u32) {\n    go(x);"),
+        "{why}"
+    );
+    // Lines like none of the file's: nothing near to show.
+    let why = applied(file, "@@\n-nothing like it\n+x\n").unwrap_err();
+    assert!(!why.contains("nearest"), "{why}");
+}
+
+#[test]
 fn the_lines_added_and_removed_are_counted_without_the_context() {
     let all = chunks("@@\n keep\n-a\n-b\n+c\n@@\n+d\n");
     assert_eq!(counts(&all), (2, 2));

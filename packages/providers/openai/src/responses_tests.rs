@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use contracts::chat::Message;
 use contracts::tool::{Input, ToolSpec};
 
+use super::offer::Offer;
 use super::request::items;
 use super::*;
 use crate::testing::{Scripted, access};
@@ -31,6 +32,13 @@ fn entry(id: &str) -> ModelEntry {
         efforts,
         context: 400_000,
     }
+}
+
+/// The request body as `complete` builds it, its tools offered as `texts` says.
+fn request_body(selection: &Selection, request: Request, texts: Texts) -> Value {
+    let offer = Offer::new(request.tools, texts, request.conversation);
+    let session = route::session(request.conversation);
+    body(selection, request, &offer, &session)
 }
 
 const APP: App = App {
@@ -144,7 +152,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
     let selection = Selection::new(entry("gpt-6-sol"))
         .with_effort(Effort::High)
         .unwrap();
-    let body = body(&selection, request, Texts::Functions);
+    let body = request_body(&selection, request, Texts::Functions);
     assert_eq!(body["model"], "gpt-6-sol");
     assert_eq!(
         (body["store"].clone(), body["stream"].clone()),
@@ -187,7 +195,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
         may_call: true,
     };
     assert_eq!(
-        super::body(&off, request, Texts::Functions)["reasoning"],
+        request_body(&off, request, Texts::Functions)["reasoning"],
         json!({"effort": "none"})
     );
 
@@ -197,7 +205,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
         tools: &[],
         may_call: false,
     };
-    let body = super::body(&Selection::new(entry("gpt-next")), bare, Texts::Functions);
+    let body = request_body(&Selection::new(entry("gpt-next")), bare, Texts::Functions);
     assert!(body.get("reasoning").is_none() && body.get("tools").is_none());
 }
 
@@ -357,7 +365,7 @@ fn a_picture_goes_in_as_a_user_message_with_an_input_image() {
             image,
         },
         "gpt-6-sol",
-        &offer::Offer::new(&[], Texts::Functions, &[]),
+        &Offer::new(&[], Texts::Functions, &[]),
     )[0];
     assert_eq!(item["role"], "user");
     assert_eq!(item["content"][0]["text"], "The screenshot");
@@ -499,7 +507,7 @@ fn a_note_the_model_wrote_beside_its_calls_goes_back_in_its_phase() {
         tools: &[],
         may_call: true,
     };
-    let body = body(
+    let body = request_body(
         &Selection::new(entry("gpt-6-sol")),
         request,
         Texts::Functions,
@@ -540,7 +548,7 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
         tools: &[],
         may_call: true,
     };
-    let body = body(
+    let body = request_body(
         &Selection::new(entry("gpt-6-sol")),
         request,
         Texts::Functions,
@@ -558,7 +566,7 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
         tools: &[],
         may_call: true,
     };
-    let other = super::body(
+    let other = request_body(
         &Selection::new(entry("gpt-6-luna")),
         request,
         Texts::Functions,
@@ -572,7 +580,7 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
         may_call: true,
     };
     assert_eq!(
-        super::body(&Selection::new(entry("gpt-next")), bare, Texts::Functions)["include"],
+        request_body(&Selection::new(entry("gpt-next")), bare, Texts::Functions)["include"],
         json!([])
     );
 }
@@ -581,7 +589,7 @@ fn script_spec() -> ToolSpec {
     ToolSpec {
         name: "exec".into(),
         description: "Run a script".into(),
-        input: Input::Text(contracts::tool::Grammar::Lark("start: /.+/".into())),
+        input: Input::Text("start: /.+/".into()),
     }
 }
 

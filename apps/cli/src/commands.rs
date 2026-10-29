@@ -3,7 +3,6 @@
 
 pub(crate) mod decide;
 pub(crate) mod doctor;
-pub(crate) mod ended;
 pub(crate) mod entry;
 pub(crate) mod extras;
 pub(crate) mod login;

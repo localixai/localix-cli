@@ -328,8 +328,8 @@ impl crate::picker::Picker for Scripted {
         &mut self,
         title: &str,
         items: &[crate::picker::Item],
-        adjustments: &[crate::picker::Adjustment],
-        groups: &[crate::picker::Group],
+        adjustments: &[protocol::Adjustment],
+        groups: &[protocol::Group],
     ) -> Option<(usize, usize)> {
         let named = groups.iter().map(|g| (g.name.clone(), g.rows)).collect();
         self.grouped.push(named);

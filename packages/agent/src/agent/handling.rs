@@ -41,7 +41,6 @@ impl Agent<'_> {
             Went::Failed => tally.failures += 1,
             Went::Nothing => {}
         }
-        run.conversation.settle();
         ends
     }
 

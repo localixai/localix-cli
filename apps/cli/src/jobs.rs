@@ -1,10 +1,11 @@
-//! `jobs`: work that goes on in the background and comes back to the conversation later. A monitor runs a command and gives each batch of
-//! lines it prints to the main agent: at its next step while a task runs, else as a new task. A
-//! schedule gives its prompt as a task of its own when due, between tasks, behind what the person
-//! queued. Both live as long as the session (a monitor until its deadline); in `exec` a task waits
-//! for its monitors, and schedules are refused: the process ends with the task.
+//! `jobs`: work that goes on in the background and comes back to the conversation later. A
+//! monitor runs a command and gives each batch of lines it prints to the main agent: at its next
+//! step while a task runs, else as a new task. A schedule gives its prompt as a task of its own
+//! when due, between tasks, behind what the person queued. Both live as long as the session (a
+//! monitor until its deadline); in `exec` a task waits for its monitors, and schedules are
+//! refused: the process ends with the task.
 
-pub(crate) mod cron;
+mod cron;
 mod monitor;
 pub(crate) mod spec;
 mod tool;

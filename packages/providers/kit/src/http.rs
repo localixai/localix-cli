@@ -148,7 +148,7 @@ pub fn encode(text: &str) -> String {
 }
 
 /// `text` with its percent escapes (and `+` as a space) decoded.
-pub fn decode(text: &str) -> String {
+fn decode(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut at = 0;

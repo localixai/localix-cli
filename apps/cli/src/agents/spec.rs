@@ -13,7 +13,7 @@ const MAX_WAIT_MS: u64 = 600_000;
 /// Characters of an agent's name.
 const NAME_CHARS: usize = 24;
 
-const DESCRIPTION: &str = "Start other agents and work with them. An agent is a session of its \
+pub(super) const DESCRIPTION: &str = "Start other agents and work with them. An agent is a session of its \
 own: a new conversation with the same tools (it cannot use this one, `ask` or `jobs`), the same \
 workspace and the same approvals; the person can watch it. It sees nothing of this conversation, \
 so give it a \
@@ -55,10 +55,6 @@ pub(crate) enum Action {
     Close {
         agent: String,
     },
-}
-
-pub(crate) fn description() -> String {
-    DESCRIPTION.into()
 }
 
 /// A string argument, and what it is for.

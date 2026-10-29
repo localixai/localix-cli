@@ -5,15 +5,14 @@
 
 use std::time::Instant;
 
-use protocol::{Label, Outcome};
+use protocol::{Event, Label, Outcome};
 use ratatui::text::{Line, Span};
 
 use super::app::{Action, App};
 use super::cells;
-use super::event::Event;
 use super::style;
 use super::tool_cell::{self, State};
-pub(crate) use super::views::{AgentState, LaneState, Running, SessionView, Views};
+use super::views::{AgentState, Running, SessionView};
 use crate::tui::printable::printable;
 
 mod ends;
@@ -24,7 +23,7 @@ const TOOK: std::time::Duration = std::time::Duration::from_millis(500);
 /// A finished call as a block: the person's refusal when the call failed on it (the gate's
 /// words), which uses up what they said; otherwise its outcome, and what they said waits for the
 /// call they refused (calls of several sessions finish in any order).
-pub(crate) fn result_block(
+fn result_block(
     declined: &mut Option<String>,
     name: &str,
     label: &Label,
@@ -70,12 +69,11 @@ impl App {
             Event::Error(text) => cells::error(&text, width),
             Event::TaskStarted(goal) => view.started(&goal, now, width)?,
             Event::Call { call, name, label } => {
-                let since = now;
                 view.running.push(Running {
                     call,
                     name,
                     label,
-                    since,
+                    since: now,
                 });
                 if let Some(lane) = &mut view.lane {
                     lane.steps.clear();

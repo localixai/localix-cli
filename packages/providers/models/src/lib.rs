@@ -52,25 +52,19 @@ pub const RESPONSES: &str = "responses";
 #[derive(Debug, Clone, std::default::Default)]
 pub struct Catalog {
     providers: BTreeMap<String, Provider>,
-    under: Under,
-}
-
-/// What lies under a catalog's own providers.
-#[derive(Debug, Clone, std::default::Default)]
-enum Under {
-    #[default]
-    Nothing,
-    /// The built-in files, read the first time a provider the catalog lacks is asked for.
-    BuiltIn(OnceLock<Box<Catalog>>),
+    /// The built-in files it lies over, read the first time a provider it lacks is asked for.
+    under: Option<OnceLock<Box<Catalog>>>,
 }
 
 impl Catalog {
     /// A document in the shape of models.dev's v2 API: read whole (one cut short is refused), its
     /// models decoded as they are asked for.
-    pub fn parse(text: &str) -> Result<Self, String> {
+    pub(crate) fn parse(text: &str) -> Result<Self, String> {
         let providers = serde_json::from_str(text).map_err(|error| error.to_string())?;
-        let under = Under::Nothing;
-        Ok(Self { providers, under })
+        Ok(Self {
+            providers,
+            under: None,
+        })
     }
 
     /// models.dev's files built in, inflated.
@@ -90,16 +84,14 @@ impl Catalog {
     /// This catalog over the built-in files: a provider it lacks is the built-in one. They are
     /// read only when such a provider is asked for, or the list of them.
     #[must_use]
-    pub fn over_built_in(self) -> Self {
-        let under = Under::BuiltIn(OnceLock::new());
+    pub(crate) fn over_built_in(self) -> Self {
+        let under = Some(OnceLock::new());
         Self { under, ..self }
     }
 
     fn under(&self) -> Option<&Catalog> {
-        match &self.under {
-            Under::Nothing => None,
-            Under::BuiltIn(read) => Some(read.get_or_init(|| Box::new(Self::built_in()))),
-        }
+        let read = self.under.as_ref()?;
+        Some(read.get_or_init(|| Box::new(Self::built_in())))
     }
 
     /// The providers llx can call (a usable model over chat completions), the popular first.
@@ -110,7 +102,6 @@ impl Catalog {
             .flat_map(|under| under.providers.keys());
         let mut ids: Vec<&str> = (self.providers.keys().chain(under))
             .map(String::as_str)
-            .filter(|id| self.callable(id))
             .collect();
         let rank = |id: &str| {
             POPULAR
@@ -118,8 +109,9 @@ impl Catalog {
                 .position(|p| *p == id)
                 .unwrap_or(POPULAR.len())
         };
-        ids.sort_by_key(|id| (rank(id), id.to_string()));
+        ids.sort_unstable_by_key(|id| (rank(id), *id));
         ids.dedup();
+        ids.retain(|id| self.callable(id));
         ids
     }
 
@@ -136,6 +128,16 @@ impl Catalog {
 
     pub fn model(&self, provider: &str, id: &str) -> Option<&Model> {
         self.provider(provider)?.model(id)
+    }
+
+    /// Whether `provider`'s model `id` takes tools of free text held to a Lark grammar over
+    /// `protocol`. models.dev's v2 API does not publish it: a fetched catalog asks the built-in
+    /// files too, which do.
+    pub fn takes_lark(&self, provider: &str, id: &str, protocol: &str) -> bool {
+        let says = |catalog: &Self| {
+            (catalog.model(provider, id)).is_some_and(|model| model.takes_lark(protocol))
+        };
+        says(self) || self.under().is_some_and(says)
     }
 
     /// `provider`'s models llx can call over `protocol`, newest first.
@@ -165,7 +167,7 @@ impl Catalog {
 
     /// The catalog's own providers as a document to keep, cut down to those llx can call, their
     /// chat models and the decision models.
-    pub fn kept(&self) -> String {
+    pub(crate) fn kept(&self) -> String {
         let keep = |model: &Model| model.usable() || model.decides();
         let kept: BTreeMap<&String, provider::Kept> = (self.providers.iter())
             .filter_map(|(id, provider)| Some((id, provider.kept(keep)?)))
@@ -193,17 +195,14 @@ fn entry(id: &str, model: &Model) -> ModelEntry {
 }
 
 /// The levels a host takes for a model, lowest first (MODELS.md, reasoning controls).
-pub fn efforts(reasoning: &Reasoning) -> Vec<Effort> {
+fn efforts(reasoning: &Reasoning) -> Vec<Effort> {
     if !reasoning.supported {
         return vec![];
     }
     let mut levels: Vec<Effort> = reasoning
         .effort
         .iter()
-        .filter_map(|name| match name.as_str() {
-            "none" => Some(Effort::Off),
-            name => Effort::named(name),
-        })
+        .filter_map(|name| Effort::named(name))
         .collect();
     if reasoning.toggle == Some(true) {
         levels.push(Effort::Off);
@@ -229,7 +228,6 @@ fn default(reasoning: &Reasoning, efforts: &[Effort]) -> Effort {
         .default
         .as_ref()
         .and_then(|d| match (d.kind.as_str(), &d.value) {
-            ("effort", Value::String(name)) if name == "none" => Some(Effort::Off),
             ("effort", Value::String(name)) => Effort::named(name),
             ("toggle", Value::Bool(false)) => Some(Effort::Off),
             _ => None,

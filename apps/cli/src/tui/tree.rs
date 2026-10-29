@@ -32,13 +32,13 @@ use super::wrap::{cut, width as text_width};
 
 mod row;
 
-use row::{Row, row, session_row};
+use row::{Branch, Row, Weight, row, session_row};
 pub(super) use row::{columns, spent};
 
 /// Agents' rows shown at most; the rest are counted.
 pub(super) const ROWS: usize = 5;
 /// Columns a lane's name takes at most, and an agent's or a job's.
-const NAME: usize = 36;
+pub(super) const NAME: usize = 36;
 const AGENT: usize = 20;
 /// A lane whose question waits for the person, open or held until it is shown.
 const WAITS: &str = "waiting for you";
@@ -64,12 +64,9 @@ pub(crate) fn render(
         names.max().unwrap_or(0).clamp(1, most.min(width / 2))
     };
     // An agent's name column is its siblings', and the last of them closes the branch.
-    let agents = |row: usize| {
+    let agents = || {
         let names = (order.iter().skip(1)).map(|&at| text_width(&printable(sessions[at].title())));
-        (
-            column(&mut names.into_iter(), AGENT),
-            row + 1 == order.len(),
-        )
+        column(&mut names.into_iter(), AGENT)
     };
     let focus = app.views.focus;
     let shown = order
@@ -84,20 +81,19 @@ pub(crate) fn render(
             (row.glyph, row.detail) = (Span::styled("?", style::waiting()), WAITS.into());
         }
         // The lane is the one on the screen anyway; an agent shown is marked.
-        if row.shown && row.branch {
+        let agent = row.branch == Branch::Mid;
+        if agent && row.weight == Weight::Shown {
             row.detail = format!("current · {}", row.detail);
         }
-        let (names, last) = match row.branch {
-            true => agents(at_row),
-            false => (
-                column(
-                    &mut std::iter::once(text_width(&printable(view.title()))),
-                    NAME,
-                ),
-                false,
-            ),
+        let names = if agent {
+            if at_row + 1 == order.len() {
+                row.branch = Branch::Last;
+            }
+            agents()
+        } else {
+            let own = std::iter::once(text_width(&printable(view.title())));
+            column(&mut own.into_iter(), NAME)
         };
-        row.branch_last = last;
         self::row(row, names, width)
     };
     let mut out = vec![];
@@ -198,14 +194,12 @@ fn jobs(app: &App, first: usize, names: usize, width: usize) -> Vec<Line<'static
         out.push(row(
             Row {
                 chosen: app.views.focus == Some(first + at),
-                shown: false,
-                branch: false,
-                branch_last: false,
+                branch: Branch::None,
                 glyph,
                 name: &job.name,
                 detail: job.detail.clone(),
                 right,
-                dimmed: false,
+                weight: Weight::Plain,
             },
             names,
             width,

@@ -34,8 +34,6 @@ pub struct Decision {
     pub model: String,
     pub cost: f64,
     pub millis: u64,
-    pub input_tokens: u64,
-    pub output_tokens: u64,
 }
 
 pub trait Decider: Send + Sync {

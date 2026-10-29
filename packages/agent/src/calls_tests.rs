@@ -4,12 +4,12 @@ use std::time::Duration;
 
 use contracts::chat::{Completion, Message, ToolCall};
 use contracts::inbox::Inbox;
-use contracts::tool::{Grammar, Input, Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::{Value, json};
 
 use crate::agent::Agent;
 use crate::fakes::Silent;
-use crate::fakes::{Recorder, Scripted, says};
+use crate::fakes::{Recorder, Scripted, says, users};
 
 /// Where the calls of a test's tools run, whichever tool they belong to: how many run now,
 /// the most that ever ran at once, and the order they started and ended in.
@@ -239,7 +239,7 @@ impl Tool for Script {
         ToolSpec {
             name: "script".into(),
             description: String::new(),
-            input: Input::Text(Grammar::Free),
+            input: Input::Text("start: /.+/".into()),
         }
     }
 
@@ -306,20 +306,6 @@ impl Inbox for Mail {
     }
 }
 
-#[expect(
-    clippy::wildcard_enum_match_arm,
-    reason = "a test picks out the variant it checks"
-)]
-fn users(messages: &[Message]) -> Vec<String> {
-    messages
-        .iter()
-        .filter_map(|message| match message {
-            Message::User(text) => Some(text.clone()),
-            _ => None,
-        })
-        .collect()
-}
-
 #[test]
 fn what_comes_in_is_said_before_the_next_turn() {
     let room = Room::default();
@@ -329,7 +315,10 @@ fn what_comes_in_is_said_before_the_next_turn() {
         .lock()
         .unwrap()
         .push("also check the README".into());
-    let chat = Scripted::new(vec![turn(vec![call("a", "look")]), says("Done.")]);
+    let chat = Scripted::new(vec![
+        turn(vec![call("a", "look")]),
+        says("Done.\nRESULT: achieved"),
+    ]);
     let tools: [&dyn Tool; 1] = [&look];
     let run = agent(&chat, &tools, Some(&mail)).run("look");
     assert_eq!(
@@ -391,7 +380,10 @@ impl contracts::chat::Chat for Interrupted<'_> {
 fn a_message_that_comes_with_the_answer_is_not_lost() {
     let mail = Mail::default();
     let chat = Interrupted {
-        script: Scripted::new(vec![says("Done."), says("Done, with the tests too.")]),
+        script: Scripted::new(vec![
+            says("Done.\nRESULT: achieved"),
+            says("Done, with the tests too.\nRESULT: achieved"),
+        ]),
         mail: &mail,
     };
     let agent = Agent {

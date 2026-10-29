@@ -2,25 +2,19 @@
 //! (first: the person comes before what they started), then the lane's queue, oldest first. An
 //! agent's own: what the main agent sent it while it worked.
 
-use std::collections::VecDeque;
 use std::sync::Mutex;
-use std::time::Duration;
 
 use contracts::inbox::Inbox;
 
-use super::Registry;
 use super::watch::Watch;
+use super::{POLL, Registry};
 use crate::output::Output;
 use protocol::Event;
 
-/// How often a wait looks whether the person wrote or the task was stopped.
-const POLL: Duration = Duration::from_millis(200);
-
 /// The main agent's inbox: the person's words, then the lane's queue, which holds whatever else
-/// came (agents' answers, monitors, the window, ...) and knows no source.
+/// came (agents' answers, monitors, ...) and knows no source.
 pub(crate) struct MainInbox<'a> {
     pub registry: &'a Registry,
-    pub queue: &'a queue::Queue,
     pub jobs: &'a crate::jobs::Jobs,
     pub jobs_kit: &'a crate::jobs::Kit<'a>,
     pub output: &'a Output,
@@ -30,17 +24,20 @@ pub(crate) struct MainInbox<'a> {
 impl MainInbox<'_> {
     /// What the person sent, taken from the interface (which shows it as theirs now).
     fn steered(&self) -> Vec<String> {
-        self.output
-            .ui()
-            .map(|ui| ui.steered(false))
-            .unwrap_or_default()
+        self.output.ui().map(|ui| ui.steered()).unwrap_or_default()
     }
 }
 
 impl Inbox for MainInbox<'_> {
     fn take(&self) -> Vec<String> {
         let mut came = self.steered();
-        came.extend(self.queue.take_joining().iter().map(queue::Entry::render));
+        came.extend(
+            self.registry
+                .queue
+                .take_joining()
+                .iter()
+                .map(queue::Entry::render),
+        );
         came
     }
 
@@ -69,22 +66,22 @@ impl Inbox for MainInbox<'_> {
             if !came.is_empty() || !expecting || (self.stopped)() {
                 return came;
             }
-            self.queue.wait(POLL);
+            self.registry.queue.wait(POLL);
         }
     }
 }
 
 /// What the main agent sends an agent while it works.
 #[derive(Default)]
-pub(crate) struct Letters(Mutex<VecDeque<String>>);
+pub(crate) struct Letters(Mutex<Vec<String>>);
 
 impl Letters {
     pub(crate) fn post(&self, message: &str) {
-        crate::sync::lock(&self.0).push_back(message.to_string());
+        crate::sync::lock(&self.0).push(message.to_string());
     }
 
     pub(super) fn take(&self) -> Vec<String> {
-        crate::sync::lock(&self.0).drain(..).collect()
+        std::mem::take(&mut *crate::sync::lock(&self.0))
     }
 }
 

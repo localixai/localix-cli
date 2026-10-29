@@ -22,13 +22,11 @@ pub(crate) fn resolve(token: &str) -> Option<Dropped> {
         .strip_prefix('\'')
         .and_then(|t| t.strip_suffix('\''))
         .or_else(|| token.strip_prefix('"').and_then(|t| t.strip_suffix('"')));
-    let path = match unquoted {
-        Some(path) => path.to_string(),
-        None => unescape(token),
+    let path = unquoted.map_or_else(|| unescape(token), str::to_string);
+    let path = match path.strip_prefix("file://") {
+        Some(p) => p.replace("%20", " "),
+        None => path,
     };
-    let path = path
-        .strip_prefix("file://")
-        .map_or_else(|| path.clone(), |p| p.replace("%20", " "));
     let path = match path.strip_prefix("~/") {
         Some(rest) => PathBuf::from(std::env::var_os("HOME")?).join(rest),
         None => PathBuf::from(&path),

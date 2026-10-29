@@ -88,12 +88,13 @@ fn a_panicking_lane_ends_the_other_lanes() {
                 max_lanes: crate::desk::MAX_LANES,
                 commands: vec![],
                 modes: vec![],
-                background: false,
                 host: None,
             };
             let serving = std::thread::Builder::new().name("serving".into());
             serving
-                .spawn_scoped(scope, move || serve(&incoming, &peer, &to_desk, &info))
+                .spawn_scoped(scope, move || {
+                    serve(None, &incoming, &peer, &to_desk, &info)
+                })
                 .unwrap();
             let mut person = Person {
                 app: App::new(80, 24, vec![]),
@@ -223,7 +224,7 @@ fn moved_to_the_background_a_lane_waits_for_the_next_interface_and_keeps_its_job
                 text: "again".into(),
                 ..protocol::Input::default()
             };
-            peer.inputs.input(again);
+            peer.inputs.input(again, false);
             let deadline = Instant::now() + Duration::from_secs(5);
             while a.turns() < 3 && Instant::now() < deadline {
                 std::thread::sleep(Duration::from_millis(20));

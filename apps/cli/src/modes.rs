@@ -9,8 +9,8 @@ use crate::error::Failure;
 use crate::mode::{Mode, Reach};
 use crate::rules::Rules;
 
-/// What `-y` chooses, and what a tool client's calls run in (K7).
-pub(crate) const BYPASS: &str = "bypass";
+/// What `-y` chooses.
+const BYPASS: &str = "bypass";
 /// What a run starts in when nothing is chosen.
 const DEFAULT: &str = "default";
 
@@ -55,7 +55,7 @@ impl Modes {
 
     /// The built-in modes and the person's, from the settings file's text (`where` names the file
     /// in an error). Settings that are not JSON, or hold no `modes`, add none.
-    pub(crate) fn with_settings(text: Option<&str>, place: &str) -> Result<Self, String> {
+    fn with_settings(text: Option<&str>, place: &str) -> Result<Self, String> {
         let mut modes = Self::built_in();
         let settings: Option<Value> = text.and_then(|text| serde_json::from_str(text).ok());
         let Some(theirs) = settings

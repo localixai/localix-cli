@@ -1,12 +1,12 @@
-//! How a request offers the tools, and how their calls travel: a tool of free text (a script) as
+//! How a request offers the tools, and how their calls travel: a tool of free text (a patch) as
 //! a `custom` tool held to its grammar where the model takes those, else as a function with one
 //! string argument; every other tool as a function. The same choice decides how an earlier call
-//! and its answer go back, and how a call comes in (ARCHITECTURE.md X4).
+//! and its answer go back, and how a call comes in (ARCHITECTURE.md B5).
 
 use std::collections::HashSet;
 
 use contracts::chat::{Message, ToolCall};
-use contracts::tool::{Grammar, Input, ToolSpec};
+use contracts::tool::{Input, ToolSpec};
 use serde_json::{Value, json};
 
 /// How the model is offered a tool of free text.
@@ -62,15 +62,9 @@ impl<'a> Offer<'a> {
     /// A tool as the request's `tools` list it.
     pub(super) fn tool(&self, spec: &ToolSpec) -> Value {
         match (&spec.input, self.texts) {
-            (Input::Text(grammar), Texts::Custom) => {
-                let format = match grammar {
-                    Grammar::Free => json!({"type": "text"}),
-                    Grammar::Lark(definition) => {
-                        json!({"type": "grammar", "syntax": "lark", "definition": definition})
-                    }
-                };
+            (Input::Text(definition), Texts::Custom) => {
                 json!({"type": "custom", "name": spec.name, "description": spec.description,
-                    "format": format})
+                    "format": {"type": "grammar", "syntax": "lark", "definition": definition}})
             }
             (Input::Text(_) | Input::Json(_), Texts::Functions | Texts::Custom) => {
                 json!({"type": "function", "name": spec.name, "description": spec.description,

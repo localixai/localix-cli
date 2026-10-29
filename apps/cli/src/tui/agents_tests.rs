@@ -287,8 +287,8 @@ fn esc_in_an_agents_view_goes_back_before_it_stops_anything() {
     assert_eq!(app.input(esc(), now), Some(Action::Stop(String::new())));
 }
 
-fn job(id: &str, name: &str) -> super::super::event::JobRow {
-    super::super::event::JobRow {
+fn job(id: &str, name: &str) -> protocol::JobRow {
+    protocol::JobRow {
         id: id.into(),
         name: name.into(),
         detail: format!("say {name}"),

@@ -232,7 +232,7 @@ fn describe(method: Method) -> &'static str {
 }
 
 /// `/login`: the steps, then the choice put in and saved.
-pub(crate) fn run(rig: &mut Rig, ui: &Ui) {
+pub(super) fn run(rig: &mut Rig, ui: &Ui) {
     let say = |text: &str| ui.send(Event::Note(text.to_string()));
     steps(rig, &mut UiTerminal { ui: ui.clone() }, &say);
 }

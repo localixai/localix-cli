@@ -16,7 +16,7 @@ use ratatui::text::{Line, Span};
 
 use super::markdown;
 use super::style;
-use super::wrap::{line_width, wrap};
+use super::wrap::{cut, line_width, width as text_width, wrap};
 use crate::tui::printable::printable;
 
 /// What the person typed.
@@ -74,7 +74,7 @@ pub(crate) fn end(end: &End, width: usize) -> Vec<Line<'static>> {
         duration(end.millis),
         end.cost
     );
-    let fill = width.saturating_sub(super::wrap::width(&text));
+    let fill = width.saturating_sub(text_width(&text));
     vec![Line::from(Span::styled(
         format!("{text}{}", "─".repeat(fill)),
         style::dim(),
@@ -126,7 +126,7 @@ pub(crate) fn note(text: &str, width: usize) -> Vec<Line<'static>> {
     let mut out = vec![];
     for row in text.trim_matches('\n').lines() {
         let row = printable(row.trim_end());
-        match super::wrap::width(&row) + 2 <= width {
+        match text_width(&row) + 2 <= width {
             true => out.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(row, style::dim()),
@@ -138,13 +138,13 @@ pub(crate) fn note(text: &str, width: usize) -> Vec<Line<'static>> {
                 let label = (trimmed.find("  ").and_then(|at| trimmed.get(at..)))
                     .map(|rest| row.len() - rest.trim_start().len())
                     .filter(|&end| {
-                        (row.get(..end)).is_some_and(|head| super::wrap::width(head) * 2 < width)
+                        (row.get(..end)).is_some_and(|head| text_width(head) * 2 < width)
                     })
                     .unwrap_or(0);
                 let (label, body) = row.split_at(label);
                 let under = match label.is_empty() {
                     true => "    ".to_string(),
-                    false => " ".repeat(2 + super::wrap::width(label)),
+                    false => " ".repeat(2 + text_width(label)),
                 };
                 let first = Line::from(Span::styled(format!("  {label}"), style::dim()));
                 let body = Line::from(Span::styled(body.to_string(), style::dim()));
@@ -164,9 +164,9 @@ pub(crate) fn header(version: &str, facts: &[&str], width: usize) -> Vec<Line<'s
         .filter(|f| !f.is_empty())
         .map(|f| printable(f))
         .collect();
-    for (at, fact) in facts.iter().enumerate() {
-        let mut fact = fact.clone();
-        if at + 1 == facts.len() {
+    let count = facts.len();
+    for (at, mut fact) in facts.into_iter().enumerate() {
+        if at + 1 == count {
             let room = width.saturating_sub(line_width(&line) + 3);
             fact = cut_start(&fact, room);
         }
@@ -178,12 +178,11 @@ pub(crate) fn header(version: &str, facts: &[&str], width: usize) -> Vec<Line<'s
 
 /// `text` without its start when wider than `columns`: `…/scratchpad/ws1`.
 fn cut_start(text: &str, columns: usize) -> String {
-    if super::wrap::width(text) <= columns {
+    if text_width(text) <= columns {
         return text.to_string();
     }
     let reversed: String = text.chars().rev().collect();
-    let kept: String = super::wrap::cut(&reversed, columns).chars().rev().collect();
-    kept
+    cut(&reversed, columns).chars().rev().collect()
 }
 
 /// `48s`, `1m 05s`, `1h 02m`.

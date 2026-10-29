@@ -21,7 +21,7 @@ pub(super) struct Routes {
 }
 
 impl Routes {
-    /// The token of the task `conversation` is in, when a reply gave one.
+    /// The token of `task`, when a reply gave one.
     pub(super) fn token(&self, task: &str) -> Option<String> {
         let tasks = self.tasks.lock().unwrap_or_else(|p| p.into_inner());
         (tasks.iter())
@@ -66,31 +66,25 @@ pub(super) fn trace(session: &str, sent: Option<&str>, reply: &Reply) {
 /// requests go where its cache is (`session-id`, the prompt cache's key); another session, an
 /// agent's too, to where its own is, so no one machine takes every session's requests.
 pub(super) fn session(conversation: &[Message]) -> String {
-    let first = (conversation.iter())
-        .filter_map(|message| match message {
-            Message::User(said) => Some(said.as_str()),
-            Message::System(_)
-            | Message::Assistant { .. }
-            | Message::Image { .. }
-            | Message::ToolResult { .. } => None,
-        })
-        .take(2);
-    provider_kit::cache::key(first)
+    provider_kit::cache::key(said(conversation).take(2))
 }
 
 /// The task a conversation is at: its first words (the session's context and goal), how many
 /// times the person spoke, and what they said last. A task begins with each of their messages.
 pub(super) fn task(conversation: &[Message]) -> String {
-    let said: Vec<&str> = (conversation.iter())
-        .filter_map(|message| match message {
-            Message::User(said) => Some(said.as_str()),
-            Message::System(_)
-            | Message::Assistant { .. }
-            | Message::Image { .. }
-            | Message::ToolResult { .. } => None,
-        })
-        .collect();
+    let said: Vec<&str> = said(conversation).collect();
     let count = said.len().to_string();
     let ends = [said.first(), said.last()].into_iter().flatten().copied();
     provider_kit::cache::key(std::iter::once(count.as_str()).chain(ends))
+}
+
+/// What the person said, in order.
+fn said(conversation: &[Message]) -> impl Iterator<Item = &str> {
+    conversation.iter().filter_map(|message| match message {
+        Message::User(said) => Some(said.as_str()),
+        Message::System(_)
+        | Message::Assistant { .. }
+        | Message::Image { .. }
+        | Message::ToolResult { .. } => None,
+    })
 }

@@ -3,7 +3,6 @@
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
-    clippy::unreachable,
     clippy::string_slice,
     reason = "test code: a panic fails the test"
 )]

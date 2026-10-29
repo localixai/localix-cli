@@ -48,7 +48,7 @@ every new file already goes where its target crate will be.
 | Core | `agent` | `contracts` |
 | Adapters | `tools`, `session` | `contracts` |
 | Adapters | `providers/{models,openai,openrouter}` | `contracts`, `kit` |
-| Client | `client` (in process; the socket in D3) | `protocol` |
+| Client | `client` (in process, and the socket) | `protocol` |
 | Server | `apps/server` (target) | every package but `client` |
 | Interface | `apps/tui` (target) | `client`, `protocol` |
 | Binary | `apps/cli` | `server`, `tui`, `client` |
@@ -76,7 +76,8 @@ every new file already goes where its target crate will be.
   one that knows the socket.
 - **L9**: a new edge between crates is a design change, recorded here first. A new `pub` item is
   an API change: visibility is the tightest that compiles (`pub(super)`, `pub(crate)`), and
-  `pub use` across crates is not used to reach past a layer.
+  `pub use` across crates is not used to reach past a layer. (The agent's conversation and history
+  internals are `pub(crate)`.)
 - **L10**: no `utils` or `common` crate, ever; a shared thing is named for what it is (`kit`,
   `queue`) and placed at the layer of what it knows.
 
@@ -113,8 +114,7 @@ every new file already goes where its target crate will be.
 - **P4**: an option is an enum, not a `bool` or an `Option` argument, where a call site would
   otherwise read `f(true, None)`; a struct of several flags is a state enum (_checked_ for
   parameters and structs).
-- **P5**: a port never returns `Result<_, String>`: its error is its enum (P2). (`History` and
-  the session store still do: debt, paid when they are next touched.)
+- **P5**: a port never returns `Result<_, String>`: its error is its enum (P2).
 - **P6**: `map_err` keeps the cause (a variant's field, or the source); rewording an error never
   drops it (_checked_: `map_err_ignore`).
 - **P7**: a crate does not re-export another crate's types, and never a glob (`pub use x::*`).

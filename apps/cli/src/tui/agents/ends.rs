@@ -39,7 +39,7 @@ impl App {
         if let Some(lane) = &mut view.lane {
             lane.steps.clear();
         }
-        let lane = self.lane_at(at);
+        let lane = self.views.lane_of(at);
         let lane = self.views.sessions[lane].lane.as_deref_mut();
         let mut none = None;
         let declined = lane.map_or(&mut none, |lane| &mut lane.declined);

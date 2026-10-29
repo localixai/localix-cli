@@ -2,11 +2,9 @@
 
 use ratatui::text::{Line, Span};
 
-use super::super::{
-    style,
-    wrap::{hard, width as columns},
-};
 use crate::tui::printable::printable;
+use crate::tui::style;
+use crate::tui::wrap::{fit, hard, width as columns};
 
 pub(super) fn render(diff: &str, width: usize) -> Vec<Line<'static>> {
     let (mut old, mut new) = (0, 0);
@@ -21,40 +19,20 @@ pub(super) fn render(diff: &str, width: usize) -> Vec<Line<'static>> {
             new = number(parts.next().unwrap_or_default().trim_start_matches('+'));
             continue;
         }
-        let (before, after, mark, colour, text) = match line.as_bytes().first() {
+        let (before, after) = (old, new);
+        let (mark, colour) = match line.as_bytes().first() {
             Some(b'-') => {
-                let at = old;
                 old += 1;
-                (
-                    at.to_string(),
-                    String::new(),
-                    '-',
-                    style::failed(),
-                    line.get(1..).unwrap_or_default(),
-                )
+                ('-', style::failed())
             }
             Some(b'+') => {
-                let at = new;
                 new += 1;
-                (
-                    String::new(),
-                    at.to_string(),
-                    '+',
-                    style::done(),
-                    line.get(1..).unwrap_or_default(),
-                )
+                ('+', style::done())
             }
             Some(b' ') => {
-                let at = (old, new);
                 old += 1;
                 new += 1;
-                (
-                    at.0.to_string(),
-                    at.1.to_string(),
-                    ' ',
-                    style::dim(),
-                    line.get(1..).unwrap_or_default(),
-                )
+                (' ', style::dim())
             }
             _ => {
                 for text in hard(&printable(line), width.saturating_sub(4).max(1)) {
@@ -66,16 +44,23 @@ pub(super) fn render(diff: &str, width: usize) -> Vec<Line<'static>> {
                 continue;
             }
         };
+        // A removed line has no new number, an added one no old.
+        let shown = |on: bool, n: usize| if on { n.to_string() } else { String::new() };
         // Only the sign and the code carry the colour: the numbers stay dim, nothing is banded.
-        let numbers = format!("    {before:>3} {after:>3} ");
-        let sign = format!("{mark} ");
+        let mut numbers = format!(
+            "    {:>3} {:>3} ",
+            shown(mark != '+', before),
+            shown(mark != '-', after)
+        );
+        let mut sign = format!("{mark} ");
         let indent = columns(&numbers) + columns(&sign);
         let room = width.saturating_sub(indent).max(1);
+        let text = line.get(1..).unwrap_or_default();
         for (at, text) in hard(&printable(text), room).into_iter().enumerate() {
             let row = if at == 0 {
                 Line::from(vec![
-                    Span::styled(numbers.clone(), style::dim()),
-                    Span::styled(sign.clone(), colour),
+                    Span::styled(std::mem::take(&mut numbers), style::dim()),
+                    Span::styled(std::mem::take(&mut sign), colour),
                     Span::styled(text, colour),
                 ])
             } else {
@@ -85,7 +70,7 @@ pub(super) fn render(diff: &str, width: usize) -> Vec<Line<'static>> {
                 ])
             };
             // Extremely narrow terminals still retain the signs and line numbers.
-            out.extend(super::super::wrap::fit(&row, width));
+            out.extend(fit(row, width));
         }
     }
     out

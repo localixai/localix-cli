@@ -147,11 +147,7 @@ fn a_patch_that_is_not_one_says_what_is_wrong_and_where() {
 }
 
 #[test]
-fn the_paths_of_a_call_are_its_path_or_every_file_of_its_patch() {
-    assert_eq!(
-        paths(&json!({"path": "a.txt", "old_string": "", "new_string": ""})),
-        ["a.txt"]
-    );
+fn the_paths_of_a_call_are_every_file_of_its_patch() {
     let patch = Value::String(patch(
         "*** Update File: a\n*** Move to: b\n*** Add File: c\n+x\n*** Update File: a\n@@\n-x\n+y\n",
     ));

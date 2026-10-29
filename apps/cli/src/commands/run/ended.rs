@@ -1,5 +1,4 @@
-//! How a task ended, as the report and the exit code say it, and what the decision model spent
-//! on it.
+//! How a task ended, as the report and the exit code say it.
 
 use agent::agent::Status;
 use serde_json::Value;
@@ -50,3 +49,7 @@ impl Ended {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "ended_tests.rs"]
+mod tests;

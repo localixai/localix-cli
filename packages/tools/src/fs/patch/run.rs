@@ -44,7 +44,7 @@ pub(super) fn run(
 ) -> Result<String, ToolError> {
     let hunks = parse(patch).map_err(ToolError::Failed)?;
     let (mut files, mut steps) = (vec![], vec![]);
-    for hunk in &hunks {
+    for hunk in hunks {
         plan(workspace, &mut files, &mut steps, hunk)?;
     }
     for step in &steps {
@@ -142,11 +142,11 @@ fn plan(
     workspace: &Workspace,
     files: &mut Vec<File>,
     steps: &mut Vec<Step>,
-    hunk: &Hunk,
+    hunk: Hunk,
 ) -> Result<(), ToolError> {
     match hunk {
         Hunk::Add { path, content } => {
-            let file = load(workspace, files, path)?;
+            let file = load(workspace, files, &path)?;
             if file.now.as_ref().is_some_and(|bytes| !bytes.is_empty()) {
                 return Err(ToolError::Failed(format!(
                     "{} already exists and is not empty: change it with '*** Update File'",
@@ -159,10 +159,10 @@ fn plan(
                 done: format!("Created {} ({size})", file.shown),
                 ..Step::of(&file.shown)
             });
-            file.now = Some(content.clone().into_bytes());
+            file.now = Some(content.into_bytes());
         }
         Hunk::Delete { path } => {
-            let file = load(workspace, files, path)?;
+            let file = load(workspace, files, &path)?;
             let Some(bytes) = file.now.take() else {
                 return Err(ToolError::Failed(format!("{} does not exist", file.shown)));
             };
@@ -174,7 +174,7 @@ fn plan(
             });
         }
         Hunk::Update { path, to, chunks } => {
-            update(workspace, files, steps, path, (to.as_deref(), chunks))?;
+            update(workspace, files, steps, &path, (to.as_deref(), &chunks))?;
         }
     }
     Ok(())
@@ -200,10 +200,13 @@ fn update(
         ))
     })?;
     let new = apply::update(&old, chunks, &shown).map_err(ToolError::Failed)?;
-    file.now = Some(new.clone().into_bytes());
+    let diff = diff::unified(&old, &new);
     let moved = match to {
-        Some(to) => move_to(workspace, files, to, &source, &new)?,
-        None => None,
+        Some(to) => move_to(workspace, files, to, &source, new)?,
+        None => {
+            file.now = Some(new.into_bytes());
+            None
+        }
     };
     let (added, removed) = apply::counts(chunks);
     let size = if chunks.is_empty() {
@@ -221,7 +224,7 @@ fn update(
             Some(dest) => format!("{verb} {shown} to {dest}{size}"),
             None => format!("{verb} {shown}{size}"),
         },
-        diff: diff::unified(&old, &new),
+        diff,
         ..Step::of(&shown)
     });
     if let Some(dest) = moved {
@@ -233,17 +236,18 @@ fn update(
     Ok(())
 }
 
-/// `new` put at `to` and the file at `source` gone, when `to` is another, free place; the name
-/// `to` is shown as, or none when the file stays where it is.
+/// `new` put at `to` and the file at `source` (taken already) gone, when `to` is another, free
+/// place; the name `to` is shown as, or none when the file stays where it is.
 fn move_to(
     workspace: &Workspace,
     files: &mut Vec<File>,
     to: &str,
     source: &PathBuf,
-    new: &str,
+    new: String,
 ) -> Result<Option<String>, ToolError> {
     let dest = load(workspace, files, to)?;
     if dest.path == *source {
+        dest.now = Some(new.into_bytes());
         return Ok(None);
     }
     if dest.now.as_ref().is_some_and(|bytes| !bytes.is_empty()) {
@@ -252,12 +256,8 @@ fn move_to(
             dest.shown
         )));
     }
-    dest.now = Some(new.as_bytes().to_vec());
-    let shown = dest.shown.clone();
-    if let Some(from) = files.iter_mut().find(|file| file.path == *source) {
-        from.now = None;
-    }
-    Ok(Some(shown))
+    dest.now = Some(new.into_bytes());
+    Ok(Some(dest.shown.clone()))
 }
 
 impl Step {

@@ -7,7 +7,7 @@
 use std::time::Duration;
 
 /// Attempts at most, the first among them.
-pub const ATTEMPTS: u32 = 3;
+const ATTEMPTS: u32 = 3;
 /// The first pause; each next one is twice as long.
 pub const PAUSE: Duration = Duration::from_millis(800);
 /// Statuses a moment's wait may mend on any host: a timeout, an upstream gone or overloaded.

@@ -225,17 +225,6 @@ fn a_prompt_needs_no_quotes_and_commands_still_parse() {
         panic!("exec")
     };
     assert_eq!(joined(&exec.prompt).as_deref(), Some("fix the tests"));
-    assert!(matches!(
-        parse(&["sessions"]).unwrap().command,
-        Some(Command::Sessions)
-    ));
-    let Some(Command::Exec(exec)) = parse(&["exec", "resume", "--last", "go on"])
-        .unwrap()
-        .command
-    else {
-        panic!("exec resume")
-    };
-    assert!(matches!(exec.command, Some(ExecCommand::Resume(_))));
 }
 
 #[test]

@@ -15,15 +15,18 @@ pub(crate) fn event(mut event: Event, root: Option<&Path>) -> Event {
 }
 
 /// `label` as it reads at `root`.
-pub(crate) fn shown(mut label: Label, root: Option<&Path>) -> Label {
+fn shown(mut label: Label, root: Option<&Path>) -> Label {
     let Some(root) = root.and_then(Path::to_str).filter(|root| root.len() > 1) else {
         return label;
     };
     let subject = relative(&label.subject, root.trim_end_matches('/'));
-    label.subject = ["cd . && ", "cd .; ", "cd . ; "]
+    label.subject = match ["cd . && ", "cd .; ", "cd . ; "]
         .iter()
         .find_map(|cd| subject.strip_prefix(cd))
-        .map_or_else(|| subject.clone(), str::to_string);
+    {
+        Some(rest) => rest.to_string(),
+        None => subject,
+    };
     label
 }
 

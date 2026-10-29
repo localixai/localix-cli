@@ -11,6 +11,8 @@ use std::process::Command;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use contracts::gate::Verdict;
+
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -23,6 +25,17 @@ pub enum Scope {
     Open,
     /// Read, and change nothing.
     ReadOnly,
+}
+
+impl Scope {
+    /// What a gate's verdict lets a command do; a refusal is its reason.
+    pub fn of(verdict: Verdict) -> Result<Self, String> {
+        match verdict {
+            Verdict::Allow => Ok(Self::Open),
+            Verdict::ReadOnly => Ok(Self::ReadOnly),
+            Verdict::Deny(reason) => Err(reason),
+        }
+    }
 }
 
 /// What a confined command holds while it runs: its scratch directory, removed when this drops,

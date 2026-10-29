@@ -17,7 +17,7 @@ pub enum Effort {
 }
 
 impl Effort {
-    pub const ALL: [Effort; 8] = [
+    const ALL: [Effort; 8] = [
         Effort::Off,
         Effort::Minimal,
         Effort::Low,
@@ -39,6 +39,15 @@ impl Effort {
             Effort::XHigh => "xhigh",
             Effort::Max => "max",
             Effort::Ultra => "ultra",
+        }
+    }
+
+    /// The name a provider's wire takes: `none` for [`Effort::Off`].
+    pub fn wire_name(self) -> &'static str {
+        if self == Effort::Off {
+            "none"
+        } else {
+            self.name()
         }
     }
 

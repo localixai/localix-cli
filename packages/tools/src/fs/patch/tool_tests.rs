@@ -1,5 +1,5 @@
 use contracts::gate::Open;
-use contracts::tool::{Grammar, Input, Tool, ToolError};
+use contracts::tool::{Input, Tool, ToolError};
 use serde_json::json;
 
 use super::PatchTool;
@@ -17,7 +17,7 @@ fn a_patch_written_as_text_changes_the_files() {
     };
     let spec = tool.spec();
     assert_eq!(spec.name, "apply_patch");
-    let Input::Text(Grammar::Lark(grammar)) = spec.input else {
+    let Input::Text(grammar) = spec.input else {
         panic!("a patch is free text with its grammar");
     };
     assert!(grammar.contains("*** Begin Patch"));

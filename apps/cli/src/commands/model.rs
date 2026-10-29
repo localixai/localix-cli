@@ -11,14 +11,15 @@ use contracts::catalog::{ModelEntry, Selection};
 
 use crate::choice::{self, Choice};
 use crate::compose::Rig;
-use crate::picker::{Adjustment, Group, Item, Terminal};
+use crate::picker::{Item, Terminal};
 use crate::providers::Provider;
 use crate::server::Ui;
 use crate::server::asking::UiTerminal;
+use protocol::{Adjustment, Group};
 
 /// `/model`: a signed-in provider's model and its level in one list; `None` on cancellation
 /// or when nobody is signed in.
-pub(crate) fn pick_model(
+fn pick_model(
     current: &Choice,
     terminal: &mut dyn Terminal,
     signed_in: &dyn Fn(&Provider) -> Option<String>,
@@ -94,7 +95,7 @@ pub(super) fn models(
 }
 
 /// `/model`: the pick, then the choice put in and saved.
-pub(crate) fn run_model(rig: &mut Rig, ui: &Ui) {
+pub(super) fn run_model(rig: &mut Rig, ui: &Ui) {
     let terminal = &mut UiTerminal { ui: ui.clone() };
     match pick_model(&rig.choice, terminal, &Provider::signed_in) {
         Some(choice) => rig.output.note(&now(rig, choice)),
@@ -102,7 +103,7 @@ pub(crate) fn run_model(rig: &mut Rig, ui: &Ui) {
     }
 }
 /// Shift+Up or Shift+Down: the model's next level up or down, put in and saved.
-pub(crate) fn step_reasoning(rig: &mut Rig, up: bool) -> String {
+pub(super) fn step_reasoning(rig: &mut Rig, up: bool) -> String {
     let selection = match stepped(&rig.choice.selection, up) {
         Ok(selection) => selection,
         Err(why) => return why,
@@ -153,7 +154,7 @@ fn adopt(rig: &mut Rig, choice: Choice) -> Result<std::io::Result<PathBuf>, Stri
     };
     rig.hide_for(&choice.provider);
     if let Some(live) = rig.live {
-        live.chat.set(chat);
+        live.set(chat);
     }
     let saved = choice::save(&choice);
     rig.choice = choice;

@@ -4,13 +4,13 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 
 use protocol::Done;
 
 use super::Peer;
 use crate::desk::Request;
-use crate::sync::lock;
+use crate::sync::{Bell, lock};
 
 /// Sessions moved to the background in a directory: their peer, and their desk's requests.
 pub(crate) struct Kept {
@@ -24,8 +24,7 @@ pub(crate) struct Host {
     pub(crate) build: String,
     attached: AtomicUsize,
     kept: Mutex<Vec<Kept>>,
-    ended: Mutex<bool>,
-    ending: Condvar,
+    ended: Bell,
 }
 
 /// An interface attached while this lives: held by its connection, not its desk, which may go on
@@ -45,8 +44,7 @@ impl Host {
             build,
             attached: AtomicUsize::new(0),
             kept: Mutex::default(),
-            ended: Mutex::new(false),
-            ending: Condvar::new(),
+            ended: Bell::new(),
         })
     }
 
@@ -87,18 +85,11 @@ impl Host {
 
     /// Asked to end: [`Host::wait`] returns.
     pub(crate) fn end(&self) {
-        *lock(&self.ended) = true;
-        self.ending.notify_all();
+        self.ended.ring();
     }
 
     /// Until the daemon is asked to end.
     pub(crate) fn wait(&self) {
-        let mut ended = lock(&self.ended);
-        while !*ended {
-            ended = self
-                .ending
-                .wait(ended)
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-        }
+        self.ended.wait(0, None);
     }
 }

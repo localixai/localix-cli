@@ -13,7 +13,7 @@ use std::time::Duration;
 use crate::http::query_value;
 use crate::page;
 
-pub const CANCEL: &str = "/cancel";
+const CANCEL: &str = "/cancel";
 const ATTEMPTS: u32 = 10;
 
 /// Where and how to listen.

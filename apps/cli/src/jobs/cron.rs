@@ -17,7 +17,7 @@ pub(crate) struct Cron {
 
 /// A moment in local time, as cron reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Local {
+struct Local {
     pub minute: u32,
     pub hour: u32,
     pub day: u32,
@@ -50,7 +50,7 @@ impl Cron {
         })
     }
 
-    pub(crate) fn matches(&self, at: Local) -> bool {
+    fn matches(&self, at: Local) -> bool {
         let has = |set: u64, value: u32| set & (1 << value) != 0;
         let day = has(self.days, at.day);
         let weekday = has(self.weekdays, at.weekday);
@@ -135,7 +135,7 @@ pub(crate) fn delay(text: &str) -> Result<u64, String> {
 }
 
 /// `at` (Unix seconds) in local time.
-pub(crate) fn local(at: u64) -> Local {
+fn local(at: u64) -> Local {
     #[cfg(unix)]
     {
         let Ok(time) = libc::time_t::try_from(at) else {
@@ -160,23 +160,15 @@ pub(crate) fn local(at: u64) -> Local {
 }
 
 /// `at` in UTC: where no local time can be read.
-pub(crate) fn utc(at: u64) -> Local {
+fn utc(at: u64) -> Local {
     let days = at / 86_400;
     let seconds = at % 86_400;
-    // Days to a civil date (Howard Hinnant's algorithm).
-    // A count of days is far below i64::MAX: the cast keeps it.
-    let z = days.cast_signed() + 719_468;
-    let era = z / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
+    let (_, month, day) = crate::context::civil(days);
     Local {
         minute: (seconds / 60 % 60) as u32,
         hour: (seconds / 3600) as u32,
-        // The algorithm keeps them in 1..=31 and 1..=12.
-        day: u32::try_from(doy - (153 * mp + 2) / 5 + 1).unwrap_or(1),
-        month: u32::try_from(if mp < 10 { mp + 3 } else { mp - 9 }).unwrap_or(1),
+        day,
+        month,
         weekday: ((days + 4) % 7) as u32,
     }
 }

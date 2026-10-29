@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use contracts::history::{History, Session};
+use contracts::history::{History, HistoryError, Session};
 
 /// Unix seconds now.
 pub fn now() -> u64 {
@@ -42,7 +42,7 @@ impl History for Sessions {
         }
     }
 
-    fn save(&self, session: &Session) -> Result<(), String> {
+    fn save(&self, session: &Session) -> Result<(), HistoryError> {
         let write = || -> std::io::Result<()> {
             std::fs::create_dir_all(&self.dir)?;
             let path = self.dir.join(format!("{}.json", session.id));
@@ -50,29 +50,31 @@ impl History for Sessions {
             std::fs::write(&partial, serde_json::to_vec(session)?)?;
             std::fs::rename(&partial, &path)
         };
-        write().map_err(|error| error.to_string())
+        write().map_err(|error| HistoryError::Write(error.to_string()))
     }
 
-    fn load(&self, id: Option<&str>) -> Result<Session, String> {
-        let id = match id {
-            Some(id) => id.to_string(),
-            // An agent's session goes on only through its parent.
-            None => self
-                .list()
-                .into_iter()
+    fn load(&self, id: Option<&str>) -> Result<Session, HistoryError> {
+        let Some(id) = id else {
+            // An agent's session goes on only through its parent; `list` has read it already.
+            return (self.list().into_iter())
                 .find(|session| !session.is_agent())
-                .map(|session| session.id)
-                .ok_or("no saved sessions")?,
+                .ok_or(HistoryError::Empty);
         };
         let text =
             std::fs::read_to_string(self.dir.join(format!("{id}.json"))).map_err(|error| {
                 if error.kind() == std::io::ErrorKind::NotFound {
-                    format!("no session {id}")
+                    HistoryError::NotFound(id.to_string())
                 } else {
-                    format!("session {id} cannot be read: {error}")
+                    HistoryError::Unreadable {
+                        id: id.to_string(),
+                        why: error.to_string(),
+                    }
                 }
             })?;
-        serde_json::from_str(&text).map_err(|error| format!("session {id} is unreadable: {error}"))
+        serde_json::from_str(&text).map_err(|error| HistoryError::Corrupt {
+            id: id.to_string(),
+            why: error.to_string(),
+        })
     }
 
     fn list(&self) -> Vec<Session> {

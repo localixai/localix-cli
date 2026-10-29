@@ -8,11 +8,11 @@ use std::time::{Duration, Instant};
 use contracts::gate::Effect;
 use contracts::person::{Person, Question, Reply};
 
-use protocol::Approval;
+use protocol::{Adjustment, Approval, Group};
 
 use super::Ui;
 use crate::gate::Asker;
-use crate::picker::{Adjustment, Group, Item, Lines, Picker};
+use crate::picker::{Item, Lines, Picker};
 
 /// Approvals asked in the interface; a stopped task closes the question with a no.
 pub(crate) struct UiGate<'a> {
@@ -70,14 +70,19 @@ pub(crate) struct UiTerminal {
     pub ui: Ui,
 }
 
+/// The rows a choice offers (a label and a note each), and the one marked.
+fn rows(items: &[Item]) -> (Vec<(String, String)>, Option<usize>) {
+    let options = items
+        .iter()
+        .map(|item| (item.label.clone(), item.detail.clone()))
+        .collect();
+    (options, items.iter().position(|item| item.marked))
+}
+
 impl Picker for UiTerminal {
     fn pick(&mut self, title: &str, items: &[Item]) -> Option<usize> {
-        let options = items
-            .iter()
-            .map(|item| (item.label.clone(), item.detail.clone()))
-            .collect();
-        self.ui
-            .pick(title, options, items.iter().position(|item| item.marked))
+        let (options, marked) = rows(items);
+        self.ui.pick(title, options, marked)
     }
 
     fn pick_adjustable(
@@ -87,14 +92,11 @@ impl Picker for UiTerminal {
         adjustments: &[Adjustment],
         groups: &[Group],
     ) -> Option<(usize, usize)> {
-        let options = items
-            .iter()
-            .map(|item| (item.label.clone(), item.detail.clone()))
-            .collect();
+        let (options, marked) = rows(items);
         self.ui.pick_adjustable(
             title,
             options,
-            items.iter().position(|item| item.marked),
+            marked,
             adjustments.to_vec(),
             groups.to_vec(),
         )
@@ -103,11 +105,11 @@ impl Picker for UiTerminal {
 
 impl Lines for UiTerminal {
     fn line(&mut self, prompt: &str, hidden: bool) -> Option<String> {
-        self.ui.line(prompt, hidden, None)
+        self.ui.line(prompt, hidden)
     }
 
     fn line_until(&mut self, prompt: &str, done: &dyn Fn() -> bool) -> Option<String> {
-        self.ui.line(prompt, false, Some(done))
+        self.ui.line_until(prompt, done)
     }
 }
 

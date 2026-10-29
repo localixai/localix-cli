@@ -260,11 +260,11 @@ pub(super) fn editor(text: &str) -> String {
 }
 
 /// `lines` printed under the history, dim, once the terminal is given back.
-pub(crate) fn say(lines: &[ratatui::text::Line<'static>]) {
+pub(super) fn say(lines: &[ratatui::text::Line<'static>]) {
     if lines.is_empty() {
         return;
     }
-    let colour = super::style::colour_stdout();
+    let colour = super::style::colour_on(&io::stdout());
     let text: String = lines
         .iter()
         .map(|line| super::style::ansi(line, colour) + "\n")

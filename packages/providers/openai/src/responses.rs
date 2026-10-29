@@ -57,7 +57,6 @@ pub struct ChatModel {
     tokens: Mutex<Held>,
     /// Rung when a refresh ends.
     renewed: Condvar,
-    base: String,
     /// How a tool of free text (a patch) is offered.
     texts: Texts,
     /// Each task's machine, as the backend named it.
@@ -82,7 +81,6 @@ impl ChatModel {
                 refreshing: false,
             }),
             renewed: Condvar::new(),
-            base: BASE.into(),
             texts: Texts::Functions,
             routes: route::Routes::default(),
         }
@@ -143,9 +141,9 @@ impl Chat for ChatModel {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let task = route::task(request.conversation);
         let session = route::session(request.conversation);
-        let body = body(&self.selection, request, self.texts).to_string();
-        let offer = offer::Offer::new(request.tools, self.texts, &[]);
-        let address = format!("{}/responses", self.base);
+        let offer = offer::Offer::new(request.tools, self.texts, request.conversation);
+        let body = body(&self.selection, request, &offer, &session).to_string();
+        let address = format!("{BASE}/responses");
         let started = std::time::Instant::now();
         let mut renewed = false;
         retried(PAUSE, || {
@@ -153,20 +151,19 @@ impl Chat for ChatModel {
                 Ok(tokens) => tokens,
                 Err(error) => return Attempt::Done(Err(error)),
             };
+            let bearer = format!("Bearer {}", tokens.access);
             let mut headers = vec![
-                ("Authorization", format!("Bearer {}", tokens.access)),
-                ("chatgpt-account-id", tokens.account),
-                ("originator", self.app.slug.to_string()),
-                ("session-id", session.clone()),
-                ("Content-Type", "application/json".into()),
-                ("Accept", "text/event-stream".into()),
+                ("Authorization", bearer.as_str()),
+                ("chatgpt-account-id", tokens.account.as_str()),
+                ("originator", self.app.slug),
+                ("session-id", session.as_str()),
+                ("Content-Type", "application/json"),
+                ("Accept", "text/event-stream"),
             ];
             let routed = self.routes.token(&task);
             if let Some(token) = &routed {
-                headers.push((route::HEADER, token.clone()));
+                headers.push((route::HEADER, token));
             }
-            let headers: Vec<(&str, &str)> =
-                headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
             let reply = match self.http.post(&address, &headers, &body) {
                 Ok(reply) => reply,
                 Err(HttpError::Unsent(why)) => {

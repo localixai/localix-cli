@@ -1,6 +1,6 @@
 //! A picture as a model takes it: a PNG, JPEG, GIF or WebP known by its first bytes, its size
 //! read from its header (the file is not decoded), encoded as base64. The one place that knows
-//! these formats: `read` returns a picture with it, and the app reads what the person attaches.
+//! these formats: the app reads what the person attaches with it.
 
 use base64::Engine as _;
 use contracts::tool::Image;

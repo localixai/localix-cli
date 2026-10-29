@@ -66,10 +66,9 @@ fn serving(peer: &Arc<Peer>) -> Sender<ToServer> {
                 max_lanes: 3,
                 commands: vec![],
                 modes: vec![],
-                background: true,
                 host: None,
             };
-            super::super::serve::serve(&incoming, &peer, &desk, &info);
+            super::super::serve::serve(None, &incoming, &peer, &desk, &info);
         })
         .unwrap();
     to_server
@@ -136,7 +135,7 @@ fn a_line_waiting_when_the_last_interface_is_gone_is_withdrawn() {
     let (ui, peer, frames) = crate::testing::fake_peer();
     let to_server = serving(&peer);
     let lane = ui.for_lane("s1");
-    let typed = asking(move || lane.line("Key", true, None));
+    let typed = asking(move || lane.line("Key", true));
     // Nobody is left to tell it was withdrawn: only that it ends.
     asked(&frames);
     drop(to_server);

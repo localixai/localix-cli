@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 
 use super::model::Model;
 
-pub(crate) const COLS: u16 = 110;
-pub(crate) const ROWS: u16 = 40;
+const COLS: u16 = 110;
+const ROWS: u16 = 40;
 
 /// Keys as a terminal sends them (only those the flows press).
 pub(crate) mod key {
@@ -82,9 +82,7 @@ impl Term {
 
     /// Another terminal's `llx` with `args`, in this one's home and workspace, at its prompt.
     pub(crate) fn beside(&self, model: &Model, args: &[&str]) -> Self {
-        let (home, workspace) = (self.home.clone(), self.workspace.clone());
-        let mut term = Self::spawn_at(home, workspace, model, args, &[]);
-        term.owns = false;
+        let term = self.next_to(model, args);
         term.wait_for("❯", Duration::from_secs(10));
         term
     }

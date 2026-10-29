@@ -1,5 +1,5 @@
-//! A session's interface and its server: in this process the interface over channels to a server on a thread; the daemon serves each socket's
-//! client with the same server (`serving`).
+//! A session's interface and its server: in this process the interface over channels to a
+//! server on a thread; the daemon serves each socket's client with the same server (`serving`).
 
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -9,7 +9,7 @@ use protocol::{Place, ToClient, ToServer};
 use tools::workspace::Workspace;
 
 use super::{Attached, NO_INTERFACE, RUN_EXEC};
-use crate::commands::repl;
+use crate::commands::entry;
 use crate::desk;
 use crate::error::Failure;
 use crate::interrupt;
@@ -80,10 +80,7 @@ pub(crate) fn serving(
     let info = info(host);
     let server = std::thread::Builder::new().name("llx-serve".into());
     server.spawn(move || {
-        let kept = match first {
-            Some(first) => serve::serve_from(first, &incoming, &served, &desk, &info),
-            None => serve::serve(&incoming, &served, &desk, &info),
-        };
+        let kept = serve::serve(first, &incoming, &served, &desk, &info);
         ended(kept, served, desk);
     })?;
     Ok((peer, requests))
@@ -93,7 +90,7 @@ pub(crate) fn serving(
 pub(crate) fn info(host: Option<Arc<Host>>) -> serve::Info {
     serve::Info {
         max_lanes: desk::MAX_LANES,
-        commands: repl::commands(),
+        commands: entry::commands(),
         // A server's settings that cannot be read refused its run already; here the list is all.
         modes: (Modes::load()
             .unwrap_or_else(|_| Modes::built_in())
@@ -101,8 +98,6 @@ pub(crate) fn info(host: Option<Arc<Host>>) -> serve::Info {
             .iter())
         .map(|mode| (mode.name().to_string(), mode.hint().to_string()))
         .collect(),
-        // Only a daemon keeps the work once the interface leaves; in process it ends with it.
-        background: host.is_some(),
         host,
     }
 }

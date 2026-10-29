@@ -26,11 +26,10 @@ pub(crate) fn result(who: &str, call: &ToolCall, outcome: &Result<ToolOutput, To
     match outcome {
         Ok(output) => debug!(
             target: TARGET,
-            "{who} done {} {}: {} bytes{}",
+            "{who} done {} {}: {} bytes",
             call.id,
             call.name,
-            output.report.len(),
-            if output.image.is_some() { ", a picture" } else { "" }
+            output.report.len()
         ),
         Err(ToolError::Failed(why)) => {
             warn!(target: TARGET, "{who} failed {} {}: {why}", call.id, call.name);

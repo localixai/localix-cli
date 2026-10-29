@@ -152,9 +152,14 @@ fn o_writes_the_answer_and_schema_prints_the_data_alone() {
 #[test]
 fn not_achieved_exits_one_and_out_of_turns_exits_two() {
     let home = Home::new();
-    let model = Model::start(vec![Reply::text("Could not.\nRESULT: not achieved")]);
+    // The first such answer goes back once: the second stands.
+    let model = Model::start(vec![
+        Reply::text("Could not.\nRESULT: not achieved"),
+        Reply::text("Still could not.\nRESULT: not achieved"),
+    ]);
     let out = exec(&home, &model, &["exec", "x"], "");
     assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
+    assert_eq!(model.requests().len(), 2);
     let model = Model::start(vec![Reply::call("bash", json!({"command": "echo hi"}))]);
     let out = exec(&home, &model, &["exec", "-y", "--max-turns", "1", "x"], "");
     assert_eq!(out.status.code(), Some(2), "{}", text(&out.stderr));

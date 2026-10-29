@@ -3,6 +3,14 @@
 ## Unreleased
 
 - Initial release.
+- An answer that does not say the goal is reached (`RESULT: not achieved`, or no RESULT line after the task made calls) goes back to the model: work left (failing checks, missing pieces) is its next step, not a reason to stop. It stands when it comes right after one sent back, with nothing done since, or after three.
+- `bash` keeps about 40,000 characters of each stream (some 10,000 tokens, as Codex does), where it kept 10,000: a test file or a build log reaches the model whole, not cut in the middle. A tool result keeps up to 90,000 characters.
+- With a ChatGPT sign-in, `apply_patch` is offered again as a tool held to its grammar for the models that take one: a fetched catalog (models.dev's v2 API, which does not publish it) had turned it into a JSON function for every OpenAI model, and patches came back cut short or malformed.
+- A patch whose lines are not found in the file says so with the file's nearest lines, numbered: the next patch needs no read first.
+- When the conversation is trimmed for the model's limit, the text of old patches goes as other large arguments do.
+- Fixed: an `--allow` or `--deny` rule with many wildcards no longer takes exponential time on a long command or path that does not match.
+- Fixed: a number key pressed on a choice with no options no longer ends the interface.
+- Markdown's ~~strikethrough~~ shows struck through; `/usage` says the cost once, the time on a line of its own.
 - A task has no turn limit unless `--max-turns` gives one (it was 50, and cut long tasks off while they were still fixing what failed); `--timeout` bounds it. The GitHub Action's `max-turns` has no default either.
 - OpenRouter requests carry prompt-cache marks only for the models that take them (Anthropic, Gemini, Qwen); OpenAI, DeepSeek, Grok and the rest cache on their own and are sent plain messages.
 - With a ChatGPT sign-in, the model's reasoning goes back with each next request, sealed, as the backend keeps nothing: the model no longer thinks the task through again at every turn. After `/model` switched, another model's reasoning stays out.

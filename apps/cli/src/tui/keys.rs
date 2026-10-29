@@ -1,14 +1,15 @@
 //! The keys the interface takes outside a question: stopping and quitting, sending, the
 //! plan-mode switch, and the commands `/` offers.
 
+use std::path::PathBuf;
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use protocol::Command;
+use protocol::{Command, SHIFT_TAB};
 
-use super::app::{Action, App, SHIFT_TAB};
+use super::app::{Action, App};
 use super::composer::Edit;
-use super::event::{Out, Typed};
+use super::event::Out;
 use super::search::stepped;
 use super::terminal::CAN_SUSPEND;
 use super::time::in_quit_window;
@@ -50,7 +51,7 @@ impl App {
                 let again = self.escaped.is_some_and(|at| in_quit_window(at, now));
                 self.escaped = if again { None } else { Some(now) };
                 if again {
-                    self.send("/rewind".into());
+                    self.send("/rewind".into(), vec![]);
                 }
             }
             // Esc closes the list a `/` opened (not a file list: `@` is part of the words).
@@ -80,7 +81,7 @@ impl App {
             {
                 self.queue_for_later();
             }
-            KeyCode::BackTab => self.send(SHIFT_TAB.into()),
+            KeyCode::BackTab => self.send(SHIFT_TAB.into(), vec![]),
             // The level up or down without a menu; it waits for a task running.
             KeyCode::Up | KeyCode::Down if key.modifiers == KeyModifiers::SHIFT => {
                 let step = if key.code == KeyCode::Up {
@@ -88,7 +89,7 @@ impl App {
                 } else {
                     protocol::LESS_REASONING
                 };
-                self.send(step.into());
+                self.send(step.into(), vec![]);
             }
             KeyCode::Char('v') if ctrl => return Some(Action::Clipboard),
             KeyCode::Char('g') if ctrl => return Some(Action::Editor),
@@ -145,13 +146,9 @@ impl App {
 
     /// Enter on what `/` or `@` offers.
     fn enter_offer(&mut self, key: KeyEvent) -> Option<Action> {
-        // File offers insert a path. A command (or a mode) runs as typed when it is a
-        // whole one, else the one marked.
+        // A command (or a mode) runs as typed when it is a whole one, else the one marked; a
+        // file offer inserts its path.
         let offers = self.offers();
-        if matches!(offers.first(), Some(Offer::File(_))) {
-            self.complete();
-            return None;
-        }
         let typed = self.composer.text();
         let typed = typed.trim();
         let whole = offers.iter().any(|offer| match offer {
@@ -167,7 +164,6 @@ impl App {
                     let command = typed.split_whitespace().next().unwrap_or("/mode");
                     format!("{command} {name}")
                 }
-                // Files are completed, as above.
                 Offer::File(_) => {
                     self.complete();
                     return None;
@@ -175,7 +171,7 @@ impl App {
             };
             self.composer.clear();
             self.offered = 0;
-            return self.submit(Typed::from(entry.as_str()));
+            return self.submit(entry, vec![]);
         }
         self.adopt_paths();
         self.typed(key)
@@ -201,32 +197,34 @@ impl App {
             && !entry.trim().is_empty()
         {
             let (text, images) = self.composer.take_attached(&entry);
-            return self.submit(Typed { text, images });
+            return self.submit(text, images);
         }
         None
     }
 
     /// What the person sent: `/exit` leaves the interface, every lane with it, and `/new` opens
     /// a lane; anything else is the shown lane's.
-    fn submit(&mut self, entry: Typed) -> Option<Action> {
-        let command = entry.text.trim().strip_prefix('/').map(str::trim);
+    fn submit(&mut self, text: String, images: Vec<PathBuf>) -> Option<Action> {
+        let command = text.trim().strip_prefix('/').map(str::trim);
         match command {
             Some(name) if protocol::EXIT.contains(&name) => return self.quit(),
             // A new lane opens now: the lane shown goes on in the background.
             Some(name) if protocol::NEW.contains(&name) => {
                 self.opening(protocol::Target::New);
             }
-            _ => self.send(entry),
+            _ => self.send(text, images),
         }
         None
     }
 
     fn stop(&mut self) -> Action {
-        self.lane_mut().stopping = true;
+        let home = self.views.home();
+        if let Some(lane) = self.views.sessions[home].lane.as_deref_mut() {
+            lane.stopping = true;
+        }
         Action::Stop(self.lane_id().to_string())
     }
 
-    /// The commands the composer's text could be the start of: only while it is `/` and a name.
     /// What the composer's text offers: the commands its `/` could start, or the files its
     /// `@` word could name.
     pub(crate) fn offers(&self) -> Vec<Offer> {
@@ -265,12 +263,10 @@ impl App {
     }
 
     /// The marked offer put in: a command replaces the text, a file its `@` word.
-    fn complete(&mut self) -> Option<Offer> {
+    fn complete(&mut self) {
         let offers = self.offers();
-        let offer = offers
-            .get(self.offered.min(offers.len().saturating_sub(1)))
-            .cloned();
-        match &offer {
+        let offer = offers.get(self.offered.min(offers.len().saturating_sub(1)));
+        match offer {
             Some(Offer::Command(name, _)) => {
                 let suffix = if name == "mode" || name == "permissions" {
                     " "
@@ -292,7 +288,6 @@ impl App {
             None => {}
         }
         self.offered = 0;
-        offer
     }
 }
 

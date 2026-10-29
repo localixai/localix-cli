@@ -254,16 +254,17 @@ fn a_failed_call_shows_why() {
 }
 
 #[test]
-fn window_calls_and_questions() {
+fn agents_jobs_and_questions() {
     insta::assert_snapshot!([
-        shown("window", said("Opening", "Opened", "python3 -q"), State::Running, 80),
-        shown("window", said("Working in", "Worked in", "w1: Click Buy; done when the cart shows 1"), State::Done(&done("w1: ### Helper: done (90% sure)\nmore")), 80),
+        shown("jobs", said("Starting", "Started", "python3 -q"), State::Running, 80),
+        shown("agents", said("Asking", "Asked", "helper"), State::Done(&done("<agent_result agent=\"a1\">\nFound it\nin two files\n</agent_result>")), 80),
         shown("ask", said("Asking", "Asked", "2 questions"), State::Running, 80),
         shown("ask", said("Asking", "Asked", "1 question"), State::Done(&done("The person answered:\n- colour: Blue")), 80),
     ].join("\n"), @r"
-    • Opening python3 -q
-    • Worked in w1: Click Buy; done when the cart shows 1
-      └ w1: ### Helper: done (90% sure)
+    • Starting python3 -q
+    • Asked helper
+      └ Found it
+        in two files
     • Asking 2 questions
     • Asked 1 question
       └ - colour: Blue

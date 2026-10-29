@@ -1,29 +1,9 @@
 //! What reaches the interface and what it sends. A session's events are the protocol's
-//! ([`Event`]); the interface's thread takes them, the questions and the terminal's keys as one
-//! [`Input`], and sends commands and replies as [`Out`].
-
-use std::path::PathBuf;
+//! (`protocol::Event`); the interface's thread takes them, the questions and the terminal's keys
+//! as one [`Input`], and sends commands and replies as [`Out`].
 
 use crossterm::event::KeyEvent;
 use protocol::{Command, Reply, ToClient};
-
-pub(crate) use protocol::{Approval, Event, JobRow};
-
-/// What the person sent: the text, and the pictures attached to it.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct Typed {
-    pub text: String,
-    pub images: Vec<PathBuf>,
-}
-
-impl From<&str> for Typed {
-    fn from(text: &str) -> Self {
-        Self {
-            text: text.into(),
-            images: vec![],
-        }
-    }
-}
 
 /// What the interface's thread takes: a frame from the server, the terminal's, or the
 /// workspace's files for `@`, read on a thread of their own.

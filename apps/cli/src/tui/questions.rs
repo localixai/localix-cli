@@ -5,10 +5,10 @@ use protocol::{Answer, Question, Reply};
 use ratatui::text::{Line, Span};
 
 use super::app::Open;
-use super::event::Approval;
 use super::select::{Choice, Picked, Select};
 use super::style;
 use crate::tui::printable::printable;
+use protocol::Approval;
 
 /// `label` names the session asking when it is not the one shown.
 pub(crate) fn approval(tool: &str, summary: &str, label: Option<&str>) -> Select {

@@ -69,12 +69,19 @@ impl Composer {
 
     /// Clear what is typed, kept among the earlier entries so that ↑ brings it back.
     pub(crate) fn discard(&mut self) {
-        let remembered = unpasted(&self.text(), &self.pastes);
+        let text = self.text();
+        self.remember(&text);
+        self.walking = None;
+        self.clear();
+    }
+
+    /// `entry`, as the person would see it again, among the earlier entries unless it is blank
+    /// or the last one.
+    fn remember(&mut self, entry: &str) {
+        let remembered = unpasted(entry, &self.pastes);
         if !remembered.trim().is_empty() && self.earlier.last() != Some(&remembered) {
             self.earlier.push(remembered);
         }
-        self.walking = None;
-        self.clear();
     }
 
     pub(crate) fn set(&mut self, text: &str) {
@@ -96,14 +103,12 @@ impl Composer {
     /// The text from `from` to the cursor replaced with `with`.
     pub(crate) fn replace(&mut self, from: usize, with: &str) {
         self.delete(from, self.at);
-        for c in with.chars() {
-            self.insert(c);
-        }
+        self.insert_str(with);
     }
 
     /// Text that arrived as one paste: its lines are kept, nothing is sent.
     pub(crate) fn paste(&mut self, text: &str) {
-        cleaned(text).chars().for_each(|c| self.insert(c));
+        self.insert_str(&cleaned(text));
     }
 
     pub(crate) fn key(&mut self, key: KeyEvent) -> Edit {
@@ -173,10 +178,7 @@ impl Composer {
         let text = self.text();
         self.clear();
         self.walking = None;
-        let remembered = unpasted(&text, &self.pastes);
-        if !remembered.trim().is_empty() && self.earlier.last() != Some(&remembered) {
-            self.earlier.push(remembered);
-        }
+        self.remember(&text);
         Edit::Sent(text)
     }
 
@@ -204,6 +206,17 @@ impl Composer {
         self.at += 1;
     }
 
+    /// `text` at the cursor in one move, replacing the selection.
+    fn insert_str(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        self.delete_selection();
+        let len = text.chars().count();
+        self.text.splice(self.at..self.at, text.chars());
+        self.at += len;
+    }
+
     fn delete(&mut self, from: usize, to: usize) {
         self.anchor = None;
         if from < to {
@@ -213,17 +226,34 @@ impl Composer {
     }
 
     fn line_start(&self) -> usize {
-        self.text[..self.at]
+        self.line_start_at(self.at)
+    }
+
+    fn line_end(&self) -> usize {
+        self.line_end_at(self.at)
+    }
+
+    /// Where the line holding index `i` starts.
+    fn line_start_at(&self, i: usize) -> usize {
+        self.text[..i]
             .iter()
             .rposition(|c| *c == '\n')
             .map_or(0, |at| at + 1)
     }
 
-    fn line_end(&self) -> usize {
-        self.text[self.at..]
+    /// Where the line holding index `i` ends.
+    fn line_end_at(&self, i: usize) -> usize {
+        self.text[i..]
             .iter()
             .position(|c| *c == '\n')
-            .map_or(self.text.len(), |at| self.at + at)
+            .map_or(self.text.len(), |at| i + at)
+    }
+
+    /// The `at`th earlier entry in the box, the cursor at its end.
+    fn recall(&mut self, at: usize) {
+        self.text = self.earlier[at].chars().collect();
+        self.at = self.text.len();
+        self.anchor = None;
     }
 
     fn word_back(&self) -> usize {
@@ -251,16 +281,14 @@ impl Composer {
     /// Ctrl-R: the next earlier entry with the words typed before the search in it, as a
     /// shell's reverse search finds them; again for the one before.
     fn search_back(&mut self) {
-        let (from, typed) = match self.walking.take() {
-            Some((at, typed)) => (at, typed),
-            None => (self.earlier.len(), self.text()),
-        };
+        let (from, typed) =
+            (self.walking.take()).unwrap_or_else(|| (self.earlier.len(), self.text()));
         let found = self.earlier[..from]
             .iter()
             .rposition(|entry| entry.contains(typed.trim()));
         match found {
             Some(at) => {
-                self.set(&self.earlier[at].clone());
+                self.recall(at);
                 self.walking = Some((at, typed));
             }
             // Nothing earlier: the entry found last stays, and so does the search.
@@ -273,11 +301,7 @@ impl Composer {
         let start = self.line_start();
         if start > 0 {
             let column = self.at - start;
-            let above = self.text[..start - 1]
-                .iter()
-                .rposition(|c| *c == '\n')
-                .map_or(0, |at| at + 1);
-            self.at = (above + column).min(start - 1);
+            self.at = (self.line_start_at(start - 1) + column).min(start - 1);
             return;
         }
         let next = match &self.walking {
@@ -290,7 +314,7 @@ impl Composer {
             .walking
             .take()
             .map_or_else(|| self.text(), |(_, typed)| typed);
-        self.set(&self.earlier[next].clone());
+        self.recall(next);
         self.walking = Some((next, typed));
     }
 
@@ -298,16 +322,12 @@ impl Composer {
         let end = self.line_end();
         if end < self.text.len() {
             let column = self.at - self.line_start();
-            let below_end = self.text[end + 1..]
-                .iter()
-                .position(|c| *c == '\n')
-                .map_or(self.text.len(), |at| end + 1 + at);
-            self.at = (end + 1 + column).min(below_end);
+            self.at = (end + 1 + column).min(self.line_end_at(end + 1));
             return;
         }
         match self.walking.take() {
             Some((at, typed)) if at + 1 < self.earlier.len() => {
-                self.set(&self.earlier[at + 1].clone());
+                self.recall(at + 1);
                 self.walking = Some((at + 1, typed));
             }
             Some((_, typed)) => self.set(&typed),

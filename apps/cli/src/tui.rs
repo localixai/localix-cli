@@ -7,30 +7,30 @@
 //! frames through a [`Client`], and draws. The sessions run in the server; the interface knows
 //! them only by what the protocol carries (ARCHITECTURE.md L7).
 
-pub(crate) mod agents;
+mod agents;
 pub(crate) mod app;
-pub(crate) mod attach;
+mod attach;
 pub(crate) mod cells;
 mod clipboard;
-pub(crate) mod composer;
+mod composer;
 mod drawing;
 pub(crate) mod event;
 mod farewell;
 mod here;
-pub(crate) mod keys;
+mod keys;
 mod list;
-pub(crate) mod live;
-pub(crate) mod markdown;
-pub(crate) mod mention;
+mod live;
+mod markdown;
+mod mention;
 mod opening;
-pub(crate) mod printable;
-pub(crate) mod questions;
-pub(crate) mod queue;
+mod printable;
+mod questions;
+mod queue;
 mod quitting;
 mod route;
-pub(crate) mod screen;
+mod screen;
 mod search;
-pub(crate) mod select;
+mod select;
 mod sessions;
 mod spend;
 mod steer;
@@ -40,7 +40,7 @@ mod terminal;
 pub(crate) mod test_support;
 mod time;
 pub(crate) mod tool_cell;
-pub(crate) mod tree;
+mod tree;
 pub(crate) mod views;
 mod within;
 pub(crate) mod wrap;
@@ -50,7 +50,7 @@ use std::sync::mpsc::{Sender, channel};
 use std::thread::JoinHandle;
 
 use client::Client;
-use protocol::{Command, Done, Event, Place, ToClient};
+use protocol::{Command, Done, Event, ToClient};
 
 use self::app::App;
 use self::event::Input;
@@ -73,8 +73,8 @@ pub(crate) type Deliver = Box<dyn Fn(ToClient) + Send>;
 pub(crate) type Connect<'a> = Box<dyn FnOnce(Deliver) -> io::Result<Client> + 'a>;
 
 /// What the interface is given: its connection to the server, the directory for `@` (where the
-/// sessions it opens work), the terminal's colours, this binary's build (a daemon of another
-/// refuses it), and how to end the process at once.
+/// sessions it opens work), this binary's build (a daemon of another refuses it), and how to end
+/// the process at once.
 pub(crate) struct Start<'a> {
     pub connect: Connect<'a>,
     pub root: &'a std::path::Path,
@@ -128,7 +128,12 @@ fn attach(start: Start, width: u16, height: u16) -> io::Result<Running> {
     }))?;
     let hello = Command::Initialize {
         version: protocol::VERSION,
-        place: Some(here(start.root)),
+        // Where this interface is: the sessions it opens work there, with its environment and
+        // the command line it was started with, whose options the sessions take.
+        place: Some(client::place::here(
+            start.root,
+            std::env::args().skip(1).collect(),
+        )),
         build: start.build,
     };
     let Ok(Done::Initialized {
@@ -176,20 +181,18 @@ struct Gone(Sender<Input>);
 impl Drop for Gone {
     fn drop(&mut self) {
         for event in [Event::Error("llx: the server is gone".into()), Event::Quit] {
-            let _ = self.0.send(Input::Frame(ToClient::Event {
-                session: None,
-                event,
-                seq: None,
-            }));
+            let _ = self.0.send(server_event(event));
         }
     }
 }
 
-/// Where this interface is: the sessions it opens work there, and their commands run with its
-/// environment (a variable that is not text is left out), and the command line it was started
-/// with, whose options the sessions take.
-fn here(root: &std::path::Path) -> Place {
-    client::place::here(root, std::env::args().skip(1).collect())
+/// What the server says of itself, as the interface's thread takes it.
+fn server_event(event: Event) -> Input {
+    Input::Frame(ToClient::Event {
+        session: None,
+        event,
+        seq: None,
+    })
 }
 
 impl Running {
@@ -207,12 +210,7 @@ impl Running {
 
 impl Drop for Running {
     fn drop(&mut self) {
-        let event = Event::Quit;
-        let _ = (self.inbox).send(Input::Frame(ToClient::Event {
-            session: None,
-            event,
-            seq: None,
-        }));
+        let _ = (self.inbox).send(server_event(Event::Quit));
         self.join();
         restore();
         terminal::say(&self.farewell);

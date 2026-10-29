@@ -23,6 +23,21 @@ pub(super) enum Ended {
     Stopped,
 }
 
+/// Read `stream` line by line on a thread of its own into `sent`.
+fn pump(stream: impl Read + Send + 'static, sent: mpsc::SyncSender<String>) {
+    let reader = std::thread::Builder::new().name("llx-monitor".into());
+    let started = reader.spawn(move || {
+        for line in BufReader::new(stream).lines().map_while(Result::ok) {
+            if sent.send(line).is_err() {
+                return;
+            }
+        }
+    });
+    // No thread to read it: the stream is dropped with the closure, and the command sees it
+    // closed.
+    drop(started);
+}
+
 /// Run `command` in `dir` with `env`, in the scope the gate allowed (read-only: in the sandbox),
 /// until it exits, `deadline` passes or `stopped` says so; give each batch of lines to `lines`.
 pub(super) fn watch(
@@ -48,31 +63,11 @@ pub(super) fn watch(
         .map_err(|error| format!("the command could not start: {error}"))?;
     // The loop below takes each line as it comes; a burst beyond this waits in the pipe.
     let (sent, received) = mpsc::sync_channel(LINES);
-    for stream in [
-        child
-            .stdout
-            .take()
-            .map(|s| Box::new(s) as Box<dyn Read + Send>),
-        child
-            .stderr
-            .take()
-            .map(|s| Box::new(s) as Box<dyn Read + Send>),
-    ]
-    .into_iter()
-    .flatten()
-    {
-        let sent = sent.clone();
-        let reader = std::thread::Builder::new().name("llx-monitor".into());
-        let started = reader.spawn(move || {
-            for line in BufReader::new(stream).lines().map_while(Result::ok) {
-                if sent.send(line).is_err() {
-                    return;
-                }
-            }
-        });
-        // No thread to read it: the stream is dropped with the closure, and the command sees
-        // it closed.
-        drop(started);
+    if let Some(out) = child.stdout.take() {
+        pump(out, sent.clone());
+    }
+    if let Some(err) = child.stderr.take() {
+        pump(err, sent.clone());
     }
     drop(sent);
     let mut batch: Vec<String> = vec![];

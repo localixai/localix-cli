@@ -1,8 +1,10 @@
 //! The agent's loop: the chat model reads the goal, calls tools until it answers, bounded by
-//! turns. A reply without a tool call is the answer. Near the end of its turns, or after calls keep
-//! failing, the model is asked to answer with what it has. The calls of one turn that may run
-//! together do ([`crate::calls`]). Before each turn, what came into the inbox is said; an answer
-//! while something is still to come waits for it, and the run goes on.
+//! `max_turns` (unlimited unless the app sets one). A reply without a tool call is the answer;
+//! one that does not say the goal is reached goes back, as work left is no reason to stop. Near
+//! the end of its turns, or after calls keep failing, the model is asked to answer with what it
+//! has. The calls of one turn that may run together do ([`crate::calls`]). Before each turn, what
+//! came into the inbox is said; an answer while something is still to come waits for it, and the
+//! run goes on.
 
 mod handling;
 
@@ -20,11 +22,18 @@ use crate::schema;
 const SYSTEM: &str = include_str!("prompt.md");
 /// Turns whose calls all failed, in a row, before the model is asked to answer.
 const MAX_FAILURES: usize = 3;
+/// Times an answer that does not say the goal is reached goes back, each after more work.
+const MAX_GO_ON: usize = 3;
 /// Times a `result` that breaks its schema goes back to be fixed.
 const MAX_FIXES: usize = 2;
 const ANSWER_NOW: &str = "Stop calling tools and answer now from what the results showed: say \
     what is missing, and end with the RESULT line.";
 const RESULT_NOW: &str = "Call `result` with the data now.";
+/// Sent back when the model's answer does not say the goal is reached: work left is no block.
+const GO_ON: &str = "Your answer does not say the goal is reached. What is left (a failing check, \
+    a missing piece, work still to do) is your next step, not a block: take it now, with a call, \
+    and go on until the goal is reached. Only if something outside your reach blocks it, answer \
+    again: say what, and end with the RESULT line.";
 /// The result a matching `result` call gets, so a follow-up finds no call left open.
 const RETURNED: &str = "The result was returned.";
 /// Why a run with a schema has no data, when the model kept answering in text.
@@ -89,6 +98,8 @@ struct Tally {
     fixes: usize,
     /// Whether the model was told to answer now: it is told once.
     reminded: bool,
+    /// Answers sent back that did not say the goal is reached.
+    went_on: usize,
 }
 
 /// How a turn's calls went: one that succeeded outweighs any that failed.
@@ -192,14 +203,17 @@ impl Agent<'_> {
         for turn in 0..self.max_turns {
             Self::deliver(&mut run, self.take());
             // Prepared for the model before each request; the elided stays elided.
-            let ceiling =
-                (self.strategy.ceiling(self.window)).saturating_sub(whole(fixed as f64 * ratio));
+            let ceiling = self
+                .strategy
+                .ceiling(self.window)
+                .saturating_sub(whole(fixed as f64 * ratio));
             let report = self.strategy.prepare(&mut run.conversation, ceiling, ratio);
             if !report.is_empty() {
                 self.observer.fitted(&report);
             }
             let estimate = run.conversation.tokens();
-            let wrap_up = turn + 1 == self.max_turns || tally.failures >= MAX_FAILURES;
+            let last = turn + 1 == self.max_turns;
+            let wrap_up = last || tally.failures >= MAX_FAILURES;
             if wrap_up {
                 self.remind(&mut run, &mut tally);
             }
@@ -227,7 +241,6 @@ impl Agent<'_> {
             if completion.calls.is_empty() {
                 // Something came in meanwhile, or is still to come: the run goes on with it. On
                 // the last turn the answer stands, and what is still to come waits for the next goal.
-                let last = turn + 1 == self.max_turns;
                 // Whether more is to come is asked before taking: a source that is done posts
                 // its last entry before it says so, so nothing it sent is left behind.
                 let expecting = !last && self.expecting();
@@ -249,6 +262,9 @@ impl Agent<'_> {
                     self.remind(&mut run, &mut tally);
                     continue;
                 }
+                if !wrap_up && self.goes_on(&mut run, &mut tally, &completion, turn == 0) {
+                    continue;
+                }
                 finish(&mut run, &completion);
                 if self.schema.is_some() {
                     // Asked for `result` and answered in text again: there is no data, and the
@@ -264,6 +280,34 @@ impl Agent<'_> {
             }
         }
         run
+    }
+
+    /// Whether an answer that does not say the goal is reached goes back, the model told to go on.
+    /// A model may stop with work left; sent back, it goes on, or says what blocks it. Its answer
+    /// stands with a schema, when it was told to answer, when it comes right after it was sent
+    /// back (nothing done since), and past the limit. An answer that does not say is one only
+    /// after calls: a reply to a greeting or a question, on the `first` turn, stands.
+    fn goes_on(
+        &self,
+        run: &mut Run,
+        tally: &mut Tally,
+        completion: &Completion,
+        first: bool,
+    ) -> bool {
+        let messages = run.conversation.messages();
+        let again = messages.len() >= 2
+            && matches!(&messages[messages.len() - 2], Message::User(text) if text == GO_ON);
+        if self.schema.is_some() || tally.reminded || again || tally.went_on >= MAX_GO_ON {
+            return false;
+        }
+        let achieved = answer::read(completion.text.as_deref().unwrap_or_default()).1;
+        if achieved == Some(true) || (achieved.is_none() && first) {
+            return false;
+        }
+        tally.went_on += 1;
+        self.say(completion);
+        run.conversation.push(Message::User(GO_ON.into()));
+        true
     }
 
     /// Show what the model said in a turn the run goes on from: it is not the answer.

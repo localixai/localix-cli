@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use super::kit::Kit;
 use super::spec::{self, Action};
+use super::wait::find;
 use super::{Child, MAX_OPEN, Registry, child, unique};
 use protocol::Event;
 
@@ -45,12 +46,6 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
             session.parent = Some(state.parent.clone());
             session.name.clone_from(&name);
             session.workspace = self.kit.workspace.root().display().to_string();
-            if let Some(ui) = self.kit.output.ui() {
-                ui.send(Event::Started {
-                    id: session.id.clone(),
-                    name: name.clone(),
-                });
-            }
             let stop = Arc::new(AtomicBool::new(false));
             let known = crate::interrupt::register_flag(&session.id, Arc::clone(&stop));
             let id = session.id.clone();
@@ -67,6 +62,13 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
             });
             (id, name)
         };
+        // Sent once the registry is let go (R6).
+        if let Some(ui) = self.kit.output.ui() {
+            ui.send(Event::Started {
+                id: id.clone(),
+                name: name.clone(),
+            });
+        }
         self.start(&id, task)?;
         Ok(ToolOutput::from(format!(
             "Started `{name}` (session {id}): it works in the background. Its answer comes to \
@@ -98,8 +100,8 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
     }
 
     fn send(&self, agent: &str, message: &str) -> Result<ToolOutput, ToolError> {
-        let at = self.find(agent)?;
         let state = self.registry.lock();
+        let at = find(&state, agent)?;
         let child = &state.children[at];
         let name = child.session.name.clone();
         if !child.open {
@@ -150,18 +152,20 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
     }
 
     fn close(&self, agent: &str) -> Result<ToolOutput, ToolError> {
-        let at = self.find(agent)?;
         let mut state = self.registry.lock();
+        let at = find(&state, agent)?;
         let child = &mut state.children[at];
         child.open = false;
         child.stop.store(true, Ordering::SeqCst);
         if !child.working {
             child.conversation = None;
         }
-        if let Some(ui) = self.kit.output.ui() {
-            ui.for_lane(&child.session.id).send(Event::Closed);
-        }
         let (name, id) = (child.session.name.clone(), child.session.id.clone());
+        // The state is let go before the interface and the queue are touched (R6).
+        drop(state);
+        if let Some(ui) = self.kit.output.ui() {
+            ui.for_lane(&id).send(Event::Closed);
+        }
         (self.registry.queue).forget(|entry| entry.key.as_deref() == Some(id.as_str()));
         Ok(ToolOutput::from(format!(
             "Closed `{name}`; its session {id} stays saved."
@@ -173,7 +177,7 @@ impl Tool for AgentsTool<'_, '_> {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: spec::NAME.into(),
-            description: spec::description(),
+            description: spec::DESCRIPTION.into(),
             input: Input::Json(spec::parameters()),
         }
     }

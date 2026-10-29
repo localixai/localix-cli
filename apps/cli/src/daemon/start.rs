@@ -6,7 +6,7 @@
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc::{RecvTimeoutError, SyncSender, sync_channel};
+use std::sync::mpsc::{RecvTimeoutError, sync_channel};
 use std::time::Duration;
 
 use super::{build, probe, socket_path, status};
@@ -23,17 +23,15 @@ pub(crate) const READY_LINE: &str = "llx serve: ready";
 /// it cannot be had.
 pub(crate) fn reach(config: &Path) -> Result<PathBuf, String> {
     let path = socket_path(config);
+    let ours = build();
     if let Some(found) = status(&path, ASK) {
-        if found.build == build() {
+        if found.build == ours {
             return Ok(path);
         }
         // One still in use is never stopped under a terminal, or under work kept for one.
         if !found.idle() {
             let (pid, other) = (found.pid, found.build);
-            log::warn!(
-                "the daemon (pid {pid}) is build {other}, not {}, and in use",
-                build()
-            );
+            log::warn!("the daemon (pid {pid}) is build {other}, not {ours}, and in use");
             return Err(format!(
                 "the daemon (pid {pid}) is build {other} and in use"
             ));
@@ -48,7 +46,7 @@ pub(crate) fn reach(config: &Path) -> Result<PathBuf, String> {
         }
     }
     spawn(config)?;
-    log::info!("daemon {} started", build());
+    log::info!("daemon {ours} started");
     // The daemon that serves may have been started where `$TMPDIR` was another: its lock says.
     Ok(socket_path(config))
 }
@@ -57,10 +55,9 @@ pub(crate) fn reach(config: &Path) -> Result<PathBuf, String> {
 /// none is left.
 pub(crate) fn stop(path: &Path) -> bool {
     let (gone, ended) = sync_channel::<()>(1);
-    let closed = Closed(gone);
     // What it sends is nothing to us; the connection's end is all we wait for.
     let Ok(client) = client::Client::connect(path, move |_| {
-        let _ = &closed;
+        let _ = &gone;
     }) else {
         return true;
     };
@@ -76,9 +73,6 @@ pub(crate) fn stop(path: &Path) -> bool {
     )
 }
 
-/// Dropped with the reader of a connection: the connection has ended.
-struct Closed(#[expect(dead_code, reason = "held only to be dropped")] SyncSender<()>);
-
 /// `llx serve` in a session of its own, with no terminal: neither this terminal's signals nor
 /// its closing reach it. Its stdin is nothing, its errors go to `daemon.log` beside the lock.
 fn spawn(config: &Path) -> Result<(), String> {
@@ -90,7 +84,7 @@ fn spawn(config: &Path) -> Result<(), String> {
         .open(config.join("daemon.log"))
         .map_err(why)?;
     let mut command = Command::new(std::env::current_exe().map_err(why)?);
-    // Which model a session uses is its client's to say (`server::place::words`), never what
+    // Which model a session uses is its client's to say (`server::place::chosen`), never what
     // the terminal that happened to start the daemon had set.
     for (name, _, _) in crate::server::place::MODEL_VARS {
         command.env_remove(name);

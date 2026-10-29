@@ -49,7 +49,7 @@ pub(super) struct Job<'a> {
 
 /// How a command ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Ending {
+pub(super) enum Ending {
     Exit(i32),
     /// Ended by a signal it did not handle; only unix has them.
     #[cfg_attr(not(unix), expect(dead_code, reason = "used only on unix"))]
@@ -108,7 +108,7 @@ pub(super) fn run(job: &Job) -> io::Result<Finished> {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Env<'a> {
     pub vars: Option<&'a [(String, String)]>,
-    pub hidden: &'a [&'a str],
+    pub hidden: &'a [String],
 }
 
 impl Env<'_> {

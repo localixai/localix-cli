@@ -106,27 +106,23 @@ fn render(lines: &[Line<'_>]) -> String {
             new + usize::from(new_count != 0),
             new_count
         );
-        if !append(&mut report, &mut used, &header, 1) {
+        if !append(&mut report, &mut used, &[&header], 1) {
             return report;
         }
         for (sign, line) in &lines[start..end] {
             let unterminated = !line.ends_with('\n');
-            // Check before formatting so an enormous source line is never copied.
-            let needed = 1 + usize::from(unterminated);
             let extra = if unterminated {
                 "\n\\ No newline at end of file\n"
             } else {
                 ""
             };
-            if report.len() + 1 + line.len() + extra.len() + TRUNCATED.len() > MAX_BYTES {
-                report.push_str(TRUNCATED);
-                return report;
-            }
+            let mut sign_bytes = [0; 4];
+            let parts: [&str; 3] = [sign.encode_utf8(&mut sign_bytes), line, extra];
             if !append(
                 &mut report,
                 &mut used,
-                &format!("{sign}{line}{extra}"),
-                needed,
+                &parts,
+                1 + usize::from(unterminated),
             ) {
                 return report;
             }
@@ -138,13 +134,16 @@ fn render(lines: &[Line<'_>]) -> String {
     report
 }
 
-fn append(report: &mut String, used: &mut usize, text: &str, count: usize) -> bool {
+/// Add `parts` to `report`, `count` lines. They are measured, not joined first, so an enormous
+/// source line is never copied.
+fn append(report: &mut String, used: &mut usize, parts: &[&str], count: usize) -> bool {
+    let size: usize = parts.iter().map(|part| part.len()).sum();
     // Always reserve room for the notice if later hunks exceed the budget.
-    if *used + count >= MAX_LINES || report.len() + text.len() + TRUNCATED.len() > MAX_BYTES {
+    if *used + count >= MAX_LINES || report.len() + size + TRUNCATED.len() > MAX_BYTES {
         report.push_str(TRUNCATED);
         return false;
     }
-    report.push_str(text);
+    report.extend(parts.iter().copied());
     *used += count;
     true
 }

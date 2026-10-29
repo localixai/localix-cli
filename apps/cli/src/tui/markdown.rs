@@ -2,10 +2,9 @@
 //! their markers hanging, quotes behind a rule, code in its own colour with its spaces kept, and a
 //! link's address after its text. No markup characters are left for the person to read past.
 
-#[path = "markdown_table.rs"]
 mod table;
 
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
@@ -97,13 +96,10 @@ impl Renderer {
             Tag::Paragraph => self.block(),
             Tag::Heading { level, .. } => {
                 self.block();
-                let heading = match level {
-                    HeadingLevel::H1 => style::bold().add_modifier(Modifier::UNDERLINED),
-                    HeadingLevel::H2
-                    | HeadingLevel::H3
-                    | HeadingLevel::H4
-                    | HeadingLevel::H5
-                    | HeadingLevel::H6 => style::bold(),
+                let heading = if level == HeadingLevel::H1 {
+                    style::bold().add_modifier(Modifier::UNDERLINED)
+                } else {
+                    style::bold()
                 };
                 self.styles.push(heading);
             }
@@ -111,10 +107,9 @@ impl Renderer {
                 self.block();
                 self.containers.push(Container::Quote);
             }
-            Tag::CodeBlock(kind) => {
+            Tag::CodeBlock(_) => {
                 self.block();
                 // A fenced block's language is left out: the colour already says it is code.
-                let _ = matches!(kind, CodeBlockKind::Fenced(_));
                 self.code = Some(String::new());
             }
             Tag::List(first) => {
@@ -129,8 +124,9 @@ impl Renderer {
                 self.flush();
                 let marker = match self.containers.last_mut() {
                     Some(Container::List(Some(n))) => {
+                        let number = *n;
                         *n += 1;
-                        format!("{}. ", *n - 1)
+                        format!("{number}. ")
                     }
                     _ => "- ".to_string(),
                 };
@@ -231,9 +227,15 @@ impl Renderer {
     fn block(&mut self) {
         self.flush();
         if self.gap && !self.rows.is_empty() {
-            let (_, rest) = self.prefixes();
-            let quoted = rest.spans.iter().any(|span| span.content.contains('│'));
-            self.rows.push(if quoted { rest } else { Line::default() });
+            let quoted = self
+                .containers
+                .iter()
+                .any(|c| matches!(c, Container::Quote));
+            self.rows.push(if quoted {
+                self.prefixes().1
+            } else {
+                Line::default()
+            });
         }
         self.gap = false;
     }

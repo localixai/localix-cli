@@ -86,14 +86,13 @@ pub(crate) fn usage(rig: &Rig) -> String {
     let session = rig.output.total();
     format!(
         "tasks      {}\nagent      {} · {} turns · {} · {} out · ${:.4}\n\
-         total      ${:.4} over {minutes} min\n\
+         time       {minutes} min\n\
          session    {} · {} out · ${:.4}\n",
         rig.session.turns.len(),
         rig.choice.model(),
         spent.calls,
         tokens_in(spent.input_tokens, spent.cached_tokens),
         thousands(spent.output_tokens),
-        spent.cost,
         spent.cost,
         tokens_in(session.input_tokens, session.cached_tokens),
         thousands(session.output_tokens),

@@ -42,8 +42,8 @@ pub(crate) struct Setup {
     pub ui: Option<Ui>,
 }
 
-/// What every lane of a session shares: the options, the workspace, the session store, and the fresh context, the same bytes for each lane so
-/// the prompt cache is shared too.
+/// What every lane of a session shares: the options, the workspace, the session store, and the
+/// fresh context, the same bytes for each lane so the prompt cache is shared too.
 pub(crate) struct Shared {
     pub options: RunOptions,
     pub workspace: Workspace,

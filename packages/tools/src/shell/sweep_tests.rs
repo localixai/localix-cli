@@ -46,16 +46,6 @@ fn spawn(command: &str) -> (Child, libc::pid_t) {
 }
 
 #[test]
-fn a_proc_entry_is_a_pid_only_when_it_is_a_number() {
-    assert_eq!(number(b"123\0\0\0"), Some(123));
-    assert_eq!(number(b"7"), Some(7));
-    assert_eq!(number(b"self\0"), None);
-    assert_eq!(number(b"\0"), None);
-    assert_eq!(number(b"12a\0"), None);
-    assert_eq!(number(b"99999999999999999999\0"), None);
-}
-
-#[test]
 fn no_session_is_swept_for_init_or_nothing() {
     assert_eq!(kill_members(0), Pass::default());
     assert_eq!(kill_members(1), Pass::default());

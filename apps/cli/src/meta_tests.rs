@@ -36,7 +36,7 @@ fn a_title_made_before_the_first_save_is_saved_with_it() {
         history.load(Some(&session.id)).is_err(),
         "nothing on disk yet"
     );
-    session.record(turn("fix the parser"), None);
+    session.record(turn("fix the parser"));
     pending.save(&history, &mut session).unwrap();
     let saved = history.load(Some(&session.id)).unwrap();
     assert_eq!(saved.title, "Fix the parser");
@@ -48,7 +48,7 @@ fn a_title_made_after_the_last_save_is_written_to_the_saved_session() {
     let history = store(&scratch);
     let pending = Pending::default();
     let mut session = history.start();
-    session.record(turn("fix the parser"), None);
+    session.record(turn("fix the parser"));
     pending.save(&history, &mut session).unwrap();
     pending.post(&history, &session.id, titled("Fix the parser"));
     let saved = history.load(Some(&session.id)).unwrap();
@@ -57,7 +57,7 @@ fn a_title_made_after_the_last_save_is_written_to_the_saved_session() {
         ("Fix the parser", 1)
     );
     // The lane's next save, from its own copy that has no title, keeps it.
-    session.record(turn("and the lexer"), None);
+    session.record(turn("and the lexer"));
     pending.save(&history, &mut session).unwrap();
     let saved = history.load(Some(&session.id)).unwrap();
     assert_eq!(

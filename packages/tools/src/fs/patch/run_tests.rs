@@ -309,3 +309,17 @@ fn a_read_only_verdict_refuses_the_patch_and_leaves_every_file_as_it_was() {
     assert_eq!(read(&dir, "notes.txt"), "one\n");
     assert!(!dir.path().join("new.txt").exists());
 }
+
+#[test]
+fn a_move_to_the_same_place_is_an_update() {
+    let dir = Scratch::new();
+    fs::write(dir.path().join("a.txt"), "x\n").unwrap();
+    let report = patch(
+        &dir,
+        &Open,
+        "*** Update File: a.txt\n*** Move to: a.txt\n@@\n-x\n+y\n",
+    )
+    .unwrap();
+    assert!(report.starts_with("Updated a.txt"), "{report}");
+    assert_eq!(read(&dir, "a.txt"), "y\n");
+}

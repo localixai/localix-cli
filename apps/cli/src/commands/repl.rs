@@ -12,7 +12,7 @@ use crate::mode;
 use crate::server::Ui;
 use protocol::Event;
 
-pub(crate) use super::entry::{Entry, HELP, commands, entry};
+use super::entry::{Entry, HELP, entry};
 
 /// The session in `ui`, after `first` when it is given.
 pub(crate) fn run(rig: &mut Rig, ui: &Ui, first: Option<&str>) -> i32 {

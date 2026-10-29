@@ -1,5 +1,6 @@
-//! A session's title, made from its first task while that task runs: the same model at its lowest level, asked once with no tools, its answer cleaned to one short
-//! line. The task never waits for it; a failure only leaves the session named by its task.
+//! A session's title, made from its first task while that task runs: the same model at its
+//! lowest level, asked once with no tools, its answer cleaned to one short line. The task never
+//! waits for it; a failure only leaves the session named by its task.
 
 use contracts::catalog::Selection;
 use contracts::chat::{Chat, Message, Request};
@@ -10,11 +11,11 @@ use crate::printable::{one_line, printable};
 use protocol::Event;
 
 /// Characters a title takes at most.
-pub(crate) const MAX: usize = 36;
+const MAX: usize = 36;
 /// Bytes of the prompt at most: a long task is cut, on a character.
 const PROMPT_BYTES: usize = 960;
-/// What the model is told; the scripted model of the tests knows a title's request by it.
-pub(crate) const INSTRUCTIONS: &str = "Generate a concise, single-line task title of at most 36 \
+/// What the model is told.
+const INSTRUCTIONS: &str = "Generate a concise, single-line task title of at most 36 \
 characters and under five words where possible. Start with an imperative verb. Capitalize only \
 the first word unless the user's language, proper nouns, acronyms, or code terms require \
 otherwise. Preserve ticket references exactly. Write in the user's language. Do not use quotes, \
@@ -44,8 +45,9 @@ pub(crate) fn start(rig: &Rig, goal: &str) {
             return;
         };
         let update = Update { title: Some(title) };
-        pending.post(&history, &id, update.clone());
-        ui.send(Event::Updated(crate::server::wire::update(&update)));
+        let event = Event::Updated(crate::server::wire::update(&update));
+        pending.post(&history, &id, update);
+        ui.send(event);
     });
     // No thread: the session stays untitled, and the naming ends with the closure, as on a
     // failed request.
@@ -61,7 +63,7 @@ fn lowest(selection: &Selection) -> Selection {
 }
 
 /// The title `chat` gives the task `goal`; `None` when it fails or says nothing usable.
-pub(crate) fn ask(chat: &dyn Chat, goal: &str) -> Option<String> {
+fn ask(chat: &dyn Chat, goal: &str) -> Option<String> {
     if goal.trim().is_empty() {
         return None;
     }
@@ -79,13 +81,8 @@ pub(crate) fn ask(chat: &dyn Chat, goal: &str) -> Option<String> {
 
 /// The request's text: the task, cut to the budget.
 fn prompt(goal: &str) -> String {
-    let mut prompt = format!("Name this task.\n\nUser prompt:\n{}", goal.trim());
-    let mut end = PROMPT_BYTES.min(prompt.len());
-    while !prompt.is_char_boundary(end) {
-        end -= 1;
-    }
-    prompt.truncate(end);
-    prompt
+    let prompt = format!("Name this task.\n\nUser prompt:\n{}", goal.trim());
+    crate::context::cut(&prompt, PROMPT_BYTES).to_string()
 }
 
 /// The answer's first line, without a label, quotes, spaces doubled or a closing mark, cut to

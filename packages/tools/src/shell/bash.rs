@@ -1,5 +1,5 @@
-//! `bash`: a shell command run in the workspace, for what the file tools do not do: builds, tests,
-//! git, search. The model reads the exit code and both streams; a failing command is an answer,
+//! `bash`: a shell command run in the workspace: it reads and searches files, and runs builds,
+//! tests and git. The model reads the exit code and both streams; a failing command is an answer,
 //! not an error.
 
 use std::fmt::Write as _;
@@ -24,13 +24,11 @@ const DESCRIPTION: &str = "Run a shell command (`{shell}`) in the workspace root
 and return its exit code, stdout and stderr. Use it for builds, tests, git, package managers and \
 searching (`rg`, `rg --files`, `grep`, `find`), and for reading files (`cat`, `sed -n`, `head`). \
 Each call is a fresh shell: `cd` and variables do not carry over, so pass `workdir` or \
-chain with `&&`. {terminal} The command is killed, with everything it started, after `timeout_ms` (default 120000, at most 600000): start a server in the \
-background with its output sent to a file. Each stream keeps about 10000 characters, its start \
-and its end. A non-zero exit is reported as output, not as a failure.";
-
-/// A command here only runs to its end, with no terminal.
-const TERMINAL: &str = "Input is closed and there is no terminal: never start an interactive \
-program (an editor, a pager, a prompt); pass flags like `--yes` or `--no-pager`.";
+chain with `&&`. Input is closed and there is no terminal: never start an interactive \
+program (an editor, a pager, a prompt); pass flags like `--yes` or `--no-pager`. The command is \
+killed, with everything it started, after `timeout_ms` (default 120000, at most 600000): start a \
+server in the background with its output sent to a file. Each stream keeps about 40000 \
+characters (some 10000 tokens), its start and its end: read a larger output in parts. A non-zero exit is reported as output, not as a failure.";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -56,9 +54,7 @@ impl Tool for BashTool<'_> {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: NAME.into(),
-            description: DESCRIPTION
-                .replace("{shell}", SHELL)
-                .replace("{terminal}", TERMINAL),
+            description: DESCRIPTION.replace("{shell}", SHELL),
             input: Input::Json(parameters()),
         }
     }
@@ -86,14 +82,13 @@ impl Tool for BashTool<'_> {
             .unwrap_or(DEFAULT_TIMEOUT_MS)
             .clamp(1, MAX_TIMEOUT_MS);
         let names = (self.hidden)();
-        let hidden: Vec<&str> = names.iter().map(String::as_str).collect();
         let job = Job {
             command,
             dir: &dir,
             timeout: Duration::from_millis(timeout),
             env: Env {
                 vars: self.workspace.env(),
-                hidden: &hidden,
+                hidden: &names,
             },
             stop: self.stop,
             scope,

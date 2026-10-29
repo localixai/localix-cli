@@ -3,7 +3,7 @@ use crate::testing::{answers, composed, users};
 
 #[test]
 fn slash_commands_are_not_tasks() {
-    use crate::commands::entry::{LESS_REASONING, MORE_REASONING};
+    use protocol::{LESS_REASONING, MORE_REASONING};
     let unknown = |text: &str| Some(Entry::Unknown(text.into()));
     for (typed, read) in [
         ("   ", None),

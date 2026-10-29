@@ -2,6 +2,8 @@
 //! person cancels ([`Picker`]); and a line of text, hidden for a secret ([`Lines`]). The
 //! interface implements both (`server::asking::UiTerminal`).
 
+use protocol::{Adjustment, Group};
+
 /// One option.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Item {
@@ -22,25 +24,19 @@ impl Item {
     }
 }
 
-/// One row's inline values and the value initially selected.
-pub(crate) use protocol::Adjustment;
-/// Consecutive rows under one name: a provider's models.
-pub(crate) use protocol::Group;
-
 pub(crate) trait Picker {
     /// The index of the option chosen; `None` when the person cancels.
     fn pick(&mut self, title: &str, items: &[Item]) -> Option<usize>;
 
-    /// The row and its selected value, the rows in `groups`; non-interactive pickers keep the
-    /// initial value, and show one list.
+    /// The row and its selected value, the rows in `groups`. The default, for test doubles,
+    /// shows one list and keeps the initial value.
     fn pick_adjustable(
         &mut self,
         title: &str,
         items: &[Item],
         adjustments: &[Adjustment],
-        groups: &[Group],
+        _groups: &[Group],
     ) -> Option<(usize, usize)> {
-        let _ = groups;
         let at = self.pick(title, items)?;
         Some((
             at,
@@ -55,9 +51,9 @@ pub(crate) trait Lines {
     fn line(&mut self, prompt: &str, hidden: bool) -> Option<String>;
 
     /// [`Lines::line`], closed unanswered (`None`) once `done` says so: a sign-in's callback
-    /// came back while the person could still paste.
-    fn line_until(&mut self, prompt: &str, done: &dyn Fn() -> bool) -> Option<String> {
-        let _ = done;
+    /// came back while the person could still paste. The default, for test doubles, never
+    /// closes by itself.
+    fn line_until(&mut self, prompt: &str, _done: &dyn Fn() -> bool) -> Option<String> {
         self.line(prompt, false)
     }
 }

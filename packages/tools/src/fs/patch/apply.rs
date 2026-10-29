@@ -3,27 +3,27 @@
 //! file's first ending (`\n` for a file without one), and a changed file ends with a newline.
 
 use super::Chunk;
-use super::seek::seek;
+use super::seek::{nearest, seek};
 
 /// A run of the file's lines replaced by others.
-struct Edit {
+struct Edit<'a> {
     at: usize,
     len: usize,
-    with: Vec<String>,
+    with: &'a [String],
 }
 
 /// `content` with every chunk applied, each looked for after the one before it. `shown` names the
 /// file in what goes wrong.
 pub(super) fn update(content: &str, chunks: &[Chunk], shown: &str) -> Result<String, String> {
     let rows: Vec<(&str, &str)> = content.split_inclusive('\n').map(ending).collect();
-    let lines: Vec<String> = rows.iter().map(|(text, _)| (*text).to_string()).collect();
+    let lines: Vec<&str> = rows.iter().map(|(text, _)| *text).collect();
     let preferred = rows.iter().map(|(_, end)| *end).find(|end| !end.is_empty());
     let preferred = preferred.unwrap_or("\n");
     let mut out = String::with_capacity(content.len());
     let mut next = 0;
     for edit in locate(&lines, chunks, shown)? {
         copy(&mut out, rows.get(next..edit.at), preferred);
-        for text in &edit.with {
+        for text in edit.with {
             out.push_str(text);
             out.push_str(preferred);
         }
@@ -63,7 +63,7 @@ fn ending(row: &str) -> (&str, &str) {
 }
 
 /// Where each chunk goes in `lines`, in file order.
-fn locate(lines: &[String], chunks: &[Chunk], shown: &str) -> Result<Vec<Edit>, String> {
+fn locate<'a>(lines: &[&str], chunks: &'a [Chunk], shown: &str) -> Result<Vec<Edit<'a>>, String> {
     let mut edits = vec![];
     let mut from = 0;
     for chunk in chunks {
@@ -77,7 +77,7 @@ fn locate(lines: &[String], chunks: &[Chunk], shown: &str) -> Result<Vec<Edit>, 
             edits.push(Edit {
                 at: lines.len(),
                 len: 0,
-                with: chunk.new.clone(),
+                with: &chunk.new,
             });
             continue;
         }
@@ -92,11 +92,7 @@ fn locate(lines: &[String], chunks: &[Chunk], shown: &str) -> Result<Vec<Edit>, 
             found = seek(lines, old, from, chunk.eof);
         }
         let Some(at) = found else {
-            return Err(format!(
-                "could not find these lines in {shown}:\n{}\nRead the file again and copy them \
-                 exactly, indentation included",
-                chunk.old.join("\n")
-            ));
+            return Err(not_found(lines, &chunk.old, shown));
         };
         edits.extend(changes(chunk, old.len(), new, at));
         from = at + old.len();
@@ -105,10 +101,32 @@ fn locate(lines: &[String], chunks: &[Chunk], shown: &str) -> Result<Vec<Edit>, 
     Ok(edits)
 }
 
+/// Why `old` was not found, with the file's lines nearest to it: copied from there, the next patch
+/// needs no read first.
+fn not_found(lines: &[&str], old: &[String], shown: &str) -> String {
+    let wanted = old.join("\n");
+    match nearest(lines, old) {
+        Some(at) => {
+            let near = lines.iter().skip(at).take(old.len());
+            let near: Vec<&str> = near.copied().collect();
+            format!(
+                "could not find these lines in {shown}:\n{wanted}\nThe nearest lines in {shown}, \
+                 from line {}:\n{}\nCopy the file's lines exactly, indentation included",
+                at + 1,
+                near.join("\n")
+            )
+        }
+        None => format!(
+            "could not find these lines in {shown}:\n{wanted}\nRead the file again and copy them \
+             exactly, indentation included"
+        ),
+    }
+}
+
 /// The edits one chunk makes where its old lines were found at `at`: the lines of context between
 /// the changes are left out, so they keep the file's own text.
-fn changes(chunk: &Chunk, old_len: usize, new: &[String], at: usize) -> Vec<Edit> {
-    let part = |from: usize, to: usize| new.get(from..to).unwrap_or_default().to_vec();
+fn changes<'a>(chunk: &Chunk, old_len: usize, new: &'a [String], at: usize) -> Vec<Edit<'a>> {
+    let part = |from: usize, to: usize| new.get(from..to).unwrap_or_default();
     let (mut old_at, mut new_at) = (0, 0);
     let mut edits = vec![];
     for &(old_kept, new_kept) in &chunk.kept {

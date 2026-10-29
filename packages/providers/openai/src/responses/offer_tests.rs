@@ -1,8 +1,15 @@
 use contracts::catalog::{Effort, ModelEntry, Selection};
 use contracts::chat::Request;
 
-use super::super::request::body;
+use super::super::{request, route};
 use super::*;
+
+/// The request body as `complete` builds it, its tools offered as `texts` says.
+fn request_body(selection: &Selection, request: Request, texts: Texts) -> Value {
+    let offer = Offer::new(request.tools, texts, request.conversation);
+    let session = route::session(request.conversation);
+    request::body(selection, request, &offer, &session)
+}
 
 const GRAMMAR: &str = "start: /.+/";
 
@@ -10,7 +17,7 @@ fn script() -> ToolSpec {
     ToolSpec {
         name: "exec".into(),
         description: "Run a script".into(),
-        input: Input::Text(Grammar::Lark(GRAMMAR.into())),
+        input: Input::Text(GRAMMAR.into()),
     }
 }
 
@@ -73,7 +80,7 @@ fn sent(texts: Texts) -> Value {
         tools: &tools,
         may_call: true,
     };
-    body(&selection(), request, texts)
+    request_body(&selection(), request, texts)
 }
 
 #[test]
@@ -87,16 +94,6 @@ fn a_model_that_takes_custom_tools_is_offered_the_script_with_its_grammar() {
     // The other tools stay functions.
     assert_eq!(body["tools"][1]["type"], "function");
     assert_eq!(body["tools"][1]["name"], "read");
-}
-
-#[test]
-fn a_script_with_no_grammar_is_a_custom_tool_of_plain_text() {
-    let free = ToolSpec {
-        input: Input::Text(Grammar::Free),
-        ..script()
-    };
-    let offer = Offer::new(&[], Texts::Custom, &[]);
-    assert_eq!(offer.tool(&free)["format"], json!({"type": "text"}));
 }
 
 #[test]

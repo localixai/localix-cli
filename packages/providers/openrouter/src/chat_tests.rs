@@ -1,5 +1,5 @@
 use super::*;
-use contracts::tool::{Grammar, Input};
+use contracts::tool::Input;
 
 #[test]
 fn a_conversation_goes_out_in_the_wire_format_with_cache_marks() {
@@ -266,7 +266,7 @@ fn script() -> ToolSpec {
     ToolSpec {
         name: "exec".into(),
         description: "Run a script.".into(),
-        input: Input::Text(Grammar::Lark("start: /.+/".into())),
+        input: Input::Text("start: /.+/".into()),
     }
 }
 

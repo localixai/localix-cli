@@ -58,7 +58,7 @@ fn children(session: &Session, agents: &[Session]) -> usize {
 
 /// One session as `llx sessions` lists it: its id, when, how many tasks, where, the first one,
 /// and how many agents it started.
-pub(crate) fn row(session: &Session, agents: usize) -> String {
+fn row(session: &Session, agents: usize) -> String {
     let shown = first_task(session);
     let place = match session.workspace.as_str() {
         "" => "?".to_string(),

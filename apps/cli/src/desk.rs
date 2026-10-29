@@ -23,9 +23,6 @@ use crate::compose::{Rig, Seat, Shared};
 use crate::server::Ui;
 use protocol::Event;
 
-/// The longest a wait for a lane's end lasts before the desk looks again: the lanes' end wakes
-/// it, this only bounds a wait that began just after a lane ended.
-const POLL: Duration = Duration::from_millis(200);
 /// Lanes open at most: opening another closes the oldest idle one.
 pub(crate) const MAX_LANES: usize = 8;
 /// Saved sessions the list shows at most.
@@ -82,7 +79,7 @@ pub(crate) type Work<'w> = Box<dyn for<'r, 's> FnOnce(&'r mut Rig<'s>) -> i32 + 
 pub(crate) type Start<'a> = dyn Fn(&Shared, Seat, Work) -> i32 + Sync + 'a;
 
 /// The session in `ui`: the first lane from `first` (with `task` as its first message), then a
-/// lane for each request, until none is left; its exit code.
+/// lane for each request, until none is left.
 pub(crate) fn run(
     shared: &Shared,
     ui: &Ui,
@@ -91,7 +88,7 @@ pub(crate) fn run(
     task: Option<String>,
     start: &Start<'_>,
     quit: &(dyn Fn() + Sync),
-) -> i32 {
+) {
     let lanes = Lanes::default();
     #[expect(
         clippy::disallowed_methods,
@@ -136,7 +133,6 @@ pub(crate) fn run(
             }
         }
     });
-    crate::exit::OK
 }
 
 /// What opening a lane needs.
@@ -153,13 +149,16 @@ impl<'e> Desk<'e> {
     /// Open `target`; a session open already is shown, never opened twice.
     fn target<'s>(&self, scope: &'s Scope<'s, 'e>, target: Target) {
         let (shared, ui) = (self.shared, self.ui);
-        let full = !matches!(&target, Target::Saved(id) if self.lanes.has(id));
-        // The interface closed one to make room: it may still be ending.
-        let until = std::time::Instant::now() + Duration::from_secs(1);
-        while full && self.lanes.count() >= MAX_LANES && std::time::Instant::now() < until {
-            self.lanes.wait(POLL);
+        if let Target::Saved(id) = &target
+            && self.lanes.has(id)
+        {
+            return ui.send(Event::Show(id.clone()));
         }
-        if full && self.lanes.count() >= MAX_LANES {
+        // The interface closed one to make room: it may still be ending.
+        if !self
+            .lanes
+            .wait_until(Duration::from_secs(1), |open| open < MAX_LANES)
+        {
             let said = format!("llx: {MAX_LANES} sessions are open: stop or quit one first");
             return ui.send(Event::Error(said));
         }
@@ -168,7 +167,6 @@ impl<'e> Desk<'e> {
                 let seat = shared.seat(shared.history.start(), Some(ui.clone()));
                 self.open(scope, seat, None, false);
             }
-            Target::Saved(id) if self.lanes.has(&id) => ui.send(Event::Show(id)),
             Target::Saved(id) => match shared.history.load(Some(&id)) {
                 Ok(session) => {
                     let mut seat = shared.seat(session, Some(ui.clone()));

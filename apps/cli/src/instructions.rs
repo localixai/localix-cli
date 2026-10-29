@@ -15,7 +15,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 /// The names an instruction file has, the first found in a directory being the one read.
-pub(crate) const NAMES: [&str; 3] = ["AGENTS.override.md", "AGENTS.md", "CLAUDE.md"];
+const NAMES: [&str; 3] = ["AGENTS.override.md", "AGENTS.md", "CLAUDE.md"];
 /// Bytes of one instruction file: a huge one must not crowd out the rest.
 pub(crate) const FILE_LIMIT: usize = 16 * 1024;
 /// Bytes of all instruction files at the start together.
@@ -57,7 +57,7 @@ pub(crate) fn project(root: &Path, budget: usize) -> Vec<Found> {
 
 /// The directories whose instructions apply to `root`: from the repository's root (the nearest
 /// ancestor with `.git`) down to `root`; only `root` outside a repository.
-pub(crate) fn chain(root: &Path) -> Vec<PathBuf> {
+fn chain(root: &Path) -> Vec<PathBuf> {
     let mut dirs = vec![];
     for dir in root.ancestors() {
         dirs.push(dir.to_path_buf());
@@ -108,17 +108,22 @@ fn imported(text: &str, dir: &Path, seen: &mut HashSet<PathBuf>, depth: usize) -
             None => dir.join(target),
         });
         match path {
-            Some(path) if depth > 0 && !seen.contains(&same(&path)) => {
+            Some(path) if depth > 0 => {
+                // A file already brought in: its line goes.
+                let key = same(&path);
+                if seen.contains(&key) {
+                    continue;
+                }
                 match std::fs::read_to_string(&path) {
                     Ok(inner) => {
-                        seen.insert(same(&path));
+                        seen.insert(key);
                         let inner_dir = path.parent().unwrap_or(dir).to_path_buf();
                         out.push_str(imported(&inner, &inner_dir, seen, depth - 1).trim_end());
                     }
                     Err(_) => out.push_str(line),
                 }
             }
-            // A file already brought in, or past the depth: its line goes.
+            // Past the depth: its line goes.
             Some(_) => continue,
             None => out.push_str(line),
         }
@@ -133,12 +138,9 @@ fn same(path: &Path) -> PathBuf {
 }
 
 /// A file's instructions as the agent reads them.
-pub(crate) fn block(found: &Found, applies: Option<&Path>) -> String {
-    let scope = applies.map_or(String::new(), |dir| {
-        format!(" applies_to=\"{}/\"", dir.display())
-    });
+pub(crate) fn block(tag: &str, found: &Found) -> String {
     format!(
-        "<project_instructions path=\"{}\"{scope}>\n{}\n</project_instructions>",
+        "<{tag} path=\"{}\">\n{}\n</{tag}>",
         found.path.display(),
         found.text
     )

@@ -50,7 +50,7 @@ fn hidden_variables_never_reach_the_command() {
     let hidden = run(&Job {
         env: Env {
             vars: None,
-            hidden: &[name],
+            hidden: &[name.to_string()],
         },
         ..job(command, dir.path(), LONG)
     })

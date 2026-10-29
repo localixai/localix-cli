@@ -35,7 +35,6 @@ fn with_inbox(output: &Output, work: impl FnOnce(&MainInbox, &Registry, &Jobs, &
     let (registry, jobs) = (Registry::new(Arc::clone(&queue)), Jobs::default());
     let inbox = MainInbox {
         registry: &registry,
-        queue: &queue,
         jobs: &jobs,
         jobs_kit: &kit,
         output,
@@ -53,12 +52,12 @@ fn the_person_comes_first_then_the_agents_then_the_jobs() {
     let (ui, peer, _frames) = crate::testing::fake_peer();
     let ui = ui.for_lane("lane");
     // The person said it to the task running.
-    ui.send(Event::TaskStarted("the task".into()));
-    peer.inputs.input(protocol::Input {
+    let input = protocol::Input {
         session: "lane".into(),
         text: "stop, use the other file".into(),
         ..protocol::Input::default()
-    });
+    };
+    peer.inputs.input(input, true);
     let output = quiet().in_ui(Some(ui));
     with_inbox(&output, |inbox, registry, jobs, kit| {
         let _ = jobs;

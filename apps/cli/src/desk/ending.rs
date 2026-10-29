@@ -3,8 +3,8 @@
 //! waits a bounded time before the process ends anyway.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Condvar, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::{Condvar, Mutex, PoisonError};
+use std::time::Duration;
 
 use crate::server::Ui;
 use crate::sync::lock;
@@ -50,26 +50,14 @@ impl Lanes {
         true
     }
 
-    /// Wait up to `timeout` for a lane to end.
-    pub(super) fn wait(&self, timeout: Duration) {
+    /// Wait up to `timeout` until `done` holds of the number of lanes open; whether it does.
+    pub(super) fn wait_until(&self, timeout: Duration, done: impl Fn(usize) -> bool) -> bool {
         let live = lock(&self.live);
-        let _ = self.ended.wait_timeout(live, timeout);
-    }
-
-    /// Wait up to `timeout` for every lane to end; whether they did.
-    pub(super) fn wait_empty(&self, timeout: Duration) -> bool {
-        let end = Instant::now() + timeout;
-        let mut live = lock(&self.live);
-        while !live.is_empty() {
-            let Some(left) = end.checked_duration_since(Instant::now()) else {
-                return false;
-            };
-            live = match self.ended.wait_timeout(live, left) {
-                Ok((live, _)) => live,
-                Err(poisoned) => poisoned.into_inner().0,
-            };
-        }
-        true
+        let (live, _) = self
+            .ended
+            .wait_timeout_while(live, timeout, |live| !done(live.len()))
+            .unwrap_or_else(PoisonError::into_inner);
+        done(live.len())
     }
 
     /// Stop every lane's task.
@@ -83,7 +71,7 @@ impl Lanes {
     /// `quit`, which ends the process.
     pub(super) fn quit(&self, bound: Duration, quit: &dyn Fn()) {
         self.stop_all();
-        if !self.wait_empty(bound) {
+        if !self.wait_until(bound, |open| open == 0) {
             quit();
         }
     }

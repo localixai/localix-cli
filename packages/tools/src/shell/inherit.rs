@@ -1,10 +1,9 @@
 //! What a command inherits of this process: its standard streams, and no other descriptor.
 //!
 //! Everything this process opens is meant to close on exec, but some descriptors are made in two
-//! steps, opened and then marked: on macOS std's pipes and sockets (it has no `pipe2`), and the
-//! terminal's two ends from `openpty` everywhere. A command another thread forks between the two
-//! steps inherits the descriptor, and a background process it starts keeps it as long as it
-//! lives: another command's output pipe, which then never ends, or the pipe std's `spawn` reads to
+//! steps, opened and then marked: on macOS std's pipes and sockets (it has no `pipe2`). A command
+//! another thread forks between the two steps inherits the descriptor, and a background process
+//! it starts keeps it as long as it lives: another command's output pipe, which then never ends, or the pipe std's `spawn` reads to
 //! learn whether exec succeeded, which keeps that `spawn` waiting until the background process
 //! dies. A descriptor this process itself inherited open would reach every command the same way.
 //!

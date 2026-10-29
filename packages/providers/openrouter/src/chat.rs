@@ -19,7 +19,7 @@ impl Chat for ChatModel {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let model = &self.selection.model().id;
         let body = body(self.client.wire(), &self.selection, &request);
-        let (value, timing) = self
+        let (value, millis) = self
             .client
             .post("/chat/completions", &body)
             .map_err(|error| match error {
@@ -28,7 +28,7 @@ impl Chat for ChatModel {
                     ChatError::Unavailable(format!("{} {other}", self.client.name))
                 }
             })?;
-        let mut completion = read(&value, model, timing.millis)?;
+        let mut completion = read(&value, model, millis)?;
         completion.calls = (completion.calls.into_iter())
             .map(|call| incoming(call, request.tools))
             .collect();
@@ -36,7 +36,7 @@ impl Chat for ChatModel {
     }
 }
 
-/// A call the model made, as the agent takes it: a script's text taken out of its one argument.
+/// A call the model made, as the agent takes it: a patch's text taken out of its one argument.
 fn incoming(mut call: ToolCall, tools: &[ToolSpec]) -> ToolCall {
     if let Some(spec) = tools.iter().find(|spec| spec.name == call.name) {
         call.arguments = spec.input.from_function(call.arguments);
@@ -135,13 +135,7 @@ fn body(host: Wire, selection: &Selection, request: &Request) -> Value {
     } else {
         body["messages"] = json!(messages);
         if levels {
-            let effort = selection.effort();
-            let name = if effort == Effort::Off {
-                "none"
-            } else {
-                effort.name()
-            };
-            body["reasoning_effort"] = json!(name);
+            body["reasoning_effort"] = json!(selection.effort().wire_name());
         }
     }
     if host == Wire::OpenAi {
@@ -216,7 +210,7 @@ fn wire(message: &Message, model: &str, tools: &[ToolSpec]) -> Value {
                 out["tool_calls"] = calls
                     .iter()
                     .map(|call| {
-                        // A script's text goes back in the one argument it was offered with.
+                        // A patch's text goes back in the one argument it was offered with.
                         let arguments = match tools.iter().find(|spec| spec.name == call.name) {
                             Some(spec) => spec.input.to_function(&call.arguments),
                             None => call.arguments.clone(),

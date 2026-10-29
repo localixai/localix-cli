@@ -31,22 +31,18 @@ pub(crate) struct Environment<'a> {
     pub runtimes: &'a [&'a str],
 }
 
-/// The whole context: the environment, the project's instructions, and what a resumed session
-/// did before.
-pub(crate) fn gather(environment: &Environment, previous: Option<&Session>) -> String {
+/// The whole context: the environment and the project's instructions.
+pub(crate) fn gather(environment: &Environment) -> String {
     let mut parts = vec![describe(environment)];
     let instructions = instructions(environment.root);
     if !instructions.is_empty() {
         parts.push(instructions);
     }
-    if let Some(session) = previous.filter(|session| !session.turns.is_empty()) {
-        parts.push(earlier(session, environment.root));
-    }
     parts.join("\n\n")
 }
 
-/// The context `fresh` (gathered with no earlier session) going on from `session`: a saved
-/// session opened in a lane of its own reads as if the run had resumed it.
+/// The context `fresh` going on from `session`, with what it did before: a resumed run, or a
+/// saved session opened in a lane of its own.
 pub(crate) fn resumed(fresh: &str, session: &Session, root: &Path) -> String {
     match session.turns.is_empty() {
         true => fresh.to_string(),
@@ -97,18 +93,14 @@ fn runnable(path: &Path) -> bool {
 
 /// The person's own instructions, then the project's from the repository root down to `root`,
 /// each in its own block, capped.
-pub(crate) fn instructions(root: &Path) -> String {
+fn instructions(root: &Path) -> String {
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let mut blocks = vec![];
     if let Some(own) = instructions::personal(home.as_deref()) {
-        blocks.push(format!(
-            "<personal_instructions path=\"{}\">\n{}\n</personal_instructions>",
-            own.path.display(),
-            own.text
-        ));
+        blocks.push(instructions::block("personal_instructions", &own));
     }
     for found in instructions::project(root, instructions::TOTAL_LIMIT) {
-        blocks.push(instructions::block(&found, None));
+        blocks.push(instructions::block("project_instructions", &found));
     }
     blocks.join("\n\n")
 }
@@ -173,23 +165,31 @@ pub(crate) fn cut(text: &str, limit: usize) -> &str {
     text.get(..end.unwrap_or(0)).unwrap_or_default()
 }
 
-/// `2026-10-22` for Unix seconds, in UTC (the civil-from-days algorithm: no date crate needed).
-pub(crate) fn date(unix: u64) -> String {
+/// The civil date of `days` since the Unix epoch: year, month, day (Howard Hinnant's
+/// civil-from-days algorithm: no date crate needed).
+pub(crate) fn civil(days: u64) -> (i64, u32, u32) {
     // A count of days is far below i64::MAX: the cast keeps it.
-    let days = (unix / 86_400).cast_signed() + 719_468;
-    let era = days.div_euclid(146_097);
-    let day_of_era = days.rem_euclid(146_097);
+    let z = days.cast_signed() + 719_468;
+    let era = z / 146_097;
+    let day_of_era = z - era * 146_097;
     let year_of_era =
         (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
     let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     let shifted_month = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * shifted_month + 2) / 5 + 1;
-    let month = if shifted_month < 10 {
+    // The algorithm keeps them in 1..=31 and 1..=12.
+    let day = u32::try_from(day_of_year - (153 * shifted_month + 2) / 5 + 1).unwrap_or(1);
+    let month = u32::try_from(if shifted_month < 10 {
         shifted_month + 3
     } else {
         shifted_month - 9
-    };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    })
+    .unwrap_or(1);
+    (year_of_era + era * 400 + i64::from(month <= 2), month, day)
+}
+
+/// `2026-10-22` for Unix seconds, in UTC.
+pub(crate) fn date(unix: u64) -> String {
+    let (year, month, day) = civil(unix / 86_400);
     format!("{year:04}-{month:02}-{day:02}")
 }
 

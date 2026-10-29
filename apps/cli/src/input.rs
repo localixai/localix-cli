@@ -37,7 +37,7 @@ pub(crate) fn prompt(arg: Option<&str>) -> Result<Prompt, Failure> {
 
 /// What stdin is, as far as waiting on it goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Stdin {
+enum Stdin {
     Terminal,
     /// A pipe or a socket, which another process may hold open: reading it can wait unseen.
     Stream,
@@ -82,7 +82,7 @@ fn ends() -> bool {
 /// What to tell the person before stdin is read to its end, where that could wait unseen: a
 /// prompt given with stdin left open (a harness's pipe, `ssh` without `-n`, a `while read` loop),
 /// or `-` at a terminal.
-pub(crate) fn waiting(arg: Option<&str>, stdin: Stdin) -> Option<&'static str> {
+fn waiting(arg: Option<&str>, stdin: Stdin) -> Option<&'static str> {
     match (arg, stdin) {
         (Some("-"), Stdin::Terminal) => {
             Some("llx: reading the prompt from stdin; end it with Ctrl-D\n")
@@ -96,7 +96,7 @@ pub(crate) fn waiting(arg: Option<&str>, stdin: Stdin) -> Option<&'static str> {
 }
 
 /// The prompt from `arg` and what was read from stdin (`None`: stdin is a terminal, not read).
-pub(crate) fn assemble(arg: Option<&str>, stdin: Option<&str>) -> Result<Prompt, Failure> {
+fn assemble(arg: Option<&str>, stdin: Option<&str>) -> Result<Prompt, Failure> {
     if arg.is_none() && stdin.is_none() {
         return Ok(Prompt::Line);
     }
@@ -144,7 +144,7 @@ fn read_capped(reader: impl Read, limit: usize) -> Result<String, Failure> {
 
 /// `--schema`: inline JSON, or `@path` to a file; it must be a JSON Schema object.
 pub(crate) fn schema(arg: &str) -> Result<Value, Failure> {
-    let usage = |message: String| Failure::Usage(message);
+    let usage = Failure::Usage;
     let text = match arg.strip_prefix('@') {
         Some(path) => std::fs::read_to_string(path)
             .map_err(|error| usage(format!("--schema {path}: {error}")))?,

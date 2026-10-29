@@ -61,7 +61,7 @@ impl Workspace {
 
     /// Where `path` points, for reading: relative to the root, or absolute; `~` is the home
     /// directory. `.` and `..` are resolved by name, so the result is clean in reports.
-    pub fn readable(&self, path: &str) -> Result<PathBuf, ToolError> {
+    pub(crate) fn readable(&self, path: &str) -> Result<PathBuf, ToolError> {
         let path = path.trim();
         if path.is_empty() {
             return Err(ToolError::Failed("the path is empty".into()));
@@ -84,7 +84,7 @@ impl Workspace {
     /// Where `path` points, for changing: as [`Self::readable`], but only inside the root once
     /// symlinks are followed. The result is the real location, so a write through a symlink lands
     /// on its target instead of replacing the link.
-    pub fn writable(&self, path: &str) -> Result<PathBuf, ToolError> {
+    pub(crate) fn writable(&self, path: &str) -> Result<PathBuf, ToolError> {
         let wanted = self.readable(path)?;
         let real = real(&wanted);
         if !real.starts_with(&self.root) {
@@ -98,7 +98,7 @@ impl Workspace {
     }
 
     /// `path` as a report shows it: relative to the root when inside it, else as it is.
-    pub fn shown(&self, path: &Path) -> String {
+    pub(crate) fn shown(&self, path: &Path) -> String {
         match path.strip_prefix(&self.root) {
             Ok(inside) if inside.as_os_str().is_empty() => ".".into(),
             Ok(inside) => inside.display().to_string(),

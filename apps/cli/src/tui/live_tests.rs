@@ -3,11 +3,11 @@ use std::time::{Duration, Instant};
 use crossterm::event::KeyCode;
 
 use super::*;
-use crate::tui::event::Event;
 use crate::tui::style;
 use crate::tui::test_support::{
     approve, call, label, live_area as shown, press, queue, sent, sent_texts, typed,
 };
+use protocol::Event;
 
 fn app() -> App {
     let mut app = App::new(

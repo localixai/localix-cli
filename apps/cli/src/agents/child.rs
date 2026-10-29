@@ -12,7 +12,7 @@ use contracts::history::Turn;
 
 use super::Registry;
 use super::inbox::AgentInbox;
-use super::kit::{Kit, Own, Tools};
+use super::kit::{Kit, Tools};
 use super::watch::{Labeled, Watch};
 use crate::mode;
 use protocol::Event;
@@ -69,11 +69,7 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
         inner: kit.gate,
         label: name.clone(),
     };
-    let own = Own {
-        gate: &gate,
-        stop: &stop,
-    };
-    let tools = Tools::new(kit, &own);
+    let tools = Tools::new(kit, &gate, &stop);
     let watch = Watch {
         output: kit.output,
         id,
@@ -108,7 +104,7 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
             said.push(brief(&name));
         }
         if now != told {
-            said.push(mode::notice(&now, &kit.rules, kit.terminal, false));
+            said.push(mode::notice(&now, kit.rules, kit.terminal, false));
         }
         let conversation = match said.is_empty() {
             true => conversation,
@@ -164,16 +160,13 @@ fn keep(
                 if child.open {
                     child.conversation = Some(run.conversation);
                 }
-                child.session.record(
-                    Turn {
-                        goal: message.to_string(),
-                        answer: run.answer.clone(),
-                        status: status.to_string(),
-                        at: session::now(),
-                        steps: vec![],
-                    },
-                    None,
-                );
+                child.session.record(Turn {
+                    goal: message.to_string(),
+                    answer: run.answer.clone(),
+                    status: status.to_string(),
+                    at: session::now(),
+                    steps: vec![],
+                });
                 Recorded {
                     session: child.session.clone(),
                     // What the main agent sent after the agent's last look at its letters.

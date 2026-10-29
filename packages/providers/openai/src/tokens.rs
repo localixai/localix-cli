@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use provider_kit::{App, oauth, store};
 use serde_json::{Value, json};
 
-pub const FILE: &str = "openai.json";
+const FILE: &str = "openai.json";
 /// Where the ChatGPT claims sit in a token.
 const AUTH_CLAIM: &str = "https://api.openai.com/auth";
 /// A token that states no lifetime is taken to last an hour.
@@ -39,7 +39,11 @@ impl std::fmt::Debug for Tokens {
 impl Tokens {
     /// The tokens in a token endpoint's answer. A refresh may leave out a new refresh or ID token
     /// (the old ones stay valid), so they are kept from `previous`.
-    pub fn from_reply(body: &Value, previous: Option<&Tokens>, now: u64) -> Result<Self, String> {
+    pub(crate) fn from_reply(
+        body: &Value,
+        previous: Option<&Tokens>,
+        now: u64,
+    ) -> Result<Self, String> {
         let text = |key: &str| {
             body.get(key)
                 .and_then(Value::as_str)
@@ -106,13 +110,13 @@ fn account_of(token: &str) -> Option<String> {
     (!account.is_empty()).then(|| account.to_string())
 }
 
-pub fn now() -> u64 {
+pub(crate) fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_secs())
 }
 
-pub fn path(app: App) -> Option<PathBuf> {
+fn path(app: App) -> Option<PathBuf> {
     store::path(app, FILE)
 }
 

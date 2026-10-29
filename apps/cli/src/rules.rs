@@ -6,6 +6,7 @@
 
 mod command;
 mod git;
+mod glob;
 mod path;
 
 /// The tools a rule can name, and whether a pattern can narrow it: a command's text for `bash`,
@@ -62,18 +63,11 @@ impl Rules {
     /// What the rules say of `tool` acting on `subject` (its command, or its path; empty when
     /// the call has none a pattern could judge). Deny first, then allow.
     pub(crate) fn judge(&self, tool: &str, subject: &str) -> Ruling {
-        let ours = |rules: &[Rule]| {
-            rules
-                .iter()
-                .filter(|rule| rule.tool == tool)
-                .cloned()
-                .collect::<Vec<_>>()
-        };
-        let (allow, deny) = (ours(&self.allow), ours(&self.deny));
-        if let Some(rule) = deny.iter().find(|rule| denies(rule, subject)) {
+        let mut deny = self.deny.iter().filter(|rule| rule.tool == tool);
+        if let Some(rule) = deny.find(|rule| denies(rule, subject)) {
             return Ruling::Denied(format!("refused by the rule `{}`", rule.text));
         }
-        match allows(&allow, tool, subject) {
+        match allows(&self.allow, tool, subject) {
             true => Ruling::Allowed,
             false => Ruling::Unsettled,
         }
@@ -103,8 +97,7 @@ impl Rules {
         if !self.deny.is_empty() {
             said.push(format!("Always refused: {}.", list(&self.deny)));
         }
-        let text = said.join(" ");
-        Some(text)
+        Some(said.join(" "))
     }
 }
 
@@ -120,13 +113,11 @@ fn denies(rule: &Rule, subject: &str) -> bool {
 }
 
 fn allows(rules: &[Rule], tool: &str, subject: &str) -> bool {
-    if rules.iter().any(|rule| rule.pattern.is_none()) {
+    let ours = rules.iter().filter(|rule| rule.tool == tool);
+    if ours.clone().any(|rule| rule.pattern.is_none()) {
         return true;
     }
-    let patterns: Vec<&str> = rules
-        .iter()
-        .filter_map(|rule| rule.pattern.as_deref())
-        .collect();
+    let patterns: Vec<&str> = ours.filter_map(|rule| rule.pattern.as_deref()).collect();
     if patterns.is_empty() || subject.is_empty() {
         return false;
     }
@@ -159,12 +150,8 @@ fn rule(text: &str) -> Result<Rule, String> {
         None => (trimmed, None),
     };
     let name = name.trim().to_ascii_lowercase();
-    let known = TOOLS
-        .iter()
-        .map(|(tool, _)| *tool)
-        .collect::<Vec<_>>()
-        .join(", ");
     let Some(&(tool, narrowed)) = TOOLS.iter().find(|(tool, _)| *tool == name) else {
+        let known = TOOLS.map(|(tool, _)| tool).join(", ");
         return Err(wrong(&format!("a rule names one of {known}")));
     };
     let pattern = match pattern {

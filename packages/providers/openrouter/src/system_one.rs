@@ -37,7 +37,7 @@ impl Decider for SystemOne {
             })
             .collect();
         let body = json!({"model": self.model, "state": state, "questions": questions});
-        let (value, timing) =
+        let (value, millis) =
             self.client
                 .post("/systemone", &body)
                 .map_err(|error| match error {
@@ -56,27 +56,15 @@ impl Decider for SystemOne {
                 .pointer("/usage/cost")
                 .and_then(Value::as_f64)
                 .unwrap_or(0.0),
-            millis: timing.millis,
-            input_tokens: value
-                .pointer("/usage/input_tokens")
-                .and_then(Value::as_u64)
-                .unwrap_or(0),
-            output_tokens: value
-                .pointer("/usage/output_tokens")
-                .and_then(Value::as_u64)
-                .unwrap_or(0),
+            millis,
             ..Decision::default()
         };
-        let answers = value
-            .get("answers")
-            .and_then(Value::as_object)
-            .cloned()
-            .unwrap_or_default();
-        for (key, answer) in answers {
-            if let Some(answer) = read_answer(&answer) {
-                decision.answers.insert(key, answer);
-            }
-        }
+        let answers = (value.get("answers").and_then(Value::as_object))
+            .into_iter()
+            .flatten();
+        decision
+            .answers
+            .extend(answers.filter_map(|(key, answer)| Some((key.clone(), read_answer(answer)?))));
         Ok(decision)
     }
 }

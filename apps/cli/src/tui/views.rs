@@ -10,7 +10,7 @@ pub(crate) struct Views {
     /// Each lane, followed by the agents it started, in the order they started.
     pub sessions: Vec<SessionView>,
     /// The jobs running in the background.
-    pub jobs: Vec<super::event::JobRow>,
+    pub jobs: Vec<protocol::JobRow>,
     /// The id of the session shown.
     pub shown: String,
     /// The row chosen in the list while it has the keys, in the order the tree draws the
@@ -57,8 +57,11 @@ pub(crate) struct SessionView {
     pub lane: Option<Box<LaneState>>,
 }
 
+/// Characters of a first task a lane is named by.
+const NAMED: usize = 48;
+
 impl SessionView {
-    pub(crate) fn new(id: String, parent: Option<String>, name: String) -> Self {
+    pub(super) fn new(id: String, parent: Option<String>, name: String) -> Self {
         let lane = parent.is_none().then(|| {
             Box::new(LaneState {
                 mode: "default".into(),
@@ -80,12 +83,7 @@ impl SessionView {
             lane,
         }
     }
-}
 
-/// Characters of a first task a lane is named by.
-const NAMED: usize = 48;
-
-impl SessionView {
     /// What the person knows it by: its name, else an explicitly new session.
     pub(crate) fn title(&self) -> &str {
         match self.name.is_empty() {
@@ -94,7 +92,6 @@ impl SessionView {
         }
     }
 
-    /// A lane with no name is named by the first line of its first task.
     /// Its task began: it works, and the transcript shows what it was asked (not the mode
     /// switch, which is no task of the person's).
     pub(crate) fn started(
@@ -115,6 +112,7 @@ impl SessionView {
         Some(super::cells::user(goal, width))
     }
 
+    /// A lane with no name is named by the first line of its first task.
     pub(crate) fn named_by(&mut self, goal: &str) {
         if self.lane.is_none() || !self.name.is_empty() {
             return;
@@ -210,13 +208,15 @@ impl Views {
         next.filter(|_| shown).map(|view| view.id.clone())
     }
 
-    /// The lane of the session shown: itself, or the agent's parent.
+    /// The lane of the session at `at`: itself, or the agent's parent.
+    pub(crate) fn lane_of(&self, at: usize) -> usize {
+        let parent = self.sessions[at].parent.as_deref();
+        parent.and_then(|parent| self.find(parent)).unwrap_or(at)
+    }
+
+    /// The lane of the session shown.
     pub(crate) fn home(&self) -> usize {
-        let at = self.find(&self.shown).unwrap_or(0);
-        match &self.sessions[at].parent {
-            Some(parent) => self.find(parent).unwrap_or(0),
-            None => at,
-        }
+        self.lane_of(self.find(&self.shown).unwrap_or(0))
     }
 
     /// The sessions the tree draws, in its order: the lane shown and the agents it started, or

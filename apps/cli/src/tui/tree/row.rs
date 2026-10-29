@@ -7,11 +7,11 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::{cells, ending, tokens};
-use crate::tui::agents::{AgentState, Running, SessionView};
 use crate::tui::printable::printable;
 use crate::tui::style;
 use crate::tui::time;
 use crate::tui::tool_cell;
+use crate::tui::views::{AgentState, Running, SessionView};
 use crate::tui::wrap::{cut, width as text_width};
 
 /// A session's row: a lane by what its task does or how its last one ended, an agent by its
@@ -45,14 +45,22 @@ pub(super) fn session_row<'a>(
     };
     Row {
         chosen,
-        shown,
-        branch: view.parent.is_some(),
-        branch_last: false,
+        branch: if view.parent.is_some() {
+            Branch::Mid
+        } else {
+            Branch::None
+        },
         glyph,
         name: view.title(),
         detail,
         right: spent(view, now),
-        dimmed: view.state == AgentState::Closed,
+        weight: if shown {
+            Weight::Shown
+        } else if view.state == AgentState::Closed {
+            Weight::Dimmed
+        } else {
+            Weight::Plain
+        },
     }
 }
 
@@ -75,24 +83,32 @@ pub(in crate::tui) fn spent(agent: &SessionView, now: Instant) -> String {
     }
 }
 
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "a row's marks, each drawn on its own: any of them may hold with the others"
-)]
+/// Where a row hangs: an agent's under its lane, the last of its lane's closing the branch.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Branch {
+    None,
+    Mid,
+    Last,
+}
+
+/// How a row's name is drawn: the session on the screen, a closed one, or any other.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Weight {
+    Shown,
+    Dimmed,
+    Plain,
+}
+
 pub(super) struct Row<'a> {
     /// The row the list's keys are on.
     pub(super) chosen: bool,
-    /// An agent's, under its lane; the last of its lane's closes the branch.
-    pub(super) branch: bool,
-    pub(super) branch_last: bool,
-    /// The session on the screen.
-    pub(super) shown: bool,
+    pub(super) branch: Branch,
     pub(super) glyph: Span<'static>,
     pub(super) name: &'a str,
     pub(super) detail: String,
     /// Time and tokens, after what it does.
     pub(super) right: String,
-    pub(super) dimmed: bool,
+    pub(super) weight: Weight,
 }
 
 pub(super) fn row(row: Row, names: usize, width: usize) -> Line<'static> {
@@ -100,15 +116,15 @@ pub(super) fn row(row: Row, names: usize, width: usize) -> Line<'static> {
         true => Span::styled("❯ ", style::code()),
         false => Span::raw("  "),
     };
-    let name_style = match (row.shown, row.dimmed) {
-        (true, _) => style::bold(),
-        (false, true) => style::dim(),
-        (false, false) => Style::default(),
+    let name_style = match row.weight {
+        Weight::Shown => style::bold(),
+        Weight::Dimmed => style::dim(),
+        Weight::Plain => Style::default(),
     };
-    let branch = match (row.branch, row.branch_last) {
-        (false, _) => "",
-        (true, false) => "  ├ ",
-        (true, true) => "  └ ",
+    let branch = match row.branch {
+        Branch::None => "",
+        Branch::Mid => "  ├ ",
+        Branch::Last => "  └ ",
     };
     let said = match row.right.is_empty() {
         true => row.detail,

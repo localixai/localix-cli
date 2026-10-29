@@ -128,7 +128,7 @@ pub(crate) fn describe(mode: &Mode, more: &Rules, terminal: bool, asks: bool) ->
     text.push_str(match terminal {
         true => " Anything else is asked of the person, who may refuse it; a refusal says why.",
         false => {
-            " Anything else that changes something (a command, a file, a page) is refused: no one \
+            " Anything else that changes something (a command, a file) is refused: no one \
              is at a terminal to approve it. Reading files works."
         }
     });

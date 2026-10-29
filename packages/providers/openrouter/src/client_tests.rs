@@ -9,7 +9,7 @@ use serde_json::json;
 
 use super::*;
 
-const APP: crate::App = crate::App {
+const APP: App = App {
     name: "llx",
     slug: "llx",
     version: "0",

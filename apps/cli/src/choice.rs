@@ -148,7 +148,7 @@ pub(crate) fn resolve(
 }
 
 /// The levels a selection's model takes, for a message: `low, medium, high`.
-pub(crate) fn levels(selection: &Selection) -> String {
+fn levels(selection: &Selection) -> String {
     let offered = selection.model().offered().iter().map(|e| e.name());
     offered.collect::<Vec<_>>().join(", ")
 }

@@ -225,15 +225,12 @@ fn closed(hunks: &mut [Hunk]) -> Result<(), String> {
     }
 }
 
-/// The files a call names: its `path` (`read`'s), or every path of a patch (a move's two) once.
-/// What a patch does not parse as names none: nothing of it is carried out.
+/// Every path of a call's patch (a move's two) once. What does not parse as a patch names none:
+/// nothing of it is carried out.
 pub fn paths(arguments: &Value) -> Vec<String> {
-    match text(arguments) {
-        Some(patch) => parse(patch).map_or_else(|_| vec![], |hunks| names(&hunks)),
-        None => (arguments.get("path").and_then(Value::as_str))
-            .map(|path| vec![path.to_string()])
-            .unwrap_or_default(),
-    }
+    text(arguments)
+        .and_then(|patch| parse(patch).ok())
+        .map_or_else(Vec::new, |hunks| names(&hunks))
 }
 
 /// The patch a call carries: its arguments as one string (how a script sends it), or an object

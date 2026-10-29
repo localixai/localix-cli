@@ -28,7 +28,7 @@ impl From<&str> for Typed {
 }
 
 /// Whether `entry` may go to the task running: words only.
-pub(crate) fn steerable(entry: &Typed) -> bool {
+fn steerable(entry: &Typed) -> bool {
     let text = entry.text.trim_start();
     entry.images.is_empty()
         && !text.is_empty()
@@ -40,8 +40,6 @@ pub(crate) fn steerable(entry: &Typed) -> bool {
 struct Lane {
     /// The lane waits for its next entry.
     ready: bool,
-    /// A task of the lane runs: words the person sends are for it.
-    busy: bool,
     queued: VecDeque<Typed>,
     steered: Vec<Typed>,
     background: VecDeque<Typed>,
@@ -84,7 +82,7 @@ impl Inputs {
             state.queued.push_front(entry);
         }
         state.ready = true;
-        let mut told = None;
+        let mut told = false;
         loop {
             let left = lanes.left;
             let state = lanes.lanes.entry(lane.into()).or_default();
@@ -104,11 +102,11 @@ impl Inputs {
                 return taken;
             }
             // Told once that it waits, outside the lock (R6); what arrives meanwhile wakes it.
-            if told.is_none() {
+            if !told {
                 let queue = queue(state);
                 drop(lanes);
                 (self.tell)(lane, queue);
-                told = Some(());
+                told = true;
                 lanes = self.lock();
                 continue;
             }
@@ -119,14 +117,14 @@ impl Inputs {
         }
     }
 
-    /// What the person sent: for the lane waiting, the task running (words), or after it.
-    pub(crate) fn input(&self, input: Input) {
+    /// What the person sent: for the lane waiting, the task running (`busy`: words), or after it.
+    pub(crate) fn input(&self, input: Input, busy: bool) {
         let entry = Typed {
             text: input.text,
             images: input.images,
         };
         self.change(&input.session, |state| {
-            match !input.later && state.busy && steerable(&entry) {
+            match !input.later && busy && steerable(&entry) {
                 true => state.steered.push(entry),
                 false => state.queued.push_back(entry),
             }
@@ -139,30 +137,25 @@ impl Inputs {
         self.change(lane, |state| state.background.push_back(text.into()));
     }
 
-    /// What the person said to the task running: taken (and shown as theirs), or, with `peek`,
-    /// only looked at.
-    pub(crate) fn steered(&self, lane: &str, peek: bool) -> Vec<String> {
-        let mut texts = vec![];
-        let mut take = |state: &mut Lane| {
-            texts = state.steered.iter().map(|e| e.text.clone()).collect();
-            if !peek {
-                state.steered.clear();
-            }
-        };
-        if peek {
-            take(self.lock().lanes.entry(lane.into()).or_default());
-            return texts;
+    /// What the person said to the task running, taken (and shown as theirs).
+    pub(crate) fn steered(&self, lane: &str) -> Vec<String> {
+        let mut said = vec![];
+        self.change(lane, |state| {
+            said = texts(&state.steered);
+            state.steered.clear();
+        });
+        if !said.is_empty() {
+            (self.tell)(lane, Event::Steered(said.clone()));
         }
-        self.change(lane, take);
-        if !texts.is_empty() {
-            (self.tell)(lane, Event::Steered(texts.clone()));
-        }
-        texts
+        said
     }
 
-    /// A task of the lane began or ended: words sent meanwhile are for it.
-    pub(crate) fn working(&self, lane: &str, busy: bool) {
-        self.lock().lanes.entry(lane.into()).or_default().busy = busy;
+    /// What the person said to the task running, only looked at.
+    pub(crate) fn peek_steered(&self, lane: &str) -> Vec<String> {
+        self.lock()
+            .lanes
+            .get(lane)
+            .map_or_else(Vec::new, |state| texts(&state.steered))
     }
 
     /// The lane's prompt gets nothing more: it ends at its next wait. Only a lane that waited
@@ -211,16 +204,21 @@ impl Inputs {
     }
 }
 
+/// What the entries said.
+fn texts<'a>(entries: impl IntoIterator<Item = &'a Typed>) -> Vec<String> {
+    entries
+        .into_iter()
+        .map(|entry| entry.text.clone())
+        .collect()
+}
+
 /// The lane's queue as the interface shows it: the background's by where it came from.
 fn queue(state: &Lane) -> Event {
-    let texts = |entries: &mut dyn Iterator<Item = &Typed>| -> Vec<String> {
-        entries.map(|entry| entry.text.clone()).collect()
-    };
     let background = state.background.iter().map(|e| super::wire::shown(&e.text));
     Event::Queue {
         ready: state.ready,
-        steered: texts(&mut state.steered.iter()),
-        queued: texts(&mut state.queued.iter()),
+        steered: texts(&state.steered),
+        queued: texts(&state.queued),
         background: background.collect(),
     }
 }

@@ -114,7 +114,7 @@ fn a_cut_never_splits_a_character() {
 #[test]
 fn the_environment_says_where_when_and_how() {
     let scratch = Scratch::new();
-    let text = gather(&environment(scratch.path()), None);
+    let text = gather(&environment(scratch.path()));
     assert!(text.starts_with("<environment>\n"));
     assert!(text.contains(&format!("Working directory: {}", scratch.path().display())));
     assert!(text.contains("Date: 2026-10-22 (UTC)"));
@@ -142,19 +142,18 @@ fn a_resumed_session_tells_what_was_asked_before() {
     };
     let session = Session {
         id: "1-ab".into(),
-        location: "https://example.com/".into(),
         turns: vec![
             turn("fix the parser", "Fixed it."),
             turn("add a test", "Added."),
         ],
         ..Session::default()
     };
-    let text = gather(&environment(scratch.path()), Some(&session));
+    let text = going_on(scratch.path(), &session);
     assert!(text.contains("<previous_session id=\"1-ab\">"));
     assert!(text.contains("1. Task: fix the parser\n   Ended: achieved\n   Answer: Fixed it."));
     assert!(text.contains("2. Task: add a test"));
     let empty = Session::default();
-    assert!(!gather(&environment(scratch.path()), Some(&empty)).contains("previous_session"));
+    assert!(!going_on(scratch.path(), &empty).contains("previous_session"));
 }
 
 fn turn(goal: &str, answer: &str) -> Turn {
@@ -183,7 +182,7 @@ fn a_huge_earlier_task_hides_neither_itself_nor_the_others() {
         ],
         ..Session::default()
     };
-    let text = gather(&environment(scratch.path()), Some(&session));
+    let text = going_on(scratch.path(), &session);
     assert!(text.contains("1. Task: first task"), "{text}");
     assert!(text.contains(&format!("2. Task: {}…", "x".repeat(GOAL_LIMIT))));
     assert!(text.contains("3. Task: fix it [with stdin, not kept here]"));
@@ -200,35 +199,31 @@ fn a_session_from_another_workspace_says_where_it_ran() {
         turns: vec![turn("fix the parser", "Fixed it.")],
         ..Session::default()
     };
-    let text = gather(&environment(scratch.path()), Some(&session));
+    let text = going_on(scratch.path(), &session);
     assert!(text.contains("Its tasks ran in /elsewhere/repo, not in this workspace"));
     session.workspace = here.clone();
-    let text = gather(&environment(scratch.path()), Some(&session));
+    let text = going_on(scratch.path(), &session);
     assert!(text.contains(&format!("Its tasks ran in this workspace, {here}.")));
 }
 
 #[test]
-fn a_saved_session_resumed_from_the_fresh_context_reads_as_gathered() {
+fn a_saved_session_resumed_from_the_fresh_context_follows_the_instructions() {
     let scratch = Scratch::new();
     scratch.file("AGENTS.md", "rules");
     let session = Session {
         id: "1-ab".into(),
-        turns: vec![Turn {
-            goal: "fix the parser".into(),
-            answer: "Fixed it.".into(),
-            status: "achieved".into(),
-            at: 1,
-            steps: vec![],
-        }],
+        turns: vec![turn("fix the parser", "Fixed it.")],
         ..Session::default()
     };
-    let environment = environment(scratch.path());
-    let fresh = gather(&environment, None);
-    let root = scratch.path();
-    assert_eq!(
-        resumed(&fresh, &session, root),
-        gather(&environment, Some(&session))
-    );
+    let fresh = gather(&environment(scratch.path()));
+    let text = resumed(&fresh, &session, scratch.path());
+    assert!(text.starts_with(&fresh));
+    assert!(text.find("rules") < text.find("<previous_session"));
     let empty = Session::default();
-    assert_eq!(resumed(&fresh, &empty, root), fresh);
+    assert_eq!(resumed(&fresh, &empty, scratch.path()), fresh);
+}
+
+/// The context of a run that resumes `session`.
+fn going_on(root: &Path, session: &Session) -> String {
+    resumed(&gather(&environment(root)), session, root)
 }

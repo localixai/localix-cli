@@ -12,7 +12,8 @@ pub(crate) const NAME: &str = "jobs";
 const WATCH_MS: u64 = 300_000;
 const MAX_WATCH_MS: u64 = 1_800_000;
 
-const DESCRIPTION: &str = "Work that goes on in the background and comes back to you later.
+pub(super) const DESCRIPTION: &str =
+    "Work that goes on in the background and comes back to you later.
 - `monitor` with `command` (and a short `name`): run a command in the background and get each \
 new line it prints as a `<monitor>` message, at your next step, or as a new task once you are \
 done. Use it to watch a log, a build, a test run or a polled status instead of waiting or \
@@ -53,10 +54,6 @@ pub(crate) enum When {
     Cron(Cron),
     /// This many seconds from now.
     In(u64),
-}
-
-pub(crate) fn description() -> String {
-    DESCRIPTION.into()
 }
 
 pub(crate) fn parameters() -> Value {

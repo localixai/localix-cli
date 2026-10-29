@@ -12,6 +12,7 @@ fn a_failing_call() -> Model {
     Model::start(vec![
         Reply::call("bash", json!({"command": ""})),
         Reply::text("Nothing ran.\nRESULT: not achieved"),
+        Reply::text("Nothing can run.\nRESULT: not achieved"),
     ])
 }
 

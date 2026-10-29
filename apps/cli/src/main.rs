@@ -75,8 +75,7 @@ fn run() -> i32 {
         Err(failure) => {
             log::warn!("ended with exit {}: {failure}", failure.code());
             if let Some(message) = failure.message() {
-                use std::io::Write;
-                let _ = writeln!(std::io::stderr(), "{message}");
+                error::note(&format!("{message}\n"));
             }
             failure.code()
         }

@@ -4,6 +4,7 @@
 //! then its client, and the daemon runs the same code for it (`At::Served`). Each task is run,
 //! reported and recorded; Ctrl-C stops it (see `interrupt`), not the process.
 
+mod ended;
 mod interface;
 #[cfg(unix)]
 mod remote;
@@ -34,8 +35,8 @@ use crate::modes::Modes;
 use crate::server::{Ui, place};
 use crate::tui;
 
+pub(crate) use self::ended::Ended;
 pub(crate) use self::interface::{Left, info, serving};
-pub(crate) use super::ended::Ended;
 
 /// The workspace `options` name (`-C`, else the current directory), with what is llx's own off
 /// limits to the tools (`place::at`).
@@ -55,7 +56,7 @@ pub(crate) enum Kind {
 
 /// What a run does once composed.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Work {
+enum Work {
     /// One task, then exit.
     One(String),
     /// A session in the interface, after a first message when there is one.
@@ -83,7 +84,7 @@ fn work(prompt: Option<&str>, kind: Kind) -> Result<Work, Failure> {
 }
 
 /// Whether a session can run: at a terminal, with no option that answers one task.
-pub(crate) fn session_allowed(
+fn session_allowed(
     prompt: Option<&str>,
     options: &RunOptions,
     terminal: bool,
@@ -202,8 +203,11 @@ pub(crate) fn run(
         now: session::now(),
         runtimes: &context::runtimes(&path),
     };
-    let context = context::gather(&environment, resumed.as_ref());
-    let fresh = context::gather(&environment, None);
+    let fresh = context::gather(&environment);
+    let context = match &resumed {
+        Some(session) => context::resumed(&fresh, session, workspace.root()),
+        None => fresh.clone(),
+    };
     let history = sessions::store();
     let mut session = resumed.unwrap_or_else(|| history.start());
     if session.workspace.is_empty() {
@@ -281,9 +285,9 @@ impl Ready {
                         told.send(protocol::Event::Quit);
                     }
                 };
-                let code = desk::run(&shared, &ui, requests, seat, first, &start, &quit);
+                desk::run(&shared, &ui, requests, seat, first, &start, &quit);
                 drop(running);
-                code
+                crate::exit::OK
             }
             Self::One(task) => compose(setup, |rig| {
                 rig.attached = rig.options.images.clone();

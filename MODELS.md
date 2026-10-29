@@ -24,7 +24,8 @@ definition is only for a lab serving its own model or a model unique to the host
 2. Deep-merge the provider file over it: tables merge key by key; arrays and primitives replace.
 3. Drop each dotted path in `base_model_omit` (e.g. `limit.input`).
 4. `modalities` are the provider file's when it has them, else the lab's.
-5. `id` is the provider file's path, `canonical_id` its `base_model`, `type` defaults to `chat`.
+5. `id` is the provider file's path, `type` defaults to `chat`. (models.dev also sets `canonical_id`
+   to the `base_model`; llx keeps no such field, nor a provider's `doc`.)
 
 **`provider.toml`**: `name`, `npm` (the AI SDK package: it decides the protocol), `env` (the key
 variables), `api` (the base address; required for `@ai-sdk/openai-compatible`), `doc`,

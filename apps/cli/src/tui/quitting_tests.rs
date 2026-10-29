@@ -4,8 +4,8 @@ use crossterm::event::KeyCode;
 use protocol::Running;
 
 use crate::tui::app::{Action, App};
-use crate::tui::event::Event;
 use crate::tui::test_support::{ctrl, in_session as from, press, render, typed};
+use protocol::Event;
 
 /// Lanes A (shown) and B; B works when `b_works`.
 fn two(b_works: bool, now: Instant) -> App {

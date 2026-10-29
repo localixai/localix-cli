@@ -270,7 +270,6 @@ fn a_command_runs_to_its_end_with_no_terminal() {
     let properties = &schema["properties"];
     assert!(properties.get("session").is_none() && properties.get("tty").is_none());
     assert_eq!(schema["required"], serde_json::json!(["command"]));
-    assert!(!spec.description.contains("{terminal}"));
     let session = tool.call(&serde_json::json!({"command": "python3", "tty": true}));
     assert!(matches!(session, Err(ToolError::Failed(_))));
 }
@@ -301,5 +300,21 @@ fn a_command_runs_with_the_workspaces_environment_and_never_its_hidden_variables
     assert!(
         report.ends_with("### stdout\nfrom the client|none|none"),
         "{report}"
+    );
+}
+
+#[test]
+fn a_source_file_of_a_thousand_lines_is_read_whole() {
+    // About 10,000 tokens, what a model reads of one file at a time: no middle cut out.
+    let dir = Scratch::new();
+    let report = bash(
+        &dir,
+        &Recorder::default(),
+        json!({"command": "awk 'BEGIN { for (i = 0; i < 1000; i++) printf \"line %04d of a file to read whole\\n\", i }'"}),
+    )
+    .unwrap();
+    assert!(!report.contains("characters cut"));
+    assert!(
+        report.contains("line 0500 of") && report.ends_with("line 0999 of a file to read whole")
     );
 }

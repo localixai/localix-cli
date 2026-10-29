@@ -15,7 +15,8 @@ impl Composer {
         }
         let mut mark = "[Paste]".to_string();
         let mut n = 2;
-        while self.text().contains(&mark) || self.pastes.iter().any(|(taken, _)| *taken == mark) {
+        let text = self.text();
+        while text.contains(&mark) || self.pastes.iter().any(|(taken, _)| *taken == mark) {
             mark = format!("[Paste #{n}]");
             n += 1;
         }
@@ -29,14 +30,15 @@ impl Composer {
         if self.at > 0 && !self.text[self.at - 1].is_whitespace() {
             self.insert(' ');
         }
-        mark.chars().chain([' ']).for_each(|c| self.insert(c));
+        self.insert_str(&format!("{mark} "));
     }
 
     /// Attach the picture at `path`: a mark for it goes in the text where the cursor is.
     pub(crate) fn attach(&mut self, path: PathBuf) {
-        let mark = self.mark(&Dropped::Image(path.clone()));
+        let dropped = Dropped::Image(path);
+        let mark = self.mark(&dropped);
         self.insert_mark(&mark);
-        self.attached.push((mark, Dropped::Image(path)));
+        self.attached.push((mark, dropped));
     }
 
     /// Whether a paste consists entirely of file paths (including shell-escaped spaces).

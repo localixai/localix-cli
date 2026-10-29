@@ -34,16 +34,10 @@ pub struct Pasted {
 
 pub fn pasted(input: &str) -> Pasted {
     let input = input.trim();
-    if input.is_empty() {
-        return Pasted {
-            code: None,
-            state: None,
-            error: None,
-        };
-    }
+    // Not an address: the code alone (or nothing).
     if !input.contains('?') {
         return Pasted {
-            code: Some(input.to_string()),
+            code: Some(input.to_string()).filter(|code| !code.is_empty()),
             state: None,
             error: None,
         };

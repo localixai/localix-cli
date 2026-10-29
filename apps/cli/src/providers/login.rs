@@ -86,7 +86,9 @@ impl Login for OpenRouter {
 
     fn finish(&self, code: &str) -> Result<String, String> {
         let key = self.0.finish(&self.1, code)?;
-        let file = openrouter::auth::save(APP, &key).map_err(|e| e.to_string())?;
+        let file = Provider::openrouter()
+            .save_key(&key)
+            .map_err(|e| e.to_string())?;
         Ok(format!(
             "Signed in: the key {} is saved in {}.",
             masked(&key),

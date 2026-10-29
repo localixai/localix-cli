@@ -27,7 +27,8 @@ use super::wrap::cut;
 use crate::tui::printable::printable;
 
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const FRAME_MS: u128 = 80;
+/// One spinner frame, as the interface redraws it (`drawing.rs`).
+const FRAME_MS: u128 = super::drawing::FRAME.as_millis();
 const PLACEHOLDER: &str = "Type a task, / for commands";
 
 /// The live rows at `now`, and where the cursor goes among them.
@@ -216,12 +217,10 @@ fn offer_rows(app: &App, offers: &[Offer], width: usize) -> Vec<Line<'static>> {
     out
 }
 
+/// The line under a mode command being typed: the mode now, and what its keys do.
 fn command_context(text: &str, current: &str) -> Option<String> {
     match text {
         "/mode" | "/permissions" => Some(format!("mode  ›  current: {current} · enter to list")),
-        "/mode " | "/permissions " => Some(format!(
-            "mode  ›  current: {current} · ↑↓ choose · tab complete · enter apply"
-        )),
         _ if text.starts_with("/mode ") || text.starts_with("/permissions ") => Some(format!(
             "mode  ›  current: {current} · ↑↓ choose · tab complete · enter apply"
         )),

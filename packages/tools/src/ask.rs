@@ -23,9 +23,9 @@ Never use it to ask for permission to run a command or change a file: those are 
 happen. If the person skips a question or nobody can answer, go on with your best assumption and \
 state it in your answer.";
 
-pub const SKIPPED: &str = "The person skipped the question. Go on with your best assumption and \
+const SKIPPED: &str = "The person skipped the question. Go on with your best assumption and \
 state it in your answer; do not ask the same thing again unless it truly blocks the work.";
-pub const STOPPED: &str = "the person stopped the task";
+const STOPPED: &str = "the person stopped the task";
 
 pub struct AskTool<'a> {
     pub person: &'a dyn Person,
@@ -100,11 +100,11 @@ fn parameters() -> Value {
 
 /// The questions `arguments` ask, or why they cannot be asked.
 fn questions(arguments: &Value) -> Result<Vec<Question>, String> {
-    let listed = match arguments.get("questions") {
-        Some(Value::Array(list)) => list.clone(),
+    let listed: &[Value] = match arguments.get("questions") {
+        Some(Value::Array(list)) => list,
         Some(_) => return Err("`questions` must be a list of questions".into()),
         // One question written at the top level.
-        None if arguments.get("question").is_some() => vec![arguments.clone()],
+        None if arguments.get("question").is_some() => std::slice::from_ref(arguments),
         None => return Err("give `questions`: a list of one to three questions".into()),
     };
     if listed.is_empty() {
@@ -146,9 +146,9 @@ fn question(item: &Value, number: usize) -> Result<Question, String> {
         Some(id) if !id.is_empty() => id.to_string(),
         _ => format!("q{number}"),
     };
-    let options = match fields.get("options") {
-        None | Some(Value::Null) => vec![],
-        Some(Value::Array(options)) => options.clone(),
+    let options: &[Value] = match fields.get("options") {
+        None | Some(Value::Null) => &[],
+        Some(Value::Array(options)) => options,
         Some(_) => return Err(format!("the options of question {number} must be a list")),
     };
     if options.len() > MAX_OPTIONS {

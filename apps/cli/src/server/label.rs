@@ -6,16 +6,6 @@ use serde_json::Value;
 
 use crate::printable::one_line;
 
-/// How the call of `name` with `args` reads.
-pub(crate) fn label(name: &str, args: &Value) -> protocol::Label {
-    let what = describe(name, args);
-    protocol::Label {
-        doing: what.verb.0.into(),
-        done: what.verb.1.into(),
-        subject: what.subject,
-    }
-}
-
 /// `n` of `thing`, as `1 question` or `3 questions`.
 fn count(n: usize, thing: &str) -> String {
     match n {
@@ -24,15 +14,15 @@ fn count(n: usize, thing: &str) -> String {
     }
 }
 
-struct What {
-    /// The verb while running and once done: `Running`/`Ran`.
-    verb: (&'static str, &'static str),
-    subject: String,
-}
-
-fn describe(name: &str, args: &Value) -> What {
+/// How the call of `name` with `args` reads. A verb is the one while running and the one once
+/// done: `Running`/`Ran`.
+pub(crate) fn label(name: &str, args: &Value) -> protocol::Label {
     let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or("").trim();
-    let what = |verb, subject: String| What { verb, subject };
+    let what = |(doing, done): (&str, &str), subject: String| protocol::Label {
+        doing: doing.into(),
+        done: done.into(),
+        subject,
+    };
     match name {
         "bash" => {
             let mut subject = one_line(text("command"));

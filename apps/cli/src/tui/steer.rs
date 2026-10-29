@@ -2,10 +2,7 @@
 //! slash command, a picture, or Tab waits for the task to end instead. The server decides which
 //! (`server/inputs.rs`); the interface only says when an entry is for after the task.
 
-use protocol::{Command, Input};
-
 use super::app::App;
-use super::event::Out;
 
 impl App {
     /// The composer's text for after the task: Tab while it works.
@@ -16,13 +13,6 @@ impl App {
         }
         self.composer.clear();
         let (text, images) = self.composer.take_attached(&entry);
-        let session = self.lane_id().to_string();
-        let input = Input {
-            session,
-            text,
-            images,
-            later: true,
-        };
-        self.outbox.push(Out::Call(Command::Input(input)));
+        self.tell(text, images, true);
     }
 }

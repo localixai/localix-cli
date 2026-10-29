@@ -184,7 +184,7 @@ fn a_catalog_decodes_only_the_models_asked_for() {
 impl Catalog {
     /// Whether the built-in files under it were read.
     fn read_built_in(&self) -> bool {
-        matches!(&self.under, Under::BuiltIn(read) if read.get().is_some())
+        self.under.as_ref().is_some_and(|read| read.get().is_some())
     }
 }
 
@@ -408,4 +408,18 @@ fn a_model_takes_tools_of_free_text_with_a_grammar_when_its_api_says_so() {
         "api": {"responses": {"base_url": "https://x"}}}))
     .unwrap();
     assert!(!bare.takes_lark(RESPONSES));
+}
+
+#[test]
+fn a_fetched_catalog_keeps_the_grammar_its_api_does_not_publish() {
+    // models.dev's v2 API leaves `freeform` out: a fetched model says nothing of it.
+    let fetched = json!({"openai": {"name": "OpenAI", "models": {"gpt-6-luna": {"name": "GPT-6 Luna",
+        "capabilities": {"tools": {"supported": true}},
+        "api": {"responses": {"base_url": "https://api.openai.com/v1"}}}}}});
+    let catalog = Catalog::parse(&fetched.to_string())
+        .unwrap()
+        .over_built_in();
+    assert!(catalog.takes_lark("openai", "gpt-6-luna", RESPONSES));
+    assert!(!catalog.takes_lark("openai", "gpt-5.3-codex-spark", RESPONSES));
+    assert!(!catalog.takes_lark("openai", "gpt-6-luna", "messages"));
 }

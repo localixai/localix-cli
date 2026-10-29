@@ -19,36 +19,24 @@ pub(crate) struct Info {
     /// What `/` offers, and the modes, each with what it does.
     pub commands: Vec<(String, String)>,
     pub modes: Vec<(String, String)>,
-    /// Whether work may go on once the interface leaves (`Command::Background`).
-    pub background: bool,
     /// The daemon this server is, when it is one.
     pub host: Option<Arc<Host>>,
 }
 
-/// Serve the peer's first client ([`Peer::new`]'s) until it is gone: replies to their
-/// questions, lanes' commands to the desk, the person's entries to the lanes' queues. Whether
-/// the person moved the session to the background: then its prompts wait for the next interface.
-/// Otherwise, once the last interface is gone, they end with nothing, and the desk, its
-/// requests' sender dropped with this connection, stops the lanes' work.
+/// Serve the peer's first client ([`Peer::new`]'s) until it is gone, from `first` when a frame
+/// was already read from the connection (the daemon reads its handshake to know where the client
+/// is): replies to their questions, lanes' commands to the desk, the person's entries to the
+/// lanes' queues. Whether the person moved the session to the background: then its prompts wait
+/// for the next interface. Otherwise, once the last interface is gone, they end with nothing, and
+/// the desk, its requests' sender dropped with this connection, stops the lanes' work.
 pub(crate) fn serve(
+    first: Option<ToServer>,
     incoming: &Receiver<ToServer>,
     peer: &Arc<Peer>,
     desk: &Sender<Request>,
     info: &Info,
 ) -> bool {
-    serving(None, incoming, peer, FIRST, desk, info)
-}
-
-/// [`serve`], from `first`, a frame already read from the connection (the daemon reads its
-/// handshake to know where the client is).
-pub(crate) fn serve_from(
-    first: ToServer,
-    incoming: &Receiver<ToServer>,
-    peer: &Arc<Peer>,
-    desk: &Sender<Request>,
-    info: &Info,
-) -> bool {
-    serving(Some(first), incoming, peer, FIRST, desk, info)
+    serving(first, incoming, peer, FIRST, desk, info)
 }
 
 /// A connection back to sessions moved to the background: attached at once, so it is given
@@ -62,7 +50,7 @@ pub(crate) fn rejoin(
     info: &Info,
 ) -> bool {
     peer.inputs.back();
-    let (me, _) = peer.attach(out, None);
+    let (me, _) = peer.hub.attach(out, None);
     serving(Some(first), incoming, peer, me, desk, info)
 }
 
@@ -82,7 +70,7 @@ fn serving(
                 id,
                 command: Command::Attach { cursor },
             } => {
-                peer.to(
+                peer.hub.to(
                     me,
                     ToClient::Done {
                         id,
@@ -96,13 +84,13 @@ fn serving(
                     id,
                     done: guarded(command, peer, desk, info),
                 };
-                peer.to(me, done);
+                peer.hub.to(me, done);
             }
         }
     }
     // The last interface is gone, and the work was not kept: nobody will answer what waits for
     // the person.
-    let left = peer.detach(me);
+    let left = peer.hub.detach(me);
     if !kept && left == 0 {
         peer.inputs.leave();
         peer.abandon(None);
@@ -112,7 +100,7 @@ fn serving(
 
 /// The connection attached again from `cursor`: replayed to.
 fn attach(peer: &Peer, me: ClientId, cursor: Option<u64>) -> Done {
-    match peer.rewind(me, cursor) {
+    match peer.hub.rewind(me, cursor) {
         Some(seq) => Done::Attached { seq },
         None => Done::Failed {
             why: "this client was dropped".into(),
@@ -164,13 +152,14 @@ fn done(command: Command, peer: &Peer, desk: &Sender<Request>, info: &Info) -> D
                 max_lanes: info.max_lanes,
                 commands: info.commands.clone(),
                 modes: info.modes.clone(),
-                background: info.background,
+                background: info.host.is_some(),
             }
         }
         // A lane that ended keeps nothing: what comes for it is refused, never kept.
         Command::Input(input) if !peer.work.open(&input.session) => not_open(&input.session),
         Command::Input(input) => {
-            peer.inputs.input(input);
+            let busy = peer.work.busy(&input.session);
+            peer.inputs.input(input, busy);
             Done::Ok
         }
         Command::Interrupt { session } => Done::Interrupted {

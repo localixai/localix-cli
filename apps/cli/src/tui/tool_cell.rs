@@ -17,10 +17,10 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::style;
-#[path = "edit_diff.rs"]
-mod edit_diff;
 use super::wrap::{cut, wrap};
 use crate::tui::printable::printable;
+
+mod edit_diff;
 
 /// Rows of output a finished call keeps: the first and the last, with how many were left out.
 const HEAD: usize = 2;
@@ -86,13 +86,7 @@ pub(crate) fn body(name: &str, outcome: &Outcome, width: usize) -> Vec<Line<'sta
         && let Outcome::Done { report } = outcome
         && let Some((summary, diffs)) = report.split_once("\n\nDiff of ")
     {
-        let mut out = body(
-            name,
-            &Outcome::Done {
-                report: summary.into(),
-            },
-            width,
-        );
+        let mut out = rows_block(output_rows(name, summary), width);
         let diffs: Vec<&str> = diffs.split("\n\nDiff of ").collect();
         for each in &diffs {
             let (file, diff) = each.split_once(":\n").unwrap_or((each, ""));
@@ -114,6 +108,11 @@ pub(crate) fn body(name: &str, outcome: &Outcome, width: usize) -> Vec<Line<'sta
         }
         Outcome::Done { report } => output_rows(name, report),
     };
+    rows_block(rows, width)
+}
+
+/// `rows` shortened, each cut to `width` under the call's rule.
+fn rows_block(rows: Vec<(String, Style)>, width: usize) -> Vec<Line<'static>> {
     let mut out = vec![];
     for (at, (text, style)) in shorten(rows).into_iter().enumerate() {
         let prefix = if at == 0 { "  └ " } else { "    " };
@@ -144,21 +143,13 @@ pub(crate) fn doing(label: &Label) -> String {
 /// The rows worth showing under a finished call. A command shows what it printed, and its exit
 /// when that was not 0; an edit shows its line counts; the rest show their report's first row.
 fn output_rows(name: &str, report: &str) -> Vec<(String, Style)> {
-    let rows = |text: &str| -> Vec<(String, Style)> {
-        text.lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(|line| (printable(line.trim_end()), style::dim()))
-            .collect()
-    };
     match name {
         "bash" => {
             let (head, streams) = report.split_once('\n').unwrap_or((report, ""));
-            let printed: String = streams
+            let printed = streams
                 .lines()
-                .filter(|line| !matches!(*line, "### stdout" | "### stderr"))
-                .collect::<Vec<_>>()
-                .join("\n");
-            let mut out = rows(&printed);
+                .filter(|line| !matches!(*line, "### stdout" | "### stderr"));
+            let mut out: Vec<_> = rows(printed).collect();
             if !exit_zero(report) {
                 out.push((printable(head), style::failed()));
             } else if out.is_empty() {
@@ -176,15 +167,20 @@ fn output_rows(name: &str, report: &str) -> Vec<(String, Style)> {
                 .collect(),
         },
         // What the person answered, without the report's own heading.
-        "ask" => rows(report).into_iter().skip(1).collect(),
-        // The agent's answer, without the line that names it.
+        "ask" => rows(report.lines()).skip(1).collect(),
         // What agents said, without the tags that frame it for the model.
-        "agents" => rows(report)
-            .into_iter()
+        "agents" => rows(report.lines())
             .filter(|(row, _)| !row.starts_with("<agent_result") && row != "</agent_result>")
             .collect(),
-        _ => rows(report).into_iter().take(1).collect(),
+        _ => rows(report.lines()).take(1).collect(),
     }
+}
+
+/// The non-blank `lines`, each as a dim row.
+fn rows<'a>(lines: impl Iterator<Item = &'a str>) -> impl Iterator<Item = (String, Style)> {
+    lines
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| (printable(line.trim_end()), style::dim()))
 }
 
 /// Whether a command's report says it exited with 0.

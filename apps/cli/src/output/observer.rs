@@ -96,12 +96,7 @@ impl Observer for Output {
 
     fn turn(&self, usage: &Usage) {
         logged::turn(&lock(&self.session), usage);
-        let spent = contracts::history::Spent {
-            input_tokens: usage.input_tokens,
-            cached_tokens: usage.cached_tokens,
-            output_tokens: usage.output_tokens,
-            cost: usage.cost,
-        };
+        let spent = contracts::history::Spent::from(usage);
         let step = contracts::history::Step {
             what: "model".into(),
             detail: format!("{} in · {} out", usage.input_tokens, usage.output_tokens),

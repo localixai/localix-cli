@@ -6,7 +6,7 @@ use contracts::chat::Chat;
 
 use super::{Rig, Seat, Setup, Shared, assemble};
 use crate::interrupt::{self, Interrupt};
-use crate::live::Live;
+use crate::live::LiveChat;
 use crate::output::Output;
 
 /// The model a session thinks with.
@@ -14,7 +14,7 @@ use crate::output::Output;
 pub(crate) struct Models<'a> {
     pub chat: &'a dyn Chat,
     /// Where `/login` puts the models it chose; `None` when they cannot change.
-    pub live: Option<&'a Live>,
+    pub live: Option<&'a LiveChat>,
 }
 
 /// Build the agent from `setup` on the chosen provider's chat model, and run `work` with it; its
@@ -29,9 +29,9 @@ pub(crate) fn compose(setup: Setup, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
 pub(crate) fn lane(shared: &Shared, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
     // The session's environment: in the daemon, its client's, whose keys it thinks with.
     let vars = shared.workspace.env();
-    let live = Live::of(&seat.choice, vars);
+    let live = LiveChat::of(&seat.choice, vars);
     let models = Models {
-        chat: &live.chat,
+        chat: &live,
         live: Some(&live),
     };
     lane_with(shared, seat, models, work)

@@ -10,7 +10,7 @@ fn run(command: &str, seconds: u64, stopped: &dyn Fn() -> bool) -> (Vec<Vec<Stri
 
 fn hiding(
     command: &str,
-    hidden: &[&str],
+    hidden: &[String],
     seconds: u64,
     stopped: &dyn Fn() -> bool,
 ) -> (Vec<Vec<String>>, String) {
@@ -87,7 +87,7 @@ fn the_apps_secrets_are_not_in_its_environment() {
     let command = format!("echo \"[${{{name}+set}}]\"");
     let (shown, _) = hiding(&command, &[], 10, &|| false);
     assert_eq!(shown, [vec!["[set]"]], "{name} is passed on unless hidden");
-    let (hidden, _) = hiding(&command, &[name.as_str()], 10, &|| false);
+    let (hidden, _) = hiding(&command, std::slice::from_ref(&name), 10, &|| false);
     assert_eq!(hidden, [vec!["[]"]], "{name} was hidden");
 }
 

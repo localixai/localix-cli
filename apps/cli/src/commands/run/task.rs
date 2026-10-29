@@ -120,7 +120,7 @@ impl Rig<'_> {
             at: session::now(),
             steps: self.output.take_steps(),
         };
-        self.session.record(turn, None);
+        self.session.record(turn);
         if let Err(error) = self.meta.save(self.history, &mut self.session) {
             self.output
                 .note(&format!("llx: the session was not saved: {error}\n"));

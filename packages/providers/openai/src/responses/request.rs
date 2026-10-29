@@ -1,34 +1,28 @@
 //! A request as the Responses API takes it: the conversation as input items, the tools, the
 //! level, and the prompt cache's key.
 
-use contracts::catalog::{Effort, Selection};
+use contracts::catalog::Selection;
 use contracts::chat::{Message, Request};
 use serde_json::{Value, json};
 
-use super::offer::{Offer, Texts};
+use super::offer::Offer;
 
-/// The request body for `request`, a tool of free text offered as `texts` says.
-pub(crate) fn body(selection: &Selection, request: Request, texts: Texts) -> Value {
-    let offer = Offer::new(request.tools, texts, request.conversation);
+/// The request body for `request`, its tools offered as `offer` says, the prompt cache keyed by
+/// `session` (the conversation's, [`super::route::session`]).
+pub(super) fn body(selection: &Selection, request: Request, offer: &Offer, session: &str) -> Value {
     let mut body = json!({
         "model": selection.model().id,
         "input": (request.conversation.iter())
-            .flat_map(|message| items(message, &selection.model().id, &offer))
+            .flat_map(|message| items(message, &selection.model().id, offer))
             .collect::<Vec<_>>(),
         "store": false,
         "stream": true,
         "include": [],
-        "prompt_cache_key": super::route::session(request.conversation),
+        "prompt_cache_key": session,
     });
     // Off is said: a request without the field reasons at the backend's own default.
     if !selection.model().efforts.is_empty() {
-        let effort = selection.effort();
-        let name = if effort == Effort::Off {
-            "none"
-        } else {
-            effort.name()
-        };
-        body["reasoning"] = json!({"effort": name});
+        body["reasoning"] = json!({"effort": selection.effort().wire_name()});
         // The reasoning comes back sealed, to be sent with the next request (`items`).
         body["include"] = json!(["reasoning.encrypted_content"]);
     }

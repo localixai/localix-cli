@@ -126,9 +126,7 @@ fn grant(rules: &OwnedFd, path: &Path, access: u64) -> io::Result<()> {
 /// `sh -c command`, a session's leader, taking on `rules` and the socket filter before it starts.
 /// `rules` must stay open until the command has started.
 pub(super) fn shell(command: &str, rules: &OwnedFd) -> Command {
-    let mut shell = Command::new("sh");
-    shell.arg("-c").arg(command);
-    super::super::process::lead(&mut shell);
+    let mut shell = super::super::process::shell(command);
     let rules = rules.as_raw_fd();
     // SAFETY: `confine` makes only system calls that are async-signal-safe (prctl, Landlock's,
     // seccomp's), takes no lock and allocates nothing.

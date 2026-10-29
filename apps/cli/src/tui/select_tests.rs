@@ -62,6 +62,12 @@ fn arrows_and_numbers_pick() {
 }
 
 #[test]
+fn a_number_picks_nothing_when_there_are_no_options() {
+    let mut select = Select::new(vec![Line::from("Pick one")], vec![], "esc cancel");
+    assert_eq!(select.key(key(KeyCode::Char('1'))), None);
+}
+
+#[test]
 fn an_option_that_types_opens_a_line_and_esc_goes_back() {
     let mut select = approval();
     assert_eq!(select.key(key(KeyCode::Char('3'))), None);

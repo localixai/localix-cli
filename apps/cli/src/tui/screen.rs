@@ -45,21 +45,22 @@ impl<W: Write> Screen<W> {
     /// (its last ones), with the cursor at `cursor` or hidden.
     pub(crate) fn frame(
         &mut self,
-        history: &[Line<'static>],
+        history: Vec<Line<'static>>,
         live: &[Line<'static>],
         cursor: Option<Cursor>,
         height: usize,
         width: usize,
     ) -> io::Result<()> {
         let history = self.grouped(history);
-        let history: Vec<Line> = history.iter().flat_map(|line| fit(line, width)).collect();
-        let mut live = live.to_vec();
+        let history: Vec<Line> = history
+            .into_iter()
+            .flat_map(|line| fit(line, width))
+            .collect();
         let mut cursor = cursor;
-        if self.gap {
-            live.insert(0, Line::default());
-            if let Some(cursor) = &mut cursor {
-                cursor.row += 1;
-            }
+        // The chain's gap stays live: a blank row above the live area, the cursor under it.
+        let lead = usize::from(self.gap);
+        if let Some(cursor) = &mut cursor {
+            cursor.row += lead;
         }
         // A question must visibly interrupt a chain, even if the next result succeeds.
         if live
@@ -70,10 +71,10 @@ impl<W: Write> Screen<W> {
             self.group = None;
         }
         // A row split in two moves the rows under it, the cursor's among them.
-        let mut split = vec![];
+        let mut split = vec![Line::default(); lead];
         for (at, line) in live.iter().enumerate() {
-            let rows = fit(line, width);
-            if let Some(c) = cursor.as_mut().filter(|c| c.row > at) {
+            let rows = fit(line.clone(), width);
+            if let Some(c) = cursor.as_mut().filter(|c| c.row > at + lead) {
                 c.row += rows.len() - 1;
             }
             split.extend(rows);
@@ -118,9 +119,9 @@ impl<W: Write> Screen<W> {
 
     /// Only successful tool heads carry the done bullet and a bold verb. Keep their gap
     /// redrawable until the next block arrives, so a chain spans frames without rewriting history.
-    fn grouped(&mut self, history: &[Line<'static>]) -> Vec<Line<'static>> {
-        let mut out = vec![];
-        for line in history {
+    fn grouped(&mut self, history: Vec<Line<'static>>) -> Vec<Line<'static>> {
+        let mut out = Vec::with_capacity(history.len());
+        for mut line in history {
             if line.spans.is_empty() && self.group.is_some() {
                 self.gap = true;
                 continue;
@@ -138,7 +139,6 @@ impl<W: Write> Screen<W> {
                 out.push(Line::default());
             }
             self.gap = false;
-            let mut line = line.clone();
             if joins {
                 line.spans[0].content = "  ↳ ".into();
             }

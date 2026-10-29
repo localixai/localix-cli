@@ -51,7 +51,7 @@ Newline-delimited JSON frames, JSON-RPC shaped: a request `{id, method, params}`
 Today's reply channels map one to one: `Ready` becomes the daemon's own input queue, `TakeSteered`
 becomes the queue's steer entries, `Approve`/`Ask`/`Choose`/`Line` become daemon → client
 requests. Types that cross need serde: `ToolOutput`/`ToolError` (results are sent as their
-report, state elided, image dropped), `Approval`, `Question`/`Answer`, `Typed`, `JobRow` (its
+report, state elided), `Approval`, `Question`/`Answer`, `Typed`, `JobRow` (its
 `Instant` becomes milliseconds left), `meta::Update`, `picker::Adjustment`.
 
 ## Who owns what

@@ -4,9 +4,9 @@ use crossterm::event::KeyCode;
 use ratatui::text::Span;
 
 use super::*;
-use crate::tui::event::Event;
 use crate::tui::style;
 use crate::tui::test_support::{call, in_session, label, press, ran, render as screen};
+use protocol::Event;
 
 fn rows(app: &App) -> Vec<String> {
     let spinner = |_| Span::raw("*");

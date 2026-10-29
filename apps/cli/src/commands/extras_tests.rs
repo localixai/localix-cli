@@ -36,6 +36,9 @@ fn diff_shows_changes_since_the_commit_and_new_files() {
             "user.name=t",
             "-c",
             "user.email=t@t",
+            // A person's signing (a key agent that may be locked) has no part in the fixture.
+            "-c",
+            "commit.gpgsign=false",
             "commit",
             "-qm",
             "a",
@@ -80,8 +83,12 @@ fn usage_counts_tokens_with_thousands_separators_as_the_trace_does() {
             "{shown}"
         );
         rig.spent.cached_tokens = 0;
+        rig.spent.cost = 0.25;
         let shown = usage(rig);
         assert!(shown.contains("· 1,234,567 in · 1,080 out"), "{shown}");
+        // The agent's cost is said once, the time on a line of its own.
+        assert_eq!(shown.matches("$0.2500").count(), 1, "{shown}");
+        assert!(shown.contains("\ntime       0 min\n"), "{shown}");
         0
     });
 }

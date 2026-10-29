@@ -5,17 +5,18 @@
 
 use std::time::{Duration, Instant};
 
+use provider_kit::App;
 use provider_kit::http::{Http, HttpError, Web};
 use provider_kit::retry::{Attempt, PAUSE, TRANSIENT, retried};
 use serde_json::Value;
 
-pub const BASE_URL: &str = "https://openrouter.ai/api/v1";
+const BASE_URL: &str = "https://openrouter.ai/api/v1";
 /// OpenAI's own API: it takes a prompt cache key.
 const OPENAI_HOST: &str = "api.openai.com";
 
 /// Which fields a host's chat completions take beside the common ones.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Wire {
+pub(crate) enum Wire {
     /// OpenRouter: its `reasoning` object, its usage report, cache marks on the messages.
     OpenRouter,
     /// OpenAI itself: `reasoning_effort`, and the prompt cache's key.
@@ -60,30 +61,25 @@ pub struct OpenRouter {
     http: Box<dyn Http>,
     key: String,
     base: String,
-    app: crate::App,
-    /// OpenRouter itself, wherever it is reached: it takes fields of its own.
-    openrouter: bool,
+    app: App,
+    /// Which fields its requests take: OpenRouter's wherever OpenRouter is reached, OpenAI's own,
+    /// or the plain ones any host that speaks the wire takes.
+    wire: Wire,
     /// Who it calls, for errors: `OpenRouter`, `DeepSeek`.
     pub(crate) name: String,
     /// A request sent and not answered is sent once more (decisions); otherwise never.
     retry_timeout: bool,
 }
 
-/// What one call took, for the trace and the usage report.
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct Timing {
-    pub millis: u64,
-}
-
 impl OpenRouter {
-    pub fn new(key: String, app: crate::App) -> Self {
+    pub fn new(key: String, app: App) -> Self {
         Self::standing_in(BASE_URL, key, app)
     }
 
     /// OpenRouter at `base` (one standing in for it): it takes OpenRouter's fields wherever it is.
-    pub fn standing_in(base: &str, key: String, app: crate::App) -> Self {
+    pub fn standing_in(base: &str, key: String, app: App) -> Self {
         Self {
-            openrouter: true,
+            wire: Wire::OpenRouter,
             ..Self::at(base, key, app, crate::NAME)
         }
     }
@@ -100,31 +96,31 @@ impl OpenRouter {
     }
 
     /// A client of the chat completions at `base`, called `name`.
-    pub fn at(base: &str, key: String, app: crate::App, name: &str) -> Self {
+    pub fn at(base: &str, key: String, app: App, name: &str) -> Self {
+        let base = base.trim_end_matches('/').to_string();
+        let host = (base.split("://").nth(1)).and_then(|rest| rest.split('/').next());
+        let wire = if host == Some(OPENAI_HOST) {
+            Wire::OpenAi
+        } else {
+            Wire::Plain
+        };
         Self {
             http: Box::new(Web::new(app, TIMEOUT)),
             key,
-            base: base.trim_end_matches('/').to_string(),
+            base,
             app,
-            openrouter: false,
+            wire,
             name: name.to_string(),
             retry_timeout: false,
         }
     }
 
-    /// Which fields its requests take: OpenRouter's, OpenAI's own, or the plain ones any host
-    /// that speaks the wire takes.
-    pub fn wire(&self) -> Wire {
-        let host = (self.base.split("://").nth(1)).and_then(|rest| rest.split('/').next());
-        match (self.openrouter, host) {
-            (true, _) => Wire::OpenRouter,
-            (false, Some(OPENAI_HOST)) => Wire::OpenAi,
-            (false, _) => Wire::Plain,
-        }
+    pub(crate) fn wire(&self) -> Wire {
+        self.wire
     }
 
     /// POST `body` to `path`, asked again on an answer a moment's wait may mend.
-    pub(crate) fn post(&self, path: &str, body: &Value) -> Result<(Value, Timing), ApiError> {
+    pub(crate) fn post(&self, path: &str, body: &Value) -> Result<(Value, u64), ApiError> {
         let started = Instant::now();
         let url = format!("{}{path}", self.base);
         let bearer = format!("Bearer {}", self.key);
@@ -170,8 +166,7 @@ impl OpenRouter {
                 }
                 let millis = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
                 return Attempt::Done(
-                    parsed
-                        .map(|value| (value, Timing { millis }))
+                    (parsed.map(|value| (value, millis)))
                         .ok_or_else(|| ApiError::Invalid("not JSON".into())),
                 );
             }

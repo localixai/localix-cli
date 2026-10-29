@@ -86,10 +86,9 @@ fn a_daemon_says_its_build_and_who_is_attached() {
             max_lanes: 1,
             commands: vec![],
             modes: vec![],
-            background: true,
             host: Some(std::sync::Arc::clone(&served)),
         };
-        crate::server::serve::serve(&c.incoming, &peer, &desk, &info);
+        crate::server::serve::serve(None, &c.incoming, &peer, &desk, &info);
     })
     .unwrap();
     let _attached = host.attach();

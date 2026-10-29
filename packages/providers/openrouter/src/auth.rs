@@ -19,17 +19,6 @@ pub fn credentials_path(app: App) -> Option<PathBuf> {
     store::path(app, "credentials")
 }
 
-pub fn save(app: App, key: &str) -> std::io::Result<PathBuf> {
-    let path = credentials_path(app).ok_or_else(|| std::io::Error::other("no home directory"))?;
-    store::save(&path, key)?;
-    Ok(path)
-}
-
-/// Forget the saved key; whether there was one.
-pub fn remove(app: App) -> std::io::Result<bool> {
-    credentials_path(app).map_or(Ok(false), |path| store::remove(&path))
-}
-
 /// A sign-in under way: the address to open, and the callback waiting for the browser.
 pub struct Login {
     address: String,

@@ -6,17 +6,19 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 use client::Client;
-use protocol::{Command, Done, ToClient};
+use protocol::{Command, Done, Event, ToClient};
 use ratatui::text::Line;
 
 use super::app::{Action, App};
-use super::event::{Event, Input, Out};
+use super::event::{Input, Out};
 use super::farewell::Leaving;
 use super::screen::Screen;
 use super::{live, style, terminal};
 
 /// How often the live area is redrawn while something runs (the spinner's frame).
-const FRAME: Duration = Duration::from_millis(80);
+pub(super) const FRAME: Duration = Duration::from_millis(80);
+/// How long the interface waits for input while nothing runs.
+const IDLE: Duration = Duration::from_secs(1);
 /// How long a command the person waits on may take.
 pub(super) const ANSWER: Duration = Duration::from_secs(5);
 
@@ -32,16 +34,12 @@ type Terminal = Screen<Box<dyn io::Write>>;
 
 /// Runs until the session is over; what to say once the terminal is given back.
 pub(super) fn draw(mut app: App, inbox: &Receiver<Input>, seat: &Seat) -> Vec<Line<'static>> {
-    let mut screen = Screen::new(terminal::out(), style::colour_stdout());
+    let mut screen = Screen::new(terminal::out(), style::colour_on(&io::stdout()));
     let mut over = false;
     let mut shown = None;
     let mut background = false;
     while !over {
-        let wait = if app.moving() {
-            FRAME
-        } else {
-            Duration::from_secs(1)
-        };
+        let wait = if app.moving() { FRAME } else { IDLE };
         let first = match inbox.recv_timeout(wait) {
             Ok(input) => Some(input),
             Err(RecvTimeoutError::Timeout) => None,
@@ -84,7 +82,7 @@ pub(super) fn draw(mut app: App, inbox: &Receiver<Input>, seat: &Seat) -> Vec<Li
         if history.is_empty() && shown.as_ref() == Some(&drawn) {
             continue;
         }
-        let _ = screen.frame(&history, &drawn.0, drawn.1, app.height, app.width);
+        let _ = screen.frame(history, &drawn.0, drawn.1, app.height, app.width);
         shown = Some(drawn);
     }
     let _ = screen.clear();
@@ -122,7 +120,7 @@ fn act(
             }
             *shown = None;
         }
-        Some(Action::Clipboard) => match super::attach::clipboard(&super::attach::pasted_dir()) {
+        Some(Action::Clipboard) => match super::attach::clipboard(&app.pasted) {
             Ok(path) => app.composer.attach(path),
             Err(why) => {
                 app.event(Event::Note(why), Instant::now());
@@ -163,7 +161,7 @@ fn stop(screen: &mut Terminal, app: &mut App, seat: &Seat, session: String) {
     let asked = seat.client.call(Command::Interrupt { session }, ANSWER);
     if matches!(asked, Ok(Done::Interrupted { again: true })) {
         let history = app.take_history();
-        let _ = screen.frame(&history, &[], None, app.height, app.width);
+        let _ = screen.frame(history, &[], None, app.height, app.width);
         let _ = screen.clear();
         terminal::restore();
         terminal::say(&app.farewell(Leaving::Quit));

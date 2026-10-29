@@ -4,18 +4,19 @@
 //! Nothing here touches the terminal, so the tests drive it as the person would.
 
 use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::time::Instant;
 
 use protocol::{Command, Input as Sent, ToClient};
 use ratatui::text::Line;
 
-use super::agents::{LaneState, Views};
 use super::attach;
 use super::composer::Composer;
-use super::event::{Input, Out, Typed};
+use super::event::{Input, Out};
 use super::mention::Files;
 use super::questions;
 use super::queue::Asked;
+use super::views::{LaneState, Views};
 use crate::tui::printable::printable;
 
 /// What the person asked for that the interface cannot do itself.
@@ -38,9 +39,6 @@ pub(crate) enum Action {
     /// Quit, the work left running in the server ("Move to background and exit").
     Background,
 }
-
-/// What Shift+Tab sends: the session reads it as the plan-mode switch.
-pub(crate) use protocol::SHIFT_TAB;
 
 /// A question open, by the id its reply goes under.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,28 +67,28 @@ impl Open {
 }
 
 pub(crate) struct App {
-    pub(crate) width: usize,
-    pub(crate) height: usize,
+    pub(super) width: usize,
+    pub(super) height: usize,
     /// Finished blocks not printed yet.
     pub(super) pending: Vec<Vec<Line<'static>>>,
     /// The main session and its agents, each a transcript, and the one shown.
     pub(crate) views: Views,
-    pub(crate) composer: Composer,
+    pub(super) composer: Composer,
     /// The commands `/` offers: each name and what it does.
-    pub(crate) commands: Vec<(String, String)>,
+    pub(super) commands: Vec<(String, String)>,
     /// The command marked among those offered.
-    pub(crate) offered: usize,
+    pub(super) offered: usize,
     /// The workspace's files, for `@`.
-    pub(crate) files: Files,
+    pub(super) files: Files,
     /// Where pictures dropped in are kept.
-    pub(crate) pasted: std::path::PathBuf,
+    pub(super) pasted: PathBuf,
     /// The question open first, then those waiting their turn.
-    pub(crate) questions: VecDeque<Asked>,
+    pub(super) questions: VecDeque<Asked>,
     /// Until when the question open ignores keys: what was typed ahead for the composer as it
     /// opened must not answer it.
     pub(super) settling: Option<Instant>,
     /// Ctrl-C at an empty prompt: a second one quits, until this moment.
-    pub(crate) quitting: Option<Instant>,
+    pub(super) quitting: Option<Instant>,
     /// That Ctrl-C cleared a draft, which ↑ brings back.
     pub(super) discarded: bool,
     /// Esc at an empty prompt: a second one rewinds, until this moment.
@@ -100,15 +98,15 @@ pub(crate) struct App {
     /// The list of sessions, while it is open.
     pub(super) listing: Option<super::sessions::SessionList>,
     /// This directory's saved sessions, as the desk last listed them.
-    pub(super) saved: Vec<(String, String, String)>,
+    pub(super) saved: Vec<protocol::Saved>,
     /// A lane closed to make room, said in the next lane that opens.
     pub(super) closed: Option<String>,
     /// What runs, in every session (asked of the server): quitting stops it.
-    pub(crate) work: Box<dyn Fn() -> Vec<protocol::Running> + Send>,
+    pub(super) work: Box<dyn Fn() -> Vec<protocol::Running> + Send>,
     /// Whether the server keeps work once the interface leaves: quitting may leave it there.
-    pub(crate) background: bool,
+    pub(super) background: bool,
     /// The modes `/mode` offers, each with what it does, as the server says them.
-    pub(crate) modes: Vec<(String, String)>,
+    pub(super) modes: Vec<(String, String)>,
     /// Lanes the server keeps open at most.
     pub(crate) max_lanes: usize,
     /// What the interface sends next: commands and replies, in order.
@@ -161,16 +159,6 @@ impl App {
     )]
     pub(crate) fn lane(&self) -> &LaneState {
         let lane = self.views.sessions[self.views.home()].lane.as_deref();
-        lane.expect("a lane")
-    }
-
-    #[expect(
-        clippy::expect_used,
-        reason = "`home` is a lane: an agent's view is its parent's, and the first view is a lane"
-    )]
-    pub(super) fn lane_mut(&mut self) -> &mut LaneState {
-        let home = self.views.home();
-        let lane = self.views.sessions[home].lane.as_deref_mut();
         lane.expect("a lane")
     }
 
@@ -241,7 +229,7 @@ impl App {
     /// wait their turn; a choice of the lane's own waits until it is shown.
     pub(crate) fn asked(&mut self, id: u64, session: &str, asked: protocol::Asked, now: Instant) {
         let at = (self.views.find(session)).unwrap_or_else(|| self.views.home());
-        let lane = self.lane_at(at);
+        let lane = self.views.lane_of(at);
         let label = self.label(lane);
         match asked {
             protocol::Asked::Approve { tool, summary } => {
@@ -295,16 +283,23 @@ impl App {
 
     /// An entry for the lane shown: the server gives it to the lane at its prompt, to the task
     /// running (words), or keeps it for after.
-    pub(super) fn send(&mut self, entry: Typed) {
+    pub(super) fn send(&mut self, text: String, images: Vec<PathBuf>) {
         // What the person types is for the lane: it is shown again to see it go there.
         let lane = self.lane_id().to_string();
         self.show(&lane);
-        self.outbox.push(Out::Call(Command::Input(Sent {
-            session: lane,
-            text: entry.text,
-            images: entry.images,
-            later: false,
-        })));
+        self.tell(text, images, false);
+    }
+
+    /// An entry to the lane shown, `later` when it is for after the task running.
+    pub(super) fn tell(&mut self, text: String, images: Vec<PathBuf>, later: bool) {
+        let session = self.lane_id().to_string();
+        let input = Sent {
+            session,
+            text,
+            images,
+            later,
+        };
+        self.outbox.push(Out::Call(Command::Input(input)));
     }
 
     /// Each path in the composer that names a file becomes its mark; a picture is kept a copy of.

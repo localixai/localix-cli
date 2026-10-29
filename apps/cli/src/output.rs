@@ -43,8 +43,7 @@ fn stderr_width() -> Option<usize> {
     None
 }
 
-/// The `--json` event schema: a public contract (see CHANGELOG.md). 4: JSON lines replace the one
-/// object of schema 3.
+/// The `--json` event schema: a public contract (see CHANGELOG.md).
 pub(crate) const SCHEMA: u32 = 5;
 
 /// What a run starts with, as `run.started` reports it.
@@ -132,16 +131,11 @@ impl Runner {
                 .map(|line| {
                     let body = line.trim_start();
                     let (indent, _) = line.split_at(line.len() - body.len());
-                    match body
-                        .strip_prefix("::")
-                        .map(|rest| ("::", rest))
-                        .or_else(|| body.strip_prefix("##[").map(|rest| ("##[", rest)))
-                    {
-                        Some((open, rest)) => {
-                            let (first, second) = open.split_at(1);
-                            format!("{indent}{first}\u{200b}{second}{rest}")
-                        }
-                        None => line.to_string(),
+                    if body.starts_with("::") || body.starts_with("##[") {
+                        let (first, rest) = body.split_at(1);
+                        format!("{indent}{first}\u{200b}{rest}")
+                    } else {
+                        line.to_string()
                     }
                 })
                 .collect(),
@@ -154,7 +148,7 @@ impl Output {
     pub(crate) fn new(json: bool, verbose: bool) -> Self {
         let out = Box::new(std::io::stdout());
         let mut output = Self::with(json, verbose, out, Box::new(std::io::stderr()));
-        output.colour = style::colour_stderr();
+        output.colour = style::colour_on(&std::io::stderr());
         output.width = stderr_width().unwrap_or(TRACE_WIDTH);
         output.answer_terminal = std::io::IsTerminal::is_terminal(&std::io::stdout());
         output.runner = Runner::here();
@@ -250,7 +244,7 @@ impl Output {
         // it as the model wrote it.
         let rendered = self.answer_terminal && summary.data.is_none() && !self.json;
         if rendered && !summary.answer.trim().is_empty() {
-            let colour = style::colour_stdout();
+            let colour = style::colour_on(&std::io::stdout());
             let rows: String = cells::agent(summary.answer, self.width)
                 .iter()
                 .map(|line| style::ansi(line, colour) + "\n")

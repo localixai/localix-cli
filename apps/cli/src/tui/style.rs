@@ -30,24 +30,15 @@ pub(crate) fn code() -> Style {
 
 /// Whether colour goes to a stream: `CLICOLOR_FORCE` wins, then `NO_COLOR` and `TERM=dumb` turn it
 /// off, then a terminal turns it on.
-pub(crate) fn colour(terminal: bool, var: &dyn Fn(&str) -> Option<String>) -> bool {
+fn colour(terminal: bool, var: &dyn Fn(&str) -> Option<String>) -> bool {
     let forced = var("CLICOLOR_FORCE").is_some_and(|v| !v.is_empty() && v != "0");
     let off = var("NO_COLOR").is_some() || var("TERM").as_deref() == Some("dumb");
     forced || (terminal && !off)
 }
 
-/// Colour for stderr, where the trace goes.
-pub(crate) fn colour_stderr() -> bool {
-    colour(std::io::stderr().is_terminal(), &|name| {
-        std::env::var(name).ok()
-    })
-}
-
-/// Colour for stdout, where the answer goes.
-pub(crate) fn colour_stdout() -> bool {
-    colour(std::io::stdout().is_terminal(), &|name| {
-        std::env::var(name).ok()
-    })
+/// Colour for `stream`: stderr where the trace goes, stdout where the answer goes.
+pub(crate) fn colour_on(stream: &impl IsTerminal) -> bool {
+    colour(stream.is_terminal(), &|name| std::env::var(name).ok())
 }
 
 /// `line` as the terminal draws it: SGR codes around each styled span, or plain text.
@@ -80,22 +71,18 @@ fn sgr(style: Style) -> String {
         (Modifier::ITALIC, "3"),
         (Modifier::UNDERLINED, "4"),
         (Modifier::REVERSED, "7"),
+        (Modifier::CROSSED_OUT, "9"),
     ] {
         if modifier.contains(flag) {
             codes.push(code);
         }
     }
-    // The colours with a code here; any other is the terminal's own.
+    // The palette's colours; any other is the terminal's own.
     let named = [
-        (Color::Black, "30"),
         (Color::Red, "31"),
         (Color::Green, "32"),
         (Color::Yellow, "33"),
-        (Color::Blue, "34"),
-        (Color::Magenta, "35"),
         (Color::Cyan, "36"),
-        (Color::Gray, "37"),
-        (Color::DarkGray, "90"),
     ];
     let fg = style
         .fg

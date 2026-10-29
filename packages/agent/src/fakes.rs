@@ -146,8 +146,37 @@ pub(crate) fn ok(report: &str) -> Result<ToolOutput, ToolError> {
     Ok(ToolOutput {
         report: report.into(),
         state: Some("state".into()),
-        image: None,
     })
+}
+
+/// What the person said, in order.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
+pub(crate) fn users(messages: &[Message]) -> Vec<String> {
+    messages
+        .iter()
+        .filter_map(|message| match message {
+            Message::User(text) => Some(text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// What the tools answered, in order.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "a test picks out the variant it checks"
+)]
+pub(crate) fn tool_results(messages: &[Message]) -> Vec<String> {
+    messages
+        .iter()
+        .filter_map(|message| match message {
+            Message::ToolResult { content, .. } => Some(content.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Shows nothing.

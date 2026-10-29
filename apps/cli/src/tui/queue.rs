@@ -36,15 +36,6 @@ impl Asked {
 }
 
 impl App {
-    /// The lane of the session at `at`: itself, or the agent's parent.
-    pub(super) fn lane_at(&self, at: usize) -> usize {
-        let view = &self.views.sessions[at];
-        match &view.parent {
-            Some(parent) => self.views.find(parent).unwrap_or(at),
-            None => at,
-        }
-    }
-
     /// Whether the session at `at` waits for the person: a question of its own is open or
     /// waiting its turn, or a choice of its own is held until it is shown.
     pub(crate) fn waits_for_person(&self, at: usize) -> bool {
@@ -134,7 +125,7 @@ impl App {
         if let Some((id, reply)) = reply {
             self.outbox.push(Out::Reply(id, reply));
         }
-        let lane = self.views.find(asker).map(|at| self.lane_at(at));
+        let lane = self.views.find(asker).map(|at| self.views.lane_of(at));
         if let Some(state) = lane.and_then(|at| self.views.sessions[at].lane.as_deref_mut())
             && said.is_some()
         {
@@ -218,10 +209,7 @@ impl App {
             open.extend(held.unwrap_or_default().into_iter().map(|(_, open)| open));
         }
         for open in open {
-            let (reply, _) = questions::answer(&open, Picked::Cancelled);
-            if let Some((id, reply)) = reply {
-                self.outbox.push(Out::Reply(id, reply));
-            }
+            self.answered("", open, Picked::Cancelled);
         }
     }
 }

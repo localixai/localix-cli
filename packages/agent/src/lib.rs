@@ -1,7 +1,8 @@
 //! The agent: a chat model reaches a goal through tools and answers. It works with any chat model
 //! (`contracts::chat::Chat`) and any tools (`contracts::tool::Tool`), and no particular one: what
 //! a tool's world is like comes in its spec, and where the run happens in the app's context.
-//! - [`agent`]: the loop, its stop conditions and what a run spent (`spend.rs`).
+//! - [`agent`]: the loop and its stop conditions.
+//! - [`history`]: how the conversation is fitted to the model's window before each request.
 //! - [`observer`]: what a run shows as it goes (calls, results, turns).
 //! - [`conversation`]: the messages, and dropping older states past a budget.
 //! - [`schema`]: `--schema`, the answer as data through the `result` tool.

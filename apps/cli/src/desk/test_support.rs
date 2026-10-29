@@ -238,11 +238,10 @@ pub(crate) fn connected(
             max_lanes: super::MAX_LANES,
             commands: vec![],
             modes: vec![],
-            background: false,
             host: None,
         };
         let served = Arc::clone(&peer);
-        scope.spawn(move || serve(&incoming, &served, &to_desk, &info));
+        scope.spawn(move || serve(None, &incoming, &served, &to_desk, &info));
         let mut at = Person {
             app: App::new(80, 24, vec![]),
             frames,
@@ -259,7 +258,7 @@ pub(crate) fn connected(
             );
             std::thread::sleep(Duration::from_millis(20));
         }
-        assert_eq!(desk.join().unwrap(), crate::exit::OK);
+        desk.join().unwrap();
     });
     scratch
 }

@@ -38,7 +38,7 @@ fn every_frame_to_the_interface_comes_back_the_same_through_json() {
         }),
         event(Event::Result {
             call: "c1".into(),
-            name: "edit".into(),
+            name: "apply_patch".into(),
             label: Label::default(),
             outcome: Outcome::Failed {
                 why: "no".into(),

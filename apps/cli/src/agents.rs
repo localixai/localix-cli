@@ -1,8 +1,8 @@
 //! `agents`: the main session starts other agents and works with them. An agent is a session of
 //! its own with a parent, run on a thread of its own: `spawn` returns at once, and its answer
 //! reaches the main agent at its next step, or through `wait`. Its conversation opens with the
-//! same context, it works with tools of its own (neither `agents` nor `ask`: one level, and nobody
-//! to answer it) behind the same gate, and it stops with the task or with `x` on its row. Its
+//! same context, it works with tools of its own (neither `agents`, `ask` nor `jobs`: one level,
+//! and nobody to answer it) behind the same gate, and it stops with the task or with `x` on its row. Its
 //! tasks are recorded in its own session, which names its parent. A task does not end while its
 //! agents work, and what they spend is the task's.
 
@@ -12,7 +12,7 @@ pub(crate) mod kit;
 pub(crate) mod spec;
 mod tool;
 mod wait;
-pub(crate) mod watch;
+mod watch;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
@@ -50,7 +50,7 @@ pub(crate) trait Delegation {
 pub(crate) struct Registry {
     state: Mutex<State>,
     /// The lane's queue: an agent's answer is posted there.
-    pub(crate) queue: Arc<Queue>,
+    queue: Arc<Queue>,
     /// An agent ended a task.
     changed: Condvar,
     /// The main agent's waiting line last said in its task: it is not said again until it changes.
@@ -88,7 +88,7 @@ impl Registry {
     }
 
     /// How many agents work now.
-    pub(crate) fn working(&self) -> usize {
+    fn working(&self) -> usize {
         self.lock().children.iter().filter(|c| c.working).count()
     }
 
@@ -111,12 +111,12 @@ impl Registry {
 
     /// The task ended, however it ended: the next one says its waiting line afresh (an answer
     /// that came after its last step goes with the task, by its kind).
-    pub(super) fn settled(&self) {
+    fn settled(&self) {
         lock(&self.said).clear();
     }
 
     /// Wait up to `timeout` for an agent to end a task.
-    pub(crate) fn wait_change(&self, timeout: Duration) {
+    fn wait_change(&self, timeout: Duration) {
         let state = self.lock();
         let _ = self.changed.wait_timeout(state, timeout);
     }

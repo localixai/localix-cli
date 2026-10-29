@@ -25,11 +25,11 @@ pub(crate) enum Halt {
 
 /// The chat model, stopped once the task's time is up or its output is closed.
 pub(crate) struct Brake<'a> {
-    pub(crate) chat: &'a dyn Chat,
+    chat: &'a dyn Chat,
     /// Whether the output's reader has gone.
-    pub(crate) closed: &'a (dyn Fn() -> bool + Sync),
+    closed: &'a (dyn Fn() -> bool + Sync),
     /// Whether the person stopped the task.
-    pub(crate) stopped: &'a (dyn Fn() -> bool + Sync),
+    stopped: &'a (dyn Fn() -> bool + Sync),
     deadline: Mutex<Option<Instant>>,
     halt: Mutex<Option<Halt>>,
 }
@@ -87,7 +87,7 @@ impl Chat for Brake<'_> {
             Some(Halt::Interrupted)
         } else if (self.closed)() {
             Some(Halt::Closed)
-        } else if lock(&self.deadline).is_some_and(|at| Instant::now() >= at) {
+        } else if self.due() {
             Some(Halt::TimedOut)
         } else {
             None

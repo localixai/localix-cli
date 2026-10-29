@@ -19,7 +19,7 @@ use crate::choice::Choice;
 use crate::cli::RunOptions;
 use crate::interrupt::Interrupt;
 use crate::jobs::{self, Jobs, JobsTool};
-use crate::live::Live;
+use crate::live::LiveChat;
 use crate::mode::{self, Mode, ModeCell};
 use crate::modes::Modes;
 use crate::output::Output;
@@ -69,7 +69,7 @@ pub(crate) struct Rig<'a> {
     pub attached: Vec<std::path::PathBuf>,
     /// What the agent thinks with now.
     pub choice: Choice,
-    pub live: Option<&'a Live>,
+    pub live: Option<&'a LiveChat>,
     /// What commands never see, read at each command.
     pub hidden: &'a Mutex<Vec<String>>,
     /// What is known of the session beside its tasks, made in the background, not saved yet.
@@ -120,17 +120,21 @@ pub(super) fn drive(
             }
             tools.push(&agents);
             tools.push(&jobs_tool);
-            *lock(&lane.kit.main) = tools.iter().map(|tool| tool.spec()).collect();
+            // Once per lane: `drive` runs once per `assemble`, so the cell is empty here.
+            let _ = lane
+                .kit
+                .main
+                .set(tools.iter().map(|tool| tool.spec()).collect());
             let agent = Agent {
                 chat: base.brake,
                 tools: &tools,
                 context: &context,
-                max_turns: options.max_turns.unwrap_or(usize::MAX),
+                max_turns: lane.kit.max_turns,
                 observer: base.output,
                 schema: schema.as_ref(),
                 inbox: Some(lane.inbox),
                 window: 0,
-                strategy: lane.strategy,
+                strategy: lane.kit.strategy,
             };
             let mut rig = Rig {
                 agent,
@@ -143,7 +147,7 @@ pub(super) fn drive(
                 agents: &agents,
                 jobs: lane.jobs,
                 jobs_kit: lane.jobs_kit,
-                window: lane.window,
+                window: lane.kit.window,
                 checkpoints: lane.checkpoints,
                 spent: contracts::chat::Spend::default(),
                 begun: std::time::Instant::now(),

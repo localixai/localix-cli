@@ -11,10 +11,10 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
-/// One answer of the model: text, tool calls, or an HTTP error with its status.
+/// One answer of the model: text, a tool call, or an HTTP error with its status.
 pub(crate) enum Reply {
     Text(String),
-    Calls(Vec<(String, Value)>),
+    Call(String, Value),
     Refused(u16),
     /// The reply given once the file exists: a lane's request waits while another works.
     After(std::path::PathBuf, Box<Reply>),
@@ -29,7 +29,7 @@ impl Reply {
 
     /// The model calls `name` with `arguments`.
     pub(crate) fn call(name: &str, arguments: Value) -> Self {
-        Self::Calls(vec![(name.into(), arguments)])
+        Self::Call(name.into(), arguments)
     }
 
     /// The model makes the file `path` holding `text`, with a patch.
@@ -139,7 +139,7 @@ fn answer(stream: TcpStream, shared: &Mutex<Shared>) {
         return respond(
             stream,
             200,
-            &completion(Some(Reply::Text(title)), 0, &request),
+            &completion(&json!({"role": "assistant", "content": title}), 0, &request),
         );
     }
     let (mut next, n) = {
@@ -148,26 +148,34 @@ fn answer(stream: TcpStream, shared: &Mutex<Shared>) {
         shared.calls += 1;
         (shared.script.pop_front(), shared.calls)
     };
-    while let Some(Reply::After(file, reply)) = next {
-        let end = std::time::Instant::now() + std::time::Duration::from_secs(30);
-        while !file.exists() && std::time::Instant::now() < end {
-            std::thread::sleep(std::time::Duration::from_millis(20));
-        }
-        next = Some(*reply);
-    }
-    let reply = {
-        match next {
-            Some(Reply::Refused(status)) => (
-                status,
-                json!({"error": {"code": status, "message": "No auth credentials found"}}),
-            ),
-            Some(Reply::Decided(choice, probabilities)) => {
-                (200, decided(&request, &choice, &probabilities))
+    let (status, body) = loop {
+        let message = match next {
+            Some(Reply::After(file, reply)) => {
+                let end = std::time::Instant::now() + std::time::Duration::from_secs(30);
+                while !file.exists() && std::time::Instant::now() < end {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                next = Some(*reply);
+                continue;
             }
-            reply => (200, completion(reply, n, &request)),
-        }
+            Some(Reply::Refused(status)) => {
+                let error = json!({"code": status, "message": "No auth credentials found"});
+                break (status, json!({ "error": error }));
+            }
+            Some(Reply::Decided(choice, probabilities)) => {
+                break (200, decided(&request, &choice, &probabilities));
+            }
+            Some(Reply::Text(text)) => json!({"role": "assistant", "content": text}),
+            Some(Reply::Call(name, arguments)) => {
+                let call = json!({"id": format!("call_{n}"), "type": "function",
+                    "function": {"name": name, "arguments": arguments.to_string()}});
+                json!({"role": "assistant", "content": null, "tool_calls": [call]})
+            }
+            None => json!({"role": "assistant", "content": "Done.\nRESULT: achieved"}),
+        };
+        break (200, completion(&message, n, &request));
     };
-    respond(stream, reply.0, &reply.1);
+    respond(stream, status, &body);
 }
 
 /// A message's text: a string, or the text of its parts (a cache mark makes it parts).
@@ -196,26 +204,9 @@ fn respond(mut stream: TcpStream, status: u16, body: &Value) {
     );
 }
 
-/// The chat completion for `reply` (the `n`th request).
-fn completion(reply: Option<Reply>, n: usize, request: &Value) -> Value {
+/// The chat completion carrying `message` (the `n`th request).
+fn completion(message: &Value, n: usize, request: &Value) -> Value {
     let model = request["model"].as_str().unwrap_or("test/model");
-    let message = match reply.unwrap_or_else(|| Reply::Text("Done.\nRESULT: achieved".into())) {
-        Reply::Text(text) => json!({"role": "assistant", "content": text}),
-        Reply::Refused(_) | Reply::After(..) | Reply::Decided(..) => {
-            unreachable!("answered before")
-        }
-        Reply::Calls(calls) => {
-            let calls: Vec<Value> = calls
-                .into_iter()
-                .enumerate()
-                .map(|(at, (name, arguments))| {
-                    json!({"id": format!("call_{n}_{at}"), "type": "function",
-                        "function": {"name": name, "arguments": arguments.to_string()}})
-                })
-                .collect();
-            json!({"role": "assistant", "content": null, "tool_calls": calls})
-        }
-    };
     json!({"id": format!("c{n}"), "model": model, "choices": [{"index": 0, "message": message}],
         "usage": {"prompt_tokens": 1000, "completion_tokens": 20, "cost": 0.0001}})
 }

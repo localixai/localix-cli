@@ -45,10 +45,9 @@ pub(crate) fn daemon(path: &Path) -> Daemon {
             max_lanes: 3,
             commands: vec![],
             modes: vec![],
-            background: false,
             host: None,
         };
-        serve(&connection.incoming, &peer, &desk, &info);
+        serve(None, &connection.incoming, &peer, &desk, &info);
         let _ = ended.send(());
     })
     .unwrap();
@@ -191,7 +190,7 @@ fn a_replay_longer_than_the_queue_never_cuts_the_client() {
     let (ours, theirs) = UnixStream::pair().unwrap();
     ours.set_read_timeout(Some(WAIT)).unwrap();
     let connection = connection(theirs).unwrap();
-    peer.attach(connection.out, None);
+    peer.hub.attach(connection.out, None);
     // The client reads only once the whole replay is posted, as a terminal busy drawing does.
     std::thread::sleep(Duration::from_millis(300));
     let mut lines = BufReader::new(ours).lines();

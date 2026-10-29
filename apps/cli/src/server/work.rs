@@ -77,6 +77,13 @@ impl Work {
         self.lock().iter().any(|known| known.id == lane)
     }
 
+    /// Whether a task of lane `lane` runs: words the person sends are for it.
+    pub(crate) fn busy(&self, lane: &str) -> bool {
+        self.lock()
+            .iter()
+            .any(|known| known.id == lane && known.busy)
+    }
+
     /// The lane ended: nothing of it runs.
     pub(crate) fn ended(&self, lane: &str) {
         self.lock().retain(|known| known.id != lane);

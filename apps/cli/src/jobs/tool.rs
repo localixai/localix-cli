@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::Scope;
 use std::time::{Duration, Instant};
 
-use contracts::gate::{Effect, Verdict};
+use contracts::gate::Effect;
 use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
 
@@ -43,15 +43,12 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
 
     /// Ask the gate: what a monitor's command may do, or the refusal.
     fn ask(&self, summary: &str) -> Result<tools::shell::Scope, ToolError> {
-        match self.kit.gate.check(Effect {
+        tools::shell::Scope::of(self.kit.gate.check(Effect {
             tool: spec::NAME,
             subject: "",
             summary,
-        }) {
-            Verdict::Allow => Ok(tools::shell::Scope::Open),
-            Verdict::ReadOnly => Ok(tools::shell::Scope::ReadOnly),
-            Verdict::Deny(why) => Err(ToolError::Failed(why)),
-        }
+        }))
+        .map_err(ToolError::Failed)
     }
 
     fn monitor(
@@ -122,10 +119,9 @@ impl<'scope, 'env> JobsTool<'scope, 'env> {
             let root = kit.workspace.root();
             let deadline = Instant::now() + timeout;
             let names = (kit.hidden)();
-            let hidden: Vec<&str> = names.iter().map(String::as_str).collect();
             let env = tools::shell::Env {
                 vars: kit.workspace.env(),
-                hidden: &hidden,
+                hidden: &names,
             };
             let ended = monitor::watch(
                 (&command, scope, kit.workspace.denied()),
@@ -262,7 +258,7 @@ impl Tool for JobsTool<'_, '_> {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: spec::NAME.into(),
-            description: spec::description(),
+            description: spec::DESCRIPTION.into(),
             input: Input::Json(spec::parameters()),
         }
     }

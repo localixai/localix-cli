@@ -1,4 +1,4 @@
-use contracts::history::Turn;
+use contracts::history::{HistoryError, Turn};
 
 use super::*;
 
@@ -35,23 +35,22 @@ fn a_session_round_trips_and_the_newest_comes_first() {
     old.updated = 1;
     sessions.save(&old).unwrap();
     let mut new = sessions.start();
-    new.record(
-        Turn {
-            goal: "find a quiz".into(),
-            answer: "Done.".into(),
-            status: "achieved".into(),
-            at: now(),
-            steps: vec![],
-        },
-        Some("https://a.example/"),
-    );
+    new.record(Turn {
+        goal: "find a quiz".into(),
+        answer: "Done.".into(),
+        status: "achieved".into(),
+        at: now(),
+        steps: vec![],
+    });
     sessions.save(&new).unwrap();
     let listed: Vec<String> = sessions.list().into_iter().map(|s| s.id).collect();
     assert_eq!(listed, [new.id.clone(), "1-old".into()]);
     let back = sessions.load(None).unwrap();
-    assert_eq!(back.location, "https://a.example/");
     assert_eq!(back.turns[0].goal, "find a quiz");
-    assert!(sessions.load(Some("missing")).is_err());
+    assert_eq!(
+        sessions.load(Some("missing")).unwrap_err(),
+        HistoryError::NotFound("missing".into())
+    );
 }
 
 #[test]
@@ -99,16 +98,13 @@ fn what_a_task_spent_is_kept_and_an_older_session_without_it_still_loads() {
         what: "bash".into(),
         ..Default::default()
     };
-    session.record(
-        Turn {
-            goal: "fix it".into(),
-            answer: "Fixed.".into(),
-            status: "achieved".into(),
-            at: now(),
-            steps: vec![turn.clone(), call],
-        },
-        None,
-    );
+    session.record(Turn {
+        goal: "fix it".into(),
+        answer: "Fixed.".into(),
+        status: "achieved".into(),
+        at: now(),
+        steps: vec![turn.clone(), call],
+    });
     sessions.save(&session).unwrap();
     let saved = std::fs::read_to_string(scratch.0.join(format!("{}.json", session.id))).unwrap();
     assert_eq!(

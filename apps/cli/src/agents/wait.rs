@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use contracts::tool::{ToolError, ToolOutput};
 
 use super::tool::AgentsTool;
-use super::{POLL, spec};
+use super::{POLL, State, spec};
 
 impl AgentsTool<'_, '_> {
     /// Wait for one of `agents` (any agent working, when none is named) to answer.
@@ -14,10 +14,12 @@ impl AgentsTool<'_, '_> {
         agents: &[String],
         timeout: Duration,
     ) -> Result<ToolOutput, ToolError> {
-        let named: Vec<String> = agents
-            .iter()
-            .map(|agent| self.find(agent).map(|at| self.id_at(at)))
-            .collect::<Result<_, _>>()?;
+        let named: Vec<String> = {
+            let state = self.registry.lock();
+            (agents.iter())
+                .map(|agent| find(&state, agent).map(|at| state.children[at].session.id.clone()))
+                .collect::<Result<_, _>>()?
+        };
         let ui = self.kit.output.ui();
         let until = Instant::now() + timeout;
         loop {
@@ -66,7 +68,7 @@ impl AgentsTool<'_, '_> {
             if (self.kit.stopped)() {
                 return Err(ToolError::Failed(crate::gate::STOPPED.into()));
             }
-            if ui.is_some_and(|ui| !ui.steered(true).is_empty()) {
+            if ui.is_some_and(|ui| !ui.peeked().is_empty()) {
                 return Ok(ToolOutput::from(format!(
                     "The wait ended: the person wrote to you. Read it, then wait again if you \
                      still need to.{still}"
@@ -82,35 +84,27 @@ impl AgentsTool<'_, '_> {
             self.registry.wait_change(left.min(POLL));
         }
     }
+}
 
-    fn id_at(&self, at: usize) -> String {
-        self.registry.lock().children[at].session.id.clone()
-    }
-
-    /// The agent `agent` names: its name, or its session id.
-    pub(super) fn find(&self, agent: &str) -> Result<usize, ToolError> {
-        let state = self.registry.lock();
-        let wanted = spec::tidy(agent).unwrap_or_default();
-        let at = state
-            .children
-            .iter()
-            .position(|child| child.session.id == agent.trim() || child.session.name == wanted);
-        at.ok_or_else(|| {
-            let names: Vec<String> = state
-                .children
-                .iter()
-                .map(|child| format!("`{}`", child.session.name))
-                .collect();
-            ToolError::Failed(match names.is_empty() {
-                true => format!(
-                    "there is no agent `{agent}`: none was started in this session (an agent \
-                     does not outlive the session it was started in)"
-                ),
-                false => format!(
-                    "there is no agent `{agent}`; there are {}",
-                    names.join(", ")
-                ),
-            })
+/// The agent `agent` names, among those `state` holds: its name, or its session id. The index is
+/// good while the caller keeps the guard (R7).
+pub(super) fn find(state: &State, agent: &str) -> Result<usize, ToolError> {
+    let wanted = spec::tidy(agent).unwrap_or_default();
+    let at = (state.children.iter())
+        .position(|child| child.session.id == agent.trim() || child.session.name == wanted);
+    at.ok_or_else(|| {
+        let names: Vec<String> = (state.children.iter())
+            .map(|child| format!("`{}`", child.session.name))
+            .collect();
+        ToolError::Failed(match names.is_empty() {
+            true => format!(
+                "there is no agent `{agent}`: none was started in this session (an agent \
+                 does not outlive the session it was started in)"
+            ),
+            false => format!(
+                "there is no agent `{agent}`; there are {}",
+                names.join(", ")
+            ),
         })
-    }
+    })
 }

@@ -42,7 +42,7 @@ type Waiting = (Option<Arc<str>>, SyncSender<Reply>);
 /// What the server holds of its interfaces: every client attached and what they were told
 /// ([`Hub`]), the questions waiting for a reply, and every lane's entries.
 pub(crate) struct Peer {
-    hub: Hub,
+    pub(crate) hub: Hub,
     asked: Mutex<HashMap<u64, Waiting>>,
     next: AtomicU64,
     pub(crate) inputs: Inputs,
@@ -75,28 +75,6 @@ impl Peer {
         });
         peer.hub.attach(out, None);
         peer
-    }
-
-    /// Attach another client: what came after `cursor` first, then the questions waiting
-    /// (W5, W6). Its id, and the number its replay went up to.
-    pub(crate) fn attach(&self, out: Sender<ToClient>, cursor: Option<u64>) -> (ClientId, u64) {
-        self.hub.attach(out, cursor)
-    }
-
-    /// Client `id` again from `cursor`; `None` once it is gone.
-    pub(crate) fn rewind(&self, id: ClientId, cursor: Option<u64>) -> Option<u64> {
-        self.hub.rewind(id, cursor)
-    }
-
-    /// Client `id` hears nothing more; how many are still attached.
-    pub(crate) fn detach(&self, id: ClientId) -> usize {
-        self.hub.detach(id)
-    }
-
-    /// How many interfaces are attached.
-    #[cfg(test)]
-    pub(crate) fn attached(&self) -> usize {
-        self.hub.attached()
     }
 
     /// The person's reply to question `id`: the first wins, and every client is told it no
@@ -133,11 +111,6 @@ impl Peer {
         self.hub.send(frame);
     }
 
-    /// `frame` to client `id` alone.
-    pub(crate) fn to(&self, id: ClientId, frame: ToClient) {
-        self.hub.to(id, frame);
-    }
-
     fn waiting(&self) -> MutexGuard<'_, HashMap<u64, Waiting>> {
         lock(&self.asked)
     }
@@ -164,18 +137,12 @@ impl Ui {
         }
     }
 
-    fn session(&self) -> String {
-        self.lane.as_deref().unwrap_or_default().to_string()
+    fn session(&self) -> &str {
+        self.lane.as_deref().unwrap_or_default()
     }
 
-    /// Report `event`, in the session's name; a lane's queue learns when its task runs.
+    /// Report `event`, in the session's name; what runs in the lanes learns of it.
     pub(crate) fn send(&self, event: Event) {
-        if let (Some(lane), Event::TaskStarted(_) | Event::TaskEnded { .. }) =
-            (self.lane.as_deref(), &event)
-        {
-            let started = matches!(event, Event::TaskStarted(_));
-            self.peer.inputs.working(lane, started);
-        }
         self.peer.work.saw(self.lane.as_deref(), &event);
         let session = self.lane.as_deref().map(str::to_string);
         self.peer.send(ToClient::Event {
@@ -187,19 +154,23 @@ impl Ui {
 
     /// The person's next entry; `None` when they leave or the lane is closed.
     pub(crate) fn next_entry(&self) -> Option<Typed> {
-        self.peer.inputs.next(&self.session())
+        self.peer.inputs.next(self.session())
     }
 
     /// What came back from the background while nothing runs: a task of its own, after what
     /// the person queued.
     pub(crate) fn background(&self, text: &str) {
-        self.peer.inputs.background(&self.session(), text);
+        self.peer.inputs.background(self.session(), text);
     }
 
-    /// What the person sent to the task running, taken (and shown as theirs) or, with `peek`,
-    /// only looked at.
-    pub(crate) fn steered(&self, peek: bool) -> Vec<String> {
-        self.peer.inputs.steered(&self.session(), peek)
+    /// What the person sent to the task running, taken (and shown as theirs).
+    pub(crate) fn steered(&self) -> Vec<String> {
+        self.peer.inputs.steered(self.session())
+    }
+
+    /// What the person sent to the task running, only looked at.
+    pub(crate) fn peeked(&self) -> Vec<String> {
+        self.peer.inputs.peek_steered(self.session())
     }
 
     /// A guard: when it drops, the lane's entries go with it.
@@ -286,16 +257,19 @@ impl Ui {
     }
 
     /// A line the person types after `prompt`, shown as dots when `hidden`; `None` when
-    /// cancelled, or withdrawn once `done` says so.
-    pub(crate) fn line(
-        &self,
-        prompt: &str,
-        hidden: bool,
-        done: Option<&dyn Fn() -> bool>,
-    ) -> Option<String> {
+    /// cancelled.
+    pub(crate) fn line(&self, prompt: &str, hidden: bool) -> Option<String> {
+        self.typed(prompt, hidden, None)
+    }
+
+    /// [`Self::line`], withdrawn once `done` says so.
+    pub(crate) fn line_until(&self, prompt: &str, done: &dyn Fn() -> bool) -> Option<String> {
+        self.typed(prompt, false, Some((done, DONE_POLL)))
+    }
+
+    fn typed(&self, prompt: &str, hidden: bool, until: Until<'_>) -> Option<String> {
         let prompt = prompt.into();
-        let done = done.map(|done| (done, DONE_POLL));
-        match self.ask(Asked::Line { prompt, hidden }, done) {
+        match self.ask(Asked::Line { prompt, hidden }, until) {
             Some(Reply::Line(line)) => line,
             _ => None,
         }
@@ -309,7 +283,7 @@ impl Ui {
         let (reply, answer) = sync_channel(1);
         let lane = self.lane.clone();
         self.peer.waiting().insert(id, (lane, reply));
-        let session = self.session();
+        let session = self.session().to_owned();
         self.peer.send(ToClient::Ask { id, session, asked });
         let reply = wait(&answer, until);
         // Withdrawn by its stop: the clients are told here; by `abandon`, they were already.
@@ -325,8 +299,8 @@ pub(crate) struct Ends(Ui);
 
 impl Drop for Ends {
     fn drop(&mut self) {
-        self.0.peer.inputs.forget(&self.0.session());
-        self.0.peer.work.ended(&self.0.session());
+        self.0.peer.inputs.forget(self.0.session());
+        self.0.peer.work.ended(self.0.session());
     }
 }
 

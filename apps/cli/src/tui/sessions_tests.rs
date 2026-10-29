@@ -3,8 +3,8 @@ use std::time::Instant;
 use crossterm::event::KeyCode;
 
 use crate::tui::app::App;
-use crate::tui::event::Event;
 use crate::tui::test_support::{Term, commands, in_session as from, press, typed};
+use protocol::Event;
 use protocol::{Command, Target};
 
 /// Lanes A (shown, idle, one task done), B (working) and C (a choice held for it).

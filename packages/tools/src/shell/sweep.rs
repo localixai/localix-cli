@@ -6,8 +6,8 @@
 //! session's id is its leader's pid, which stays taken while the leader is not reaped, so the
 //! sweep runs before the leader is reaped and never reaches a recycled pid.
 //!
-//! The processes are listed into a table on the stack, with system calls only (no allocation, no
-//! lock), so the signal handler that quits at once may sweep too.
+//! On macOS the processes are listed into a table on the stack with one system call; on Linux
+//! they are the numbered entries of `/proc`.
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -28,7 +28,7 @@ pub(super) struct Pass {
 }
 
 /// Send SIGKILL to every process of session `sid` but its leader (the caller kills and reaps that
-/// one). Only system calls, so a signal handler may call it.
+/// one).
 pub(super) fn kill_members(sid: libc::pid_t) -> Pass {
     let mut pass = Pass::default();
     if sid <= 1 {
@@ -53,7 +53,7 @@ pub(super) fn kill_members(sid: libc::pid_t) -> Pass {
 /// fork while it is killed), for at most `wait`; whether none is left.
 #[expect(
     clippy::disallowed_methods,
-    reason = "a backoff between kill passes: a process killed has no event to wait on, and this runs in a signal handler too"
+    reason = "a backoff between kill passes: a process killed has no event to wait on"
 )]
 pub(super) fn end(sid: libc::pid_t, wait: Duration) -> bool {
     let deadline = Instant::now() + wait;
@@ -87,68 +87,21 @@ fn each_pid(mut visit: impl FnMut(libc::pid_t)) {
         .for_each(&mut visit);
 }
 
-/// Call `visit` with the pid of every process on the system: the numbered entries of `/proc`,
-/// read with `getdents64` into a buffer on the stack.
-#[cfg(any(target_os = "linux", target_os = "android"))]
+/// Call `visit` with the pid of every process on the system: the numbered entries of `/proc`.
+#[cfg(target_os = "linux")]
 fn each_pid(mut visit: impl FnMut(libc::pid_t)) {
-    // An entry: inode (8 bytes), offset (8), its length (2), its type (1), then its name.
-    const NAME: usize = 19;
-    let flags = libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC;
-    // SAFETY: open reads a constant, NUL-terminated path.
-    let dir = unsafe { libc::open(c"/proc".as_ptr(), flags) };
-    if dir < 0 {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
         return;
-    }
-    let mut buffer = [0u8; 16 * 1024];
-    loop {
-        // SAFETY: getdents64 writes at most `buffer.len()` bytes into `buffer`.
-        let read =
-            unsafe { libc::syscall(libc::SYS_getdents64, dir, buffer.as_mut_ptr(), buffer.len()) };
-        let Ok(read) = usize::try_from(read) else {
-            break;
-        };
-        if read == 0 {
-            break;
-        }
-        let mut at = 0;
-        while at + NAME < read {
-            let length = usize::from(u16::from_ne_bytes([buffer[at + 16], buffer[at + 17]]));
-            if length == 0 {
-                break;
-            }
-            let end = (at + length).min(read);
-            if let Some(pid) = number(&buffer[at + NAME..end]) {
-                visit(pid);
-            }
-            at += length;
-        }
-    }
-    // SAFETY: the descriptor was opened above and is closed once.
-    unsafe { libc::close(dir) };
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| entry.file_name().to_str()?.parse().ok())
+        .for_each(&mut visit);
 }
 
 /// Elsewhere there is no list of processes to sweep: only the group's signal ends a session.
-#[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
+#[cfg(not(any(target_vendor = "apple", target_os = "linux")))]
 fn each_pid(_: impl FnMut(libc::pid_t)) {}
-
-/// The pid a `/proc` entry's NUL-terminated name spells, or `None` for any other entry.
-#[cfg_attr(
-    not(any(target_os = "linux", target_os = "android", test)),
-    expect(
-        dead_code,
-        reason = "used only where /proc lists a session's processes, and by its tests"
-    )
-)]
-fn number(name: &[u8]) -> Option<libc::pid_t> {
-    let digits = name.split(|&byte| byte == 0).next()?;
-    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
-        return None;
-    }
-    digits.iter().try_fold(0 as libc::pid_t, |pid, &digit| {
-        pid.checked_mul(10)?
-            .checked_add(libc::pid_t::from(digit - b'0'))
-    })
-}
 
 #[cfg(test)]
 #[path = "sweep_tests.rs"]

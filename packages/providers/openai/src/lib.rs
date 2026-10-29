@@ -3,15 +3,13 @@
 //! - [`tokens`]: the tokens, the account they belong to, and the file they are kept in.
 //! - [`responses`]: the chat port over the Responses API of the ChatGPT backend.
 //!
-//! It knows nothing of the app that uses it beyond the [`App`] it is given.
+//! It knows nothing of the app that uses it beyond the [`provider_kit::App`] it is given.
 
 pub mod auth;
 pub mod responses;
 #[cfg(test)]
 mod testing;
 pub mod tokens;
-
-pub use provider_kit::App;
 
 /// How the provider is named to the person.
 pub const NAME: &str = "OpenAI";

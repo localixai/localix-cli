@@ -10,7 +10,7 @@ pub(crate) mod title;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use contracts::history::{History, Session};
+use contracts::history::{History, HistoryError, Session};
 
 /// A change to a session's facts; a field left `None` stays as it is.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -19,7 +19,7 @@ pub(crate) struct Update {
 }
 
 impl Update {
-    pub(crate) fn apply(&self, session: &mut Session) {
+    fn apply(&self, session: &mut Session) {
         if let Some(title) = &self.title {
             session.title.clone_from(title);
         }
@@ -53,7 +53,11 @@ struct Shared {
 // behind it.
 impl Pending {
     /// Save `session` with what is pending applied.
-    pub(crate) fn save(&self, history: &dyn History, session: &mut Session) -> Result<(), String> {
+    pub(crate) fn save(
+        &self,
+        history: &dyn History,
+        session: &mut Session,
+    ) -> Result<(), HistoryError> {
         let pending = self.lock();
         pending.apply(session);
         history.save(session)

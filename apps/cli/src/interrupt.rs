@@ -26,7 +26,7 @@ pub(crate) struct Process {
 pub(crate) static PROCESS: Process = Process::new();
 
 impl Process {
-    pub(crate) const fn new() -> Self {
+    const fn new() -> Self {
         Self {
             generation: AtomicU64::new(0),
             busy: AtomicUsize::new(0),
@@ -50,12 +50,6 @@ impl Process {
     }
 }
 
-impl Default for Process {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// One session's task: whether it runs, and whether it was stopped, by itself or by the process.
 pub(crate) struct Interrupt {
     process: &'static Process,
@@ -71,7 +65,7 @@ impl Interrupt {
         Self::of(&PROCESS)
     }
 
-    pub(crate) fn of(process: &'static Process) -> Self {
+    fn of(process: &'static Process) -> Self {
         Self {
             process,
             busy: AtomicBool::new(false),
@@ -108,12 +102,6 @@ impl Interrupt {
     /// Stop the task. Returns whether to quit instead: no task runs, or it was stopped already.
     pub(crate) fn stop(&self) -> bool {
         !self.busy.load(Ordering::SeqCst) || self.stopped.swap(true, Ordering::SeqCst)
-    }
-}
-
-impl Default for Interrupt {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

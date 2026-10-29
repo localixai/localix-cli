@@ -3,10 +3,8 @@
 use pulldown_cmark::Alignment;
 use ratatui::text::{Line, Span};
 
-use super::super::{
-    style,
-    wrap::{line_width, wrap},
-};
+use crate::tui::style;
+use crate::tui::wrap::{line_width, wrap};
 
 pub(super) struct Table {
     pub(super) rows: Vec<Vec<Line<'static>>>,
@@ -58,12 +56,12 @@ impl Table {
             let Some((at, _)) = widest else { break };
             widths[at] -= 1;
         }
-        for (index, row) in self.rows.into_iter().enumerate() {
-            let cells: Vec<Vec<Line<'static>>> = (0..columns)
-                .map(|at| {
-                    let cell = row.get(at).cloned().unwrap_or_default();
-                    wrap(&cell, widths[at], &Line::default(), &Line::default())
-                })
+        for (index, mut row) in self.rows.into_iter().enumerate() {
+            row.resize_with(columns, Line::default);
+            let mut cells: Vec<Vec<Line<'static>>> = row
+                .iter()
+                .zip(&widths)
+                .map(|(cell, width)| wrap(cell, *width, &Line::default(), &Line::default()))
                 .collect();
             let height = cells.iter().map(Vec::len).max().unwrap_or(1);
             for line in 0..height {
@@ -74,7 +72,10 @@ impl Table {
                 };
                 rendered.spans.push(Span::styled("│", style::dim()));
                 for at in 0..columns {
-                    let cell = cells[at].get(line).cloned().unwrap_or_default();
+                    let cell = cells[at]
+                        .get_mut(line)
+                        .map(std::mem::take)
+                        .unwrap_or_default();
                     let padding = widths[at].saturating_sub(line_width(&cell));
                     let left = match self.alignments[at] {
                         Alignment::Right => padding,

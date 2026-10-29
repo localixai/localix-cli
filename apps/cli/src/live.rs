@@ -1,6 +1,5 @@
-//! The models a session thinks with, switchable between tasks: `/login` puts in the chat model
-//! it chose without rebuilding
-//! the agent, its tools or its conversation.
+//! The chat model a session thinks with, switchable between tasks: `/login` puts in the one it
+//! chose without rebuilding the agent, its tools or its conversation.
 
 use std::sync::RwLock;
 
@@ -9,11 +8,9 @@ use contracts::chat::{Chat, ChatError, Completion, Request};
 use crate::choice::Choice;
 use crate::providers::{self, Provider};
 
-pub(crate) struct Live {
-    pub chat: LiveChat,
-}
+pub(crate) struct LiveChat(RwLock<Box<dyn Chat>>);
 
-impl Live {
+impl LiveChat {
     /// The model of `choice` (one that asks to sign in, when there is no sign-in yet), its keys
     /// read in `vars`.
     pub(crate) fn of(choice: &Choice, vars: providers::Vars) -> Self {
@@ -21,15 +18,9 @@ impl Live {
             .provider
             .chat_in(&choice.selection, vars)
             .unwrap_or_else(|| Box::new(SignedOut(choice.provider.clone())));
-        Self {
-            chat: LiveChat::new(chat),
-        }
+        Self::new(chat)
     }
-}
 
-pub(crate) struct LiveChat(RwLock<Box<dyn Chat>>);
-
-impl LiveChat {
     pub(crate) fn new(chat: Box<dyn Chat>) -> Self {
         Self(RwLock::new(chat))
     }

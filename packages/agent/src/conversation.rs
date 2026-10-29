@@ -25,14 +25,19 @@ const UNANSWERED: &str = "The call was not carried out: the run ended first.";
 #[derive(Debug)]
 pub struct Conversation {
     messages: Vec<Message>,
+    /// Each message's estimated tokens, kept with it: the estimate is asked for at every turn,
+    /// and working it out means writing every call's arguments out again.
+    sizes: Vec<u64>,
     /// The tool results that still carry their state: (message index, report).
     stateful: Vec<(usize, String)>,
 }
 
 impl Conversation {
     pub(crate) fn new(system: &str) -> Self {
+        let system = Message::System(system.to_string());
         Self {
-            messages: vec![Message::System(system.to_string())],
+            sizes: vec![fit::tokens(&system)],
+            messages: vec![system],
             stateful: vec![],
         }
     }
@@ -44,11 +49,20 @@ impl Conversation {
     /// The conversation as it was when it had `len` messages: a rewind to before a task.
     pub fn truncate(&mut self, len: usize) {
         self.messages.truncate(len.max(1));
+        self.sizes.truncate(self.messages.len());
         self.stateful.retain(|(at, _)| *at < self.messages.len());
     }
 
     pub(crate) fn push(&mut self, message: Message) {
+        self.sizes.push(fit::tokens(&message));
         self.messages.push(message);
+    }
+
+    /// Message `at` changed in place: its size with it.
+    fn resized(&mut self, at: usize) {
+        if let (Some(size), Some(message)) = (self.sizes.get_mut(at), self.messages.get(at)) {
+            *size = fit::tokens(message);
+        }
     }
 
     /// Answer every tool call left without a result, so the conversation can go on: a model
@@ -106,7 +120,7 @@ impl Conversation {
 
     /// The tokens the conversation takes, estimated.
     pub(crate) fn tokens(&self) -> u64 {
-        self.messages.iter().map(fit::tokens).sum()
+        self.sizes.iter().sum()
     }
 
     /// Replace message `at`'s output, or its calls' large arguments, by pointers (see `history`);
@@ -114,7 +128,7 @@ impl Conversation {
     /// never brings its report back.
     pub(crate) fn elide(&mut self, at: usize) -> usize {
         self.stateful.retain(|(state, _)| *state != at);
-        match self.messages.get_mut(at) {
+        let elided = match self.messages.get_mut(at) {
             Some(Message::ToolResult { content, .. }) => {
                 *content = fit::pointer(content.chars().count());
                 1
@@ -139,7 +153,9 @@ impl Conversation {
                 elided
             }
             _ => 0,
-        }
+        };
+        self.resized(at);
+        elided
     }
 
     /// A call that did nothing useful, and why.
@@ -164,10 +180,12 @@ impl Conversation {
     }
 
     fn drop_states(&mut self) {
-        for (at, report) in self.stateful.drain(..) {
+        let dropped: Vec<(usize, String)> = self.stateful.drain(..).collect();
+        for (at, report) in dropped {
             if let Some(Message::ToolResult { content, .. }) = self.messages.get_mut(at) {
                 *content = format!("{report}\n{OMITTED}");
             }
+            self.resized(at);
         }
     }
 }

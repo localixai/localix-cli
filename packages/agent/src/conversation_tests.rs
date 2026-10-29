@@ -183,3 +183,33 @@ fn a_rewind_forgets_the_states_past_it() {
         "a state past the rewind is never written back"
     );
 }
+
+#[test]
+fn the_token_estimate_follows_every_change_of_the_messages() {
+    // The estimate is kept beside the messages: it must say what a fresh count says after a
+    // push, an elision, a dropped state and a rewind.
+    let fresh = |c: &Conversation| c.messages().iter().map(crate::history::tokens).sum::<u64>();
+    let mut c = Conversation::new("rules");
+    c.push(Message::User("Goal: x".into()));
+    let call = ToolCall {
+        id: "c1".into(),
+        name: "echo".into(),
+        arguments: json!({"text": "x".repeat(5_000)}),
+    };
+    c.push(Message::Assistant {
+        text: None,
+        calls: vec![call],
+        carried: vec![],
+    });
+    c.result("c1", output(&"y".repeat(5_000), 1));
+    assert_eq!(c.tokens(), fresh(&c));
+    assert_eq!(c.elide(2), 1);
+    assert_eq!(c.elide(3), 1);
+    assert_eq!(c.tokens(), fresh(&c));
+    for n in 0..40 {
+        c.result("c1", output("r", n));
+    }
+    assert_eq!(c.tokens(), fresh(&c));
+    c.truncate(2);
+    assert_eq!(c.tokens(), fresh(&c));
+}

@@ -75,6 +75,7 @@ fn ask(chat: &dyn Chat, goal: &str) -> Option<String> {
         conversation: &conversation,
         tools: &[],
         may_call: false,
+        deadline: None,
     };
     clean(chat.complete(request).ok()?.text.as_deref()?)
 }

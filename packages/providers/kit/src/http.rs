@@ -1,7 +1,7 @@
 //! HTTP as the providers use it: a POST of a body with headers, answered with a status and the
 //! whole body. Behind [`Http`], so a provider's requests are tested with a fake and no network.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::App;
 
@@ -24,9 +24,15 @@ impl Reply {
 }
 
 pub trait Http: Send + Sync {
-    /// POST `body` to `address` with `headers`; `Err` when no whole answer came.
-    fn post(&self, address: &str, headers: &[(&str, &str)], body: &str)
-    -> Result<Reply, HttpError>;
+    /// POST `body` to `address` with `headers`; `Err` when no whole answer came. Not waited for
+    /// past `deadline`, when there is one.
+    fn post(
+        &self,
+        address: &str,
+        headers: &[(&str, &str)],
+        body: &str,
+        deadline: Option<Instant>,
+    ) -> Result<Reply, HttpError>;
 }
 
 /// Why no answer came, as a caller acts on it: whether the request may be sent again.
@@ -48,6 +54,9 @@ impl std::fmt::Display for HttpError {
 }
 
 impl std::error::Error for HttpError {}
+
+/// Why a request is not sent once its deadline has passed.
+pub const OUT_OF_TIME: &str = "the time limit ran out before the request";
 
 /// The longest body read: a long streamed reply is a few megabytes at most.
 const BODY_LIMIT: u64 = 64 << 20;
@@ -75,6 +84,7 @@ pub fn agent(app: App, timeout: Duration) -> ureq::Agent {
 #[derive(Clone)]
 pub struct Web {
     agent: ureq::Agent,
+    timeout: Duration,
 }
 
 impl Web {
@@ -82,6 +92,7 @@ impl Web {
     pub fn new(app: App, timeout: Duration) -> Self {
         Self {
             agent: agent(app, timeout),
+            timeout,
         }
     }
 }
@@ -92,11 +103,25 @@ impl Http for Web {
         address: &str,
         headers: &[(&str, &str)],
         body: &str,
+        deadline: Option<Instant>,
     ) -> Result<Reply, HttpError> {
+        // The time left, capped by the client's own limit, is this request's: ureq takes a
+        // per-request `config().timeout_global(..)`, so the agent and its connections are kept.
+        let timeout = match deadline {
+            None => self.timeout,
+            Some(at) => {
+                let left = at.saturating_duration_since(Instant::now());
+                if left.is_zero() {
+                    return Err(HttpError::Unsent(OUT_OF_TIME.into()));
+                }
+                left.min(self.timeout)
+            }
+        };
         let mut request = self.agent.post(address);
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
+        let request = request.config().timeout_global(Some(timeout)).build();
         let mut response = request.send(body).map_err(|error| sent_or_not(&error))?;
         let status = response.status().as_u16();
         let headers = (response.headers().iter())

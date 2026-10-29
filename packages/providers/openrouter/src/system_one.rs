@@ -37,15 +37,15 @@ impl Decider for SystemOne {
             })
             .collect();
         let body = json!({"model": self.model, "state": state, "questions": questions});
-        let (value, millis) =
-            self.client
-                .post("/systemone", &body)
-                .map_err(|error| match error {
-                    ApiError::Invalid(message) => DecideError::Invalid(message),
-                    other @ (ApiError::Auth(_) | ApiError::Http(..) | ApiError::Network(_)) => {
-                        DecideError::Unavailable(format!("{} {other}", crate::NAME))
-                    }
-                })?;
+        let (value, millis) = self
+            .client
+            .post("/systemone", &body, None)
+            .map_err(|error| match error {
+                ApiError::Invalid(message) => DecideError::Invalid(message),
+                other @ (ApiError::Auth(_) | ApiError::Http(..) | ApiError::Network(_)) => {
+                    DecideError::Unavailable(format!("{} {other}", crate::NAME))
+                }
+            })?;
         let mut decision = Decision {
             model: value
                 .get("model")

@@ -144,6 +144,8 @@ pub struct Request<'a> {
     pub tools: &'a [ToolSpec],
     /// Whether the model may call them now; `false` asks for an answer.
     pub may_call: bool,
+    /// The latest moment the caller still wants an answer; `None`: the provider's own limit.
+    pub deadline: Option<std::time::Instant>,
 }
 
 pub trait Chat: Send + Sync {

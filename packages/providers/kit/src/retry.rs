@@ -4,7 +4,7 @@
 //! answer (`HttpError::Unanswered`) may have been acted on and billed, and is not asked again
 //! unless the caller says so.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Attempts at most, the first among them.
 const ATTEMPTS: u32 = 3;
@@ -22,16 +22,24 @@ pub enum Attempt<T, E> {
 }
 
 /// `attempt` until it is done, or its last failure after [`ATTEMPTS`]; `pause` before the second.
+/// No pause is slept past `until`: the failure is returned instead.
 #[expect(
     clippy::disallowed_methods,
     reason = "a backoff between attempts, which no event ends sooner"
 )]
-pub fn retried<T, E>(pause: Duration, mut attempt: impl FnMut() -> Attempt<T, E>) -> Result<T, E> {
+pub fn retried<T, E>(
+    pause: Duration,
+    until: Option<Instant>,
+    mut attempt: impl FnMut() -> Attempt<T, E>,
+) -> Result<T, E> {
     let mut wait = pause;
     for _ in 1..ATTEMPTS {
         match attempt() {
             Attempt::Done(result) => return result,
-            Attempt::Again(_) => {
+            Attempt::Again(error) => {
+                if until.is_some_and(|at| Instant::now() + wait >= at) {
+                    return Err(error);
+                }
                 std::thread::sleep(wait);
                 wait = wait.saturating_mul(2);
             }

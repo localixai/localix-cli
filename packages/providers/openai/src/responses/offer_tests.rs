@@ -80,6 +80,7 @@ fn sent(texts: Texts) -> Value {
         conversation: &conversation,
         tools: &tools,
         may_call: true,
+        deadline: None,
     };
     request_body(&selection(), request, texts)
 }

@@ -188,6 +188,7 @@ impl Agent<'_> {
                 conversation: run.conversation.messages(),
                 tools: &specs,
                 may_call: true,
+                deadline: None,
             };
             let completion = match self.chat.complete(request) {
                 Ok(completion) => completion,

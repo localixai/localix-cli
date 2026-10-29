@@ -151,7 +151,7 @@ impl Chat for ChatModel {
         let started = std::time::Instant::now();
         let mut renewed = false;
         let mut resent = false;
-        retried(PAUSE, || {
+        retried(PAUSE, request.deadline, || {
             let tokens = match self.tokens(false) {
                 Ok(tokens) => tokens,
                 Err(error) => return Attempt::Done(Err(error)),
@@ -169,7 +169,7 @@ impl Chat for ChatModel {
             if let Some(token) = &routed {
                 headers.push((route::HEADER, token));
             }
-            let reply = match self.http.post(&address, &headers, &body) {
+            let reply = match self.http.post(&address, &headers, &body, request.deadline) {
                 Ok(reply) => reply,
                 Err(HttpError::Unsent(why)) => {
                     return Attempt::Again(ChatError::Unavailable(format!(

@@ -27,7 +27,13 @@ impl Http for Scripted {
         clippy::unwrap_in_result,
         reason = "a test's fake: a poisoned lock fails the test"
     )]
-    fn post(&self, _: &str, _: &[(&str, &str)], body: &str) -> Result<Reply, HttpError> {
+    fn post(
+        &self,
+        _: &str,
+        _: &[(&str, &str)],
+        body: &str,
+        _: Option<Instant>,
+    ) -> Result<Reply, HttpError> {
         let body = serde_json::from_str(body).unwrap_or(Value::Null);
         self.sent.lock().unwrap().push(body);
         let next = self.answers.lock().unwrap().pop();
@@ -68,12 +74,15 @@ fn lab() -> OpenRouter {
 #[test]
 fn an_overloaded_answer_is_retried_and_a_refused_key_is_not() {
     let (client, sent) = scripted(lab(), vec![Ok((503, "{}")), Ok((200, r#"{"ok":1}"#))]);
-    assert_eq!(client.post("/x", &json!({})).unwrap().0, json!({"ok": 1}));
+    assert_eq!(
+        client.post("/x", &json!({}), None).unwrap().0,
+        json!({"ok": 1})
+    );
     assert_eq!(sent.lock().unwrap().len(), 2);
 
     let refused = r#"{"error":{"message":"User not found."}}"#;
     let (client, sent) = scripted(lab(), vec![Ok((401, refused))]);
-    let error = client.post("/x", &json!({})).unwrap_err();
+    let error = client.post("/x", &json!({}), None).unwrap_err();
     assert_eq!(error, ApiError::Auth("User not found.".into()));
     assert_eq!(sent.lock().unwrap().len(), 1);
     assert_eq!(
@@ -87,12 +96,12 @@ fn a_request_sent_and_not_answered_is_not_sent_again_and_one_not_sent_is() {
     // A reply being written is billed: sending it again pays for it twice.
     let unanswered = HttpError::Unanswered("timed out".into());
     let (client, sent) = scripted(lab(), vec![Err(unanswered)]);
-    let error = client.post("/x", &json!({})).unwrap_err();
+    let error = client.post("/x", &json!({}), None).unwrap_err();
     assert_eq!(error, ApiError::Network("timed out".into()));
     assert_eq!(sent.lock().unwrap().len(), 1, "sent once");
     let unsent = HttpError::Unsent("connection refused".into());
     let (client, sent) = scripted(lab(), vec![Err(unsent), Ok((200, "{}"))]);
-    assert_eq!(client.post("/x", &json!({})).unwrap().0, json!({}));
+    assert_eq!(client.post("/x", &json!({}), None).unwrap().0, json!({}));
     assert_eq!(sent.lock().unwrap().len(), 2, "sent again");
 }
 
@@ -103,7 +112,7 @@ fn a_decision_not_answered_is_asked_once_more() {
     assert_eq!(deciding.wire(), Wire::OpenRouter);
     let unanswered = || Err(HttpError::Unanswered("timed out".into()));
     let (client, sent) = scripted(deciding, vec![unanswered(), unanswered(), unanswered()]);
-    let error = client.post("/x", &json!({})).unwrap_err();
+    let error = client.post("/x", &json!({}), None).unwrap_err();
     assert!(matches!(error, ApiError::Network(_)), "{error:?}");
     assert_eq!(sent.lock().unwrap().len(), 2, "sent twice, not more");
 }
@@ -135,6 +144,7 @@ fn openrouter_at_another_address_is_still_sent_openrouters_fields() {
         conversation: &conversation,
         tools: &[],
         may_call: true,
+        deadline: None,
     };
     assert_eq!(chat.complete(request).unwrap().text.as_deref(), Some("hi"));
     let sent = sent.lock().unwrap()[0].clone();
@@ -166,7 +176,7 @@ fn cut_short() -> String {
 #[test]
 fn an_answer_cut_short_is_said_so_not_taken_for_one_that_is_not_json() {
     let client = OpenRouter::at(&cut_short(), "k".into(), APP, "Lab");
-    let error = client.post("/x", &json!({})).unwrap_err();
+    let error = client.post("/x", &json!({}), None).unwrap_err();
     let ApiError::Network(why) = &error else {
         panic!("{error:?}");
     };

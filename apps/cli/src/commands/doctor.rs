@@ -101,6 +101,7 @@ fn agent_model(chat: &dyn Chat, model: &str) -> (Mark, String) {
         conversation: &hello,
         tools: &[],
         may_call: false,
+        deadline: None,
     };
     match chat.complete(request) {
         Ok(completion) => (

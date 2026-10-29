@@ -134,7 +134,15 @@ impl Chat for Brake<'_> {
                 }))
             }
             None => {
-                let done = self.chat.complete(request)?;
+                // The request is not waited for past the task's time (C2: a value, not a timer).
+                let deadline = [request.deadline, *lock(&self.deadline)]
+                    .into_iter()
+                    .flatten()
+                    .min();
+                let done = self.chat.complete(Request {
+                    deadline,
+                    ..request
+                })?;
                 lock(&self.budget).1 += done.usage.cost;
                 Ok(done)
             }

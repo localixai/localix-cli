@@ -42,6 +42,7 @@ fn a_request_with_no_billed_amount_is_priced_from_the_catalog() {
         conversation: &[],
         tools: &[],
         may_call: false,
+        deadline: None,
     };
     let cost = priced.complete(request).unwrap().usage.cost;
     let expected = catalog()
@@ -141,6 +142,7 @@ fn openrouters_address_is_read_from_the_sessions_environment() {
         conversation: &[],
         tools: &[],
         may_call: false,
+        deadline: None,
     };
     let _ = chat.complete(request);
     // Wakes the stand-in when nothing reached it.

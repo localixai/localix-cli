@@ -21,7 +21,7 @@ impl Chat for ChatModel {
         let body = body(self.client.wire(), &self.selection, &request);
         let (value, millis) = self
             .client
-            .post("/chat/completions", &body)
+            .post("/chat/completions", &body, request.deadline)
             .map_err(|error| match error {
                 ApiError::Invalid(message) => ChatError::Invalid(message),
                 other @ (ApiError::Auth(_) | ApiError::Http(..) | ApiError::Network(_)) => {

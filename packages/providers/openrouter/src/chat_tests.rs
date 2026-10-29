@@ -124,6 +124,7 @@ fn request_body(wire: Wire, selection: &Selection, may_call: bool) -> Value {
         conversation: &conversation,
         tools: &tools,
         may_call,
+        deadline: None,
     };
     body(wire, selection, &request)
 }
@@ -182,6 +183,7 @@ fn openai_itself_is_sent_one_cache_key_for_every_session_with_the_same_start_and
             conversation: &conversation,
             tools,
             may_call: true,
+            deadline: None,
         };
         body(wire, &selection(vec![], Effort::Off), &request)["prompt_cache_key"].clone()
     };
@@ -265,6 +267,7 @@ fn a_script_is_offered_as_a_function_with_one_string_argument() {
         conversation: &conversation,
         tools: &tools,
         may_call: true,
+        deadline: None,
     };
     let body = body(Wire::OpenRouter, &selection(vec![], Effort::Off), &request);
     let function = &body["tools"][0]["function"];

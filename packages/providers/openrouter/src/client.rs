@@ -120,7 +120,12 @@ impl OpenRouter {
     }
 
     /// POST `body` to `path`, asked again on an answer a moment's wait may mend.
-    pub(crate) fn post(&self, path: &str, body: &Value) -> Result<(Value, u64), ApiError> {
+    pub(crate) fn post(
+        &self,
+        path: &str,
+        body: &Value,
+        deadline: Option<Instant>,
+    ) -> Result<(Value, u64), ApiError> {
         let started = Instant::now();
         let url = format!("{}{path}", self.base);
         let bearer = format!("Bearer {}", self.key);
@@ -131,8 +136,8 @@ impl OpenRouter {
         ];
         let body = body.to_string();
         let mut timed_out = false;
-        retried(PAUSE, || {
-            let (status, text) = match self.http.post(&url, &headers, &body) {
+        retried(PAUSE, deadline, || {
+            let (status, text) = match self.http.post(&url, &headers, &body, deadline) {
                 Ok(reply) => (reply.status, reply.body),
                 // A reply being written is billed: asking again would pay for it twice (a decision
                 // is asked once more). One that never got through is asked again.

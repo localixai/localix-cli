@@ -68,8 +68,14 @@ impl Keep for Arc<Memory> {
 struct Shared(Arc<Scripted>);
 
 impl Http for Shared {
-    fn post(&self, a: &str, h: &[(&str, &str)], b: &str) -> Result<Reply, HttpError> {
-        self.0.post(a, h, b)
+    fn post(
+        &self,
+        a: &str,
+        h: &[(&str, &str)],
+        b: &str,
+        d: Option<std::time::Instant>,
+    ) -> Result<Reply, HttpError> {
+        self.0.post(a, h, b, d)
     }
 }
 
@@ -149,6 +155,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
         conversation: &conversation,
         tools: std::slice::from_ref(&spec),
         may_call: true,
+        deadline: None,
     };
     let selection = Selection::new(entry("gpt-6-sol"))
         .with_effort(Effort::High)
@@ -194,6 +201,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
         conversation: &[],
         tools: &[],
         may_call: true,
+        deadline: None,
     };
     assert_eq!(
         request_body(&off, request, Texts::Functions)["reasoning"],
@@ -205,6 +213,7 @@ fn a_conversation_goes_out_as_input_items_with_the_level_chosen() {
         conversation: &[],
         tools: &[],
         may_call: false,
+        deadline: None,
     };
     let body = request_body(&Selection::new(entry("gpt-next")), bare, Texts::Functions);
     assert!(body.get("reasoning").is_none() && body.get("tools").is_none());
@@ -257,6 +266,7 @@ fn a_request_names_the_account_and_the_token() {
         conversation: &conversation,
         tools: &[],
         may_call: false,
+        deadline: None,
     };
     model.complete(request).unwrap();
     let sent = &http.sent()[0];
@@ -285,6 +295,7 @@ fn a_token_about_to_lapse_is_refreshed_and_kept_first() {
         conversation: &[],
         tools: &[],
         may_call: false,
+        deadline: None,
     };
     model.complete(request).unwrap();
     let sent = http.sent();
@@ -328,6 +339,7 @@ fn a_refused_token_is_refreshed_once_then_the_refusal_is_said() {
         conversation: &[],
         tools: &[],
         may_call: false,
+        deadline: None,
     };
     let refused = model.complete(request).unwrap_err().to_string();
     assert!(
@@ -347,6 +359,7 @@ fn a_usage_limit_says_so() {
         conversation: &[],
         tools: &[],
         may_call: false,
+        deadline: None,
     };
     let refused = model.complete(request).unwrap_err().to_string();
     assert!(refused.contains("usage limit") && refused.contains("try later"));
@@ -383,6 +396,7 @@ fn a_stream_that_went_out_unanswered_is_sent_once_more_and_no_further() {
         conversation: &[],
         tools: &[],
         may_call: false,
+        deadline: None,
     };
     let (model, http, _) = model_of(
         Scripted::answering(vec![
@@ -443,6 +457,7 @@ fn a_request_that_never_went_out_is_sent_again() {
         conversation: &[],
         tools: &[],
         may_call: false,
+        deadline: None,
     };
     assert!(model.complete(request).is_ok());
     assert_eq!(http.sent().len(), 2);
@@ -466,6 +481,7 @@ fn each_conversation_is_a_session_of_its_own_at_the_backend_all_its_requests_one
             conversation,
             tools: &[],
             may_call: true,
+            deadline: None,
         };
         model.complete(request).unwrap();
     };
@@ -533,6 +549,7 @@ fn a_note_the_model_wrote_beside_its_calls_goes_back_in_its_phase() {
         conversation: &conversation,
         tools: &[],
         may_call: true,
+        deadline: None,
     };
     let body = request_body(
         &Selection::new(entry("gpt-6-sol")),
@@ -574,6 +591,7 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
         conversation: &conversation,
         tools: &[],
         may_call: true,
+        deadline: None,
     };
     let body = request_body(
         &Selection::new(entry("gpt-6-sol")),
@@ -592,6 +610,7 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
         conversation: &conversation,
         tools: &[],
         may_call: true,
+        deadline: None,
     };
     let other = request_body(
         &Selection::new(entry("gpt-6-luna")),
@@ -605,6 +624,7 @@ fn the_models_reasoning_goes_back_with_the_next_request() {
         conversation: &[],
         tools: &[],
         may_call: true,
+        deadline: None,
     };
     assert_eq!(
         request_body(&Selection::new(entry("gpt-next")), bare, Texts::Functions)["include"],
@@ -626,6 +646,7 @@ fn ask_with(model: &ChatModel, spec: &ToolSpec) -> Completion {
         conversation: &conversation,
         tools: std::slice::from_ref(spec),
         may_call: true,
+        deadline: None,
     };
     model.complete(request).unwrap()
 }
@@ -699,6 +720,7 @@ fn the_routing_token_a_reply_gives_goes_back_within_its_task_and_no_further() {
                 conversation,
                 tools: &[],
                 may_call: true,
+                deadline: None,
             })
             .unwrap();
     };
@@ -735,4 +757,20 @@ fn the_routing_token_a_reply_gives_goes_back_within_its_task_and_no_further() {
             Some("s2".into())
         ]
     );
+}
+
+#[test]
+fn the_deadline_of_a_request_reaches_the_http_client() {
+    let (model, http, _) = model(vec![(200, streamed(&[completed()]))], tokens(LATER));
+    let conversation = conversation();
+    let at = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    model
+        .complete(Request {
+            conversation: &conversation,
+            tools: &[],
+            may_call: false,
+            deadline: Some(at),
+        })
+        .unwrap();
+    assert_eq!(http.sent()[0].deadline, Some(at));
 }

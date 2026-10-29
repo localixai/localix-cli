@@ -28,6 +28,7 @@ pub(crate) struct Sent {
     pub address: String,
     pub headers: Vec<(String, String)>,
     pub body: String,
+    pub deadline: Option<std::time::Instant>,
 }
 
 impl Sent {
@@ -86,6 +87,7 @@ impl Http for Scripted {
         address: &str,
         headers: &[(&str, &str)],
         body: &str,
+        deadline: Option<std::time::Instant>,
     ) -> Result<Reply, HttpError> {
         self.sent.lock().unwrap().push(Sent {
             address: address.into(),
@@ -94,6 +96,7 @@ impl Http for Scripted {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
             body: body.into(),
+            deadline,
         });
         let next = self.replies.lock().unwrap().pop();
         next.unwrap_or_else(|| Err(HttpError::Unsent("no reply scripted".into())))

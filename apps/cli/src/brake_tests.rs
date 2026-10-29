@@ -8,6 +8,21 @@ use super::*;
 #[derive(Default)]
 struct Ready(AtomicUsize);
 
+/// A chat model that keeps the deadline each request carried.
+#[derive(Default)]
+struct Seen(Mutex<Vec<Option<Instant>>>);
+
+impl Chat for Seen {
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "a test's fake: a poisoned lock fails the test"
+    )]
+    fn complete(&self, request: Request) -> Result<Completion, ChatError> {
+        self.0.lock().unwrap().push(request.deadline);
+        Ok(Completion::default())
+    }
+}
+
 /// A chat model whose every answer costs 0.01.
 struct Dear;
 
@@ -38,6 +53,7 @@ fn request(conversation: &[Message]) -> Request<'_> {
         conversation,
         tools: &[],
         may_call: true,
+        deadline: None,
     }
 }
 
@@ -148,4 +164,27 @@ fn no_budget_never_halts() {
         assert!(brake.complete(request(&[])).is_ok());
     }
     assert!(!brake.due());
+}
+
+#[test]
+fn a_request_carries_the_time_the_task_has_left() {
+    let chat = Seen::default();
+    let open = || false;
+    let brake = Brake::new(&chat, &open, &open);
+    brake.complete(request(&[])).unwrap();
+    brake.arm(Limits::time(Duration::from_secs(2)));
+    let before = Instant::now();
+    brake.complete(request(&[])).unwrap();
+    let mut earlier = request(&[]);
+    earlier.deadline = Some(before + Duration::from_millis(500));
+    brake.complete(earlier).unwrap();
+    let seen = chat.0.lock().unwrap().clone();
+    assert_eq!(seen[0], None, "no task, no deadline");
+    let at = seen[1].unwrap();
+    assert!(at > before && at <= Instant::now() + Duration::from_secs(2));
+    assert_eq!(
+        seen[2],
+        Some(before + Duration::from_millis(500)),
+        "the nearer wins"
+    );
 }

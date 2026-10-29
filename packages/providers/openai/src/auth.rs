@@ -150,7 +150,7 @@ fn token(
     let address = format!("{ISSUER}/oauth/token");
     let headers = [content, ("Accept", "application/json")];
     let reply = http
-        .post(&address, &headers, body)
+        .post(&address, &headers, body, None)
         .map_err(|error| format!("the ChatGPT sign-in could not be reached: {error}"))?;
     let value: Value = serde_json::from_str(&reply.body).unwrap_or(Value::Null);
     if reply.status == 200 {

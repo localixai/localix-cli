@@ -6,6 +6,7 @@ fn ask(chat: &dyn Chat) -> Result<Completion, ChatError> {
         conversation: &[],
         tools: &[],
         may_call: false,
+        deadline: None,
     })
 }
 

@@ -75,7 +75,7 @@ impl Login {
         let body = json!({"code": code, "code_verifier": self.verifier,
             "code_challenge_method": "S256"});
         let (value, _) = client
-            .post("/auth/keys", &body)
+            .post("/auth/keys", &body, None)
             .map_err(|e| e.to_string())?;
         value
             .get("key")

@@ -44,7 +44,7 @@
   --display: 'Display', ui-sans-serif, system-ui, sans-serif;
   --text: 'Text', ui-sans-serif, system-ui, sans-serif;
   --mono: 'Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --gutter: clamp(1.25rem, 4vw, 2.5rem);
+  --gutter: clamp(1.25rem, 4vw, 4.5rem);
   /* One scale, a major third from 1rem: small print, body, lead, section headings. */
   --step-s: 0.8125rem;
   --step-0: 1rem;
@@ -61,6 +61,8 @@
 }
 html {
   background: var(--black);
+  /* Everything is in rem, so a wide monitor scales the page up rather than leaving it a column. */
+  font-size: clamp(100%, 0.5rem + 0.5vw, 140%);
   scroll-padding-top: 1rem;
   -webkit-text-size-adjust: 100%;
 }
@@ -133,7 +135,7 @@ pre,
   font-feature-settings: 'calt' 0, 'liga' 0;
 }
 .wrap {
-  width: min(84rem, 100% - 2 * var(--gutter));
+  width: min(96rem, 100% - 2 * var(--gutter));
   margin-inline: auto;
 }
 

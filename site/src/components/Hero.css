@@ -54,13 +54,13 @@ h1 {
 /* Side by side on wide screens, the hero filling the window between the bar and the footer. */
 @media (min-width: 60rem) {
   .hero {
-    grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
-    column-gap: clamp(3rem, 5vw, 6rem);
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    column-gap: clamp(2.5rem, 4vw, 5rem);
     align-items: center;
-    min-height: calc(100svh - 10rem);
+    min-height: min(calc(100svh - 10rem), 60rem);
   }
   h1 {
-    font-size: clamp(2.75rem, 4.3vw, 5.5rem);
+    font-size: clamp(2.75rem, 4vw, 5.5rem);
   }
 }
 

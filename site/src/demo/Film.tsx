@@ -41,7 +41,7 @@ export function Film({ src, label }: { src: string; label: string }) {
       term.open(node);
       const fit = () => {
         const size = (node.clientWidth - PADDING) / (cast.cols * CELL);
-        term.options.fontSize = Math.max(6, Math.min(15, Math.floor(size * 2) / 2));
+        term.options.fontSize = Math.max(6, Math.min(24, Math.floor(size * 2) / 2));
       };
       fit();
       const resized = new ResizeObserver(fit);

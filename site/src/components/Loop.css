@@ -1,7 +1,7 @@
 /* The steps as a stack: each card sticks under the bar and the next slides over it, a little
    lower, so the edges of those under it show. Words on the left, what llx printed on the right. */
 .loop {
-  padding-block: clamp(3rem, 8vw, 6rem) clamp(4rem, 10vw, 8rem);
+  padding-block: clamp(2rem, 4vw, 4rem) clamp(3rem, 6vw, 6rem);
 }
 .loop h2 {
   margin: 0 0 clamp(2rem, 4vw, 3rem);
@@ -19,7 +19,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
-  min-height: 19rem;
+  min-height: clamp(19rem, 17vw, 24rem);
   padding: clamp(1.25rem, 3vw, 2.25rem);
   border: 1px solid var(--line-strong);
   border-radius: 20px;

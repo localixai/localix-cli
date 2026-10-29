@@ -15,6 +15,7 @@ mod repo;
 mod rules;
 mod sessions;
 mod sign_in;
+mod signals;
 mod startup;
 mod tui;
 mod usage;

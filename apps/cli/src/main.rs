@@ -45,7 +45,7 @@ use clap::Parser;
 )]
 fn main() {
     hardening::private();
-    std::process::exit(run());
+    std::process::exit(error::guarded(run));
 }
 
 /// The command line parsed and its command run; the process's exit code.

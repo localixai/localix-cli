@@ -403,6 +403,65 @@ fn six_agents_open_at_most() {
     });
 }
 
+#[test]
+fn a_closed_agent_is_let_go_when_the_next_one_starts() {
+    let chat = Router::new(&[(
+        "main",
+        vec![
+            call("c1", json!({"action": "spawn", "task": "t", "name": "old"})),
+            call("c2", json!({"action": "wait"})),
+            call("c3", json!({"action": "close", "agent": "old"})),
+            call("c4", json!({"action": "spawn", "task": "t", "name": "new"})),
+            call("c5", json!({"action": "list"})),
+            says("Done."),
+        ],
+    )]);
+    composed_with(crate::modes::built("bypass"), true, &chat, |rig| {
+        rig.task("two generations");
+        let list = &results(rig)[4].1;
+        assert!(list.contains("`new`") && !list.contains("`old`"), "{list}");
+        0
+    });
+}
+
+#[test]
+fn eight_agents_work_at_most_even_when_some_are_closed() {
+    let names = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
+    let mut script = vec![];
+    for (n, name) in names.iter().enumerate().take(6) {
+        script.push(call(
+            &format!("s{n}"),
+            json!({"action": "spawn", "task": "t", "name": name}),
+        ));
+    }
+    // Closed while working, an agent still thinks: it still counts.
+    for (n, name) in names.iter().enumerate().take(6) {
+        script.push(call(
+            &format!("x{n}"),
+            json!({"action": "close", "agent": name}),
+        ));
+    }
+    for (n, name) in names.iter().enumerate().skip(6) {
+        script.push(call(
+            &format!("t{n}"),
+            json!({"action": "spawn", "task": "t", "name": name}),
+        ));
+    }
+    let mut chat = Router::new(&[("main", script)]);
+    chat.slow = names.to_vec();
+    composed_with(crate::modes::built("bypass"), true, &chat, |rig| {
+        rig.task("a crowd");
+        let results = results(rig);
+        assert!(!results[12].0 && !results[13].0, "{results:?}");
+        assert!(
+            results[14].0 && results[14].1.contains("8 agents are working"),
+            "{:?}",
+            results[14]
+        );
+        0
+    });
+}
+
 /// A gate that remembers each summary it is asked.
 #[derive(Default)]
 struct Asked(Mutex<Vec<String>>);

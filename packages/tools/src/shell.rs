@@ -4,6 +4,7 @@
 
 mod bash;
 mod inherit;
+mod leaders;
 mod output;
 mod process;
 mod sandbox;
@@ -11,5 +12,6 @@ mod sweep;
 
 pub use bash::BashTool;
 pub use inherit::streams_only;
+pub use leaders::{Tracked, kill_all, track};
 pub use process::{Env, SHELL, kill, scoped, shell};
 pub use sandbox::{Held, Scope};

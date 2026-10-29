@@ -86,6 +86,8 @@ pub(super) fn run(job: &Job) -> io::Result<Finished> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
+    // Listed until it is reaped, for a quit that cannot wait for it (`leaders`).
+    let _listed = super::leaders::track(&child);
     let started = Instant::now();
     // Two readers, one send each: room for both, so neither waits.
     let (closed, readers) = mpsc::sync_channel(PIPES);

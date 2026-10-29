@@ -10,7 +10,7 @@ use serde_json::Value;
 use super::kit::Kit;
 use super::spec::{self, Action};
 use super::wait::find;
-use super::{Child, MAX_OPEN, Registry, child, unique};
+use super::{Child, MAX_OPEN, MAX_WORKING, Registry, child, unique};
 use protocol::Event;
 
 pub(crate) struct AgentsTool<'scope, 'env> {
@@ -35,6 +35,15 @@ impl<'scope, 'env> AgentsTool<'scope, 'env> {
     fn spawn(&self, task: &str, name: Option<String>) -> Result<ToolOutput, ToolError> {
         let (id, name) = {
             let mut state = self.registry.lock();
+            // A closed agent that has stopped is let go: its session stays saved, and the
+            // registry holds only what can still act.
+            state.children.retain(|child| child.open || child.working);
+            let working = state.children.iter().filter(|child| child.working).count();
+            if working >= MAX_WORKING {
+                return Err(ToolError::Failed(format!(
+                    "{working} agents are working: wait for one to answer first"
+                )));
+            }
             let open = state.children.iter().filter(|child| child.open).count();
             if open >= MAX_OPEN {
                 return Err(ToolError::Failed(format!(

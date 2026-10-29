@@ -1,4 +1,4 @@
-//! The person stopping a task: Ctrl-C (SIGINT) or SIGTERM during it. The task ends the way the
+//! The person stopping a task: Ctrl-C (SIGINT), SIGTERM or SIGHUP (the terminal gone) during it. The task ends the way the
 //! time limit ends it: the command running is killed with everything it started (commands run in
 //! their own session, so the terminal's signal never reaches them); the gate approves nothing more,
 //! and the task ends at its next model turn as `interrupted` (exit 130), with its `run.completed`
@@ -6,7 +6,7 @@
 //! quits at once. A signal stops every
 //! session's task; the interface's keys stop one session's, by its id.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::sync::lock;
@@ -171,20 +171,55 @@ pub(crate) fn working() -> usize {
     PROCESS.busy.load(Ordering::SeqCst)
 }
 
-/// Quit now, as a second Ctrl-C does.
+/// The write end of the pipe that wakes the quitting thread, or -1 before [`install`].
+static QUIT_FD: AtomicI32 = AtomicI32::new(-1);
+
+/// Quit now, as a second Ctrl-C does: every command and monitor started is killed first (their
+/// sessions outlive the process otherwise), by a thread that can do what a signal handler cannot;
+/// this only wakes it, and may be called from a handler.
 pub(crate) fn quit_now() -> ! {
+    let fd = QUIT_FD.load(Ordering::SeqCst);
+    // SAFETY: write is async-signal-safe and reads one static byte.
+    if fd >= 0 && unsafe { libc::write(fd, b"q".as_ptr().cast(), 1) } == 1 {
+        loop {
+            // SAFETY: pause only waits for a signal; the quitting thread ends the process.
+            unsafe { libc::pause() };
+        }
+    }
     // SAFETY: _exit ends the process at once.
     unsafe { libc::_exit(crate::exit::INTERRUPTED) }
 }
 
-/// Handle SIGINT and SIGTERM for the rest of the process.
+/// Start the thread that ends the process when [`quit_now`] wakes it. Without one (no pipe, no
+/// thread) a quit is a plain `_exit`.
+fn reaper() {
+    let mut ends = [-1 as libc::c_int; 2];
+    // SAFETY: pipe fills the two descriptors of `ends`, which lives here.
+    if unsafe { libc::pipe(ends.as_mut_ptr()) } != 0 {
+        return;
+    }
+    let [read, write] = ends;
+    let thread = std::thread::Builder::new().name("llx-quit".into());
+    let started = thread.spawn(move || {
+        let mut byte = 0_u8;
+        // SAFETY: read fills one byte of `byte`, which lives here; the descriptor is this thread's.
+        while unsafe { libc::read(read, (&raw mut byte).cast(), 1) } < 0 {}
+        tools::shell::kill_all();
+        // SAFETY: _exit ends the process at once.
+        unsafe { libc::_exit(crate::exit::INTERRUPTED) }
+    });
+    if started.is_ok() {
+        QUIT_FD.store(write, Ordering::SeqCst);
+    }
+}
+
+/// Handle SIGINT, SIGTERM and SIGHUP (the terminal gone) for the rest of the process.
 pub(crate) fn install() {
+    reaper();
     extern "C" fn on_signal(_: libc::c_int) {
         const NOTE: &[u8] = b"\nllx: stopping the task (Ctrl-C again quits now)\n";
         if PROCESS.stop() {
-            // SAFETY: _exit is async-signal-safe; nothing is left to flush that matters more than
-            // quitting when asked twice.
-            unsafe { libc::_exit(crate::exit::INTERRUPTED) };
+            quit_now();
         }
         // SAFETY: write is async-signal-safe, and NOTE outlives the call.
         unsafe { libc::write(2, NOTE.as_ptr().cast(), NOTE.len()) };
@@ -200,7 +235,7 @@ pub(crate) fn install() {
     unsafe { libc::sigemptyset(&mut action.sa_mask) };
     // The action is fully initialized before it is installed, and the handler does only what a
     // signal handler may (atomics, kill, write, _exit).
-    for signal in [libc::SIGINT, libc::SIGTERM] {
+    for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP] {
         // SAFETY: as said above; the action outlives the call, which copies it.
         unsafe { libc::sigaction(signal, &action, std::ptr::null_mut()) };
     }

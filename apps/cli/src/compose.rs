@@ -57,6 +57,10 @@ pub(crate) fn assemble(
     let closed = || output.closed();
     let stopped = || interrupt.stopped();
     let brake = Brake::new(models.chat, &closed, &stopped);
+    // The tools' stop: the person's, or the time limit's, so a command running past it is killed
+    // as a stop kills it. The gate and the person keep `stopped`: waiting on them is not the
+    // task's time (`waited`).
+    let limited = || stopped() || brake.due();
     let mode = ModeCell::new(seat.mode.clone());
     let waited = |took| brake.extend(took);
     let approver = match &seat.ui {
@@ -96,7 +100,7 @@ pub(crate) fn assemble(
         mode: &mode,
         gate: &gate,
         ask: &ask,
-        stopped: &stopped,
+        stopped: &limited,
         live: models.live,
     };
     equip(&base, seat, work)
@@ -157,14 +161,12 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
         session: *asks,
         queue: &lane_queue,
     };
-    // The wait between turns ends at the time limit too; the gates and tools keep `stopped`.
-    let waiting = || (base.stopped)() || base.brake.due();
     let inbox = MainInbox {
         registry: &registry,
         jobs: &jobs,
         jobs_kit: &jobs_kit,
         output,
-        stopped: &waiting,
+        stopped: base.stopped,
     };
     let lane = Lane {
         kit: &kit,

@@ -253,6 +253,22 @@ fn the_time_limit_holds_while_the_task_waits_on_a_quiet_monitor() {
 }
 
 #[test]
+fn the_time_limit_ends_a_command_that_is_still_running() {
+    let home = Home::new();
+    let model = Model::start(vec![Reply::call("bash", json!({"command": "sleep 60"}))]);
+    let started = std::time::Instant::now();
+    let out = exec(&home, &model, &["exec", "-y", "--timeout", "2", "x"], "");
+    let stderr = text(&out.stderr);
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(15),
+        "the command outlived the limit: {:?}: {stderr}",
+        started.elapsed()
+    );
+    assert_eq!(out.status.code(), Some(2), "{stderr}");
+    assert!(stderr.contains("time limit"), "{stderr}");
+}
+
+#[test]
 fn an_agent_is_offered_the_tools_of_the_main_session() {
     let names = |request: &Value| -> Vec<String> {
         (request["tools"].as_array().unwrap().iter())

@@ -61,6 +61,8 @@ pub(super) fn watch(
     let mut child = shell
         .spawn()
         .map_err(|error| format!("the command could not start: {error}"))?;
+    // Listed until it ends, for a quit that cannot wait for it.
+    let _listed = tools::shell::track(&child);
     // The loop below takes each line as it comes; a burst beyond this waits in the pipe.
     let (sent, received) = mpsc::sync_channel(LINES);
     if let Some(out) = child.stdout.take() {

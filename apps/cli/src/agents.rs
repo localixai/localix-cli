@@ -31,6 +31,8 @@ use protocol::Event;
 
 /// Agents open at once: each keeps its conversation.
 const MAX_OPEN: usize = 6;
+/// Agents thinking at once, closed ones that have not stopped yet among them.
+const MAX_WORKING: usize = 8;
 /// How often a wait looks whether the task was stopped or the person wrote.
 const POLL: Duration = Duration::from_millis(200);
 

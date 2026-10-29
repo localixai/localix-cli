@@ -79,6 +79,29 @@ pub(crate) fn note(text: &str) {
     let _ = err.write_all(text.as_bytes()).and_then(|()| err.flush());
 }
 
+/// Run `work` to its exit code; a panic that got this far (the desk and the server turn a
+/// request's own into its failure, W8) ends the run with the environment's code and one line,
+/// not a trace and the panic's 101. The panic hook has logged it already.
+pub(crate) fn guarded(work: impl FnOnce() -> i32 + std::panic::UnwindSafe) -> i32 {
+    match std::panic::catch_unwind(work) {
+        Ok(code) => code,
+        Err(payload) => {
+            let said = panic_message(payload.as_ref());
+            note(&format!("llx: internal error: {said} (see the log)\n"));
+            exit::ENVIRONMENT
+        }
+    }
+}
+
+/// What a panic said, when it said text.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|text| (*text).to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown cause".into())
+}
+
 #[cfg(test)]
 #[path = "error_tests.rs"]
 mod tests;

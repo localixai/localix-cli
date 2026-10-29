@@ -21,8 +21,16 @@ llx exec \
   --allow 'bash(git diff *)' --allow 'bash(git show *)' --allow 'bash(git log *)' \
   --allow 'bash(git status *)' --allow 'bash(ls *)' --allow 'bash(grep *)' \
   --allow 'bash(cat *)' --allow 'bash(head *)' --allow 'bash(rg *)' \
-  --schema "@$here/schema.json" -o "$out" "$prompt" </dev/null >/dev/null ||
-  { echo "llx could not finish: exit $?" >&2; exit 2; }
+  --schema "@$here/schema.json" -o "$out" "$prompt" </dev/null >/dev/null || {
+    code=$?
+    # 1: the agent could not judge the change (its result says what blocked it); 2: out of turns,
+    # time or budget; 3: no key, no network. None is a verdict on the change.
+    case $code in
+      1) echo "llx could not judge the change: $(cat "$out")" >&2 ;;
+      *) echo "llx could not finish: exit $code" >&2 ;;
+    esac
+    exit 2
+  }
 
 jq -r '.changes[] | "\(if .breaking then "BREAKS" else "safe  " end)  \(if .kind == "semantic" then "semantic  " else "structural" end)  \(.endpoint): \(.change)"' "$out"
 [ "$(jq -r .breaking "$out")" = false ] || exit 1

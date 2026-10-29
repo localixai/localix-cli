@@ -15,8 +15,11 @@ use serde_json::{Value, json};
 use crate::auth;
 use crate::tokens::{self, Tokens};
 
+mod offer;
 mod request;
 mod route;
+pub use offer::Texts;
+use offer::custom_call;
 use request::body;
 
 pub(crate) const BASE: &str = "https://chatgpt.com/backend-api/codex";
@@ -55,6 +58,8 @@ pub struct ChatModel {
     /// Rung when a refresh ends.
     renewed: Condvar,
     base: String,
+    /// How a tool of free text (a patch) is offered.
+    texts: Texts,
     /// Each task's machine, as the backend named it.
     routes: route::Routes,
 }
@@ -78,8 +83,15 @@ impl ChatModel {
             }),
             renewed: Condvar::new(),
             base: BASE.into(),
+            texts: Texts::Functions,
             routes: route::Routes::default(),
         }
+    }
+
+    /// How tools of free text are offered: as `custom` ones for a model that takes those.
+    #[must_use]
+    pub fn with_texts(self, texts: Texts) -> Self {
+        Self { texts, ..self }
     }
 
     /// The tokens to send, refreshed first when they are about to lapse (or `force`d). One thread
@@ -131,7 +143,8 @@ impl Chat for ChatModel {
     fn complete(&self, request: Request) -> Result<Completion, ChatError> {
         let task = route::task(request.conversation);
         let session = route::session(request.conversation);
-        let body = body(&self.selection, request).to_string();
+        let body = body(&self.selection, request, self.texts).to_string();
+        let offer = offer::Offer::new(request.tools, self.texts, &[]);
         let address = format!("{}/responses", self.base);
         let started = std::time::Instant::now();
         let mut renewed = false;
@@ -148,8 +161,9 @@ impl Chat for ChatModel {
                 ("Content-Type", "application/json".into()),
                 ("Accept", "text/event-stream".into()),
             ];
-            if let Some(token) = self.routes.token(&task) {
-                headers.push((route::HEADER, token));
+            let routed = self.routes.token(&task);
+            if let Some(token) = &routed {
+                headers.push((route::HEADER, token.clone()));
             }
             let headers: Vec<(&str, &str)> =
                 headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
@@ -169,8 +183,12 @@ impl Chat for ChatModel {
             };
             match reply.status {
                 200 => Attempt::Done({
+                    route::trace(&session, routed.as_deref(), &reply);
                     self.routes.keep(task.clone(), &reply);
                     read(&reply.body, self.selection.model().id.as_str()).map(|mut completion| {
+                        completion.calls = (completion.calls.into_iter())
+                            .map(|call| offer.incoming(call))
+                            .collect();
                         completion.usage.millis =
                             u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
                         completion
@@ -203,15 +221,30 @@ pub(crate) fn read(body: &str, model: &str) -> Result<Completion, ChatError> {
             "response.output_item.done" => {
                 let item = &event["item"];
                 match item["type"].as_str() {
-                    Some("message") => said.extend(
-                        item["content"]
-                            .as_array()
-                            .into_iter()
-                            .flatten()
-                            .filter(|part| part["type"] == "output_text")
-                            .filter_map(|part| part["text"].as_str().map(str::to_string)),
-                    ),
+                    Some("message") => {
+                        // Its phase goes back with it: a note beside calls is not an answer.
+                        // Without its id: nothing is stored at the backend to name.
+                        if item["phase"].is_string() {
+                            let mut kept = item.clone();
+                            if let Some(fields) = kept.as_object_mut() {
+                                fields.remove("id");
+                            }
+                            completion
+                                .carried
+                                .push(json!({"model": model, "item": kept}));
+                        }
+                        said.extend(
+                            item["content"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .filter(|part| part["type"] == "output_text")
+                                .filter_map(|part| part["text"].as_str().map(str::to_string)),
+                        );
+                    }
                     Some("function_call") => completion.calls.extend(call(item)),
+                    // A tool of free text offered as a custom one: its input is the text whole.
+                    Some("custom_tool_call") => completion.calls.extend(custom_call(item)),
                     // Nothing is stored at the backend: only a sealed reasoning can go back, and
                     // only to the model that sealed it.
                     Some("reasoning") if item["encrypted_content"].is_string() => {

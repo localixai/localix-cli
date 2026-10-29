@@ -125,7 +125,7 @@ pub(super) fn drive(
                 chat: base.brake,
                 tools: &tools,
                 context: &context,
-                max_turns: options.max_turns,
+                max_turns: options.max_turns.unwrap_or(usize::MAX),
                 observer: base.output,
                 schema: schema.as_ref(),
                 inbox: Some(lane.inbox),

@@ -1235,6 +1235,7 @@ version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "contracts",
+ "log",
  "provider-kit",
  "serde_json",
 ]

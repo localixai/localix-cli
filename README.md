@@ -37,7 +37,7 @@ llx is a minimal agent runtime: a model in a loop over a few plain tools, on any
 
 | Who calls | Command | What they get |
 | --- | --- | --- |
-| **You** | `llx` | A minimal agent at your terminal, with four tools: `bash`, `ask`, `agents`, `jobs` |
+| **You** | `llx` | A minimal agent at your terminal, with five tools: `bash`, `apply_patch`, `ask`, `agents`, `jobs` |
 | **Your scripts and CI** | `llx exec --json --schema …` | One task, then exit: JSON events, an answer in the shape you define, exit codes to branch on |
 | **Your other agents** | `llx exec` · `llx decide` | Commands they run from their shell: helpers on any model, quick decisions. They extend the agent you use, never replace it |
 

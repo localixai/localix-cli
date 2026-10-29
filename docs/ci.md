@@ -78,7 +78,7 @@ One of `prompt` and `prompt-file` is needed. The rest are optional.
 | `allow`, `deny` | | [Rules](modes.md#rules), one per line. |
 | `mode` | `default` | `default`, `plan`, `bypass`, or a mode of your own. |
 | `provider`, `model`, `reasoning` | llx's own | Set as `LLX_PROVIDER`, `LLX_MODEL` and `LLX_REASONING`. |
-| `max-turns` | 50 | Model turns for the task. |
+| `max-turns` | none | Model turns for the task; the timeout bounds it. |
 | `timeout` | 900 | Seconds. Always passed, so a run always has a deadline. |
 | `working-directory` | the workspace | Where the agent works. |
 | `version` | the action's own | The llx release to install. `system` uses the `llx` already on the PATH, for a self-hosted runner that builds it. |
@@ -213,7 +213,7 @@ Rules come from the workflow and your settings, never from the repository: a pul
 
 ## Limits
 
-- `max-turns` (default 50) and `timeout` (the action's default is 900 seconds; `llx exec`'s own is 1800, at most a day). llx stops at the first model turn past either, and the task exits 2. A command the agent runs has its own limit (120 seconds by default).
+- `max-turns` (no limit by default) and `timeout` (the action's default is 900 seconds; `llx exec`'s own is 1800, at most a day). llx stops at the first model turn past either, and the task exits 2. A command the agent runs has its own limit (120 seconds by default).
 - Put `timeout-minutes` on the job as well: it is the runner's limit, whatever happens inside.
 - llx has no cost cap by amount. The two limits above bound a run, and the key's own limit bounds the spend.
 

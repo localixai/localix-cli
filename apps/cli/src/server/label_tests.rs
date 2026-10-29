@@ -15,7 +15,7 @@ fn did(name: &str, args: &Value) -> String {
 }
 
 #[test]
-fn commands_and_questions_read_as_what_they_do() {
+fn commands_files_and_questions_read_as_what_they_do() {
     assert_eq!(
         did("bash", &json!({"command": "cargo  test\n --all"})),
         "Ran cargo test --all"
@@ -45,4 +45,15 @@ fn agents_and_jobs_read_as_their_action() {
         did("jobs", &json!({"action": "stop", "job": "j2"})),
         "Stopped job j2"
     );
+}
+
+#[test]
+fn a_patch_reads_as_the_files_it_changes() {
+    let patch = json!(
+        "*** Begin Patch\n*** Update File: a.ts\n*** Move to: b.ts\n*** Add File: c/d.ts\n+x\n*** End Patch"
+    );
+    assert_eq!(doing("apply_patch", &patch), "Patching a.ts, b.ts, c/d.ts");
+    assert_eq!(did("apply_patch", &patch), "Patched a.ts, b.ts, c/d.ts");
+    // Not a patch: it changes nothing, and the call reads as the patch it was meant to be.
+    assert_eq!(did("apply_patch", &json!("hello")), "Patched a patch");
 }

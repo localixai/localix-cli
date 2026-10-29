@@ -10,6 +10,7 @@ use contracts::gate::Gate;
 use contracts::history::History;
 use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::Value;
+use tools::fs::PatchTool;
 use tools::shell::BashTool;
 use tools::workspace::Workspace;
 
@@ -53,11 +54,12 @@ pub(crate) struct Own<'a> {
     pub stop: &'a (dyn Fn() -> bool + Sync),
 }
 
-/// A session's tools: `bash`, through which the model reads, searches and changes files and runs
-/// the checks (ARCHITECTURE.md B1).
+/// A session's tools: `bash`, through which the model reads, searches and runs the checks, and
+/// `apply_patch`, through which it changes files (ARCHITECTURE.md B1).
 pub(crate) struct Tools<'a> {
     kit: &'a Kit<'a>,
     bash: BashTool<'a>,
+    patch: PatchTool<'a>,
 }
 
 impl<'a> Tools<'a> {
@@ -70,12 +72,16 @@ impl<'a> Tools<'a> {
                 hidden: kit.hidden,
                 stop: own.stop,
             },
+            patch: PatchTool {
+                workspace: kit.workspace,
+                gate: own.gate,
+            },
         }
     }
 
     /// Run `work` with the tools as the agent offers them.
     pub(crate) fn with<T>(&self, work: impl FnOnce(&[&dyn Tool]) -> T) -> T {
-        let tools: [&dyn Tool; 1] = [&self.bash];
+        let tools: [&dyn Tool; 2] = [&self.bash, &self.patch];
         work(&tools)
     }
 
@@ -120,7 +126,8 @@ impl Tool for Withheld {
 
     fn call(&self, _: &Value) -> Result<ToolOutput, ToolError> {
         Err(ToolError::Failed(format!(
-            "`{}` is the main session's alone: an agent works with bash, and decides on its best \
+            "`{}` is the main session's alone: an agent works with bash and \
+             apply_patch, and decides on its best \
              assumption where it would ask",
             self.0.name
         )))

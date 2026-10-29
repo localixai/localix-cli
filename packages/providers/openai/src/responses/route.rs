@@ -45,6 +45,22 @@ impl Routes {
     }
 }
 
+/// Where a reply came from, in the log: a request read from the cache or afresh is traced to the
+/// machine that answered it (the routing token it was sent and the one it was given, as hashes, and
+/// the edge's request ids), so a turn that read nothing can be told from one that changed.
+pub(super) fn trace(session: &str, sent: Option<&str>, reply: &Reply) {
+    let short = |token: Option<&str>| {
+        token.map_or_else(|| "-".to_string(), |t| provider_kit::cache::key([t]))
+    };
+    log::debug!(
+        "{session} routed {} -> {}, request {}, ray {}",
+        short(sent),
+        short(reply.header(HEADER)),
+        reply.header("x-request-id").unwrap_or("-"),
+        reply.header("cf-ray").unwrap_or("-"),
+    );
+}
+
 /// The session a conversation is, as the backend keeps it apart: its first words (the session's
 /// context and first goal, or an agent's brief), the same at every later request of it. Its
 /// requests go where its cache is (`session-id`, the prompt cache's key); another session, an

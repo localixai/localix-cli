@@ -1,15 +1,15 @@
 # Tools
 
-llx has four tools. The set is deliberately minimal: a new capability goes into one of them (as
+llx has five tools. The set is deliberately minimal: a new capability goes into one of them (as
 an `action`), or is left to the shell. The model works as you do at a terminal: it reads with `cat`,
-`sed -n` and `rg`, writes a whole file with a heredoc (`cat > path <<'EOF'`), and changes part of a
-file with a short script (`python3 - <<'EOF'`) that checks the old text occurs exactly once. Its
-context names the script runtimes found on the session's `PATH` (`python3`, `node`, `bun`, only
+`sed -n` and `rg` and runs the checks in the shell, and changes files with a patch, as free text with
+nothing to escape. Its context names the script runtimes found on the session's `PATH` (`python3`, `node`, `bun`, only
 those present) in a `Runtimes:` line.
 
 | Tool | What it is for |
 | --- | --- |
-| [`bash`](#bash) | Commands that run to their end: reading, searching, changing files, running checks |
+| [`bash`](#bash) | Commands that run to their end: reading, searching, running checks |
+| [`apply_patch`](#apply_patch) | Files added, changed, deleted or moved, with a patch |
 | [`ask`](#ask) | A question to you |
 | [`agents`](#agents) | Other agents, in parallel |
 | [`jobs`](#jobs) | Monitors and schedules |
@@ -20,6 +20,12 @@ those present) in a `Runtimes:` line.
 - A timeout (120 s by default, at most 600 s) or Ctrl-C kills it with everything it started.
 - Each stream keeps its first and last 5,000 bytes. A non-zero exit is a normal result. It asks the gate. In a read-only mode its commands run in an operating system sandbox instead ([modes](modes.md#modes)); a command that writes a file fails there.
 - The key variables of the provider in use (as the catalog names them, such as `DEEPSEEK_API_KEY`) and `OPENROUTER_API_KEY` are left out of a command's environment; other providers' variables stay, so a project's own tests can use them; a provider chosen later with `/login` has its variables left out too, from the next command on. That is no barrier, since a command can still read llx's own environment (`ps -E` on macOS; on Linux llx marks itself non-dumpable, so only root can read `/proc/<llx pid>/environ`, and a hosted CI runner gives passwordless `sudo`) and the saved key file. Where `bash` runs on input from strangers, see [CI security](ci.md#security).
+
+## apply_patch
+
+- A patch as free text, `*** Begin Patch` … `*** End Patch`: `*** Add File`, `*** Delete File`, `*** Update File` (with `*** Move to`), each update's hunks found by their lines and the lines around them. Where the provider takes a tool of free text held to a grammar (the ChatGPT sign-in, for a model the catalog says takes one), it is offered so; elsewhere as a function with the patch in one string. Every file is worked out and asked of the gate before any is written; a hunk that does not fit changes nothing.
+- Writes are atomic (a new temporary file, then a rename) and keep CRLF line endings and permissions; a read-only file is refused, and a file with other hard links is written in place.
+- It asks the gate, refuses to write when the file changed while the question was open, and changes only files inside the workspace, never llx's own. In a read-only mode (`plan`) a patch is refused: a file written cannot be sandboxed.
 
 ## ask
 

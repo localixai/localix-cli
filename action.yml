@@ -49,9 +49,9 @@ inputs:
     required: false
     default: ''
   max-turns:
-    description: Model turns for the task (1 to 10000).
+    description: Model turns for the task (1 to 10000). None by default; the timeout bounds the task.
     required: false
-    default: '50'
+    default: ''
   timeout:
     description: Seconds the task may take (1 to 86400). A run always has a deadline.
     required: false

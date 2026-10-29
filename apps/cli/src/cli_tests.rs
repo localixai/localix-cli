@@ -41,7 +41,7 @@ fn a_prompt_runs_with_its_options() {
     assert_eq!(run.models.model.as_deref(), Some("openai/gpt-5-mini"));
     assert_eq!(run.models.reasoning.as_deref(), Some("high"));
     assert_eq!(run.output_last_message, Some(PathBuf::from("last.txt")));
-    assert_eq!(run.max_turns, 7);
+    assert_eq!(run.max_turns, Some(7));
     let plain = parse(&["x"]).unwrap().run.models;
     assert!(plain.provider.is_none() && plain.model.is_none() && plain.reasoning.is_none());
 }

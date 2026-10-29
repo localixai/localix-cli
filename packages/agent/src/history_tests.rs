@@ -212,7 +212,7 @@ mod dialogue {
     use std::sync::Mutex;
 
     use contracts::chat::{Chat, ChatError, Completion, Request, Usage};
-    use contracts::tool::{Tool, ToolError, ToolSpec};
+    use contracts::tool::{Input, Tool, ToolError, ToolSpec};
     use serde_json::Value;
 
     use super::*;
@@ -277,7 +277,7 @@ mod dialogue {
 
     fn specs(specs: &[ToolSpec]) -> u64 {
         let size = |spec: &ToolSpec| {
-            spec.name.len() + spec.description.len() + spec.parameters.to_string().len()
+            spec.name.len() + spec.description.len() + spec.input.schema().to_string().len()
         };
         specs.iter().map(|spec| size(spec) as u64 / 4).sum()
     }
@@ -291,7 +291,7 @@ mod dialogue {
             ToolSpec {
                 name: self.0.into(),
                 description: "d".repeat(8_000),
-                parameters: json!({"type": "object"}),
+                input: Input::Json(json!({"type": "object"})),
             }
         }
 

@@ -266,7 +266,7 @@ fn a_command_runs_to_its_end_with_no_terminal() {
         stop: &|| false,
     };
     let spec = tool.spec();
-    let schema = spec.parameters;
+    let schema = spec.input.schema();
     let properties = &schema["properties"];
     assert!(properties.get("session").is_none() && properties.get("tty").is_none());
     assert_eq!(schema["required"], serde_json::json!(["command"]));

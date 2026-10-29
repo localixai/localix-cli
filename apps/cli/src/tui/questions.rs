@@ -14,6 +14,7 @@ use crate::tui::printable::printable;
 pub(crate) fn approval(tool: &str, summary: &str, label: Option<&str>) -> Select {
     let title = match tool {
         "bash" => "Run this command?".to_string(),
+        "apply_patch" => "Change this file?".to_string(),
         tool => format!("Allow {}?", printable(tool)),
     };
     let tool = printable(tool);

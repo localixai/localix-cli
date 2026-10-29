@@ -53,7 +53,7 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 | `-m, --model MODEL` | The agent's chat model, a model id of the provider's (any OpenRouter id works). Env `LLX_MODEL`. Default: the one `/login` saved, else `gpt-6-luna` on OpenAI and `anthropic/claude-haiku-5.5` on OpenRouter. |
 | `--reasoning LEVEL` | How much the chat model reasons: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` or `ultra`, as far as the model takes it (a level it does not take is a usage error; `/login` lists its levels). Env `LLX_REASONING`. Default: the one `/login` saved for that model, else the model's own. |
 | `--decision-model MODEL` | The decision model `llx doctor` checks. Env `LLX_DECISION_MODEL`, default `~typesafe/jev-latest`. |
-| `--max-turns N` | Model turns for one task (50; 1 to 10000). |
+| `--max-turns N` | Model turns for one task (1 to 10000). None by default: `--timeout` bounds a task. |
 | `--timeout SECONDS` | Seconds one task may take (1800; at most 86400). It stops at the first model turn past them, or while the task waits on its monitors or agents. Time spent waiting on you (an approval, a question) does not count. |
 | `--no-daemon` | Run the session in this process instead of the daemon (`llx serve`). Env `LLX_NO_DAEMON=1`. `exec` always runs in process. |
 

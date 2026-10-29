@@ -377,3 +377,35 @@ fn a_request_is_priced_from_the_catalog_with_its_long_context_band() {
         .unwrap();
     assert!(luna.price(10_000, 0, 1_000).unwrap() > 0.0);
 }
+
+#[test]
+fn a_model_takes_tools_of_free_text_with_a_grammar_when_its_api_says_so() {
+    let catalog = Catalog::built_in();
+    let luna = catalog.model("openai", "gpt-6-luna").unwrap();
+    assert!(luna.takes_lark(RESPONSES));
+    // Said by the model for every API it is served through.
+    let older = catalog.model("openai", "gpt-5.1").unwrap();
+    assert!(older.takes_lark(RESPONSES));
+    // A model that lists none, and an API the model is not served through.
+    let spark = catalog.model("openai", "gpt-5.3-codex-spark").unwrap();
+    assert!(!spark.takes_lark(RESPONSES));
+    assert!(!luna.takes_lark("messages"));
+    // Text alone is not a grammar.
+    let text: Model = serde_json::from_value(json!({"name": "T",
+        "api": {"responses": {"base_url": "https://x",
+            "capabilities": {"tools": {"freeform": ["text"]}}}}}))
+    .unwrap();
+    assert!(!text.takes_lark(RESPONSES));
+    // The API's own list wins over the model's.
+    let own: Model = serde_json::from_value(json!({"name": "O",
+        "capabilities": {"tools": {"supported": true, "freeform": ["text"]}},
+        "api": {"responses": {"base_url": "https://x",
+            "capabilities": {"tools": {"freeform": ["text", "lark"]}}}}}))
+    .unwrap();
+    assert!(own.takes_lark(RESPONSES));
+    // A fetched model with none of it: not freeform.
+    let bare: Model = serde_json::from_value(json!({"name": "B",
+        "api": {"responses": {"base_url": "https://x"}}}))
+    .unwrap();
+    assert!(!bare.takes_lark(RESPONSES));
+}

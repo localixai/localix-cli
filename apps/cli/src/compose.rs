@@ -134,7 +134,7 @@ fn equip(base: &Base, seat: Seat, work: impl FnOnce(&mut Rig) -> i32) -> i32 {
         hidden: &hidden,
         stopped: base.stopped,
         context: fresh,
-        max_turns: options.max_turns,
+        max_turns: options.max_turns.unwrap_or(usize::MAX),
         window: &window,
         strategy: &strategy,
         output,

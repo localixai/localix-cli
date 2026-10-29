@@ -16,6 +16,10 @@ minutes (its cache varies over the day), at the price of slower wall times on a 
   python3 evals/arena/arena.py --repeat 3 --record  # the benchmark: rows into benchmarks/arena/
   python3 evals/arena/arena.py --agents llx,codex   # some of them
   python3 evals/arena/arena.py --task phone-shop    # another task (TASKS)
+
+A scored task (SCORED: task-tracker) starts from benchmarks/<task>/original instead, is judged by
+score.py (public and hidden tests passed, out of all), and keeps each run's folder in the logs;
+--record puts the folders and the rows under benchmarks/<task>/runs/<stamp>/.
 """
 import argparse
 import datetime
@@ -30,6 +34,8 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+import score as scoring
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = ROOT / "evals" / "arena"
@@ -52,6 +58,17 @@ TASKS = {
         ["src/App.test.tsx", "src/phones.ts"],
     ),
 }
+# A scored task starts from benchmarks/<task>/original (its tests, its setup) and is judged by
+# score.py: how many public and hidden tests pass. Each run's folder is kept, to compare.
+SCORED = {
+    "task-tracker": "Build the task tracker's API in src/, in TypeScript on Bun, with no dependencies. The tests "
+    "in test/ say what it does. Work until all of them pass: run `bun test` and `bunx tsc --noEmit`, fix "
+    "what fails, and run them again, as many times as it takes. Split the code into modules: no file in "
+    "src/ over 200 lines, no line over 120 characters (test/structure.test.ts checks it). Do not change or "
+    "add files in test/, package.json, tsconfig.json or bun.lock.",
+}
+TASKS.update({name: (prompt, []) for name, prompt in SCORED.items()})
+LONG = {"task-tracker": 1800}  # a timeout of its own, in seconds
 TASK_NAME = "ledger-web"
 TASK, KEPT = TASKS[TASK_NAME]
 
@@ -100,9 +117,12 @@ def command(agent, work, home):
     model = MODEL[agent]
     if agent == "llx":
         llx = os.environ.get("LLX_BIN", str(ROOT / "target" / "release" / "llx"))
-        env = {**plain_env(home), "LLX_NO_DAEMON": "1"}
+        # openai=debug: each reply's routing in the log, kept beside the run (see `one`)
+        env = {**plain_env(home), "LLX_NO_DAEMON": "1", "RUST_LOG": "warn,llx=info,openai=debug"}
         args = [llx, "exec", "--json", "-y", "-C", str(work), "--provider", "openai", "-m", model,
-                "--reasoning", EFFORT, "--timeout", str(TIMEOUT), TASK]
+                "--reasoning", EFFORT, "--timeout", str(LONG.get(TASK_NAME, TIMEOUT)),
+                # Codex and Claude Code count no turns: the time limit alone bounds a run.
+                "--max-turns", "10000", TASK]
         return args, env
     if agent == "codex":
         args = ["codex", "exec", "--json", "--ignore-user-config", "--ignore-rules", "--ephemeral",
@@ -142,16 +162,24 @@ def measure(agent, events):
     """One row's numbers from the agent's own events. Input counts every token sent."""
     row = {"model": None, "turns": 0, "tools": 0, "input": 0, "cached": 0, "output": 0, "cost": 0.0}
     if agent == "llx":
+        # What the cache could give at most: each request what the one before it sent. A request
+        # that reads less than its share was answered where its session's cache is not.
+        # Past 100%: a first request found another session's start (the prompt, the tools).
+        row["reachable"], before, row["largest"] = 0, 0, 0
         for e in events:
             if e.get("type") == "turn":
                 row["turns"] += 1
                 row["model"] = e.get("model")
+                row["reachable"] += min(before, e.get("input_tokens", 0))
+                before = e.get("input_tokens", 0)
+                row["largest"] = max(row["largest"], before)
             elif e.get("type") == "tool.call":
                 row["tools"] += 1
             elif e.get("type") == "run.completed":
                 spent = e["usage"]["agent"]
                 row.update(input=spent["input_tokens"], cached=spent["cached_tokens"], output=spent["output_tokens"])
         row["cost"] = cost(MODEL[agent], row["input"] - row["cached"], row["cached"], 0, row["output"])
+        row["requests"] = row["turns"]
     elif agent == "codex":
         row["model"] = MODEL[agent]  # codex exec --json does not name it; -m chose it
         for e in events:
@@ -164,6 +192,8 @@ def measure(agent, events):
             elif e.get("type") == "item.completed" and e["item"].get("type") not in ("agent_message", "reasoning"):
                 row["tools"] += 1
         row["cost"] = cost(MODEL[agent], row["input"] - row["cached"], row["cached"], 0, row["output"])
+        # Codex reports a task's totals only: a request for each tool call's result, and the first.
+        row["requests"] = row["tools"] + 1
     else:
         write = 0
         for e in events:
@@ -185,7 +215,8 @@ def measure(agent, events):
 
 def prepare(parent, agent):
     work = parent / agent
-    shutil.copytree(ROOT / "evals" / "fixtures" / TASK_NAME, work, ignore=shutil.ignore_patterns("node_modules", "dist"))
+    fixture = scoring.original(TASK_NAME) if TASK_NAME in SCORED else ROOT / "evals" / "fixtures" / TASK_NAME
+    shutil.copytree(fixture, work, ignore=shutil.ignore_patterns("node_modules", "dist"))
     quiet = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "check": True}
     subprocess.run(["git", "init", "-q"], cwd=work, **quiet)
     subprocess.run(["git", "add", "-A"], cwd=work, **quiet)
@@ -202,7 +233,7 @@ def run(agent, parent, logs):
     with open(log, "w") as out, open(log.with_suffix(".stderr"), "w") as err:
         try:
             code = subprocess.run(args, cwd=work, env=env, stdin=subprocess.DEVNULL, stdout=out,
-                                  stderr=err, timeout=TIMEOUT + 60).returncode
+                                  stderr=err, timeout=LONG.get(TASK_NAME, TIMEOUT) + 60).returncode
         except subprocess.TimeoutExpired:
             code = "timeout"
     seconds = round(time.monotonic() - started, 1)
@@ -212,15 +243,60 @@ def run(agent, parent, logs):
             events.append(json.loads(line))
         except ValueError:
             pass
-    check = subprocess.run(["sh", str(HERE / "check.sh"), TASK_NAME, str(work), *KEPT], capture_output=True, text=True)
-    row = {"agent": agent, "exit": code, "seconds": seconds, **measure(agent, events),
-           "passed": check.returncode == 0, "check": check.stdout.strip().splitlines()}
+    if TASK_NAME in SCORED:
+        scored = scoring.score(TASK_NAME, work)
+        row = {"agent": agent, "exit": code, "seconds": seconds, **measure(agent, events),
+               "passed": scored["score"] == scored["total"], "check": scoring.lines(scored),
+               **{k: scored[k] for k in ("score", "total", "public", "public_total", "hidden", "hidden_total", "types", "kept")},
+               "failing": scored["failing"], "work": f"{agent}-{parent.name}"}
+        keep_work(work, logs / "work" / row["work"])
+    else:
+        check = subprocess.run(["sh", str(HERE / "check.sh"), TASK_NAME, str(work), *KEPT], capture_output=True, text=True)
+        row = {"agent": agent, "exit": code, "seconds": seconds, **measure(agent, events),
+               "passed": check.returncode == 0, "check": check.stdout.strip().splitlines()}
     row["cost"] = round(row["cost"], 4)
+    row["uncached"] = row["input"] - row["cached"]  # what costs: the input read afresh
     if row["model"] != MODEL[agent] and not str(row["model"] or "").startswith(MODEL[agent]):
         row["passed"] = False
         row["check"].append(f"FAIL ran on {row['model']}, not {MODEL[agent]}")
     shutil.rmtree(work / "node_modules", ignore_errors=True)
     return row
+
+
+def keep_work(work, to):
+    """What the agent left, to read and compare: its files, not the installed packages, the
+    repository or what the check wrote."""
+    shutil.copytree(work, to, ignore=shutil.ignore_patterns("node_modules", ".git", "hidden", "check-*.log", "dist"))
+    diff = subprocess.run(["git", "diff", "--stat", "HEAD"], cwd=work, capture_output=True, text=True).stdout
+    added = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"], cwd=work, capture_output=True, text=True).stdout
+    (to.parent / f"{to.name}.diffstat").write_text(diff + ("\nnew files:\n" + added if added else ""))
+
+
+def record_runs(stamp, logs, rows):
+    """A scored task's benchmark: each run's folder beside its result, under the task's runs/."""
+    home = ROOT / "benchmarks" / TASK_NAME / "runs" / stamp
+    model = MODEL["llx"]
+    counts = {}
+    for row in rows:
+        counts[row["agent"]] = counts.get(row["agent"], 0) + 1
+        name = f"{row['agent']}-{counts[row['agent']]}"
+        source = logs / "work" / row["work"]
+        target = home / model / name
+        shutil.copytree(source, target)
+        stat = (source.parent / f"{row['work']}.diffstat").read_text()
+        (target / "RESULT.md").write_text(result_page(row, stat))
+        row["folder"] = f"{model}/{name}"
+    return home
+
+
+def result_page(row, stat):
+    failing = "\n".join(f"- {name}" for name in row["failing"]) or "- none"
+    return (f"# {row['agent']} on {row['model']}\n\n"
+            f"Score {row['score']}/{row['total']}: public tests {row['public']}/{row['public_total']}, "
+            f"hidden {row['hidden']}/{row['hidden_total']}, types {'ok' if row['types'] else 'failing'}.\n\n"
+            f"| Time | Requests | Input | Read afresh | Output | Cost |\n| --- | --- | --- | --- | --- | --- |\n"
+            f"| {row['seconds']} s | {row['requests']} | {row['input']:,} | {row['uncached']:,} | {row['output']:,} | ${row['cost']:.4f} |\n\n"
+            f"## Failing tests\n\n{failing}\n\n## Changed files\n\n```\n{stat.strip()}\n```\n")
 
 
 def versions():
@@ -244,11 +320,22 @@ def one(n, agent, logs):
     finally:  # a refreshed sign-in goes back; the copy never stays behind, even when a run breaks
         if copy:
             hand_back(original, copy)
+        kept = parent / f"home-{agent}" / ".config" / "llx" / "logs" / "llx.log"
+        if kept.exists():
+            shutil.copy2(kept, logs / f"{agent}-{parent.name}.log")
         shutil.rmtree(parent / f"home-{agent}", ignore_errors=True)
     print(f"{n} {agent:7} {'pass' if row['passed'] else 'FAIL'} {row['seconds']:>6}s "
           f"{row['turns']:>3} turns {row['tools']:>3} tools {row['input']:>9,} in "
-          f"{row['output']:>7,} out ${row['cost']:.4f}  {'; '.join(row['check'][:3])}", flush=True)
+          f"{row['uncached']:>7,} afresh {row['output']:>7,} out ${row['cost']:.4f}{reach(row)}  "
+          f"{'; '.join(row['check'][:3])}", flush=True)
     return row
+
+
+def reach(row):
+    """The cached input beside what the cache could give, where the agent's events say it."""
+    if not row.get("reachable"):
+        return ""
+    return f"  cache {row['cached']:,}/{row['reachable']:,} ({100 * row['cached'] // row['reachable']}%)"
 
 
 def main():
@@ -277,10 +364,18 @@ def main():
             rows = list(pool.map(lambda r: one(*r, logs), runs))
     else:
         rows = [one(n, agent, logs) for n, agent in runs]
-    hidden = hashlib.sha256((HERE / "hidden" / f"{TASK_NAME}.test.tsx").read_bytes()).hexdigest()
+    if TASK_NAME in SCORED:
+        files = sorted((HERE / "hidden" / TASK_NAME).iterdir())
+        hidden = hashlib.sha256(b"".join(f.read_bytes() for f in files)).hexdigest()
+    else:
+        hidden = hashlib.sha256((HERE / "hidden" / f"{TASK_NAME}.test.tsx").read_bytes()).hexdigest()
     result = {"hidden_sha256": hidden, "at": stamp, "task": TASK_NAME, "parallel": args.parallel, "prompt": TASK, "effort": EFFORT, "models": MODEL, "versions": versions(), "rows": rows}
     (logs / "summary.json").write_text(json.dumps(result, indent=1))
-    if args.record:
+    if args.record and TASK_NAME in SCORED:
+        home = record_runs(stamp, logs, rows)
+        (home / "result.json").write_text(json.dumps(result, indent=1) + "\n")
+        print(f"recorded: {home}")
+    elif args.record:
         KEEP.mkdir(parents=True, exist_ok=True)
         (KEEP / f"{stamp}.json").write_text(json.dumps(result, indent=1) + "\n")
     print(f"logs: {logs}")

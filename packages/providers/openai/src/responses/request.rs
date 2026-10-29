@@ -2,16 +2,18 @@
 //! level, and the prompt cache's key.
 
 use contracts::catalog::{Effort, Selection};
-use contracts::chat::{Message, Request, ToolCall};
-use contracts::tool::ToolSpec;
+use contracts::chat::{Message, Request};
 use serde_json::{Value, json};
 
-/// The request body for `request`.
-pub(crate) fn body(selection: &Selection, request: Request) -> Value {
+use super::offer::{Offer, Texts};
+
+/// The request body for `request`, a tool of free text offered as `texts` says.
+pub(crate) fn body(selection: &Selection, request: Request, texts: Texts) -> Value {
+    let offer = Offer::new(request.tools, texts, request.conversation);
     let mut body = json!({
         "model": selection.model().id,
         "input": (request.conversation.iter())
-            .flat_map(|message| items(message, &selection.model().id))
+            .flat_map(|message| items(message, &selection.model().id, &offer))
             .collect::<Vec<_>>(),
         "store": false,
         "stream": true,
@@ -31,7 +33,7 @@ pub(crate) fn body(selection: &Selection, request: Request) -> Value {
         body["include"] = json!(["reasoning.encrypted_content"]);
     }
     if !request.tools.is_empty() {
-        body["tools"] = request.tools.iter().map(tool).collect();
+        body["tools"] = request.tools.iter().map(|spec| offer.tool(spec)).collect();
         body["tool_choice"] = json!(if request.may_call { "auto" } else { "none" });
         // Several calls in one turn: independent reads and searches cost one turn, not many. The
         // agent runs together only the calls whose tools allow it, the rest in order.
@@ -40,19 +42,9 @@ pub(crate) fn body(selection: &Selection, request: Request) -> Value {
     body
 }
 
-/// A tool as the request's `tools` list it.
-fn tool(spec: &ToolSpec) -> Value {
-    json!({"type": "function", "name": spec.name, "description": spec.description,
-        "parameters": spec.parameters, "strict": false})
-}
-
-/// An earlier call as an input item.
-fn call_item(call: &ToolCall) -> Value {
-    json!({"type": "function_call", "call_id": call.id, "name": call.name,
-        "arguments": call.arguments.to_string()})
-}
-
-pub(super) fn items(message: &Message, model: &str) -> Vec<Value> {
+/// A message as the Responses API's input items, for `model`: a reasoning another model sealed
+/// (before `/model` switched) is left out, as that model alone can open it.
+pub(super) fn items(message: &Message, model: &str, offer: &Offer) -> Vec<Value> {
     let text = |role: &str, kind: &str, text: &str| json!({"type": "message", "role": role, "content": [{"type": kind, "text": text}]});
     match message {
         Message::System(rules) => vec![text("developer", "input_text", rules)],
@@ -61,16 +53,20 @@ pub(super) fn items(message: &Message, model: &str) -> Vec<Value> {
             text: said,
             calls,
             carried,
-        } => (carried.iter())
+        } => {
             // Only what this provider kept: another's (chat completions' fields) has no "item".
-            .filter(|kept| kept["model"] == model)
-            .filter_map(|kept| kept.get("item").cloned())
-            .chain(
-                said.iter()
-                    .map(|said| text("assistant", "output_text", said)),
-            )
-            .chain(calls.iter().map(call_item))
-            .collect(),
+            let kept: Vec<Value> = (carried.iter())
+                .filter(|kept| kept["model"] == model)
+                .filter_map(|kept| kept.get("item").cloned())
+                .collect();
+            // The text goes back as the messages it came in, with their phase, when they were kept.
+            let whole = kept.iter().any(|item| item["type"] == "message");
+            let said = said.iter().filter(|_| !whole);
+            (kept.into_iter())
+                .chain(said.map(|said| text("assistant", "output_text", said)))
+                .chain(calls.iter().map(|call| offer.call_item(call)))
+                .collect()
+        }
         // A picture goes in as the person's message, after the call that took it.
         Message::Image { caption, image } => vec![json!({"type": "message", "role": "user",
             "content": [{"type": "input_text", "text": caption},
@@ -86,7 +82,7 @@ pub(super) fn items(message: &Message, model: &str) -> Vec<Value> {
                 true => format!("Error: {content}"),
                 false => content.clone(),
             };
-            vec![json!({"type": "function_call_output", "call_id": id, "output": output})]
+            vec![offer.output_item(id, &output)]
         }
     }
 }

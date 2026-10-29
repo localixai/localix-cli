@@ -92,14 +92,164 @@ fn a_running_call_has_a_dim_bullet_and_a_present_verb() {
 }
 
 #[test]
+fn files_say_what_changed() {
+    let edited = done("Updated src/a.rs (+3 -1 lines)");
+    let created = done("Created site/index.html (48 lines)");
+    let several = done("Updated src/a.rs (+1 -1 lines)\nDeleted src/b.rs");
+    insta::assert_snapshot!([
+        shown("apply_patch", said("Patching", "Patched", "src/a.rs"), State::Done(&edited), 80),
+        shown("apply_patch", said("Patching", "Patched", "site/index.html"), State::Done(&created), 80),
+        shown("apply_patch", said("Patching", "Patched", "src/a.rs, src/b.rs"), State::Done(&several), 80),
+    ].join("\n"), @r"
+    • Patched src/a.rs
+      └ (+3 -1 lines)
+    • Patched site/index.html
+      └ (48 lines)
+    • Patched src/a.rs, src/b.rs
+      └ Updated src/a.rs (+1 -1 lines)
+        Deleted src/b.rs
+    ");
+}
+
+#[test]
+fn edits_show_numbered_coloured_diff_with_context_and_wrapped_code() {
+    use ratatui::style::Color;
+
+    let outcome = done(
+        "Updated a.rs (+1 -1 lines)\n\nDiff of a.rs:\n@@ -181,3 +181,3 @@\n target: 'bun',\n-throw: true,\n+throw: false,\n end",
+    );
+    let rendered = lines(
+        "apply_patch",
+        &said("Patching", "Patched", "a.rs"),
+        &State::Done(&outcome),
+        60,
+    );
+    let screen = rendered
+        .iter()
+        .map(style::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(screen.contains("181 181   target: 'bun',"), "{screen}");
+    assert!(screen.contains("182     - throw: true,"), "{screen}");
+    assert!(screen.contains("    182 + throw: false,"), "{screen}");
+    assert!(rendered.iter().any(|row| {
+        row.spans
+            .iter()
+            .any(|span| span.content.contains("throw: true") && span.style.fg == Some(Color::Red))
+    }));
+    assert!(rendered.iter().any(|row| {
+        row.spans.iter().any(|span| {
+            span.content.contains("throw: false") && span.style.fg == Some(Color::Green)
+        })
+    }));
+    let long = format!(
+        "Created x (1 line)\n\nDiff of x:\n@@ -0,0 +1,1 @@\n+    {}",
+        "x".repeat(80)
+    );
+    let rendered = lines(
+        "apply_patch",
+        &said("Patching", "Patched", "x"),
+        &State::Done(&done(&long)),
+        30,
+    );
+    assert!(
+        rendered
+            .iter()
+            .all(|row| super::super::wrap::line_width(row) <= 30)
+    );
+    assert_eq!(
+        rendered
+            .iter()
+            .map(style::plain)
+            .collect::<String>()
+            .matches('x')
+            .count(),
+        81
+    );
+}
+
+#[test]
+fn a_diff_colours_its_signs_and_code_only_never_a_band_and_dims_its_numbers() {
+    use ratatui::style::{Color, Modifier};
+
+    let report = done(
+        "Updated x (+1 -1 lines)\n\nDiff of x:\n@@ -1,2 +1,2 @@\n context\n-old\n+abcdefghijklmnopqrstuvwxyz",
+    );
+    let rendered = lines(
+        "apply_patch",
+        &said("Patching", "Patched", "x"),
+        &State::Done(&report),
+        24,
+    );
+    let spans: Vec<_> = rendered.iter().flat_map(|row| row.spans.iter()).collect();
+    assert!(
+        spans
+            .iter()
+            .all(|span| span.style.bg.is_none() && row_bg(&rendered))
+    );
+    let span = |text: &str| {
+        spans
+            .iter()
+            .find(|span| span.content.contains(text))
+            .unwrap()
+    };
+    assert_eq!(span("old").style.fg, Some(Color::Red));
+    assert_eq!(span("abcdef").style.fg, Some(Color::Green));
+    assert!(span("  1 ").style.add_modifier.contains(Modifier::DIM));
+}
+
+fn row_bg(rows: &[Line]) -> bool {
+    rows.iter().all(|row| row.style.bg.is_none())
+}
+
+#[test]
+fn separated_diff_hunks_keep_their_line_numbers_and_a_visible_gap() {
+    let report = done(
+        "Updated x (+2 -2 lines)\n\nDiff of x:\n@@ -1,1 +1,1 @@\n-a\n+b\n@@ -300,1 +300,1 @@\n-c\n+d",
+    );
+    let shown = shown(
+        "apply_patch",
+        said("Patching", "Patched", "x"),
+        State::Done(&report),
+        60,
+    );
+    assert!(shown.contains("    …\n"), "{shown}");
+    assert!(shown.contains("300     - c"), "{shown}");
+    assert!(shown.contains("    300 + d"), "{shown}");
+}
+
+#[test]
+fn a_patch_of_several_files_shows_each_diff_under_its_name() {
+    let report = done(
+        "Updated a.rs (+1 -1 lines)\nCreated b.rs (1 line)\n\nDiff of a.rs:\n@@ -1,1 +1,1 @@\n-a\n+b\n\n\
+         Diff of b.rs:\n@@ -0,0 +1,1 @@\n+new",
+    );
+    let shown = shown(
+        "apply_patch",
+        said("Patching", "Patched", "a.rs, b.rs"),
+        State::Done(&report),
+        60,
+    );
+    let (a, b) = (
+        shown.find("    a.rs").unwrap(),
+        shown.find("    b.rs").unwrap(),
+    );
+    assert!(a < shown.find("- a").unwrap(), "{shown}");
+    assert!(
+        b > shown.find("+ b").unwrap() && b < shown.find("+ new").unwrap(),
+        "{shown}"
+    );
+}
+
+#[test]
 fn a_failed_call_shows_why() {
     let outcome = Outcome::Failed {
-        why: "not allowed: the person said no".into(),
-        declined: true,
+        why: "src/a.rs: the lines to change were not found".into(),
+        declined: false,
     };
-    insta::assert_snapshot!(shown("bash", said("Running", "Ran", "rm -rf dist"), State::Done(&outcome), 80), @r"
-    • Ran rm -rf dist
-      └ not allowed: the person said no
+    insta::assert_snapshot!(shown("apply_patch", said("Patching", "Patched", "src/a.rs"), State::Done(&outcome), 80), @r"
+    • Patched src/a.rs
+      └ src/a.rs: the lines to change were not found
     ");
 }
 

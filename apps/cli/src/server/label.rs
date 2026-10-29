@@ -41,6 +41,15 @@ fn describe(name: &str, args: &Value) -> What {
             }
             what(("Running", "Ran"), subject)
         }
+        "apply_patch" => {
+            let paths = tools::fs::named_paths(args);
+            let subject = if paths.is_empty() {
+                "a patch".to_string()
+            } else {
+                paths.join(", ")
+            };
+            what(("Patching", "Patched"), subject)
+        }
         "ask" => {
             let n = args
                 .get("questions")

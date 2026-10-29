@@ -1,15 +1,16 @@
 //! `--allow` and `--deny`: rules on what runs without asking, read as Claude Code writes them
-//! (`bash(cargo test *)`, `jobs`). A deny rule refuses what it names in every mode; an allow rule
-//! lets what it names run where the mode would ask or, with no one to ask, refuse. A read-only
-//! mode stays read-only whatever is allowed. They come from the command line only:
-//! a rule read from the repository would let a pull request allow itself.
+//! (`bash(cargo test *)`, `apply_patch(docs/**)`, `jobs`). A deny rule refuses what it names in
+//! every mode; an allow rule lets what it names run where the mode would ask or, with no one to
+//! ask, refuse. A read-only mode stays read-only whatever is allowed. They come from the command
+//! line only: a rule read from the repository would let a pull request allow itself.
 
 mod command;
 mod git;
+mod path;
 
-/// The tools a rule can name, and whether a pattern can narrow it: a command's text for `bash`.
-/// The others are named whole.
-const TOOLS: [(&str, bool); 2] = [("bash", true), ("jobs", false)];
+/// The tools a rule can name, and whether a pattern can narrow it: a command's text for `bash`,
+/// a path for `apply_patch`. The others are named whole.
+const TOOLS: [(&str, bool); 3] = [("bash", true), ("apply_patch", true), ("jobs", false)];
 
 /// What the rules say of an effect before the mode does.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,7 +73,7 @@ impl Rules {
         if let Some(rule) = deny.iter().find(|rule| denies(rule, subject)) {
             return Ruling::Denied(format!("refused by the rule `{}`", rule.text));
         }
-        match allows(&allow, subject) {
+        match allows(&allow, tool, subject) {
             true => Ruling::Allowed,
             false => Ruling::Unsettled,
         }
@@ -111,13 +112,14 @@ fn denies(rule: &Rule, subject: &str) -> bool {
     match (&rule.pattern, rule.tool) {
         (None, _) => true,
         (Some(_), _) if subject.is_empty() => false,
+        (Some(pattern), "apply_patch") => path::matches(pattern, subject),
         (Some(pattern), _) => command::every(subject)
             .iter()
             .any(|part| command::matches(pattern, part)),
     }
 }
 
-fn allows(rules: &[Rule], subject: &str) -> bool {
+fn allows(rules: &[Rule], tool: &str, subject: &str) -> bool {
     if rules.iter().any(|rule| rule.pattern.is_none()) {
         return true;
     }
@@ -127,6 +129,11 @@ fn allows(rules: &[Rule], subject: &str) -> bool {
         .collect();
     if patterns.is_empty() || subject.is_empty() {
         return false;
+    }
+    if tool == "apply_patch" {
+        return patterns
+            .iter()
+            .any(|pattern| path::matches(pattern, subject));
     }
     let Some(parts) = command::sure(subject) else {
         return false;
@@ -168,7 +175,15 @@ fn rule(text: &str) -> Result<Rule, String> {
                 "`{tool}` is named whole, without a pattern"
             )));
         }
-        Some(pattern) => Some(pattern.to_string()),
+        Some(pattern) => {
+            if let Some(why) = (tool == "apply_patch")
+                .then(|| path::invalid(pattern))
+                .flatten()
+            {
+                return Err(wrong(why));
+            }
+            Some(pattern.to_string())
+        }
     };
     Ok(Rule {
         text: trimmed.to_string(),

@@ -5,7 +5,7 @@
 //! of losing a turn to a schema error.
 
 use contracts::person::{Answer, Choice, Person, Question, Reply};
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde_json::{Map, Value, json};
 
 const NAME: &str = "ask";
@@ -36,7 +36,7 @@ impl Tool for AskTool<'_> {
         ToolSpec {
             name: NAME.into(),
             description: DESCRIPTION.into(),
-            parameters: parameters(),
+            input: Input::Json(parameters()),
         }
     }
 

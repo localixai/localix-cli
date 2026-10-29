@@ -161,6 +161,19 @@ fn not_achieved_exits_one_and_out_of_turns_exits_two() {
 }
 
 #[test]
+fn a_task_has_no_turn_limit_but_the_one_given() {
+    let home = Home::new();
+    let mut script: Vec<Reply> = (0..60)
+        .map(|_| Reply::call("bash", json!({"command": "true"})))
+        .collect();
+    script.push(Reply::text("Done.\nRESULT: achieved"));
+    let model = Model::start(script);
+    let out = exec(&home, &model, &["exec", "-y", "x"], "");
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert_eq!(model.requests().len(), 61);
+}
+
+#[test]
 fn a_refused_key_exits_three_and_says_what_to_do() {
     let (home, model) = (Home::new(), Model::start(vec![Reply::Refused(401)]));
     let out = exec(&home, &model, &["exec", "x"], "");
@@ -235,7 +248,7 @@ fn an_agent_is_offered_the_tools_of_the_main_session() {
         requests.len()
     );
     let main = names(&requests[0]);
-    assert_eq!(main, ["bash", "agents", "jobs"]);
+    assert_eq!(main, ["bash", "apply_patch", "agents", "jobs"]);
     for request in &requests {
         assert_eq!(names(request), main, "one list, one prompt cache");
     }

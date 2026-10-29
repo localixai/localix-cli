@@ -52,6 +52,9 @@ Rules are written as Claude Code writes them:
 | `bash(cargo test)` | that command exactly |
 | `bash(cargo test *)` | `cargo test`, `cargo test -q`, …, not `cargo testing` |
 | `bash(* --version)` | any program's `--version` |
+| `apply_patch` | every file change |
+| `apply_patch(docs/**)` | a file under `docs/`, from the workspace root |
+| `apply_patch(*.md)` | a Markdown file at any depth |
 | `jobs` | every monitor or schedule |
 
 - `*` stands for any text, spaces included; the words before it limit the rule, so put it after the subcommand (`git log *`, not `git * main`).

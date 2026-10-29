@@ -19,7 +19,7 @@ type BuiltIn = (&'static str, &'static str, &'static [&'static str], Reach);
 const BUILT_IN: [BuiltIn; 3] = [
     (
         DEFAULT,
-        "Each command is asked; with no one to ask, refused.",
+        "Each command and file change is asked; with no one to ask, refused.",
         &[],
         Reach::Anything,
     ),
@@ -34,7 +34,7 @@ const BUILT_IN: [BuiltIn; 3] = [
     (
         BYPASS,
         "Everything runs without asking (-y).",
-        &["bash", "jobs"],
+        &["bash", "apply_patch", "jobs"],
         Reach::Anything,
     ),
 ];

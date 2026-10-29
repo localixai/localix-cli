@@ -17,6 +17,8 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::style;
+#[path = "edit_diff.rs"]
+mod edit_diff;
 use super::wrap::{cut, wrap};
 use crate::tui::printable::printable;
 
@@ -80,6 +82,32 @@ pub(crate) fn head(name: &str, label: &Label, state: &State, width: usize) -> Ve
 
 /// What a finished call printed or why it failed, under its head.
 pub(crate) fn body(name: &str, outcome: &Outcome, width: usize) -> Vec<Line<'static>> {
+    if name == "apply_patch"
+        && let Outcome::Done { report } = outcome
+        && let Some((summary, diffs)) = report.split_once("\n\nDiff of ")
+    {
+        let mut out = body(
+            name,
+            &Outcome::Done {
+                report: summary.into(),
+            },
+            width,
+        );
+        let diffs: Vec<&str> = diffs.split("\n\nDiff of ").collect();
+        for each in &diffs {
+            let (file, diff) = each.split_once(":\n").unwrap_or((each, ""));
+            // Which file a diff is of, when there are several.
+            if diffs.len() > 1 {
+                let file = cut(&printable(file), width.saturating_sub(4).max(1));
+                out.push(Line::from(Span::styled(
+                    format!("    {file}"),
+                    style::dim(),
+                )));
+            }
+            out.extend(edit_diff::render(diff, width));
+        }
+        return out;
+    }
     let rows = match outcome {
         Outcome::Failed { why, .. } | Outcome::Fatal { why } => {
             vec![(printable(why), style::failed())]
@@ -114,7 +142,7 @@ pub(crate) fn doing(label: &Label) -> String {
 }
 
 /// The rows worth showing under a finished call. A command shows what it printed, and its exit
-/// when that was not 0; the rest show their report's first row.
+/// when that was not 0; an edit shows its line counts; the rest show their report's first row.
 fn output_rows(name: &str, report: &str) -> Vec<(String, Style)> {
     let rows = |text: &str| -> Vec<(String, Style)> {
         text.lines()
@@ -138,6 +166,15 @@ fn output_rows(name: &str, report: &str) -> Vec<(String, Style)> {
             }
             out
         }
+        // One file: its counts, as the head names it; several: a line each.
+        "apply_patch" => match report.lines().nth(1) {
+            None => (report.rfind('(').and_then(|at| report.get(at..)))
+                .map(|counts| vec![(counts.to_string(), style::dim())])
+                .unwrap_or_default(),
+            Some(_) => (report.lines())
+                .map(|line| (printable(line), style::dim()))
+                .collect(),
+        },
         // What the person answered, without the report's own heading.
         "ask" => rows(report).into_iter().skip(1).collect(),
         // The agent's answer, without the line that names it.

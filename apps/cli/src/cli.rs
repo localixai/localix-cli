@@ -16,7 +16,7 @@ const LONG_ABOUT: &str = "llx: an ultrafast, lightweight agent runtime. A minima
 terminal (llx), one task for scripts and CI (llx exec), and a decision step (llx decide).
 
 It works in a directory (the current one, or -C DIR) with its tools: bash, the shell it reads \
-and changes files and runs commands with (each run to its end), ask, a question to you (in a session only), agents: other agents it starts in parallel, each a session of its own (in a \
+files and runs commands with (each run to its end), apply_patch, the patch it changes files with, ask, a question to you (in a session only), agents: other agents it starts in parallel, each a session of its own (in a \
 session, a list under the prompt shows them: down arrow, then enter to see one), and jobs: \
 monitors (a background command whose lines come back) and schedules (a prompt at a time).
 
@@ -312,7 +312,7 @@ pub(crate) struct RunOptions {
     )]
     pub mode: Option<String>,
     /// Run what RULE names without asking, where the mode would ask or, with no one to ask,
-    /// refuse: `bash(cargo test *)` (every part of the command must match), `jobs`.
+    /// refuse: `bash(cargo test *)` (every part of the command must match), `apply_patch(docs/**)`, `jobs`.
     /// Repeat it. Plan mode stays read-only. The syntax is Claude Code's; what a
     /// pattern covers, and what it never does, is in docs/modes.md#rules.
     #[arg(long, value_name = "RULE", help_heading = "Approvals")]
@@ -337,10 +337,10 @@ pub(crate) struct RunOptions {
     #[arg(short, long, help_heading = "Output")]
     pub verbose: bool,
 
-    /// Model turns for one task (1 to 10000).
-    #[arg(long, value_name = "N", default_value_t = 50, help_heading = "Limits",
+    /// Model turns for one task (1 to 10000). None by default: the time limit bounds a task.
+    #[arg(long, value_name = "N", help_heading = "Limits",
         value_parser = RangedU64ValueParser::<usize>::new().range(1..=10_000))]
-    pub max_turns: usize,
+    pub max_turns: Option<usize>,
     /// Seconds one task may take, up to a day; it stops at the first model turn past them, or
     /// while it waits on its monitors or agents.
     #[arg(long, value_name = "SECONDS", default_value_t = 1800, help_heading = "Limits",

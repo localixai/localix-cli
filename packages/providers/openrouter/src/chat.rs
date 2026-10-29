@@ -28,8 +28,20 @@ impl Chat for ChatModel {
                     ChatError::Unavailable(format!("{} {other}", self.client.name))
                 }
             })?;
-        read(&value, model, timing.millis)
+        let mut completion = read(&value, model, timing.millis)?;
+        completion.calls = (completion.calls.into_iter())
+            .map(|call| incoming(call, request.tools))
+            .collect();
+        Ok(completion)
     }
+}
+
+/// A call the model made, as the agent takes it: a script's text taken out of its one argument.
+fn incoming(mut call: ToolCall, tools: &[ToolSpec]) -> ToolCall {
+    if let Some(spec) = tools.iter().find(|spec| spec.name == call.name) {
+        call.arguments = spec.input.from_function(call.arguments);
+    }
+    call
 }
 
 /// The completion in a reply: its text, its calls, the reasoning that goes back with it, and the
@@ -103,7 +115,7 @@ fn thought(message: &Value, model: &str) -> Option<Value> {
 fn body(host: Wire, selection: &Selection, request: &Request) -> Value {
     let model = &selection.model().id;
     let messages: Vec<Value> = (request.conversation.iter())
-        .map(|message| wire(message, model))
+        .map(|message| wire(message, model, request.tools))
         .collect();
     // No output limit: a whole file in one call is a long reply, and a cut one breaks the
     // call's arguments. The model's own maximum applies.
@@ -152,7 +164,7 @@ fn cache_key(model: &str, request: &Request) -> String {
         [
             spec.name.clone(),
             spec.description.clone(),
-            spec.parameters.to_string(),
+            spec.input.schema().to_string(),
         ]
     });
     let rules = request
@@ -185,7 +197,7 @@ pub(crate) fn reasoning(effort: Effort) -> Value {
 
 /// A message in the chat-completions wire format, for `model`: the reasoning another model wrote
 /// stays out.
-fn wire(message: &Message, model: &str) -> Value {
+fn wire(message: &Message, model: &str, tools: &[ToolSpec]) -> Value {
     match message {
         Message::System(text) => json!({"role": "system", "content": text}),
         Message::User(text) => json!({"role": "user", "content": text}),
@@ -204,8 +216,13 @@ fn wire(message: &Message, model: &str) -> Value {
                 out["tool_calls"] = calls
                     .iter()
                     .map(|call| {
+                        // A script's text goes back in the one argument it was offered with.
+                        let arguments = match tools.iter().find(|spec| spec.name == call.name) {
+                            Some(spec) => spec.input.to_function(&call.arguments),
+                            None => call.arguments.clone(),
+                        };
                         json!({"id": call.id, "type": "function", "function": {
-                            "name": call.name, "arguments": call.arguments.to_string()}})
+                            "name": call.name, "arguments": arguments.to_string()}})
                     })
                     .collect();
             }
@@ -240,7 +257,7 @@ fn picture(caption: &str, image: &Image) -> Value {
 
 fn function(spec: &ToolSpec) -> Value {
     json!({"type": "function", "function": {
-        "name": spec.name, "description": spec.description, "parameters": spec.parameters}})
+        "name": spec.name, "description": spec.description, "parameters": spec.input.schema()}})
 }
 
 /// Whether OpenRouter's model `id` caches only where told to: Anthropic, Gemini and Qwen take

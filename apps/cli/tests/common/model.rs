@@ -31,6 +31,13 @@ impl Reply {
     pub(crate) fn call(name: &str, arguments: Value) -> Self {
         Self::Calls(vec![(name.into(), arguments)])
     }
+
+    /// The model makes the file `path` holding `text`, with a patch.
+    pub(crate) fn create(path: &str, text: &str) -> Self {
+        let lines: String = text.lines().flat_map(|line| ["+", line, "\n"]).collect();
+        let patch = format!("*** Begin Patch\n*** Add File: {path}\n{lines}*** End Patch");
+        Self::call("apply_patch", json!({ "source": patch }))
+    }
 }
 
 #[derive(Default)]

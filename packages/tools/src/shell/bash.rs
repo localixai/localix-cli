@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use std::time::Duration;
 
 use contracts::gate::Gate;
-use contracts::tool::{Tool, ToolError, ToolOutput, ToolSpec};
+use contracts::tool::{Input, Tool, ToolError, ToolOutput, ToolSpec};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -22,8 +22,8 @@ const MAX_TIMEOUT_MS: u64 = 600_000;
 /// What the model reads of the tool; `{shell}` is the shell this system runs commands with.
 const DESCRIPTION: &str = "Run a shell command (`{shell}`) in the workspace root, or in `workdir`, \
 and return its exit code, stdout and stderr. Use it for builds, tests, git, package managers and \
-searching (`rg`, `rg --files`, `grep`, `find`), and for reading and changing files (`cat`, `sed -n`, \
-a heredoc, a short script). Each call is a fresh shell: `cd` and variables do not carry over, so pass `workdir` or \
+searching (`rg`, `rg --files`, `grep`, `find`), and for reading files (`cat`, `sed -n`, `head`). \
+Each call is a fresh shell: `cd` and variables do not carry over, so pass `workdir` or \
 chain with `&&`. {terminal} The command is killed, with everything it started, after `timeout_ms` (default 120000, at most 600000): start a server in the \
 background with its output sent to a file. Each stream keeps about 10000 characters, its start \
 and its end. A non-zero exit is reported as output, not as a failure.";
@@ -59,7 +59,7 @@ impl Tool for BashTool<'_> {
             description: DESCRIPTION
                 .replace("{shell}", SHELL)
                 .replace("{terminal}", TERMINAL),
-            parameters: parameters(),
+            input: Input::Json(parameters()),
         }
     }
 

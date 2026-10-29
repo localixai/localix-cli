@@ -39,7 +39,7 @@ validate() {
   local tool
   for tool in jq perl; do command -v "$tool" >/dev/null || die "needs $tool on PATH"; done
   [ -n "${INPUT_INSTALL_ONLY:-}${INPUT_PROMPT:-}${INPUT_PROMPT_FILE:-}" ] || die "give prompt or prompt-file"
-  in_range "${INPUT_MAX_TURNS:-50}" 10000 || die "max-turns is a number from 1 to 10000"
+  [ -z "${INPUT_MAX_TURNS:-}" ] || in_range "$INPUT_MAX_TURNS" 10000 || die "max-turns is a number from 1 to 10000"
   in_range "${INPUT_TIMEOUT:-900}" 86400 || die "timeout is a number of seconds from 1 to 86400"
   [[ -z ${INPUT_MODE:-} || $INPUT_MODE =~ ^[A-Za-z0-9_-]+$ ]] || die "mode is a name"
   if [ -n "${INPUT_WORKING_DIRECTORY:-}" ]; then
@@ -124,7 +124,8 @@ prepare() {
     [ -z "${INPUT_REASONING:-}" ] || printf 'LLX_REASONING=%s\0' "$INPUT_REASONING"
   } >"$dir/env"
 
-  cmd+=("$(command -v llx)" exec --json -v -o "$dir/result.txt" --max-turns "${INPUT_MAX_TURNS:-50}" --timeout "${INPUT_TIMEOUT:-900}")
+  cmd+=("$(command -v llx)" exec --json -v -o "$dir/result.txt" --timeout "${INPUT_TIMEOUT:-900}")
+  [ -z "${INPUT_MAX_TURNS:-}" ] || cmd+=(--max-turns "$INPUT_MAX_TURNS")
   [ -z "${INPUT_SCHEMA:-}" ] || cmd+=(--schema "$INPUT_SCHEMA")
   [ -z "${INPUT_MODE:-}" ] || cmd+=(--mode "$INPUT_MODE")
   rules --allow "${INPUT_ALLOW:-}"

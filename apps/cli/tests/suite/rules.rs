@@ -131,6 +131,48 @@ fn a_deny_rule_refuses_even_with_yes_and_names_itself() {
 }
 
 #[test]
+fn an_apply_patch_rule_allows_the_paths_it_names_and_no_others() {
+    let home = Home::new();
+    let model = Model::start(vec![
+        Reply::create("docs/a.md", "a"),
+        Reply::create("src/b.rs", "b"),
+        Reply::text("Done.\nRESULT: achieved"),
+    ]);
+    let args = ["exec", "--allow", "apply_patch(docs/**)", "x"];
+    let out = exec(&home, &model, &args, "");
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert!(home.path().join("docs/a.md").exists());
+    assert!(!home.path().join("src/b.rs").exists());
+}
+
+#[test]
+fn yes_lets_a_patch_change_files() {
+    let home = Home::new();
+    let model = Model::start(vec![
+        Reply::create("a.md", "a"),
+        Reply::text("Done.\nRESULT: achieved"),
+    ]);
+    let out = exec(&home, &model, &["exec", "-y", "x"], "");
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert!(home.path().join("a.md").exists(), "{}", said(&model, 1));
+}
+
+#[test]
+fn plan_mode_refuses_a_patch_whatever_is_allowed() {
+    let home = Home::new();
+    let model = Model::start(vec![
+        Reply::create("a.md", "a"),
+        Reply::text("Done.\nRESULT: achieved"),
+    ]);
+    let args = ["exec", "--mode", "plan", "--allow", "apply_patch", "x"];
+    let out = exec(&home, &model, &args, "");
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert!(!home.path().join("a.md").exists());
+    let told = said(&model, 1);
+    assert!(told.contains("read-only"), "{told}");
+}
+
+#[test]
 fn plan_mode_stays_read_only_whatever_is_allowed() {
     let (home, model) = (Home::new(), running("echo a > a.md"));
     let args = ["exec", "--mode", "plan", "--allow", "bash", "x"];
@@ -142,7 +184,7 @@ fn plan_mode_stays_read_only_whatever_is_allowed() {
 #[test]
 fn a_rule_that_cannot_be_read_is_not_ready() {
     let home = Home::new();
-    for rule in ["bash(echo *", "nosuchtool", "apply_patch"] {
+    for rule in ["bash(echo *", "nosuchtool", "apply_patch(//etc/**)"] {
         let model = running("echo hi");
         let out = exec(&home, &model, &["exec", "--allow", rule, "x"], "");
         assert_eq!(out.status.code(), Some(3), "{rule}");

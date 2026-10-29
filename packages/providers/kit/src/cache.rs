@@ -1,6 +1,5 @@
 //! The prompt cache's key, for an API that routes requests by one (OpenAI's `prompt_cache_key`):
-//! a hash of what every request of every session with them starts with, so a new session goes to
-//! where that start is cached.
+//! a hash of what a session's requests all start with, so they go to where that start is cached.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 

@@ -1,4 +1,5 @@
 use super::*;
+use contracts::tool::{Grammar, Input};
 
 #[test]
 fn a_conversation_goes_out_in_the_wire_format_with_cache_marks() {
@@ -23,7 +24,7 @@ fn a_conversation_goes_out_in_the_wire_format_with_cache_marks() {
             },
         ]
         .iter()
-        .map(|message| wire(message, "m"))
+        .map(|message| wire(message, "m", &[]))
         .collect(),
     );
     assert_eq!(
@@ -69,7 +70,7 @@ fn a_picture_goes_out_as_a_user_message_with_an_image_part_and_the_mark() {
             },
         ]
         .iter()
-        .map(|message| wire(message, "m"))
+        .map(|message| wire(message, "m", &[]))
         .collect(),
     );
     let picture = &messages[1];
@@ -116,7 +117,7 @@ fn request_body(wire: Wire, selection: &Selection, may_call: bool) -> Value {
     let tools = [ToolSpec {
         name: "read".into(),
         description: "Read.".into(),
-        parameters: json!({"type": "object"}),
+        input: Input::Json(json!({"type": "object"})),
     }];
     let request = Request {
         conversation: &conversation,
@@ -172,7 +173,7 @@ fn openai_itself_is_sent_one_cache_key_for_every_session_with_the_same_start_and
     let tools = [ToolSpec {
         name: "read".into(),
         description: "Read.".into(),
-        parameters: json!({"type": "object"}),
+        input: Input::Json(json!({"type": "object"})),
     }];
     let key = |wire: Wire, tools: &[ToolSpec], goal: &str| {
         let conversation = [Message::System("rules".into()), Message::User(goal.into())];
@@ -204,7 +205,7 @@ fn the_models_reasoning_goes_back_to_it_with_the_next_request() {
         "tool_calls": [{"id": "c1", "type": "function",
             "function": {"name": "read", "arguments": "{}"}}]}}]});
     let completion = read(&reply, "m", 0).unwrap();
-    let sent = wire(&completion.message(), "m");
+    let sent = wire(&completion.message(), "m", &[]);
     assert_eq!(sent["reasoning_details"], details);
     assert!(
         sent.get("reasoning").is_none(),
@@ -215,11 +216,11 @@ fn the_models_reasoning_goes_back_to_it_with_the_next_request() {
     // A host that says it in `reasoning_content` (DeepSeek's own API) is answered in it.
     let reply = json!({"model": "m", "choices": [{"message": {"content": "Done.",
         "reasoning_content": "step by step"}}]});
-    let sent = wire(&read(&reply, "m", 0).unwrap().message(), "m");
+    let sent = wire(&read(&reply, "m", 0).unwrap().message(), "m", &[]);
     assert_eq!(sent["reasoning_content"], "step by step");
 
     // Another model (after /model) is sent none of it.
-    let other = wire(&completion.message(), "other");
+    let other = wire(&completion.message(), "other", &[]);
     assert!(other.get("reasoning_details").is_none() && other.get("reasoning").is_none());
 }
 
@@ -258,5 +259,60 @@ fn cache_marks_go_only_to_the_models_that_take_explicit_breakpoints() {
     assert_eq!(
         sent["messages"][0]["content"], "rules",
         "the content stays a plain string"
+    );
+}
+
+fn script() -> ToolSpec {
+    ToolSpec {
+        name: "exec".into(),
+        description: "Run a script.".into(),
+        input: Input::Text(Grammar::Lark("start: /.+/".into())),
+    }
+}
+
+#[test]
+fn a_script_is_offered_as_a_function_with_one_string_argument() {
+    let conversation = [Message::User("goal".into())];
+    let tools = [script()];
+    let request = Request {
+        conversation: &conversation,
+        tools: &tools,
+        may_call: true,
+    };
+    let body = body(Wire::OpenRouter, &selection(vec![], Effort::Off), &request);
+    let function = &body["tools"][0]["function"];
+    assert_eq!(function["name"], "exec");
+    assert_eq!(function["parameters"]["required"], json!(["source"]));
+    assert_eq!(
+        function["parameters"]["properties"]["source"]["type"],
+        "string"
+    );
+}
+
+#[test]
+fn a_scripts_call_is_its_text_coming_in_and_its_one_argument_going_back() {
+    let wired = json!({"id": "c1", "function": {"name": "exec",
+        "arguments": "{\"source\":\"return 1\"}"}});
+    let call = read_call(&wired).unwrap();
+    // The reader keeps what the model wrote; the port takes the text out for the agent.
+    let tools = [script()];
+    let call = incoming(call, &tools);
+    assert_eq!(call.arguments, json!("return 1"));
+
+    let sent = wire(
+        &Message::Assistant {
+            text: None,
+            calls: vec![call],
+            carried: vec![],
+        },
+        "m",
+        &tools,
+    );
+    let arguments = sent["tool_calls"][0]["function"]["arguments"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(arguments).unwrap(),
+        json!({"source": "return 1"})
     );
 }

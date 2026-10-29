@@ -14,12 +14,21 @@ pub(crate) struct Ended {
     pub error: Option<String>,
 }
 
+/// The limits a task ran within, for the words of the one it hit.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Bounds {
+    /// Seconds.
+    pub timeout: u64,
+    /// Dollars.
+    pub budget: Option<f64>,
+}
+
 impl Ended {
     pub(crate) fn of(
         status: &Status,
         data: Option<&Result<Value, String>>,
         halt: Option<Halt>,
-        timeout: u64,
+        bounds: Bounds,
     ) -> Self {
         let ended = |status, code, error: Option<String>| Self {
             status,
@@ -31,7 +40,16 @@ impl Ended {
                 "exhausted",
                 exit::EXHAUSTED,
                 Some(format!(
-                    "the time limit ran out ({timeout} s; raise it with --timeout)"
+                    "the time limit ran out ({} s; raise it with --timeout)",
+                    bounds.timeout
+                )),
+            ),
+            (Some(Halt::OverBudget), _) => ended(
+                "exhausted",
+                exit::EXHAUSTED,
+                Some(format!(
+                    "the budget ran out (${}; raise it with --budget)",
+                    bounds.budget.unwrap_or_default()
                 )),
             ),
             (Some(Halt::Closed), _) => ended("interrupted", exit::OK, None),

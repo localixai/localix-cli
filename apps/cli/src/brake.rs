@@ -1,4 +1,4 @@
-//! Stopping a task between model turns: when its time is up, when the person stopped it (Ctrl-C),
+//! Stopping a task between model turns: when its time is up, when its budget is spent, when the person stopped it (Ctrl-C),
 //! or when no one reads its output any more (noticed on a write: with
 //! `--json`, every event). The chat model is
 //! wrapped, so the agent's loop ends the way it ends on any unreachable model, after the tool call
@@ -19,8 +19,27 @@ pub(crate) enum Halt {
     TimedOut,
     /// The reader of its output went away.
     Closed,
+    /// It spent its budget.
+    OverBudget,
     /// The person stopped it.
     Interrupted,
+}
+
+/// What bounds a task here: its time, and the most it may spend. Children's requests go through
+/// the same brake, so their spend counts.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Limits {
+    pub time: Duration,
+    /// Dollars; `None` is no bound.
+    pub budget: Option<f64>,
+}
+
+impl Limits {
+    /// Bounded in time alone.
+    #[cfg(test)]
+    pub(crate) fn time(time: Duration) -> Self {
+        Self { time, budget: None }
+    }
 }
 
 /// The chat model, stopped once the task's time is up or its output is closed.
@@ -31,6 +50,8 @@ pub(crate) struct Brake<'a> {
     /// Whether the person stopped the task.
     stopped: &'a (dyn Fn() -> bool + Sync),
     deadline: Mutex<Option<Instant>>,
+    /// The budget, and what the task has spent so far.
+    budget: Mutex<(Option<f64>, f64)>,
     halt: Mutex<Option<Halt>>,
 }
 
@@ -45,13 +66,15 @@ impl<'a> Brake<'a> {
             closed,
             stopped,
             deadline: Mutex::new(None),
+            budget: Mutex::new((None, 0.0)),
             halt: Mutex::new(None),
         }
     }
 
-    /// Start a task with `limit` to reach its answer in.
-    pub(crate) fn arm(&self, limit: Duration) {
-        *lock(&self.deadline) = Instant::now().checked_add(limit);
+    /// Start a task within `limits`; what it spent before is forgotten.
+    pub(crate) fn arm(&self, limits: Limits) {
+        *lock(&self.deadline) = Instant::now().checked_add(limits.time);
+        *lock(&self.budget) = (limits.budget, 0.0);
         *lock(&self.halt) = None;
     }
 
@@ -64,14 +87,22 @@ impl<'a> Brake<'a> {
         }
     }
 
-    /// Whether the task's time is up, recorded as its halt: a task that waits on its monitors or
-    /// agents makes no model turn to be stopped at, so its wait asks this.
+    /// Whether the task's time is up or its budget spent, recorded as its halt: a task that
+    /// waits on its monitors or agents makes no model turn to be stopped at, so its wait asks
+    /// this.
     pub(crate) fn due(&self) -> bool {
-        let due = lock(&self.deadline).is_some_and(|at| Instant::now() >= at);
-        if due {
-            *lock(&self.halt) = Some(Halt::TimedOut);
+        let late = lock(&self.deadline).is_some_and(|at| Instant::now() >= at);
+        let (budget, spent) = *lock(&self.budget);
+        let broke = budget.is_some_and(|most| spent >= most);
+        let halt = if late {
+            Some(Halt::TimedOut)
+        } else {
+            broke.then_some(Halt::OverBudget)
+        };
+        if halt.is_some() {
+            *lock(&self.halt) = halt;
         }
-        due
+        halt.is_some()
     }
 
     /// Why the last task was stopped, if it was: a stop that came after its last turn (Ctrl-C
@@ -88,7 +119,7 @@ impl Chat for Brake<'_> {
         } else if (self.closed)() {
             Some(Halt::Closed)
         } else if self.due() {
-            Some(Halt::TimedOut)
+            *lock(&self.halt)
         } else {
             None
         };
@@ -97,11 +128,16 @@ impl Chat for Brake<'_> {
                 *lock(&self.halt) = Some(halt);
                 Err(ChatError::Unavailable(match halt {
                     Halt::TimedOut => "the time limit ran out".into(),
+                    Halt::OverBudget => "the budget ran out".into(),
                     Halt::Closed => "the output was closed".into(),
                     Halt::Interrupted => "the person stopped the task".into(),
                 }))
             }
-            None => self.chat.complete(request),
+            None => {
+                let done = self.chat.complete(request)?;
+                lock(&self.budget).1 += done.usage.cost;
+                Ok(done)
+            }
         }
     }
 }

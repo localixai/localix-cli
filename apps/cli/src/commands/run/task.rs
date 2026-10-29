@@ -6,8 +6,9 @@ use contracts::history::Turn;
 use contracts::tool::Image;
 use serde_json::Value;
 
-use super::Ended;
+use super::{Bounds, Ended};
 use crate::attach;
+use crate::brake::Limits;
 use crate::compose::Rig;
 use crate::exit;
 use crate::output::{Start, Summary};
@@ -25,7 +26,10 @@ impl Rig<'_> {
         });
         let attached = self.pictures();
         crate::meta::title::start(self, goal);
-        self.brake.arm(Duration::from_secs(self.options.timeout));
+        self.brake.arm(Limits {
+            time: Duration::from_secs(self.options.timeout),
+            budget: self.options.budget,
+        });
         self.interrupt.begin();
         self.jobs_kit.queue.begin();
         let at = self.conversation.as_ref().map_or(0, |c| c.messages().len());
@@ -47,7 +51,15 @@ impl Rig<'_> {
         let halt = self.brake.halted();
         self.interrupt.end();
         self.conversation = Some(run.conversation);
-        let ended = Ended::of(&run.status, run.data.as_ref(), halt, self.options.timeout);
+        let ended = Ended::of(
+            &run.status,
+            run.data.as_ref(),
+            halt,
+            Bounds {
+                timeout: self.options.timeout,
+                budget: self.options.budget,
+            },
+        );
         self.record(goal, &run.answer, ended.status);
         // `-o` first, so `exit_code` in the report is the code the process ends with.
         let (code, error) = match self.write_last(&run.answer, run.data.as_ref()) {

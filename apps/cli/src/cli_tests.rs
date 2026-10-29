@@ -126,6 +126,11 @@ fn removed_and_unknown_flags_are_usage_errors() {
     assert!(!zero.to_string().contains("18446744073709551615"));
     assert!(parse(&["--timeout", "86401", "x"]).is_err());
     assert!(parse(&["--timeout", "86400", "x"]).is_ok());
+    for bad in ["0", "-1", "abc", "nan", "inf"] {
+        assert!(parse(&["--budget", bad, "x"]).is_err(), "{bad}");
+    }
+    let ok = parse(&["--budget", "0.50", "x"]).unwrap();
+    assert_eq!(ok.run.budget, Some(0.5));
 }
 
 #[test]

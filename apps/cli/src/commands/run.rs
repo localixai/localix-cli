@@ -34,7 +34,7 @@ use crate::modes::Modes;
 use crate::server::{Ui, place};
 use crate::tui;
 
-pub(crate) use self::ended::Ended;
+pub(crate) use self::ended::{Bounds, Ended};
 pub(crate) use self::interface::{Left, info, serving};
 
 /// The workspace `options` name (`-C`, else the current directory), with what is llx's own off

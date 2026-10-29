@@ -41,6 +41,7 @@ validate() {
   [ -n "${INPUT_INSTALL_ONLY:-}${INPUT_PROMPT:-}${INPUT_PROMPT_FILE:-}" ] || die "give prompt or prompt-file"
   [ -z "${INPUT_MAX_TURNS:-}" ] || in_range "$INPUT_MAX_TURNS" 10000 || die "max-turns is a number from 1 to 10000"
   in_range "${INPUT_TIMEOUT:-900}" 86400 || die "timeout is a number of seconds from 1 to 86400"
+  [[ -z ${INPUT_BUDGET:-} || ( $INPUT_BUDGET =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)$ && $INPUT_BUDGET =~ [1-9] ) ]] || die "budget is an amount in dollars above 0"
   [[ -z ${INPUT_MODE:-} || $INPUT_MODE =~ ^[A-Za-z0-9_-]+$ ]] || die "mode is a name"
   if [ -n "${INPUT_WORKING_DIRECTORY:-}" ]; then
     cd -- "$INPUT_WORKING_DIRECTORY" 2>/dev/null || die "working-directory does not exist"
@@ -126,6 +127,7 @@ prepare() {
 
   cmd+=("$(command -v llx)" exec --json -v -o "$dir/result.txt" --timeout "${INPUT_TIMEOUT:-900}")
   [ -z "${INPUT_MAX_TURNS:-}" ] || cmd+=(--max-turns "$INPUT_MAX_TURNS")
+  [ -z "${INPUT_BUDGET:-}" ] || cmd+=(--budget "$INPUT_BUDGET")
   [ -z "${INPUT_SCHEMA:-}" ] || cmd+=(--schema "$INPUT_SCHEMA")
   [ -z "${INPUT_MODE:-}" ] || cmd+=(--mode "$INPUT_MODE")
   rules --allow "${INPUT_ALLOW:-}"

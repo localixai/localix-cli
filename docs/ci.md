@@ -79,6 +79,7 @@ One of `prompt` and `prompt-file` is needed. The rest are optional.
 | `mode` | `default` | `default`, `plan`, `bypass`, or a mode of your own. |
 | `provider`, `model`, `reasoning` | llx's own | Set as `LLX_PROVIDER`, `LLX_MODEL` and `LLX_REASONING`. |
 | `max-turns` | none | Model turns for the task; the timeout bounds it. |
+| `budget` | none | Dollars the task may spend (more than 0). Where the provider reports a cost: OpenRouter does, a ChatGPT sign-in does not. |
 | `timeout` | 900 | Seconds. Always passed, so a run always has a deadline. |
 | `working-directory` | the workspace | Where the agent works. |
 | `version` | the action's own | The llx release to install. `system` uses the `llx` already on the PATH, for a self-hosted runner that builds it. |
@@ -213,9 +214,9 @@ Rules come from the workflow and your settings, never from the repository: a pul
 
 ## Limits
 
-- `max-turns` (no limit by default) and `timeout` (the action's default is 900 seconds; `llx exec`'s own is 1800, at most a day). llx stops at the first model turn past either, and the task exits 2. A command the agent runs has its own limit (120 seconds by default).
+- Three limits, independent: `max-turns` (no limit by default), `timeout` (the action's default is 900 seconds; `llx exec`'s own is 1800, at most a day) and `budget` (dollars, none by default). The first one reached ends the task, at the next model turn, and it exits 2. A command the agent runs has its own limit (120 seconds by default).
 - Put `timeout-minutes` on the job as well: it is the runner's limit, whatever happens inside.
-- llx has no cost cap by amount. The two limits above bound a run, and the key's own limit bounds the spend.
+- `budget` counts the cost the provider reports (OpenRouter does, a ChatGPT sign-in does not), so the key's own limit at the provider is the cap that always holds.
 
 ## Answers and exit codes
 

@@ -115,7 +115,7 @@ How a task ends is a contract a pipeline can read. The exit code says it, and `-
 | --- | --- | --- |
 | 0 | `achieved` | `result` said the goal was reached |
 | 1 | `not_achieved` | `result` said it was not (`blocked_by` says why), or its data did not match `--schema` |
-| 2 | `exhausted` | Turns (`--max-turns`) or time (`--timeout`) ran out before a `result` |
+| 2 | `exhausted` | Turns (`--max-turns`), time (`--timeout`) or money (`--budget`) ran out before a `result`: the first reached ends the task |
 | 3 | `error` | No key, no network, a model error, a bad argument |
 | 130 | `interrupted` | Ctrl-C or SIGTERM |
 

@@ -347,11 +347,25 @@ pub(crate) struct RunOptions {
     #[arg(long, value_name = "SECONDS", default_value_t = 1800, help_heading = "Limits",
         value_parser = RangedU64ValueParser::<u64>::new().range(1..=86_400))]
     pub timeout: u64,
+    /// Dollars one task may spend (more than 0, e.g. 0.50); it stops at the next model turn
+    /// once its turns have cost that. Counted where the provider reports a cost: OpenRouter
+    /// does, a ChatGPT sign-in does not. The first of --max-turns, --timeout and --budget
+    /// reached ends the task with exit 2.
+    #[arg(long, value_name = "USD", help_heading = "Limits", value_parser = dollars)]
+    pub budget: Option<f64>,
 
     /// Run the session in this process, not in the daemon (`llx serve`) that a session at the
     /// terminal otherwise starts or attaches to. `exec` always runs in this process.
     #[arg(long, env = "LLX_NO_DAEMON", value_parser = clap::builder::FalseyValueParser::new())]
     pub no_daemon: bool,
+}
+
+/// A budget in dollars: a number above zero.
+fn dollars(text: &str) -> Result<f64, String> {
+    match text.parse::<f64>() {
+        Ok(usd) if usd.is_finite() && usd > 0.0 => Ok(usd),
+        Ok(_) | Err(_) => Err(format!("`{text}` is not an amount above 0")),
+    }
 }
 
 /// A prompt given as words, unquoted or quoted, as one text; `None` when none was given.

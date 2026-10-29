@@ -186,6 +186,26 @@ fn text_alone_is_reminded_until_result_ends_the_run() {
 }
 
 #[test]
+fn a_task_stops_once_its_turns_have_cost_the_budget() {
+    let home = Home::new();
+    // The scripted model charges 0.0001 a completion.
+    let script: Vec<Reply> = (0..10)
+        .map(|_| Reply::call("bash", json!({"command": "true"})))
+        .collect();
+    let model = Model::start(script);
+    let out = exec(
+        &home,
+        &model,
+        &["exec", "-y", "--budget", "0.00015", "x"],
+        "",
+    );
+    let stderr = text(&out.stderr);
+    assert_eq!(out.status.code(), Some(2), "{stderr}");
+    assert!(stderr.contains("the budget ran out ($0.00015;"), "{stderr}");
+    assert_eq!(model.requests().len(), 2);
+}
+
+#[test]
 fn a_task_has_no_turn_limit_but_the_one_given() {
     let home = Home::new();
     let mut script: Vec<Reply> = (0..60)

@@ -56,7 +56,7 @@ run_action() {
     env -i PATH="$tmp/bin:$PATH" HOME="$tmp" STUB_DIR="$tmp/run" RUNNER_TEMP="$tmp/run/rt" \
       GITHUB_STEP_SUMMARY="$tmp/run/summary" GITHUB_PATH="$tmp/run/path" \
       GITHUB_ACTION_PATH="$tmp/run/act" INPUT_PROMPT=go INPUT_PROMPT_FILE= INPUT_SCHEMA= INPUT_ALLOW= INPUT_DENY= \
-      INPUT_MODE= INPUT_PROVIDER= INPUT_MODEL= INPUT_REASONING= INPUT_MAX_TURNS= INPUT_TIMEOUT=900 \
+      INPUT_MODE= INPUT_PROVIDER= INPUT_MODEL= INPUT_REASONING= INPUT_MAX_TURNS= INPUT_TIMEOUT=900 INPUT_BUDGET= \
       INPUT_WORKING_DIRECTORY= INPUT_VERSION=system INPUT_ARGS= INPUT_INSTALL_ONLY= "$@" bash -c '
         script=$1 out=$2 prepared=$3
         if GITHUB_OUTPUT=$prepared bash "$script" prepare; then outcome=success; else outcome=failure; fi
@@ -165,10 +165,10 @@ eq "prompt-file first, read as it is" $'from the file $PR\n\nthen 7' "$(cat "$tm
 
 # Rules, one per line, blanks and padding dropped; the other inputs.
 run_action INPUT_ALLOW=$'bash(gh pr view *)\n\n  jobs  \r\nbash(git log *)' INPUT_DENY=$'bash(git push *)\n' INPUT_MODE=plan \
-  INPUT_PROVIDER=openrouter INPUT_MODEL=acme/m INPUT_REASONING=low INPUT_ARGS='--foo bar' INPUT_MAX_TURNS=9 INPUT_TIMEOUT=60
+  INPUT_PROVIDER=openrouter INPUT_MODEL=acme/m INPUT_REASONING=low INPUT_ARGS='--foo bar' INPUT_MAX_TURNS=9 INPUT_TIMEOUT=60 INPUT_BUDGET=0.50
 has "rules" "$(args)" "--allow"$'\001'"bash(gh pr view *)"$'\001'"--allow"$'\001'"jobs"$'\001'"--allow"$'\001'"bash(git log *)"$'\001'"--deny"$'\001'"bash(git push *)"$'\001'
 has "mode, limits and extra arguments" "$(args)" "--mode"$'\001'"plan"$'\001'
-has "limits" "$(args)" "--timeout"$'\001'"60"$'\001'"--max-turns"$'\001'"9"$'\001'
+has "limits" "$(args)" "--timeout"$'\001'"60"$'\001'"--max-turns"$'\001'"9"$'\001'"--budget"$'\001'"0.50"$'\001'
 has "extra arguments, before the prompt" "$(args)" "--foo"$'\001'"bar"$'\001'"-"$'\001'
 eq "provider, model, reasoning" "openrouter|acme/m|low|1|0" "$(sed -n 2p "$tmp/run/env")"
 run_action INPUT_ARGS=$'--foo bar\n--baz'
@@ -185,7 +185,7 @@ eq "install-only: no outputs" "" "$(names)"
 eq "install-only: no summary" "" "$(summary)"
 
 # Inputs are checked first, and the reason is in the summary.
-for bad in INPUT_PROMPT= INPUT_MAX_TURNS=many INPUT_MAX_TURNS=0 INPUT_MAX_TURNS=10001 INPUT_TIMEOUT=-1 INPUT_TIMEOUT=86401 \
+for bad in INPUT_PROMPT= INPUT_MAX_TURNS=many INPUT_MAX_TURNS=0 INPUT_MAX_TURNS=10001 INPUT_TIMEOUT=-1 INPUT_TIMEOUT=86401 INPUT_BUDGET=0 INPUT_BUDGET=-1 INPUT_BUDGET=lots \
   INPUT_MODE='a b' INPUT_WORKING_DIRECTORY=/nowhere INPUT_PROMPT_FILE=/nowhere; do
   run_action "$bad"
   eq "rejected: $bad" "3 not-ready" "$rc $(output status)"

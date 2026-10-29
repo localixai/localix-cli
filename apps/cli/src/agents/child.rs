@@ -116,7 +116,11 @@ pub(super) fn work(kit: &Kit, registry: &Registry, id: &str, message: &str) {
         }
     });
     let halt = stop().then_some(crate::brake::Halt::Interrupted);
-    let status = crate::commands::run::Ended::of(&run.status, None, halt, 0).status;
+    let bounds = crate::commands::run::Bounds {
+        timeout: 0,
+        budget: None,
+    };
+    let status = crate::commands::run::Ended::of(&run.status, None, halt, bounds).status;
     let millis = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     watch.show(Event::Answer(run.answer.clone()));
     watch.show(Event::TaskEnded {

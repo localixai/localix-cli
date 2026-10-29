@@ -4,9 +4,14 @@ use serde_json::json;
 use super::*;
 use crate::exit;
 
+const BOUNDS: Bounds = Bounds {
+    timeout: 90,
+    budget: Some(0.5),
+};
+
 #[test]
 fn an_answer_ends_with_the_code_its_result_line_says() {
-    let ended = |status: Status| Ended::of(&status, None, None, 60);
+    let ended = |status: Status| Ended::of(&status, None, None, BOUNDS);
     assert_eq!(ended(Status::Achieved).code, exit::OK);
     assert_eq!(ended(Status::NotAchieved).code, exit::FAILED);
     assert_eq!(ended(Status::NotAchieved).status, "not_achieved");
@@ -27,11 +32,11 @@ fn an_answer_ends_with_the_code_its_result_line_says() {
 #[test]
 fn data_that_does_not_match_fails_the_run() {
     let mismatch = Err("the result did not match the schema".to_string());
-    let ended = Ended::of(&Status::Achieved, Some(&mismatch), None, 60);
+    let ended = Ended::of(&Status::Achieved, Some(&mismatch), None, BOUNDS);
     assert_eq!(ended.code, exit::FAILED);
     let data = Ok(json!({"n": 1}));
     assert_eq!(
-        Ended::of(&Status::Achieved, Some(&data), None, 60).code,
+        Ended::of(&Status::Achieved, Some(&data), None, BOUNDS).code,
         exit::OK
     );
 }
@@ -64,11 +69,22 @@ fn a_halt_decides_the_status_and_exit_code() {
             None,
         ),
     ] {
-        let got = Ended::of(status, None, Some(halt), 90);
+        let got = Ended::of(status, None, Some(halt), BOUNDS);
         assert_eq!((got.status, got.code), (ended, code), "{halt:?}");
         match error {
             Some(part) => assert!(got.error.unwrap().contains(part), "{halt:?}"),
             None => assert_eq!(got.error, None, "{halt:?}"),
         }
     }
+}
+
+#[test]
+fn a_spent_budget_exhausts_the_task_and_says_how_to_raise_it() {
+    let ended = Ended::of(&Status::Achieved, None, Some(Halt::OverBudget), BOUNDS);
+    assert_eq!(ended.code, exit::EXHAUSTED);
+    assert_eq!(ended.status, "exhausted");
+    assert_eq!(
+        ended.error.as_deref(),
+        Some("the budget ran out ($0.5; raise it with --budget)")
+    );
 }

@@ -10,6 +10,7 @@
 - ChatGPT: a reply withheld by the content filter is an error, not an empty answer; a stream cut or timed out is sent once more; a refreshed sign-in that cannot be saved is logged as a warning, and an `invalid_grant` refresh says to `/login` again.
 - An HTTP request that fails after it went out (a connection closed before the answer) counts as unanswered, not unsent, so it is not sent again where that could be billed twice.
 - Which OpenRouter models take prompt-cache breakpoints is the model catalog's (`ModelEntry::marks`), no longer a list of id prefixes in the provider.
+- `--budget USD` (and the action's `budget` input) bounds what one task may spend, beside `--max-turns` and `--timeout`: the first limit reached ends the task with exit 2. It counts the cost the provider reports (OpenRouter does, a ChatGPT sign-in does not).
 - `bash` keeps about 40,000 characters of each stream (some 10,000 tokens, as Codex does), where it kept 10,000: a test file or a build log reaches the model whole, not cut in the middle. A tool result keeps up to 90,000 characters.
 - With a ChatGPT sign-in, `apply_patch` is offered again as a tool held to its grammar for the models that take one: a fetched catalog (models.dev's v2 API, which does not publish it) had turned it into a JSON function for every OpenAI model, and patches came back cut short or malformed.
 - A patch whose lines are not found in the file says so with the file's nearest lines, numbered: the next patch needs no read first.

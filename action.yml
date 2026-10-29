@@ -56,6 +56,10 @@ inputs:
     description: Seconds the task may take (1 to 86400). A run always has a deadline.
     required: false
     default: '900'
+  budget:
+    description: Dollars the task may spend (more than 0, e.g. 0.50), where the provider reports a cost (OpenRouter does, a ChatGPT sign-in does not). None by default.
+    required: false
+    default: ''
   working-directory:
     description: Where the agent works. Default is the workspace.
     required: false
@@ -121,6 +125,7 @@ runs:
         INPUT_REASONING: ${{ inputs.reasoning }}
         INPUT_MAX_TURNS: ${{ inputs.max-turns }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_BUDGET: ${{ inputs.budget }}
         INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_ARGS: ${{ inputs.args }}

@@ -10,7 +10,7 @@ Every task ends with the agent's `result` call: `achieved`, a `summary`, `blocke
 | --- | --- |
 | 0 | The task was achieved: its `result` said so |
 | 1 | Its `result` said the task was not achieved (`blocked_by` says why), or the data did not match `--schema` |
-| 2 | Turns or the time limit ran out before a `result` |
+| 2 | Turns, time or budget ran out before a `result` |
 | 3 | The environment or the command line is not ready: no key, no network, a model error, a bad argument |
 | 130 | Interrupted: Ctrl-C (or SIGTERM) |
 

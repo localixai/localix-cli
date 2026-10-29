@@ -80,7 +80,7 @@ inputs:
 outputs:
   result:
     description: >-
-      The final answer, or with schema the JSON data (empty when no data matched it). Empty past 900 KB:
+      The result's summary, or with schema the JSON data (empty when no data matched it). Empty past 900 KB:
       result-file has it whole.
     value: ${{ steps.finish.outputs.result }}
   result-file:

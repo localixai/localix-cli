@@ -37,7 +37,7 @@ One to three questions to you, in a session only (not in `exec`). Each is shown 
 Starts other agents and works with them, in parallel:
 
 - `spawn` (a task, and a short name) starts one on a thread of its own and returns at once; `send` tells one more (read at its next step while it works, or a new task once it is done); `wait` (some or all, `timeout_ms`, 30 s by default) returns the answers that came; `list` shows them; `close` ends one (at most 6 open).
-- An agent's answer, its last message, reaches the main agent by itself at its next step as an `<agent_result>` message; a task does not end while its agents work.
+- An agent's answer, the summary of its `result` call, reaches the main agent by itself at its next step as an `<agent_result>` message; a task does not end while its agents work.
 - An agent is a session of its own whose parent is the main one: its conversation opens with the same context, it has the same tools but `agents`, `ask` and `jobs` (one level, and nobody to answer it), and asks the same gate, its approvals marked `[agent name]` and asked one at a time. It sees nothing of the main conversation.
 - It stops with the task (Ctrl-C, the time limit) or alone (`x` on its row), and what it spends counts in the task's turns and cost (and in `--json`'s `turn` events and `usage`).
 - Its tasks are saved as a session that names its parent; `llx sessions` lists the main ones with how many agents each started, and `resume` never picks an agent's.

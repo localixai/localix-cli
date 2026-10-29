@@ -107,3 +107,21 @@ fn the_lines_added_and_removed_are_counted_without_the_context() {
     let all = chunks("@@\n keep\n-a\n-b\n+c\n@@\n+d\n");
     assert_eq!(counts(&all), (2, 2));
 }
+
+#[test]
+fn lines_only_added_after_an_anchor_go_below_it() {
+    let file = "fn one() {\n}\nfn two() {\n}\n";
+    assert_eq!(
+        applied(file, "@@ fn one() {\n+    x\n").unwrap(),
+        "fn one() {\n    x\n}\nfn two() {\n}\n"
+    );
+}
+
+#[test]
+fn a_hunk_may_start_with_its_anchor_line() {
+    let file = "fn one() {\n}\nfn two() {\n    x\n}\n";
+    assert_eq!(
+        applied(file, "@@ fn two() {\n-fn two() {\n+fn three() {\n").unwrap(),
+        "fn one() {\n}\nfn three() {\n    x\n}\n"
+    );
+}

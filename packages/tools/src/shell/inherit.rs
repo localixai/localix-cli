@@ -85,7 +85,3 @@ fn close_on_exec() {
         unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) };
     }
 }
-
-/// Elsewhere commands inherit what they always did.
-#[cfg(not(any(target_vendor = "apple", target_os = "linux")))]
-fn close_on_exec() {}

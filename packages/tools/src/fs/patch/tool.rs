@@ -17,9 +17,11 @@ patch's text. It starts with `*** Begin Patch` and ends with `*** End Patch`; be
 for each file, `*** Add File: <path>` and its lines each starting with `+`; `*** Delete File: \
 <path>`; or `*** Update File: <path>`, optionally `*** Move to: <path>`, then hunks: a line `@@` \
 (or `@@ <a line near the change>`), then the hunk's lines, each starting with ` ` (kept, three \
-around each change), `-` (removed) or `+` (added). Paths are relative to the workspace root. \
-Files change only inside the workspace; missing directories are created and line endings are \
-kept. Read a file before changing it, and again when a patch fails.";
+around each change), `-` (removed) or `+` (added). Every added line starts with `+`, blank ones \
+too. Paths are relative to the workspace root; a path outside it is refused. `Add File` does not \
+overwrite a file: change an existing one with `Update File`, or `Delete File` then `Add File` to \
+rewrite it. Missing directories are created and line endings are kept. A patch is applied whole \
+or not at all. Read a file before changing it, and again when a patch fails.";
 
 /// The patch's grammar, as the model's provider holds it to.
 const GRAMMAR: &str = r#"start: begin_patch hunk+ end_patch

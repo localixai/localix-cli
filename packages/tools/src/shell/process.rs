@@ -75,8 +75,11 @@ pub(super) struct Finished {
 
 /// Run `job` in a shell, with no input.
 pub(super) fn run(job: &Job) -> io::Result<Finished> {
-    let (mut shell, _held) = scoped(job.command, job.scope, job.kept)?;
+    let (mut shell, held) = scoped(job.command, job.scope, job.kept)?;
     quiet_env(&mut shell, job.env);
+    if let Some(scratch) = held.scratch() {
+        shell.env("TMPDIR", scratch);
+    }
     let mut child = shell
         .current_dir(job.dir)
         .stdin(Stdio::null())

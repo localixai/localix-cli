@@ -8,7 +8,6 @@
 use std::io;
 use std::path::PathBuf;
 use std::process::Command;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use contracts::gate::Verdict;
@@ -47,6 +46,14 @@ pub struct Held {
     rules: Option<std::os::fd::OwnedFd>,
 }
 
+impl Held {
+    /// The command's scratch directory: its `TMPDIR`, set after the environment it runs with, so
+    /// a client's own `TMPDIR` does not replace it.
+    pub(super) fn scratch(&self) -> Option<&std::path::Path> {
+        self.scratch.as_deref()
+    }
+}
+
 impl Drop for Held {
     fn drop(&mut self) {
         if let Some(scratch) = &self.scratch {
@@ -64,8 +71,7 @@ pub(super) fn read_only(command: &str, kept: &[PathBuf]) -> io::Result<(Command,
     let held = Held {
         scratch: Some(scratch.clone()),
     };
-    let mut shell = macos::shell(command, &scratch, kept)?;
-    shell.env("TMPDIR", &scratch);
+    let shell = macos::shell(command, &scratch, kept)?;
     Ok((shell, held))
 }
 
@@ -80,21 +86,11 @@ pub(super) fn read_only(command: &str, _kept: &[PathBuf]) -> io::Result<(Command
         rules: None,
     };
     let rules = linux::rules(&scratch)?;
-    let mut shell = linux::shell(command, &rules);
-    shell.env("TMPDIR", &scratch);
+    let shell = linux::shell(command, &rules);
     held.rules = Some(rules);
     Ok((shell, held))
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-pub(super) fn read_only(_: &str, _: &[PathBuf]) -> io::Result<(Command, Held)> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "this system has no sandbox to confine a command to reading: it was not run",
-    ))
-}
-
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 /// A new directory of the command's own under the system's temporary one, readable by the person
 /// alone, as the sandbox names it: symlinks resolved (macOS's `/var` is `/private/var`).
 fn scratch() -> io::Result<PathBuf> {

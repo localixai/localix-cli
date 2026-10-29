@@ -281,7 +281,7 @@ fn a_fifo_is_refused_before_it_is_opened() {
     let message = failed(patch(&dir, &gate, "*** Update File: pipe\n@@\n-a\n+b\n"));
     assert_eq!(
         message,
-        "pipe is not a regular file: apply_patch changes files"
+        "pipe is not a regular file: apply_patch changes files. No file was changed."
     );
     assert!(gate.asked.lock().unwrap().is_empty());
 }
@@ -321,4 +321,42 @@ fn a_move_to_the_same_place_is_an_update() {
     .unwrap();
     assert!(report.starts_with("Updated a.txt"), "{report}");
     assert_eq!(read(&dir, "a.txt"), "y\n");
+}
+
+#[test]
+fn a_write_that_fails_puts_back_every_file_written_before_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = Scratch::new();
+    dir.file("a.txt", "x\n");
+    dir.file("b.txt", "y\n");
+    fs::set_permissions(dir.path().join("b.txt"), fs::Permissions::from_mode(0o444)).unwrap();
+    let message = failed(patch(
+        &dir,
+        &Open,
+        "*** Add File: c.txt\n+new\n*** Update File: a.txt\n@@\n-x\n+X\n*** Update File: b.txt\n@@\n-y\n+Y\n",
+    ));
+    assert!(
+        message.contains("b.txt") && message.ends_with("No file was changed."),
+        "{message}"
+    );
+    assert_eq!(read(&dir, "a.txt"), "x\n");
+    assert!(!dir.path().join("c.txt").exists());
+}
+
+#[test]
+fn every_failure_of_a_patch_says_no_file_was_changed() {
+    let dir = Scratch::new();
+    dir.file("a.txt", "x\n");
+    let message = failed(patch(
+        &dir,
+        &Open,
+        "*** Update File: a.txt\n@@\n-nope\n+Y\n",
+    ));
+    assert!(message.ends_with("No file was changed."), "{message}");
+    let message = failed(patch(
+        &dir,
+        &Refusing("a.txt"),
+        "*** Update File: a.txt\n@@\n-x\n+Y\n",
+    ));
+    assert!(message.ends_with("No file was changed."), "{message}");
 }

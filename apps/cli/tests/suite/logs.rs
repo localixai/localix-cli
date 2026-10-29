@@ -11,8 +11,8 @@ use crate::suite::exec::exec;
 fn a_failing_call() -> Model {
     Model::start(vec![
         Reply::call("bash", json!({"command": ""})),
-        Reply::text("Nothing ran.\nRESULT: not achieved"),
-        Reply::text("Nothing can run.\nRESULT: not achieved"),
+        Reply::blocked("Nothing ran.", "blocked"),
+        Reply::blocked("Nothing can run.", "blocked"),
     ])
 }
 
@@ -30,7 +30,7 @@ fn a_task_leaves_each_call_with_its_arguments_its_failure_and_how_it_ended_in_th
     assert!(log.contains(r#"bash {"command":""}"#), "{log}");
     let failed = log
         .lines()
-        .find(|line| line.contains("the command is empty"));
+        .find(|line| line.contains("no command was given"));
     assert!(failed.is_some_and(|line| line.contains(" WARN ")), "{log}");
     assert!(log.contains("not_achieved"), "{log}");
     // One event a line, each with its time and level first, as env_logger writes them.

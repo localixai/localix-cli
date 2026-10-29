@@ -67,18 +67,22 @@ fn locate<'a>(lines: &[&str], chunks: &'a [Chunk], shown: &str) -> Result<Vec<Ed
     let mut edits = vec![];
     let mut from = 0;
     for chunk in chunks {
+        let mut anchor = None;
         if let Some(context) = &chunk.context {
             let at = seek(lines, std::slice::from_ref(context), from, false)
                 .ok_or_else(|| format!("could not find the line `{context}` in {shown}"))?;
-            from = at + 1;
+            anchor = Some(at);
+            // The hunk's first old line may be the anchor line itself.
+            from = at;
         }
         if chunk.old.is_empty() {
-            // Lines only added have no place to be found: they go to the end.
+            // Lines only added go below their anchor; with none, to the end.
             edits.push(Edit {
-                at: lines.len(),
+                at: anchor.map_or(lines.len(), |at| at + 1),
                 len: 0,
                 with: &chunk.new,
             });
+            from = anchor.map_or(from, |at| at + 1);
             continue;
         }
         let (mut old, mut new) = (&chunk.old[..], &chunk.new[..]);

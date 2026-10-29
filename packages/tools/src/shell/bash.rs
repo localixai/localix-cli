@@ -28,7 +28,8 @@ chain with `&&`. Input is closed and there is no terminal: never start an intera
 program (an editor, a pager, a prompt); pass flags like `--yes` or `--no-pager`. The command is \
 killed, with everything it started, after `timeout_ms` (default 120000, at most 600000): start a \
 server in the background with its output sent to a file. Each stream keeps about 40000 \
-characters (some 10000 tokens), its start and its end: read a larger output in parts. A non-zero exit is reported as output, not as a failure.";
+characters (some 10000 tokens): a short start and a longer end, the middle cut. Redirect a \
+large output to a file and read it in parts. A non-zero exit is reported as output, not as a failure.";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -139,14 +140,14 @@ impl BashTool<'_> {
     }
 }
 
-const EMPTY: &str = "the command is empty";
+const EMPTY: &str = "no command was given: pass the shell command to run as \"command\"";
 
 /// The arguments of a command run to its end.
 fn parameters() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "command": {"type": "string", "description": "The command to run."},
+            "command": {"type": "string", "minLength": 1, "description": "The command to run."},
             "timeout_ms": {"type": "integer", "minimum": 1, "maximum": MAX_TIMEOUT_MS,
                 "description": "Kill it after this many milliseconds (default 120000)."},
             "workdir": {"type": "string",

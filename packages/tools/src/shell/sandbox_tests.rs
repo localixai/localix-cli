@@ -1,6 +1,3 @@
-// Only where a sandbox can be set up: elsewhere every read-only command is refused.
-#![cfg(any(target_os = "macos", target_os = "linux"))]
-
 use std::time::Duration;
 
 use super::Scope;
@@ -65,6 +62,32 @@ fn a_read_only_command_has_a_scratch_directory_of_its_own_and_dev_null() {
     let scratch = lines.next().unwrap_or_default();
     // Removed once the command ended.
     assert!(!std::path::Path::new(scratch).exists(), "{scratch}");
+}
+
+#[test]
+fn the_scratch_directory_survives_a_clients_environment() {
+    // The daemon runs a command with the client's variables, whose own `TMPDIR` is not writable
+    // from the sandbox.
+    let dir = Scratch::new();
+    let vars = [
+        ("PATH".to_string(), "/usr/bin:/bin".to_string()),
+        ("TMPDIR".to_string(), "/nowhere".to_string()),
+    ];
+    let finished = run(&Job {
+        command: r#"echo kept > "$TMPDIR/x" && cat "$TMPDIR/x""#,
+        dir: dir.path(),
+        timeout: Duration::from_secs(60),
+        env: Env {
+            vars: Some(&vars),
+            hidden: &[],
+        },
+        stop: &|| false,
+        scope: Scope::ReadOnly,
+        kept: &[],
+    })
+    .unwrap();
+    assert_eq!(finished.ending, Ending::Exit(0), "{}", finished.stderr);
+    assert_eq!(finished.stdout, "kept");
 }
 
 #[test]

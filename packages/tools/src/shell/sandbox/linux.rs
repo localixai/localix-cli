@@ -12,6 +12,8 @@ use std::path::Path;
 use std::process::Command;
 
 // From <linux/landlock.h>.
+/// The oldest ABI that can keep a command from changing any file.
+const MIN_ABI: i64 = 3;
 const CREATE_RULESET_VERSION: u32 = 1;
 const RULE_PATH_BENEATH: u32 = 1;
 const WRITE_FILE: u64 = 1 << 1;
@@ -53,15 +55,10 @@ pub(super) fn rules(scratch: &Path) -> io::Result<OwnedFd> {
             CREATE_RULESET_VERSION,
         )
     };
-    if abi < 1 {
-        return Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "this kernel has no Landlock (Linux 5.13 or later, with it enabled): the command could \
-             not be confined to reading",
-        ));
-    }
+    supported(abi)?;
     let since = |version: i64, rights: u64| if abi >= version { rights } else { 0 };
-    let changes = CHANGES | since(2, REFER) | since(3, TRUNCATE);
+    // ABI 3 is required, so renames across directories and truncation are always handled.
+    let changes = CHANGES | REFER | TRUNCATE;
     let attr = RulesetAttr {
         handled_access_fs: changes,
         handled_access_net: since(4, TCP),
@@ -69,7 +66,7 @@ pub(super) fn rules(scratch: &Path) -> io::Result<OwnedFd> {
     };
     // The attribute as long as this kernel knows it: an older one refuses a longer one.
     let size: usize = match abi {
-        1..=3 => 8,
+        ..=3 => 8,
         4 | 5 => 16,
         _ => 24,
     };
@@ -88,13 +85,23 @@ pub(super) fn rules(scratch: &Path) -> io::Result<OwnedFd> {
         .ok_or_else(io::Error::last_os_error)?;
     // SAFETY: a descriptor the call just opened, owned here alone.
     let rules = unsafe { OwnedFd::from_raw_fd(fd) };
-    grant(
-        &rules,
-        Path::new("/dev/null"),
-        WRITE_FILE | since(3, TRUNCATE),
-    )?;
+    grant(&rules, Path::new("/dev/null"), WRITE_FILE | TRUNCATE)?;
     grant(&rules, scratch, changes)?;
     Ok(rules)
+}
+
+/// Whether a kernel at Landlock ABI `abi` (negative: none) can confine a command to reading. Below
+/// 3 a file could still be truncated, and a rename could move one across directories, so the
+/// command would not be read-only: it is refused with the reason, never run open (B3).
+fn supported(abi: i64) -> io::Result<()> {
+    if abi >= MIN_ABI {
+        return Ok(());
+    }
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "this kernel's Landlock is missing or too old (ABI 3, Linux 6.2 or later, is needed to keep \
+         a command from truncating files): the command could not be confined to reading",
+    ))
 }
 
 /// Let the ruleset `rules` grant `access` beneath `path`.
@@ -195,3 +202,7 @@ static FILTER: [libc::sock_filter; FILTER_LEN as usize] = [
     op(RETURN, libc::SECCOMP_RET_ALLOW, 0, 0),
     op(RETURN, REFUSED, 0, 0),
 ];
+
+#[cfg(test)]
+#[path = "linux_tests.rs"]
+mod tests;

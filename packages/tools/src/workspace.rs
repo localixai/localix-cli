@@ -110,11 +110,11 @@ impl Workspace {
 /// `~` or `~/rest` in the home directory, when it is known.
 fn home(path: &str) -> Option<PathBuf> {
     let rest = path.strip_prefix('~')?;
-    if !(rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\')) {
+    if !(rest.is_empty() || rest.starts_with('/')) {
         return None;
     }
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(rest.trim_start_matches(['/', '\\'])))
+    let home = std::env::var_os("HOME")?;
+    Some(PathBuf::from(home).join(rest.trim_start_matches('/')))
 }
 
 /// `path` with `.` dropped and each `..` taking off the name before it, without touching the disk.

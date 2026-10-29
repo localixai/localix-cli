@@ -42,6 +42,18 @@ pub(super) fn run(
     gate: &dyn Gate,
     patch: &str,
 ) -> Result<String, ToolError> {
+    // Whole or nothing: a failure always leaves the files as they were, and says so, so the model
+    // sends the whole patch again rather than the part it thinks is left.
+    carry_out(workspace, gate, patch).map_err(|error| match error {
+        ToolError::Failed(why) => ToolError::Failed(format!(
+            "{}. No file was changed.",
+            why.trim_end().trim_end_matches('.')
+        )),
+        fatal @ ToolError::Fatal(_) => fatal,
+    })
+}
+
+fn carry_out(workspace: &Workspace, gate: &dyn Gate, patch: &str) -> Result<String, ToolError> {
     let hunks = parse(patch).map_err(ToolError::Failed)?;
     let (mut files, mut steps) = (vec![], vec![]);
     for hunk in hunks {
@@ -74,28 +86,29 @@ pub(super) fn run(
 }
 
 /// The writes of `changed` first, then its deletions, so a move that fails halfway keeps its
-/// source.
+/// source. A failure puts back every file already written, from what was on disk.
 fn write(changed: &[&File]) -> Result<(), ToolError> {
     let (written, removed): (Vec<&&File>, Vec<&&File>) =
         changed.iter().partition(|file| file.now.is_some());
-    let mut done = vec![];
+    let mut done: Vec<&File> = vec![];
     for file in written.into_iter().chain(removed) {
         let result = match &file.now {
             Some(bytes) => atomic::write(&file.path, bytes),
             None => fs::remove_file(&file.path),
         };
         if let Err(error) = result {
+            for back in done {
+                let _ = match &back.disk {
+                    Some(bytes) => atomic::write(&back.path, bytes),
+                    None => fs::remove_file(&back.path),
+                };
+            }
             return Err(ToolError::Failed(format!(
-                "{} could not be written: {error}. Written before it: {}",
-                file.shown,
-                if done.is_empty() {
-                    "none".into()
-                } else {
-                    done.join(", ")
-                }
+                "{} could not be written: {error}",
+                file.shown
             )));
         }
-        done.push(file.shown.clone());
+        done.push(file);
     }
     Ok(())
 }
@@ -264,7 +277,7 @@ impl Step {
     /// A step on `shown`, its words still to say.
     fn of(shown: &str) -> Self {
         Self {
-            subject: shown.replace('\\', "/"),
+            subject: shown.to_string(),
             summary: String::new(),
             done: String::new(),
             diff: String::new(),

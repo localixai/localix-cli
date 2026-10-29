@@ -99,10 +99,6 @@ fn each_pid(mut visit: impl FnMut(libc::pid_t)) {
         .for_each(&mut visit);
 }
 
-/// Elsewhere there is no list of processes to sweep: only the group's signal ends a session.
-#[cfg(not(any(target_vendor = "apple", target_os = "linux")))]
-fn each_pid(_: impl FnMut(libc::pid_t)) {}
-
 #[cfg(test)]
 #[path = "sweep_tests.rs"]
 mod tests;

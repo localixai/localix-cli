@@ -191,7 +191,19 @@ fn entry(id: &str, model: &Model) -> ModelEntry {
         default: default(&reasoning, &efforts),
         efforts,
         context: limit.and_then(|l| l.input.or(l.context)).unwrap_or(0),
+        marks: takes_marks(id),
     }
+}
+
+/// Whether model `id` caches a prompt only where told to: Anthropic, Gemini and Qwen take
+/// `cache_control` breakpoints (OpenRouter's prompt-caching guide); OpenAI, DeepSeek, Grok,
+/// Moonshot and the rest cache a repeated start on their own. The catalog's `cache.explicit` also
+/// covers other mechanisms (OpenAI's own breakpoint field), so it cannot say this; ids name the
+/// vendor first, and that is what is read, here beside the data, not in a provider (A4).
+pub fn takes_marks(id: &str) -> bool {
+    ["anthropic/", "google/gemini", "qwen/"]
+        .iter()
+        .any(|vendor| id.starts_with(vendor))
 }
 
 /// The levels a host takes for a model, lowest first (MODELS.md, reasoning controls).

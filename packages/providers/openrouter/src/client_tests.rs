@@ -124,6 +124,7 @@ fn openrouter_at_another_address_is_still_sent_openrouters_fields() {
         efforts: vec![Effort::Low, Effort::High],
         default: Effort::High,
         context: 1000,
+        marks: false,
     };
     let chat = crate::chat::ChatModel {
         client,

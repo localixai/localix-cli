@@ -165,6 +165,7 @@ fn token(
     Err(match code {
         "refresh_token_expired" => format!("the ChatGPT sign-in has expired: {again}"),
         "refresh_token_reused" => format!("the ChatGPT sign-in was used elsewhere: {again}"),
+        "invalid_grant" => format!("the ChatGPT sign-in is no longer valid: {again}"),
         "refresh_token_invalidated" => format!("the ChatGPT sign-in was revoked: {again}"),
         _ => format!(
             "the ChatGPT token {operation} failed ({}): {again}",

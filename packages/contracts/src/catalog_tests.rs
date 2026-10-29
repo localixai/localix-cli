@@ -3,6 +3,7 @@ use super::*;
 fn entry(efforts: &[Effort], default: Effort) -> ModelEntry {
     ModelEntry {
         context: 0,
+        marks: false,
         id: "m".into(),
         name: "M".into(),
         efforts: efforts.to_vec(),

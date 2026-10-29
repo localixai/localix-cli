@@ -94,6 +94,23 @@ fn a_refused_refresh_says_to_sign_in_again_without_the_token() {
 }
 
 #[test]
+fn a_refresh_token_the_issuer_no_longer_grants_says_to_sign_in_again() {
+    let old = Tokens {
+        access: "a".into(),
+        refresh: "secret".into(),
+        id: None,
+        account: "acct".into(),
+        expires: 0,
+    };
+    let http = Scripted::new(vec![(400, json!({"error": "invalid_grant"}).to_string())]);
+    let refused = refresh(&http, &old, 0).unwrap_err();
+    assert!(
+        refused.contains("no longer valid") && refused.contains("/login"),
+        "{refused}"
+    );
+}
+
+#[test]
 fn a_pasted_address_must_come_from_this_sign_in() {
     // Any free port: the real ones may belong to a sign-in under way, which must not be cancelled.
     let login = Login::listen(APP, &[0]).unwrap();

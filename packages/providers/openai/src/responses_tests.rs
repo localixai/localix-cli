@@ -31,6 +31,7 @@ fn entry(id: &str) -> ModelEntry {
         default: efforts.get(2).copied().unwrap_or(Effort::Off),
         efforts,
         context: 400_000,
+        marks: false,
     }
 }
 
@@ -377,10 +378,15 @@ fn a_picture_goes_in_as_a_user_message_with_an_input_image() {
 }
 
 #[test]
-fn a_request_that_went_out_unanswered_is_not_sent_again() {
+fn a_stream_that_went_out_unanswered_is_sent_once_more_and_no_further() {
+    let request = Request {
+        conversation: &[],
+        tools: &[],
+        may_call: false,
+    };
     let (model, http, _) = model_of(
         Scripted::answering(vec![
-            Err(HttpError::Unanswered("timed out".into())),
+            Err(HttpError::Unanswered("socket dropped".into())),
             Ok(Reply {
                 status: 200,
                 headers: vec![],
@@ -389,14 +395,35 @@ fn a_request_that_went_out_unanswered_is_not_sent_again() {
         ]),
         tokens(LATER),
     );
-    let request = Request {
-        conversation: &[],
-        tools: &[],
-        may_call: false,
-    };
+    assert!(model.complete(request).is_ok());
+    assert_eq!(http.sent().len(), 2);
+    let (model, http, _) = model_of(
+        Scripted::answering(vec![
+            Err(HttpError::Unanswered("timed out".into())),
+            Err(HttpError::Unanswered("timed out again".into())),
+            Err(HttpError::Unanswered("never read".into())),
+        ]),
+        tokens(LATER),
+    );
     let failed = model.complete(request).unwrap_err().to_string();
-    assert!(failed.contains("timed out"), "{failed}");
-    assert_eq!(http.sent().len(), 1, "a reply may be billed: asked once");
+    assert!(failed.contains("timed out again"), "{failed}");
+    assert_eq!(
+        http.sent().len(),
+        2,
+        "a reply may be billed: asked twice at most"
+    );
+}
+
+#[test]
+fn a_reply_cut_at_the_output_limit_stands_and_a_filtered_one_is_an_error() {
+    let incomplete = |reason: &str| {
+        streamed(&[json!({"type": "response.incomplete", "response": {
+            "incomplete_details": {"reason": reason}, "usage": {"output_tokens": 9}}})])
+    };
+    let cut = read(&incomplete("max_output_tokens"), "m").unwrap();
+    assert_eq!(cut.usage.output_tokens, 9);
+    let filtered = read(&incomplete("content_filter"), "m");
+    assert!(matches!(filtered, Err(ChatError::Invalid(m)) if m.contains("content filter")));
 }
 
 #[test]

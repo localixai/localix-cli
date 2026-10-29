@@ -423,3 +423,22 @@ fn a_fetched_catalog_keeps_the_grammar_its_api_does_not_publish() {
     assert!(!catalog.takes_lark("openai", "gpt-5.3-codex-spark", RESPONSES));
     assert!(!catalog.takes_lark("openai", "gpt-6-luna", "messages"));
 }
+
+#[test]
+fn only_the_vendors_that_take_cache_breakpoints_are_marked() {
+    for id in [
+        "anthropic/claude-x",
+        "google/gemini-x",
+        "qwen/qwen3-coder-plus",
+    ] {
+        assert!(takes_marks(id), "{id}");
+    }
+    for id in [
+        "openai/gpt-x",
+        "deepseek/deepseek-x",
+        "google/gemma-x",
+        "lab/model",
+    ] {
+        assert!(!takes_marks(id), "{id}");
+    }
+}

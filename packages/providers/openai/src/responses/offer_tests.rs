@@ -36,6 +36,7 @@ fn selection() -> Selection {
         efforts: vec![],
         default: Effort::Off,
         context: 400_000,
+        marks: false,
     })
 }
 

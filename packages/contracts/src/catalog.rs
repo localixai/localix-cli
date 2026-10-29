@@ -74,6 +74,9 @@ pub struct ModelEntry {
     pub default: Effort,
     /// Its context window in tokens; 0 when it is not known.
     pub context: u64,
+    /// Whether it caches a prompt only where the request marks a breakpoint; the rest cache a
+    /// repeated start on their own, and a mark would only reshape their content.
+    pub marks: bool,
 }
 
 impl ModelEntry {

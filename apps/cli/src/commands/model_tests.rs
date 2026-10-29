@@ -64,6 +64,7 @@ fn level(efforts: Vec<Effort>, at: Effort) -> Selection {
         default: at,
         efforts,
         context: 1000,
+        marks: false,
     };
     Selection::new(model).with_effort(at).unwrap()
 }

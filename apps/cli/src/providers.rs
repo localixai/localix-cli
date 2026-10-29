@@ -159,6 +159,7 @@ impl Provider {
             efforts: vec![],
             default: Effort::Off,
             context: 0,
+            marks: models::takes_marks(id),
         })
     }
 

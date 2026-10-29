@@ -123,7 +123,7 @@ fn body(host: Wire, selection: &Selection, request: &Request) -> Value {
     // Only a model that takes levels is sent one: another may refuse the field.
     let levels = !selection.model().efforts.is_empty();
     if host == Wire::OpenRouter {
-        body["messages"] = json!(if takes_marks(model) {
+        body["messages"] = json!(if selection.model().marks {
             cached(messages)
         } else {
             messages
@@ -252,17 +252,6 @@ fn picture(caption: &str, image: &Image) -> Value {
 fn function(spec: &ToolSpec) -> Value {
     json!({"type": "function", "function": {
         "name": spec.name, "description": spec.description, "parameters": spec.input.schema()}})
-}
-
-/// Whether OpenRouter's model `id` caches only where told to: Anthropic, Gemini and Qwen take
-/// `cache_control` breakpoints (its prompt-caching guide); OpenAI, DeepSeek, Grok, Moonshot and the
-/// rest cache a repeated start on their own, and a mark would only change their content's shape.
-/// The catalog's `cache.explicit` also covers other mechanisms (OpenAI's own breakpoint field), so
-/// it cannot say this; OpenRouter ids name the vendor first, and that is what is read.
-fn takes_marks(id: &str) -> bool {
-    ["anthropic/", "google/gemini", "qwen/"]
-        .iter()
-        .any(|vendor| id.starts_with(vendor))
 }
 
 /// The conversation with prompt-cache breakpoints on the system prompt and the newest message, so

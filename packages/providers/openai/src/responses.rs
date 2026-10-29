@@ -39,7 +39,11 @@ impl Keep for Saved {
     }
 
     fn save(&self, tokens: &Tokens) {
-        let _ = tokens::save(self.0, tokens);
+        // The new tokens are used either way; unsaved, the next process refreshes with a refresh
+        // token that is spent, which the issuer refuses: the log says why that sign-in lapses.
+        if let Err(error) = tokens::save(self.0, tokens) {
+            log::warn!("the refreshed ChatGPT sign-in could not be saved: {error}");
+        }
     }
 }
 
@@ -146,6 +150,7 @@ impl Chat for ChatModel {
         let address = format!("{BASE}/responses");
         let started = std::time::Instant::now();
         let mut renewed = false;
+        let mut resent = false;
         retried(PAUSE, || {
             let tokens = match self.tokens(false) {
                 Ok(tokens) => tokens,
@@ -171,11 +176,15 @@ impl Chat for ChatModel {
                         "ChatGPT is unreachable: {why}"
                     )));
                 }
-                // A reply being written is billed: asking again would pay for it twice.
+                // A stream cut or timed out may have been billed, so it is asked once more at
+                // most: nothing of it was acted on, and the backend stores nothing of a request.
                 Err(HttpError::Unanswered(why)) => {
-                    return Attempt::Done(Err(ChatError::Unavailable(format!(
-                        "ChatGPT did not answer: {why}"
-                    ))));
+                    let error = ChatError::Unavailable(format!("ChatGPT did not answer: {why}"));
+                    return if std::mem::replace(&mut resent, true) {
+                        Attempt::Done(Err(error))
+                    } else {
+                        Attempt::Again(error)
+                    };
                 }
             };
             match reply.status {
@@ -252,7 +261,20 @@ pub(crate) fn read(body: &str, model: &str) -> Result<Completion, ChatError> {
                     _ => {}
                 }
             }
-            "response.completed" | "response.incomplete" => {
+            "response.completed" => {
+                completion.usage = usage(&event["response"], model);
+                ended = true;
+            }
+            // Cut at the output limit, the reply so far stands and the agent goes on; refused by
+            // the content filter, there is nothing to go on from.
+            "response.incomplete" => {
+                if event.pointer("/response/incomplete_details/reason")
+                    == Some(&json!("content_filter"))
+                {
+                    return Err(ChatError::Invalid(
+                        "ChatGPT withheld the reply (content filter)".into(),
+                    ));
+                }
                 completion.usage = usage(&event["response"], model);
                 ended = true;
             }

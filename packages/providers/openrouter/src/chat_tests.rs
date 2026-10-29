@@ -104,6 +104,7 @@ fn selection_of(id: &str, efforts: Vec<Effort>, effort: Effort) -> Selection {
         default: efforts.first().copied().unwrap_or(Effort::Off),
         efforts,
         context: 100_000,
+        marks: id.starts_with("marked/"),
     };
     Selection::new(model).with_effort(effort).unwrap()
 }
@@ -132,7 +133,7 @@ fn openrouter_is_sent_its_reasoning_object_the_usage_report_and_cache_marks() {
     let levels = vec![Effort::Off, Effort::Low, Effort::High];
     let sent = request_body(
         Wire::OpenRouter,
-        &selection_of("anthropic/claude-x", levels.clone(), Effort::High),
+        &selection_of("marked/claude-x", levels.clone(), Effort::High),
         true,
     );
     assert_eq!(sent["reasoning"], json!({"effort": "high"}));
@@ -234,26 +235,12 @@ fn cache_marks_go_only_to_the_models_that_take_explicit_breakpoints() {
         );
         sent.to_string().contains("cache_control")
     };
-    for id in [
-        "anthropic/claude-x",
-        "google/gemini-x",
-        "qwen/qwen3-coder-plus",
-    ] {
-        assert!(marked(id), "{id} needs explicit breakpoints");
-    }
-    for id in [
-        "openai/gpt-x",
-        "deepseek/deepseek-x",
-        "x-ai/grok-x",
-        "moonshotai/kimi-x",
-        "google/gemma-x",
-        "lab/model",
-    ] {
-        assert!(!marked(id), "{id} caches on its own: no marks");
-    }
+    // The catalog says which models are marked (`ModelEntry::marks`), not the id.
+    assert!(marked("marked/model"));
+    assert!(!marked("anthropic/by-name-only"));
     let sent = request_body(
         Wire::OpenRouter,
-        &selection_of("openai/gpt-x", vec![], Effort::Off),
+        &selection_of("lab/plain", vec![], Effort::Off),
         true,
     );
     assert_eq!(

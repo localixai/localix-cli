@@ -30,6 +30,25 @@ fn a_request_refused_was_not_sent_and_one_left_unanswered_was() {
 }
 
 #[test]
+fn a_connection_closed_after_the_request_went_out_is_unanswered() {
+    // A server that reads the request and hangs up without a word: it may have acted on it.
+    let server = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = server.local_addr().unwrap();
+    let hangup = std::thread::Builder::new()
+        .name("hangup".into())
+        .spawn(move || {
+            let (mut socket, _) = server.accept().unwrap();
+            let mut seen = [0_u8; 4096];
+            let _ = std::io::Read::read(&mut socket, &mut seen);
+        })
+        .unwrap();
+    let web = Web::new(APP, Duration::from_secs(5));
+    let reply = web.post(&format!("http://{address}/x"), &[], "{}");
+    hangup.join().unwrap();
+    assert!(matches!(reply, Err(HttpError::Unanswered(_))), "{reply:?}");
+}
+
+#[test]
 fn a_form_encodes_everything_but_unreserved_characters() {
     assert_eq!(
         form(&[

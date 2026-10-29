@@ -32,11 +32,10 @@ pub trait Http: Send + Sync {
 /// Why no answer came, as a caller acts on it: whether the request may be sent again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HttpError {
-    /// It did not get through (offline, no such host, refused, a broken connection): sending it
-    /// again is safe.
+    /// It did not get through (offline, no such host, refused): sending it again is safe.
     Unsent(String),
-    /// It went out and no whole answer came back (the time ran out, the answer was cut short or
-    /// too long): the server may have acted on it, and billed it.
+    /// It went out and no whole answer came back (the time ran out, the connection broke, the
+    /// answer was cut short or too long): the server may have acted on it, and billed it.
     Unanswered(String),
 }
 
@@ -98,16 +97,7 @@ impl Http for Web {
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
-        let mut response = request.send(body).map_err(|error| {
-            // Past the connection, the time ran out with the request sent.
-            if let ureq::Error::Timeout(when) = error
-                && !matches!(when, ureq::Timeout::Connect | ureq::Timeout::Resolve)
-            {
-                HttpError::Unanswered(error.to_string())
-            } else {
-                HttpError::Unsent(error.to_string())
-            }
-        })?;
+        let mut response = request.send(body).map_err(|error| sent_or_not(&error))?;
         let status = response.status().as_u16();
         let headers = (response.headers().iter())
             .filter_map(|(name, value)| {
@@ -123,6 +113,34 @@ impl Http for Web {
             headers,
             body,
         })
+    }
+}
+
+/// Whether a failed send left the request unsent: it failed before a byte went out (no such host,
+/// refused, a failed handshake, a connect that timed out), else it may have been acted on.
+fn sent_or_not(error: &ureq::Error) -> HttpError {
+    use std::io::ErrorKind::{
+        AddrNotAvailable, ConnectionRefused, HostUnreachable, NetworkUnreachable,
+    };
+    use ureq::{Error, Timeout};
+    // Any other failure came after the request was written.
+    let before = matches!(
+        error,
+        Error::HostNotFound
+            | Error::ConnectionFailed
+            | Error::BadUri(_)
+            | Error::Http(_)
+            | Error::Tls(_)
+            | Error::NativeTls(_)
+            | Error::Timeout(Timeout::Connect | Timeout::Resolve)
+    ) || matches!(error, Error::Io(io) if matches!(
+        io.kind(),
+        ConnectionRefused | AddrNotAvailable | HostUnreachable | NetworkUnreachable
+    ));
+    if before {
+        HttpError::Unsent(error.to_string())
+    } else {
+        HttpError::Unanswered(error.to_string())
     }
 }
 

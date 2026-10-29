@@ -31,16 +31,11 @@ const TRACE_WIDTH: usize = 100;
 
 /// The columns of the terminal stderr goes to.
 fn stderr_width() -> Option<usize> {
-    #[cfg(unix)]
-    {
-        // SAFETY: a winsize is four integers: all zero is one.
-        let mut size: libc::winsize = unsafe { std::mem::zeroed() };
-        // SAFETY: TIOCGWINSZ only fills the struct, which outlives the call.
-        let ok = unsafe { libc::ioctl(2, libc::TIOCGWINSZ, &mut size) } == 0;
-        (ok && size.ws_col > 0).then_some(size.ws_col as usize)
-    }
-    #[cfg(not(unix))]
-    None
+    // SAFETY: a winsize is four integers: all zero is one.
+    let mut size: libc::winsize = unsafe { std::mem::zeroed() };
+    // SAFETY: TIOCGWINSZ only fills the struct, which outlives the call.
+    let ok = unsafe { libc::ioctl(2, libc::TIOCGWINSZ, &mut size) } == 0;
+    (ok && size.ws_col > 0).then_some(size.ws_col as usize)
 }
 
 /// The `--json` event schema: a public contract (see CHANGELOG.md).

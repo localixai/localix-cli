@@ -13,7 +13,6 @@ fn environment(root: &Path) -> Environment<'_> {
     }
 }
 
-#[cfg(unix)]
 #[test]
 fn the_runtimes_on_the_path_are_named_in_a_fixed_order_and_only_those() {
     use std::os::unix::fs::PermissionsExt;

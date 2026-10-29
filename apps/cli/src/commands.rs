@@ -10,11 +10,9 @@ pub(crate) mod model;
 pub(crate) mod repl;
 pub(crate) mod rewind;
 pub(crate) mod run;
-#[cfg(unix)]
 pub(crate) mod serve;
 pub(crate) mod sessions;
 pub(crate) mod signin;
-#[cfg(unix)]
 use crate::cli::{Cli, Command, ExecCommand, joined};
 use crate::error::Failure;
 use run::{At, Kind};
@@ -45,7 +43,6 @@ pub(crate) fn dispatch(cli: Cli, at: At) -> Result<i32, Failure> {
         Some(Command::Sessions) => sessions::list(),
         Some(Command::Logout) => signin::logout(),
         Some(Command::Doctor(models)) => doctor::doctor(&models),
-        #[cfg(unix)]
         Some(Command::Serve(serve)) => serve::serve(serve.action.as_ref()),
     }
 }

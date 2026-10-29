@@ -74,7 +74,6 @@ fn new_lane_leaves_the_old_lanes_agents_running() {
     });
 }
 
-#[cfg(unix)]
 #[test]
 fn a_monitor_wakes_only_its_lane() {
     let ((to_a, a), (_to_b, b)) = (gated(), gated());

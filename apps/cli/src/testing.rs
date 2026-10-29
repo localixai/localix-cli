@@ -32,18 +32,16 @@ impl Scratch {
     /// directory may sit inside one (TMPDIR=$PWD/tmp, a devcontainer), so the usual others are
     /// tried too.
     pub(crate) fn outside_repository() -> Option<Self> {
-        let mut bases = vec![std::env::temp_dir()];
-        if cfg!(unix) {
-            bases.extend(["/tmp", "/var/tmp"].map(PathBuf::from));
-        }
-        bases.into_iter().find_map(|base| {
-            let scratch = Self::under(&base);
-            let in_repository = scratch
-                .path()
-                .ancestors()
-                .any(|dir| dir.join(".git").exists());
-            (!in_repository).then_some(scratch)
-        })
+        [std::env::temp_dir(), "/tmp".into(), "/var/tmp".into()]
+            .into_iter()
+            .find_map(|base| {
+                let scratch = Self::under(&base);
+                let in_repository = scratch
+                    .path()
+                    .ancestors()
+                    .any(|dir| dir.join(".git").exists());
+                (!in_repository).then_some(scratch)
+            })
     }
 
     fn under(base: &Path) -> Self {

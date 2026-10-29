@@ -79,16 +79,10 @@ pub(crate) fn runtimes(path: &std::ffi::OsStr) -> Vec<&'static str> {
         .collect()
 }
 
-#[cfg(unix)]
 fn runnable(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
     std::fs::metadata(path)
         .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
-}
-
-#[cfg(not(unix))]
-fn runnable(path: &Path) -> bool {
-    path.with_extension("exe").is_file()
 }
 
 /// The person's own instructions, then the project's from the repository root down to `root`,

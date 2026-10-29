@@ -139,7 +139,6 @@ pub(crate) enum Command {
     /// One per config directory. It holds every session, with its agents, jobs and terminal
     /// sessions; a closed terminal stops its sessions' work, and the daemon
     /// lives on until `llx serve stop`.
-    #[cfg(unix)]
     Serve(ServeArgs),
 }
 

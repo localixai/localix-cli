@@ -112,7 +112,6 @@ fn act(
         }
         Some(Action::Suspend) => {
             let _ = screen.clear();
-            #[cfg(unix)]
             terminal::suspend();
             // The window may have been resized meanwhile, and the live area is drawn again.
             if let Ok((width, height)) = crossterm::terminal::size() {

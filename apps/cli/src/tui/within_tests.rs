@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use super::within;
 
-#[cfg(unix)]
 #[test]
 fn a_child_is_waited_for_until_its_deadline_then_killed() {
     let mut echo = Command::new("sh");
@@ -24,7 +23,6 @@ fn a_child_is_waited_for_until_its_deadline_then_killed() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn what_the_child_is_given_reaches_it_even_when_it_never_reads_the_rest() {
     let cat = Command::new("cat");

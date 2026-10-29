@@ -6,7 +6,6 @@
 
 mod ended;
 mod interface;
-#[cfg(unix)]
 mod remote;
 mod task;
 
@@ -172,7 +171,6 @@ pub(crate) fn run(
             (Ready::Session(first, attached), Some(place))
         }
         (Work::Session(first), None) => {
-            #[cfg(unix)]
             if !options.no_daemon {
                 match remote::run(&workspace) {
                     Ok(code) => return Ok(code),

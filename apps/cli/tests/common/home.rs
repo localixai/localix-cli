@@ -96,7 +96,6 @@ impl Home {
 
 impl Drop for Home {
     fn drop(&mut self) {
-        #[cfg(unix)]
         stop_daemon(&self.0);
         let _ = std::fs::remove_dir_all(&self.0);
     }
@@ -110,7 +109,6 @@ impl Drop for Home {
     clippy::disallowed_methods,
     reason = "`llx serve stop` waits a bounded time for the daemon, and ends"
 )]
-#[cfg(unix)]
 pub(crate) fn stop_daemon(home: &Path) {
     let lock = home.join("config").join("llx").join("daemon.lock");
     let pid = || {

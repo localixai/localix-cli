@@ -37,7 +37,6 @@ fn a_task_leaves_each_call_with_its_arguments_its_failure_and_how_it_ended_in_th
     for line in log.lines() {
         assert!(line.starts_with("[20") && line.contains("Z "), "{line}");
     }
-    #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let file = home.path().join("config/llx/logs/llx.log");

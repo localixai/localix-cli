@@ -152,17 +152,13 @@ fn quit_with_lanes_that_stop_ends_without_the_hard_exit() {
         person.until("A asks its model", |_| a.turns() == 1);
         person.act(Some(Action::QuitNow), false);
         // A call that outlasts the stop however late it lands (a quick one raced it to a turn).
-        let long = match cfg!(unix) {
-            true => call("bash", json!({"command": "sleep 30"})),
-            false => call("read", json!({"path": "."})),
-        };
+        let long = call("bash", json!({"command": "sleep 30"}));
         to_a.send(long).unwrap();
         person.until_over();
     });
 }
 
 /// The command outlasts the stop, however late it lands: it is killed, and no turn comes after.
-#[cfg(unix)]
 #[test]
 #[expect(
     clippy::disallowed_methods,

@@ -269,7 +269,6 @@ fn an_object_with_a_patch_alone_is_a_patch_too() {
     clippy::disallowed_methods,
     reason = "a test's fixture: the command ends by itself"
 )]
-#[cfg(unix)]
 #[test]
 fn a_fifo_is_refused_before_it_is_opened() {
     let dir = Scratch::new();

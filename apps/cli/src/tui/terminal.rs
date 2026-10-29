@@ -19,7 +19,6 @@ const LEAVE: &str = "\x1b[<1u\x1b[?2004l\x1b[?25h";
 /// last row, the cursor's place, the update's end) for a second write at the flush. A frame is
 /// one buffer (`Screen`), so it goes out in one write.
 pub(super) fn out() -> Box<dyn Write> {
-    #[cfg(unix)]
     if let Ok(own) = unbuffered(io::stdout()) {
         return Box::new(own);
     }
@@ -27,7 +26,6 @@ pub(super) fn out() -> Box<dyn Write> {
 }
 
 /// A writer to `fd` that keeps nothing back.
-#[cfg(unix)]
 fn unbuffered(fd: impl std::os::fd::AsFd) -> io::Result<std::fs::File> {
     Ok(fd.as_fd().try_clone_to_owned()?.into())
 }
@@ -40,19 +38,16 @@ pub(crate) fn restore() {
 }
 
 /// The terminal's modes before the interface made it raw, for a signal handler to put back.
-#[cfg(unix)]
 static SAVED: std::sync::OnceLock<libc::termios> = std::sync::OnceLock::new();
 
 /// How the process ends at once, given by the app; called from the signal handler, so it must
 /// be async-signal-safe.
-#[cfg(unix)]
 static QUIT: std::sync::OnceLock<fn() -> !> = std::sync::OnceLock::new();
 
 /// SIGTERM and SIGHUP end the process with `quit` once the terminal is given back: its modes as
 /// they were, the cursor shown, nothing more reported (the client has no other handler; in
 /// process, `interrupt::install` replaces SIGTERM's with stopping the task). Called before the
 /// terminal is made raw, whose modes it keeps.
-#[cfg(unix)]
 pub(super) fn on_signals(quit: fn() -> !) {
     extern "C" fn given_back(_: libc::c_int) {
         if let Some(modes) = SAVED.get() {
@@ -170,36 +165,17 @@ pub(super) fn read_keys(events: &Sender<Input>) {
 
 /// The terminal's next event: the reader sleeps in the read until one comes (R9). The editor's
 /// turn wakes it with a resize (`wake_reader`).
-#[cfg(unix)]
 fn next() -> io::Result<Option<Terminal>> {
     crossterm::event::read().map(Some)
 }
 
 /// Gets the reader out of its read: crossterm's reader also wakes on SIGWINCH, and reads it as a
 /// resize, of the size the terminal has (which changes nothing).
-#[cfg(unix)]
 fn wake_reader() {
     // SAFETY: raise only sends this thread a signal; SIGWINCH is crossterm's to handle, and
     // ignored where nothing handles it.
     unsafe { libc::raise(libc::SIGWINCH) };
 }
-
-/// Elsewhere nothing wakes a read: the reader looks for keys every 50 ms, and between two looks
-/// for the editor's turn (`None`).
-#[cfg(not(unix))]
-fn next() -> io::Result<Option<Terminal>> {
-    loop {
-        if *KEYS.turn() == Turn::Asked {
-            return Ok(None);
-        }
-        if crossterm::event::poll(Duration::from_millis(50))? {
-            return crossterm::event::read().map(Some);
-        }
-    }
-}
-
-#[cfg(not(unix))]
-fn wake_reader() {}
 
 /// `during` with the terminal handed over: the reader reads no key meanwhile, the terminal is as
 /// it was before llx took it, and the interface's modes are set again after, with the keys given
@@ -215,13 +191,9 @@ fn handed_over<T>(during: impl FnOnce() -> T) -> T {
     result
 }
 
-/// Whether Ctrl+Z can stop llx here: elsewhere the key is read as any other.
-pub(super) const CAN_SUSPEND: bool = cfg!(unix);
-
 /// The terminal given back and the process stopped (Ctrl+Z), as vim and less do; it returns once
 /// the shell continues it (`fg`), the terminal the interface's again. SIGTSTP is raised on this
 /// thread and stops every thread of the process: the server's, in process, with it.
-#[cfg(unix)]
 pub(super) fn suspend() {
     handed_over(|| {
         // SAFETY: raise only sends this thread a signal; SIGTSTP is not handled here, so its

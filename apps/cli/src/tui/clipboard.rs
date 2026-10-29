@@ -13,9 +13,7 @@ const WAIT: Duration = Duration::from_secs(3);
 pub(super) fn copy(text: &str) -> String {
     #[cfg(target_os = "macos")]
     let tools: &[&[&str]] = &[&["pbcopy"]];
-    #[cfg(target_os = "windows")]
-    let tools: &[&[&str]] = &[&["clip"]];
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(target_os = "macos"))]
     let tools: &[&[&str]] = &[
         &["wl-copy"],
         &["xclip", "-selection", "clipboard"],

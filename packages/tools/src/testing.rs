@@ -51,7 +51,6 @@ impl Drop for Scratch {
 /// making and its marking (std makes a pipe on macOS, then marks it close-on-exec), at 200 or
 /// above, past the descriptors a test process starts with; closed when dropped. With the shell
 /// command that says whether it reached the command: `inherited`, else `closed`.
-#[cfg(unix)]
 pub(crate) fn stray() -> (std::os::fd::OwnedFd, String) {
     use std::os::fd::FromRawFd;
     // SAFETY: F_DUPFD makes a new descriptor for stderr, without close-on-exec.

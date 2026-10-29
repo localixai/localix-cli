@@ -22,7 +22,6 @@ pub(crate) fn run(home: &Home, command: std::process::Command, stdin: &str) -> O
 
 /// `command` run as [`exec`] runs it.
 fn exec_as(home: &Home, mut command: std::process::Command, stdin: &str) -> Output {
-    #[cfg(unix)]
     {
         let lead = || {
             // SAFETY: setsid takes nothing and only makes the child a session's leader.

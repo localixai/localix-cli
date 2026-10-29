@@ -15,7 +15,6 @@ fn a_write_creates_the_parents_and_leaves_no_temporary_file() {
     assert_eq!(names, ["c.txt"]);
 }
 
-#[cfg(unix)]
 #[test]
 fn an_executable_stays_executable() {
     use std::os::unix::fs::PermissionsExt;
@@ -67,7 +66,6 @@ fn a_read_only_file_is_refused_and_kept() {
     assert_eq!(fs::read_to_string(&path).unwrap(), "vendored");
 }
 
-#[cfg(unix)]
 #[test]
 fn every_hard_link_sees_the_new_content() {
     let dir = Scratch::new();
@@ -88,7 +86,6 @@ fn a_long_name_still_gets_a_temporary_beside_it() {
     assert!(name.file_name().unwrap().len() < 140, "{}", name.display());
 }
 
-#[cfg(unix)]
 #[test]
 fn a_symlink_planted_at_a_temporary_name_is_never_written_through() {
     let dir = Scratch::new();

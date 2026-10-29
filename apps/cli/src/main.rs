@@ -6,15 +6,12 @@ mod agents;
 mod arrivals;
 mod attach;
 mod brake;
-#[cfg(unix)]
 mod checkpoints;
 mod choice;
 mod cli;
-#[cfg(unix)]
 mod commands;
 mod compose;
 mod context;
-#[cfg(unix)]
 mod daemon;
 mod desk;
 mod error;
@@ -40,7 +37,6 @@ mod sync;
 #[cfg(test)]
 mod testing;
 mod tui;
-#[cfg(unix)]
 use clap::Parser;
 
 #[expect(

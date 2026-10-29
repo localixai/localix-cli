@@ -17,7 +17,7 @@ export function Hero() {
         </p>
         <InstallCommand tabs={INSTALL} />
         <p className="hero-under">
-          macOS · Linux · Windows · MIT · <a href={DOCS}>Read the docs</a>
+          macOS · Linux · MIT · <a href={DOCS}>Read the docs</a>
         </p>
       </div>
       <figure className="hero-demo">

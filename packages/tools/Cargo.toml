@@ -14,9 +14,7 @@ base64.workspace = true
 contracts.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-
 # A command's own session and the kill of its process group (setsid, kill).
-[target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
 [lints]

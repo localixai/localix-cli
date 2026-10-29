@@ -40,7 +40,6 @@ fn the_reader_gives_the_keys_to_the_editor_and_takes_them_back() {
 /// A frame is one buffer, and it reaches the terminal in one write: nothing of it (its last row,
 /// the cursor's place, the update's end) waits for a flush, as std's line-buffered stdout keeps
 /// what follows a frame's last line break for a second write.
-#[cfg(unix)]
 #[test]
 fn a_frame_reaches_the_terminal_whole_before_any_flush() {
     let (mut terminal, end) = io::pipe().unwrap();

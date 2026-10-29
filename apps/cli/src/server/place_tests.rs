@@ -8,7 +8,6 @@ use crate::testing::{Scratch, ScriptedChat, quiet, says};
 
 /// A session opened from a client elsewhere: its commands run there, with what the client has
 /// and this process lacks.
-#[cfg(unix)]
 #[test]
 fn a_session_works_in_the_clients_directory_with_the_clients_environment() {
     let (scratch, there) = (Scratch::new(), Scratch::new());

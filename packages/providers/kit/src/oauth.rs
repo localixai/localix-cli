@@ -62,11 +62,7 @@ pub fn claims(token: &str) -> Option<Value> {
 pub fn open(address: &str) {
     #[cfg(target_os = "macos")]
     let command = std::process::Command::new("open").arg(address).spawn();
-    #[cfg(target_os = "windows")]
-    let command = std::process::Command::new("cmd")
-        .args(["/C", "start", "", address])
-        .spawn();
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(target_os = "macos"))]
     let command = std::process::Command::new("xdg-open").arg(address).spawn();
     // The opener hands the address on and ends at once: waited for, it leaves no zombie behind
     // in a daemon that runs for weeks. (R10's debt: a short local query with no deadline.)

@@ -6,6 +6,7 @@
 //! read never stalls.
 
 use std::io::{self, Read};
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
@@ -28,10 +29,7 @@ const POLL: Duration = Duration::from_millis(50);
 const PIPES: usize = 2;
 
 /// The shell commands run with, as a person would type it.
-#[cfg(unix)]
 pub const SHELL: &str = "sh -c";
-#[cfg(windows)]
-pub const SHELL: &str = "cmd /C";
 
 /// What to run, and the bounds it runs in.
 pub(super) struct Job<'a> {
@@ -51,8 +49,7 @@ pub(super) struct Job<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Ending {
     Exit(i32),
-    /// Ended by a signal it did not handle; only unix has them.
-    #[cfg_attr(not(unix), expect(dead_code, reason = "used only on unix"))]
+    /// Ended by a signal it did not handle.
     Signal(i32),
     /// Past its deadline; `killed` once it and everything it started are known to be gone.
     TimedOut {
@@ -197,7 +194,6 @@ pub fn scoped(command: &str, scope: Scope, kept: &[PathBuf]) -> io::Result<(Comm
 
 /// `sh -c command` as the leader of a session of its own (so `kill` ends all it starts), inheriting
 /// llx's standard streams only.
-#[cfg(unix)]
 pub fn shell(command: &str) -> Command {
     let mut shell = Command::new("sh");
     shell.arg("-c").arg(command);
@@ -207,7 +203,6 @@ pub fn shell(command: &str) -> Command {
 
 /// Make `shell` the leader of a session of its own when it starts, inheriting llx's standard
 /// streams only. A sandbox's own hooks, added after, run after these.
-#[cfg(unix)]
 pub(super) fn lead(shell: &mut Command) {
     use std::os::unix::process::CommandExt;
     // SAFETY: setsid takes nothing and only makes the forked child a session's leader.
@@ -221,19 +216,9 @@ pub(super) fn lead(shell: &mut Command) {
     super::inherit::streams_only(shell);
 }
 
-#[cfg(windows)]
-pub fn shell(command: &str) -> Command {
-    use std::os::windows::process::CommandExt;
-    // cmd parses its own command line: passed raw, the command reaches it as written.
-    let mut shell = Command::new("cmd");
-    shell.arg("/C").raw_arg(command);
-    shell
-}
-
 /// Kill the command and everything it started: its process group, then every other process of its
 /// session (the jobs a shell with job control put in groups of their own); whether all of it is
 /// known to be gone. `child` must not be reaped yet: its pid is the session's id until it is.
-#[cfg(unix)]
 pub fn kill(child: &mut Child) -> bool {
     // A pid the system gave: it is a pid_t, which `id` widened.
     let leader = child.id().cast_signed();
@@ -247,27 +232,6 @@ pub fn kill(child: &mut Child) -> bool {
     // Before the reap, while the leader's pid still names the session.
     let swept = super::sweep::end(leader, KILL_WAIT);
     reaped(child) && (signalled || gone) && swept
-}
-
-/// Kill the command and everything it started (the process tree); whether all of it is known to
-/// be gone.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "taskkill signals the tree and returns: it has no wait of its own"
-)]
-#[cfg(windows)]
-pub fn kill(child: &mut Child) -> bool {
-    let tree = Command::new("taskkill")
-        .args(["/PID", &child.id().to_string(), "/T", "/F"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success());
-    if !tree {
-        let _ = child.kill();
-    }
-    reaped(child) && tree
 }
 
 /// Whether `child` exited within [`KILL_WAIT`] of being killed.
@@ -331,14 +295,7 @@ pub(super) fn ending(status: ExitStatus) -> Ending {
     if let Some(code) = status.code() {
         return Ending::Exit(code);
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::ExitStatusExt;
-        if let Some(signal) = status.signal() {
-            return Ending::Signal(signal);
-        }
-    }
-    Ending::Unknown
+    status.signal().map_or(Ending::Unknown, Ending::Signal)
 }
 
 #[cfg(test)]

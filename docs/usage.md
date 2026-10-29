@@ -65,7 +65,7 @@ without `-n`, a `while read` loop) should pass `</dev/null`.
 - `decide QUESTION`: ask the decision model one question about stdin (`--choices a,b,…` instead of yes or no, `--expect CHOICE` to exit 1 on any other, `--json` for the probabilities and the cost) and print the option it picked. No agent, no tools; it needs an OpenRouter key. The [reference](reference.md#llx-decide) has its options and exit codes.
 - `resume [ID | --last] [PROMPT]`: go on with a session at the terminal. `--last` is the newest session that ran in this workspace (else the newest of all, with a note).
 - `doctor`: check that everything a run needs is in place.
-- `serve`: the daemon the sessions run in (unix). `serve status` says whether it runs (its pid, its build, the terminals attached, the sessions open and working, those moved to the background, the jobs; exit 1 when none runs), `serve stop` ends it, stopping every session's task first.
+- `serve`: the daemon the sessions run in. `serve status` says whether it runs (its pid, its build, the terminals attached, the sessions open and working, those moved to the background, the jobs; exit 1 when none runs), `serve stop` ends it, stopping every session's task first.
 
 ## In a session
 
@@ -87,7 +87,7 @@ interface cannot start) it is a usage error pointing to `llx exec`, which prints
 
 - Enter sends. Shift+Enter, Ctrl-J or a line ending in `\` start a new line; a paste keeps its lines. Up and Down walk earlier entries.
 - While a task works, Enter sends what you type to it, read at its next step (`↳`); Tab keeps it for after the task (`⏎`).
-- Ctrl-R finds the last earlier entry with the words already typed (type them first; again for older ones). Ctrl-G writes the entry in `$EDITOR`. Ctrl-U clears the line before the cursor. Shift+Left and Shift+Right select (with Alt or Ctrl, by word; Shift+Home and Shift+End to the line's ends): Backspace or Delete deletes the selection, and typing or a paste replaces it. Ctrl-Z (unix) gives the terminal back and stops llx, as vim does; the shell's `fg` continues it with the screen drawn again, and the session's tasks go on meanwhile.
+- Ctrl-R finds the last earlier entry with the words already typed (type them first; again for older ones). Ctrl-G writes the entry in `$EDITOR`. Ctrl-U clears the line before the cursor. Shift+Left and Shift+Right select (with Alt or Ctrl, by word; Shift+Home and Shift+End to the line's ends): Backspace or Delete deletes the selection, and typing or a paste replaces it. Ctrl-Z gives the terminal back and stops llx, as vim does; the shell's `fg` continues it with the screen drawn again, and the session's tasks go on meanwhile.
 - Leaving (Ctrl-C twice, Ctrl-D, `/exit`) prints, dim under the history, `Resume this session: llx resume <id>` for each session with a task, the one shown first; moving to the background says to run `llx` in this directory to come back.
 - Clipboard text shows as `[Paste]` (numbered for several) and is expanded when sent.
 - Shift+Tab goes round the modes (default → plan → bypass → your own → default) without Enter; while a task runs, the switch waits until it ends.

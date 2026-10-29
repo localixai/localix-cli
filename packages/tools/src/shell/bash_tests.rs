@@ -40,7 +40,6 @@ fn timeless(report: &str) -> String {
     format!("{head} in Ts{rest}")
 }
 
-#[cfg(unix)]
 #[test]
 fn a_failing_command_is_output_with_its_code_and_streams() {
     let dir = Scratch::new();
@@ -61,7 +60,6 @@ fn a_failing_command_is_output_with_its_code_and_streams() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn empty_streams_are_left_out() {
     let dir = Scratch::new();
@@ -79,8 +77,7 @@ fn workdir_is_relative_to_the_root() {
     let dir = Scratch::new();
     dir.file("sub/inner.txt", "");
     let gate = Recorder::default();
-    let command = if cfg!(windows) { "dir /B" } else { "ls" };
-    let report = bash(&dir, &gate, json!({"command": command, "workdir": "sub"})).unwrap();
+    let report = bash(&dir, &gate, json!({"command": "ls", "workdir": "sub"})).unwrap();
     assert_eq!(
         timeless(&report),
         "exit 0 in Ts (in sub)\n### stdout\ninner.txt"
@@ -91,10 +88,7 @@ fn workdir_is_relative_to_the_root() {
         json!({"command": "ls", "workdir": "nope"}),
     ));
     assert_eq!(missing, "nope is not a directory");
-    assert_eq!(
-        *gate.asked.lock().unwrap(),
-        [format!("bash: {command}  (in sub)")]
-    );
+    assert_eq!(*gate.asked.lock().unwrap(), ["bash: ls  (in sub)"]);
 }
 
 #[test]
@@ -117,7 +111,6 @@ fn the_gate_is_told_a_workdir_outside_the_workspace() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn the_gate_is_told_a_symlinked_workdir_leads_outside() {
     let dir = Scratch::new();
@@ -139,7 +132,6 @@ fn the_gate_is_told_a_symlinked_workdir_leads_outside() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_command_past_its_timeout_is_killed_fast() {
     let dir = Scratch::new();
@@ -221,25 +213,10 @@ fn a_report_says_how_the_command_ended() {
     );
 }
 
-#[cfg(windows)]
-#[test]
-fn a_command_runs_in_the_root_on_windows() {
-    // cmd.exe cannot start in a verbatim (`\\?\`) directory: it falls back to C:\Windows.
-    let dir = Scratch::new();
-    let root = Workspace::new(dir.path())
-        .unwrap()
-        .root()
-        .display()
-        .to_string();
-    let report = bash(&dir, &Recorder::default(), json!({"command": "cd"})).unwrap();
-    assert!(report.ends_with(&format!("### stdout\n{root}")), "{report}");
-}
-
 #[expect(
     clippy::disallowed_methods,
     reason = "a test's fixture: the command ends by itself"
 )]
-#[cfg(unix)]
 #[test]
 fn without_tty_there_is_still_no_terminal() {
     if std::process::Command::new("python3")
@@ -274,7 +251,6 @@ fn a_command_runs_to_its_end_with_no_terminal() {
     assert!(matches!(session, Err(ToolError::Failed(_))));
 }
 
-#[cfg(unix)]
 #[test]
 fn a_command_runs_with_the_workspaces_environment_and_never_its_hidden_variables() {
     let dir = Scratch::new();

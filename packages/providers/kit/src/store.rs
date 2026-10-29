@@ -37,7 +37,6 @@ pub fn save(path: &Path, text: &str) -> std::io::Result<()> {
     }
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     // Its own name per process: two sessions saving at once do not write into one file.
     let temporary = path.with_extension(format!("tmp{}", std::process::id()));

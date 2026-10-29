@@ -50,7 +50,6 @@ fn absolute_paths_are_readable_anywhere_but_writable_only_inside() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_symlink_out_of_the_root_is_not_writable() {
     let dir = Scratch::new();
@@ -61,7 +60,6 @@ fn a_symlink_out_of_the_root_is_not_writable() {
     assert!(failed(workspace.writable("out/file.txt")).contains("outside the workspace"));
 }
 
-#[cfg(unix)]
 #[test]
 fn a_write_through_a_symlink_inside_lands_on_its_target() {
     let dir = Scratch::new();
@@ -103,42 +101,9 @@ fn a_denied_path_is_refused_however_it_is_reached() {
         assert!(message.ends_with("is off limits to the tools"), "{message}");
         assert!(failed(workspace.writable(path.to_str().unwrap())).contains("off limits"));
     }
-    #[cfg(unix)]
     {
         std::os::unix::fs::symlink(&key, dir.path().join("innocent.txt")).unwrap();
         assert!(failed(workspace.readable("innocent.txt")).contains("off limits"));
     }
     assert!(workspace.readable("anything-else.txt").is_ok());
-}
-
-#[test]
-fn verbatim_paths_become_plain_when_they_mean_the_same() {
-    assert_eq!(
-        unverbatim(r"\\?\C:\Users\me\repo").as_deref(),
-        Some(r"C:\Users\me\repo")
-    );
-    assert_eq!(unverbatim(r"\\?\D:\").as_deref(), Some(r"D:\"));
-    assert_eq!(
-        unverbatim(r"\\?\UNC\server\share\repo").as_deref(),
-        Some(r"\\server\share\repo")
-    );
-    assert_eq!(unverbatim(r"C:\already\plain"), None);
-    assert_eq!(unverbatim(r"\\?\C:\dir\NUL"), None, "a device name");
-    assert_eq!(unverbatim(r"\\?\C:\dir\com1.txt"), None, "a device name");
-    assert_eq!(unverbatim(r"\\?\C:\dir\trailing."), None);
-    let long = format!(r"\\?\C:\{}", "a".repeat(300));
-    assert_eq!(unverbatim(&long), None, "past MAX_PATH");
-    assert_eq!(unverbatim(r"\\?\Volume{1234}\x"), None);
-}
-
-#[cfg(windows)]
-#[test]
-fn the_root_is_never_verbatim_on_windows() {
-    let dir = Scratch::new();
-    let workspace = Workspace::new(dir.path()).unwrap();
-    assert!(
-        !workspace.root().to_string_lossy().starts_with(r"\\?\"),
-        "{}",
-        workspace.root().display()
-    );
 }

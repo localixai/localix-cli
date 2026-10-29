@@ -957,7 +957,6 @@ fn a_stopping_task_says_a_second_ctrl_c_quits_at_once() {
     assert!(shown.contains("ctrl-c again to quit now"), "{shown}");
 }
 
-#[cfg(unix)]
 #[test]
 fn ctrl_z_suspends_and_keeps_the_draft() {
     let now = Instant::now();

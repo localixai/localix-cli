@@ -8,6 +8,7 @@
 - With a ChatGPT sign-in, `apply_patch` is offered again as a tool held to its grammar for the models that take one: a fetched catalog (models.dev's v2 API, which does not publish it) had turned it into a JSON function for every OpenAI model, and patches came back cut short or malformed.
 - A patch whose lines are not found in the file says so with the file's nearest lines, numbered: the next patch needs no read first.
 - When the conversation is trimmed for the model's limit, the text of old patches goes as other large arguments do.
+- llx runs on macOS and Linux: the code that was meant for Windows, which no release built, is gone, and `scripts/dist.sh` builds no Windows archive.
 - Fixed: an `--allow` or `--deny` rule with many wildcards no longer takes exponential time on a long command or path that does not match.
 - Fixed: a number key pressed on a choice with no options no longer ends the interface.
 - Markdown's ~~strikethrough~~ shows struck through; `/usage` says the cost once, the time on a line of its own.

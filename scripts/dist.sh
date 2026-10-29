@@ -1,17 +1,15 @@
 #!/bin/sh
 # Builds release archives into dist/: one per target, named the way install.sh and the npm
 # packages look them up, plus SHA256SUMS. CI (.github/workflows/release.yml) runs it once per
-# platform; it needs only what the runners have: cargo with rustup, tar, and lipo (macOS) or 7z
-# (Windows).
+# platform; it needs only what the runners have: cargo with rustup, tar, and lipo (macOS).
 #
 #   scripts/dist.sh                            # every target this host builds
 #   scripts/dist.sh x86_64-unknown-linux-gnu   # just these
 #
 # Host targets: macOS builds aarch64 and x86_64, and joins them into universal-apple-darwin;
-# Linux builds its own architecture (glibc); Windows (Git Bash) builds x86_64-pc-windows-msvc.
+# Linux builds its own architecture (glibc).
 #
-# Archives: llx-<target>.tar.gz (.zip on Windows) holding llx (llx.exe), README.md and
-# LICENSE at the top level.
+# Archives: llx-<target>.tar.gz holding llx, README.md and LICENSE at the top level.
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -25,7 +23,6 @@ host_targets() {
   case "$(uname -s)" in
     Darwin) echo "aarch64-apple-darwin x86_64-apple-darwin" ;;
     Linux) echo "$(uname -m)-unknown-linux-gnu" ;;
-    MINGW* | MSYS* | CYGWIN*) echo "x86_64-pc-windows-msvc" ;;
     *)
       echo "dist.sh: no release targets for $(uname -s); name them as arguments" >&2
       exit 1
@@ -39,38 +36,21 @@ sha256() {
     sha256sum "$1"
   else
     shasum -a 256 "$1"
-  fi | sed 's/ \*/  /' # Git Bash marks binary mode with `*`; install.sh expects two spaces
+  fi
 }
 
 # package NAME BINARY: stages the binary with the docs and archives them into dist/ as
-# llx-NAME.tar.gz (.zip on Windows). NAME is a target, or a target and a flavour. The loop's own
+# llx-NAME.tar.gz. NAME is a target, or a target and a flavour. The loop's own
 # `target` is not touched: the variables are global in sh.
 package() {
   name=$1
   binary=$2
   stage=$(mktemp -d)
-  case "$name" in
-    *windows*)
-      cp "$binary" "$stage/llx.exe"
-      archive="llx-$name.zip"
-      ;;
-    *)
-      cp "$binary" "$stage/llx"
-      archive="llx-$name.tar.gz"
-      ;;
-  esac
+  cp "$binary" "$stage/llx"
+  archive="llx-$name.tar.gz"
   cp README.md LICENSE "$stage/"
   rm -f "$dist/$archive"
-  case "$archive" in
-    *.zip)
-      if command -v 7z >/dev/null 2>&1; then
-        (cd "$stage" && 7z a -tzip -bso0 "$dist/$archive" .)
-      else
-        (cd "$stage" && zip -q -r "$dist/$archive" .)
-      fi
-      ;;
-    *) tar -C "$stage" -czf "$dist/$archive" llx README.md LICENSE ;;
-  esac
+  tar -C "$stage" -czf "$dist/$archive" llx README.md LICENSE
   rm -rf "$stage"
   echo "packaged $archive"
 }
@@ -85,10 +65,7 @@ for target in $targets; do
     rustup target add "$target" >/dev/null
   fi
   cargo build --release --locked --target "$target"
-  case "$target" in
-    *windows*) package "$target" "$target_dir/$target/release/llx.exe" ;;
-    *) package "$target" "$target_dir/$target/release/llx" ;;
-  esac
+  package "$target" "$target_dir/$target/release/llx"
 done
 
 # One macOS download for both architectures, when both were built in this run.

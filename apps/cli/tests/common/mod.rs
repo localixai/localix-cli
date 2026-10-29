@@ -4,5 +4,4 @@
 
 pub(crate) mod home;
 pub(crate) mod model;
-#[cfg(unix)]
 pub(crate) mod term;

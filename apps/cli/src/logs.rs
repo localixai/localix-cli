@@ -118,7 +118,6 @@ impl Kept {
     fn open(dir: &Path) -> std::io::Result<Self> {
         let mut made = std::fs::DirBuilder::new();
         made.recursive(true);
-        #[cfg(unix)]
         std::os::unix::fs::DirBuilderExt::mode(&mut made, 0o700);
         made.create(dir)?;
         if std::fs::metadata(dir.join(FILE)).is_ok_and(|kept| kept.len() > LIMIT) {
@@ -130,7 +129,6 @@ impl Kept {
     fn append(dir: &Path) -> std::io::Result<Self> {
         let mut options = OpenOptions::new();
         options.create(true).append(true);
-        #[cfg(unix)]
         std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
         let file = options.open(dir.join(FILE))?;
         let size = file.metadata()?.len();

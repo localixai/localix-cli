@@ -85,7 +85,6 @@ pub(crate) struct Start<'a> {
 /// Takes the terminal, attaches to the server and starts drawing.
 pub(crate) fn start(start: Start) -> io::Result<Running> {
     let (width, height) = crossterm::terminal::size()?;
-    #[cfg(unix)]
     terminal::on_signals(start.quit_now);
     crossterm::terminal::enable_raw_mode()?;
     let mut out = io::stdout();

@@ -45,7 +45,6 @@ fn a_session_without_a_terminal_points_to_exec() {
 /// stdin a terminal, but no size to draw at: it is not the process's own terminal (a session of
 /// its own, with none), and stdout is a pipe. The interface cannot start, and there is no plain
 /// prompt line to fall back on: a usage error that points to `exec`.
-#[cfg(unix)]
 #[test]
 fn a_session_whose_interface_cannot_start_points_to_exec() {
     use std::process::Stdio;
@@ -78,7 +77,6 @@ fn a_session_whose_interface_cannot_start_points_to_exec() {
 
 /// A key or setting exported in the shell that runs the tests reaches no test: the binary sees
 /// only the home it is given, so no test depends on the machine or calls a real model.
-#[cfg(unix)]
 #[test]
 #[expect(
     clippy::disallowed_methods,
@@ -113,7 +111,6 @@ fn the_binary_sees_nothing_of_the_shell_that_runs_the_tests() {
 
 /// The terminal is llx's own, but the interface cannot draw (stdout's reader is gone): the
 /// usage error leaves the terminal as it found it, not in raw mode.
-#[cfg(unix)]
 #[test]
 #[expect(
     clippy::disallowed_methods,

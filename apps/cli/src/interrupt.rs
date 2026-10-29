@@ -178,7 +178,6 @@ pub(crate) fn quit_now() -> ! {
 }
 
 /// Handle SIGINT and SIGTERM for the rest of the process.
-#[cfg(unix)]
 pub(crate) fn install() {
     extern "C" fn on_signal(_: libc::c_int) {
         const NOTE: &[u8] = b"\nllx: stopping the task (Ctrl-C again quits now)\n";
@@ -206,10 +205,6 @@ pub(crate) fn install() {
         unsafe { libc::sigaction(signal, &action, std::ptr::null_mut()) };
     }
 }
-
-/// On Windows, Ctrl-C reaches the commands too (they share the console), and ends the process.
-#[cfg(not(unix))]
-pub fn install() {}
 
 #[cfg(test)]
 #[path = "interrupt_tests.rs"]

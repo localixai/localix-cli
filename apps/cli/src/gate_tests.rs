@@ -164,7 +164,6 @@ fn a_question_ctrl_c_ended_reads_as_the_stop() {
     assert_eq!(gate.check(bash("ls")), Verdict::Deny(STOPPED.into()));
 }
 
-#[cfg(unix)]
 #[test]
 fn a_waiting_question_ends_when_the_task_is_stopped_and_reads_what_was_typed() {
     use std::io::Write;
@@ -181,7 +180,6 @@ fn a_waiting_question_ends_when_the_task_is_stopped_and_reads_what_was_typed() {
 /// A stop at a real question, on `/dev/tty`, which macOS's `poll` cannot wait on. The test runs
 /// itself again in a child whose controlling terminal is a new pseudo-terminal, as a person's
 /// prompt is: there the stop must end the wait while nothing is typed.
-#[cfg(unix)]
 mod terminal {
     use std::os::fd::{FromRawFd, OwnedFd};
     use std::os::unix::process::CommandExt;

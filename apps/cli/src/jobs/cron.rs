@@ -136,25 +136,22 @@ pub(crate) fn delay(text: &str) -> Result<u64, String> {
 
 /// `at` (Unix seconds) in local time.
 fn local(at: u64) -> Local {
-    #[cfg(unix)]
-    {
-        let Ok(time) = libc::time_t::try_from(at) else {
-            return utc(at);
+    let Ok(time) = libc::time_t::try_from(at) else {
+        return utc(at);
+    };
+    // SAFETY: a tm is integers and a pointer localtime_r sets: all zero is one.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    // SAFETY: localtime_r fills `tm` from `time`; both live through the call.
+    let filled = unsafe { libc::localtime_r(&time, &mut tm) };
+    if !filled.is_null() {
+        // localtime_r gives each field in its range: none is negative.
+        return Local {
+            minute: tm.tm_min.cast_unsigned(),
+            hour: tm.tm_hour.cast_unsigned(),
+            day: tm.tm_mday.cast_unsigned(),
+            month: tm.tm_mon.cast_unsigned() + 1,
+            weekday: tm.tm_wday.cast_unsigned(),
         };
-        // SAFETY: a tm is integers and a pointer localtime_r sets: all zero is one.
-        let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-        // SAFETY: localtime_r fills `tm` from `time`; both live through the call.
-        let filled = unsafe { libc::localtime_r(&time, &mut tm) };
-        if !filled.is_null() {
-            // localtime_r gives each field in its range: none is negative.
-            return Local {
-                minute: tm.tm_min.cast_unsigned(),
-                hour: tm.tm_hour.cast_unsigned(),
-                day: tm.tm_mday.cast_unsigned(),
-                month: tm.tm_mon.cast_unsigned() + 1,
-                weekday: tm.tm_wday.cast_unsigned(),
-            };
-        }
     }
     utc(at)
 }

@@ -24,7 +24,7 @@ impl Workspace {
     /// The workspace at `root`, which must exist.
     pub fn new(root: impl AsRef<Path>) -> io::Result<Self> {
         Ok(Self {
-            root: canonical(root.as_ref())?,
+            root: root.as_ref().canonicalize()?,
             denied: vec![],
             env: None,
         })
@@ -140,7 +140,7 @@ pub(crate) fn real(path: &Path) -> PathBuf {
     let mut existing = path.to_path_buf();
     let mut missing = vec![];
     loop {
-        if let Ok(canonical) = canonical(&existing) {
+        if let Ok(canonical) = existing.canonicalize() {
             return missing
                 .iter()
                 .rev()
@@ -154,74 +154,6 @@ pub(crate) fn real(path: &Path) -> PathBuf {
             _ => return path.to_path_buf(),
         }
     }
-}
-
-/// `path` canonicalized, as a person writes it. On Windows, `canonicalize` returns a verbatim path
-/// (`\\?\C:\...`), which cmd.exe cannot use as its directory (it falls back to C:\Windows) and
-/// which reads oddly in every report; it is turned back into the plain form when that means the
-/// same file, as the `dunce` crate does.
-fn canonical(path: &Path) -> io::Result<PathBuf> {
-    path.canonicalize().map(|path| plain(&path))
-}
-
-#[cfg(not(windows))]
-fn plain(path: &Path) -> PathBuf {
-    path.to_path_buf()
-}
-
-#[cfg(windows)]
-fn plain(path: &Path) -> PathBuf {
-    path.to_str()
-        .and_then(unverbatim)
-        .map_or_else(|| path.to_path_buf(), PathBuf::from)
-}
-
-/// `\\?\C:\rest` as `C:\rest`, and `\\?\UNC\server\share` as `\\server\share`, when the plain
-/// form names the same file: shorter than MAX_PATH, and with no name Windows reads otherwise (a
-/// device such as `NUL`, a trailing dot or space). `None` keeps the verbatim form.
-#[cfg_attr(
-    not(any(windows, test)),
-    expect(dead_code, reason = "used only on Windows, and by its tests")
-)]
-fn unverbatim(path: &str) -> Option<String> {
-    const MAX_PATH: usize = 260;
-    let rest = path.strip_prefix(r"\\?\")?;
-    let (plain, names) = match rest.strip_prefix(r"UNC\") {
-        Some(share) => (format!(r"\\{share}"), share),
-        None => {
-            let drive = rest.as_bytes();
-            let lettered = drive.len() >= 3
-                && drive[0].is_ascii_alphabetic()
-                && drive[1] == b':'
-                && drive[2] == b'\\';
-            if !lettered {
-                return None;
-            }
-            (rest.to_string(), rest.get(3..).unwrap_or_default())
-        }
-    };
-    let ordinary = names
-        .split('\\')
-        .filter(|name| !name.is_empty())
-        .all(ordinary);
-    (plain.len() < MAX_PATH && ordinary).then_some(plain)
-}
-
-/// A file name that means itself outside a verbatim path.
-fn ordinary(name: &str) -> bool {
-    if name.ends_with(['.', ' ']) || name.contains(['/', ':', '*', '?', '"', '<', '>', '|']) {
-        return false;
-    }
-    let stem = name.split('.').next().unwrap_or(name).trim_end();
-    let stem = stem.to_ascii_uppercase();
-    let numbered = stem.len() == 4
-        && (stem.starts_with("COM") || stem.starts_with("LPT"))
-        && stem.as_bytes()[3].is_ascii_digit();
-    !numbered
-        && !matches!(
-            stem.as_str(),
-            "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
-        )
 }
 
 #[cfg(test)]

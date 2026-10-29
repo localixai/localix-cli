@@ -11,7 +11,6 @@ use super::app::{Action, App};
 use super::composer::Edit;
 use super::event::Out;
 use super::search::stepped;
-use super::terminal::CAN_SUSPEND;
 use super::time::in_quit_window;
 
 impl App {
@@ -40,7 +39,7 @@ impl App {
             // Ctrl-D at an empty prompt quits, asked first while work runs.
             KeyCode::Char('d') if ctrl && self.composer.is_empty() => return self.quit(),
             // Ctrl-Z gives the terminal back and stops llx until the shell's `fg`.
-            KeyCode::Char('z') if ctrl && CAN_SUSPEND => return Some(Action::Suspend),
+            KeyCode::Char('z') if ctrl => return Some(Action::Suspend),
             // In an agent's view Esc goes back to the main one; Ctrl-C still stops the task.
             KeyCode::Esc if self.shown().parent.is_some() => {
                 let lane = self.lane_id().to_string();

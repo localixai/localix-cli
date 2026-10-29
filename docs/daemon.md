@@ -135,7 +135,7 @@ process environment): commands run in the environment of the client that opened 
    stop`, then a kill by the pid in the lock file).
    The model a session uses is its client's: the providers' keys from its environment, the
    `LLX_*` model variables as options added to its command line (`server::place::words`; a
-   daemon is started without them). Not built: `--no-daemon` aside, Windows runs in process.
+   daemon is started without them).
 
 4. **Attach and detach.** The event ring and cursors, pending requests replayed, the quit
    question (stop, move to the background, stay), `status`/`stop`, version restart.

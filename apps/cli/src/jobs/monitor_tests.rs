@@ -46,7 +46,6 @@ fn with(
     (batches.into_inner().unwrap(), ended)
 }
 
-#[cfg(unix)]
 #[test]
 fn lines_that_come_together_are_one_batch_and_the_exit_is_told() {
     // The first two in one write; the third long past the gather window.
@@ -59,7 +58,6 @@ fn lines_that_come_together_are_one_batch_and_the_exit_is_told() {
     assert_eq!(ended, "exit 3");
 }
 
-#[cfg(unix)]
 #[test]
 fn the_deadline_and_a_stop_end_the_command_and_what_it_started() {
     let (_, ended) = run("sleep 30 & sleep 30", 1, &|| false);
@@ -72,7 +70,6 @@ fn the_deadline_and_a_stop_end_the_command_and_what_it_started() {
     assert!(begun.elapsed() < Duration::from_secs(5));
 }
 
-#[cfg(unix)]
 #[test]
 fn the_apps_secrets_are_not_in_its_environment() {
     // A variable this process already has stands for a secret, so no test changes the
@@ -91,7 +88,6 @@ fn the_apps_secrets_are_not_in_its_environment() {
     assert_eq!(hidden, [vec!["[]"]], "{name} was hidden");
 }
 
-#[cfg(unix)]
 #[test]
 fn a_monitor_runs_with_the_environment_of_the_client() {
     let vars = [
@@ -112,7 +108,6 @@ fn a_monitor_runs_with_the_environment_of_the_client() {
 /// A descriptor this process has open without close-on-exec when a monitor starts (one another
 /// thread is making, before it marks it close-on-exec) never reaches it: a monitor lives long,
 /// and what it holds stays open as long.
-#[cfg(unix)]
 #[test]
 fn a_monitor_inherits_only_its_output() {
     use std::os::fd::FromRawFd;
@@ -126,7 +121,6 @@ fn a_monitor_inherits_only_its_output() {
     assert_eq!(lines, [vec!["closed"]]);
 }
 
-#[cfg(unix)]
 #[test]
 fn a_command_that_closes_its_output_still_ends_at_its_deadline_and_its_stop() {
     let begun = Instant::now();

@@ -58,7 +58,6 @@ impl Stdin {
 }
 
 /// Whether stdin is something that always ends: not a pipe, a socket or unknown.
-#[cfg(unix)]
 fn ends() -> bool {
     use std::os::fd::AsFd;
     use std::os::unix::fs::FileTypeExt;
@@ -72,11 +71,6 @@ fn ends() -> bool {
         }
         Err(_) => false,
     }
-}
-
-#[cfg(not(unix))]
-fn ends() -> bool {
-    false
 }
 
 /// What to tell the person before stdin is read to its end, where that could wait unseen: a

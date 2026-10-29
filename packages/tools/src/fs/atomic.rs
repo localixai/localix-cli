@@ -61,15 +61,9 @@ pub(super) fn write(path: &Path, content: &[u8]) -> io::Result<()> {
 }
 
 /// Whether the file has names besides this one, which a rename would leave on the old content.
-#[cfg(unix)]
 fn linked(meta: &fs::Metadata) -> bool {
     use std::os::unix::fs::MetadataExt;
     meta.nlink() > 1
-}
-
-#[cfg(not(unix))]
-fn linked(_: &fs::Metadata) -> bool {
-    false
 }
 
 /// A new temporary file at the first free name `next` gives. Each name is created, never opened

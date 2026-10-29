@@ -12,7 +12,6 @@ fn a_saved_secret_is_readable_by_the_person_alone() {
     let path = dir.join("nested").join("secret");
     save(&path, "  token \n").unwrap();
     assert_eq!(read(&path).as_deref(), Some("token"));
-    #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let mode = std::fs::metadata(&path).unwrap().permissions().mode();
@@ -24,7 +23,6 @@ fn a_saved_secret_is_readable_by_the_person_alone() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-#[cfg(unix)]
 #[test]
 fn a_file_saved_with_wider_permissions_is_narrowed() {
     use std::os::unix::fs::PermissionsExt;

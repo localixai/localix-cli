@@ -10,9 +10,7 @@ pub(crate) mod inputs;
 pub(crate) mod label;
 pub(crate) mod place;
 pub(crate) mod serve;
-#[cfg(unix)]
 pub(crate) mod socket;
-#[cfg(unix)]
 pub(crate) mod ui;
 pub(crate) mod wire;
 pub(crate) mod work;

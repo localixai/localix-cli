@@ -154,7 +154,6 @@ fn lock(waiting: &Waiting) -> MutexGuard<'_, Pending> {
 
 pub mod place;
 
-#[cfg(unix)]
 mod socket;
 
 #[cfg(test)]

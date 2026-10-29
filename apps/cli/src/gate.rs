@@ -17,10 +17,8 @@ use protocol::Approval;
 /// Times an unreadable answer is asked again before it counts as no.
 const TRIES: usize = 3;
 /// How often a waiting question checks whether the task was stopped.
-#[cfg(unix)]
 const POLL_MS: libc::c_int = 100;
 /// The same, as `select` takes it.
-#[cfg(unix)]
 const POLL_US: libc::suseconds_t = 100_000;
 
 /// Refuses everything once the person stopped the task, and asks `inner` until then: nothing
@@ -76,7 +74,6 @@ impl Tty {
         Self::open().is_some()
     }
 
-    #[cfg(unix)]
     fn open() -> Option<(File, File)> {
         let file = OpenOptions::new()
             .read(true)
@@ -84,17 +81,6 @@ impl Tty {
             .open("/dev/tty")
             .ok()?;
         Some((file.try_clone().ok()?, file))
-    }
-
-    #[cfg(windows)]
-    fn open() -> Option<(File, File)> {
-        let input = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open("CONIN$")
-            .ok()?;
-        let output = OpenOptions::new().write(true).open("CONOUT$").ok()?;
-        Some((input, output))
     }
 }
 
@@ -117,21 +103,16 @@ impl Prompter for Tty {
 
 /// Drop what was typed before the question was shown (the next task, typed while this one ran):
 /// it must not answer a question the person never saw.
-#[cfg(unix)]
 fn discard_typed_ahead(input: &File) {
     use std::os::fd::AsRawFd;
     // SAFETY: tcflush only discards the terminal's pending input; the descriptor is open.
     unsafe { libc::tcflush(input.as_raw_fd(), libc::TCIFLUSH) };
 }
 
-#[cfg(not(unix))]
-fn discard_typed_ahead(_: &File) {}
-
 /// Wait until a line can be read from `input`; false when the task was stopped first. The signal
 /// handler restarts a blocking read (`SA_RESTART`), so a read alone would keep the question open
 /// after Ctrl-C until Enter: waiting in short polls lets the stop end it at once. macOS's `poll`
 /// cannot wait on `/dev/tty` (it answers `POLLNVAL` at once), so there `select` waits instead.
-#[cfg(unix)]
 fn typed(input: &File, stopped: &dyn Fn() -> bool) -> bool {
     use std::os::fd::AsRawFd;
     let fd = input.as_raw_fd();
@@ -153,7 +134,6 @@ fn typed(input: &File, stopped: &dyn Fn() -> bool) -> bool {
 }
 
 /// What one short wait for input found.
-#[cfg(unix)]
 #[derive(Debug, PartialEq, Eq)]
 enum Readiness {
     /// Input, a hangup or an error: the read that follows says which.
@@ -164,7 +144,6 @@ enum Readiness {
     Unsupported,
 }
 
-#[cfg(unix)]
 fn poll_in(fd: libc::c_int) -> Readiness {
     let mut wanted = libc::pollfd {
         fd,
@@ -179,9 +158,8 @@ fn poll_in(fd: libc::c_int) -> Readiness {
     readiness(ready)
 }
 
-#[cfg(unix)]
 fn select_in(fd: libc::c_int) -> Readiness {
-    // A descriptor past what a set holds cannot be waited on: the read blocks, as on Windows.
+    // A descriptor past what a set holds cannot be waited on: the read blocks.
     if usize::try_from(fd).map_or(true, |fd| fd >= libc::FD_SETSIZE) {
         return Readiness::Ready;
     }
@@ -202,7 +180,6 @@ fn select_in(fd: libc::c_int) -> Readiness {
     readiness(ready)
 }
 
-#[cfg(unix)]
 fn readiness(ready: libc::c_int) -> Readiness {
     let interrupted =
         ready < 0 && std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted;
@@ -210,12 +187,6 @@ fn readiness(ready: libc::c_int) -> Readiness {
         true => Readiness::Ready,
         false => Readiness::Quiet,
     }
-}
-
-/// On Windows the read blocks: Ctrl-C ends the process there anyway (see `interrupt`).
-#[cfg(not(unix))]
-fn typed(_: &File, _: &dyn Fn() -> bool) -> bool {
-    true
 }
 
 /// Asks the person whether an effect may happen: yes, always for its tool, or no; `None` when no

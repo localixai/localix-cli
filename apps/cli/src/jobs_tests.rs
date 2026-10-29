@@ -18,7 +18,6 @@ fn call(arguments: serde_json::Value) -> Completion {
     }
 }
 
-#[cfg(unix)]
 #[test]
 fn in_exec_a_task_waits_for_its_monitor_and_reads_each_batch() {
     let replies = vec![
@@ -48,7 +47,6 @@ fn in_exec_a_task_waits_for_its_monitor_and_reads_each_batch() {
     });
 }
 
-#[cfg(unix)]
 #[test]
 fn monitor_remains_expected_until_completion_is_posted() {
     use contracts::tool::Tool;
@@ -191,7 +189,6 @@ fn sent(seen: &Seen) -> (Vec<String>, Option<Vec<String>>) {
     (tasks, rows)
 }
 
-#[cfg(unix)]
 #[test]
 fn a_line_that_closes_the_tag_stays_inside_its_monitor_message() {
     let replies = vec![

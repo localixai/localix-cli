@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Initial release.
+- The prompt tells the agent never to give up: failing checks, errors and a long road ahead are the work, and a task ends only when it is complete or what is left truly cannot be done from here, said exactly.
 - The context's `Mode:` line no longer says anything is refused where every tool is allowed whole (`bypass`, `-y`): a tool allowed whole is "allowed, whatever it does", and only a rule with a pattern is held to "every part of the command".
 - Tool reports read as Codex's: `bash` returns `Exit code: N`, `Wall time: 0.4 seconds`, `Total output lines: N` when the output was cut, then `Output:` with stdout and stderr as one stream (no `### stdout`/`### stderr` sections; other endings are `Killed by signal:`, `Timed out after:`, `Stopped:` lines), and `apply_patch` returns `Success. Updated the following files:` with `A`, `M` or `D` per path. The patch's diff no longer reaches the model: it is a `shown` text of the call's result (`ToolOutput::shown`, an optional `shown` on the protocol's `Done`) that only the interface draws.
 - A task's time limit (`--timeout`) now also ends a model request in flight: each request carries the time left as a deadline and the HTTP client stops waiting at it, no longer after the provider's own 10 minutes; a retry sleeps no pause past it.

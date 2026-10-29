@@ -180,7 +180,7 @@ impl Conversation {
     }
 
     fn drop_states(&mut self) {
-        let dropped: Vec<(usize, String)> = self.stateful.drain(..).collect();
+        let dropped: Vec<(usize, String)> = std::mem::take(&mut self.stateful);
         for (at, report) in dropped {
             if let Some(Message::ToolResult { content, .. }) = self.messages.get_mut(at) {
                 *content = format!("{report}\n{OMITTED}");

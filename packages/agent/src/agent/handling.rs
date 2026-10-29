@@ -99,12 +99,16 @@ fn take_result(
             run.data = done.data.map(Ok);
             (Ok(ToolOutput::from(RETURNED.to_string())), true)
         }
-        Err(problems) if *fixes < MAX_FIXES => {
+        // A progress report: refused as often as it comes, and the work goes on.
+        Err(schema::Refused::Unblocked) => {
+            (Err(ToolError::Failed(schema::UNBLOCKED.into())), false)
+        }
+        Err(schema::Refused::Mismatch(problems)) if *fixes < MAX_FIXES => {
             *fixes += 1;
             let why = format!("The result is not taken: {problems}. Call `result` again.");
             (Err(ToolError::Failed(why)), false)
         }
-        Err(problems) => {
+        Err(schema::Refused::Mismatch(problems)) => {
             let why = format!("the result did not match the schema: {problems}");
             run.status = Status::NotAchieved;
             run.data = Some(Err(why.clone()));

@@ -48,7 +48,7 @@ fn a_result_call_is_checked_against_its_schema() {
     let wrong = json!({"data": {"price": "93"}, "summary": "", "achieved": true});
     assert_eq!(
         take(&wrong, Some(&schema)),
-        Err("data.price must be number".into())
+        Err(Refused::Mismatch("data.price must be number".into()))
     );
 }
 
@@ -74,6 +74,8 @@ fn fields_put_beside_achieved_instead_of_inside_data_are_the_data() {
 fn a_call_with_no_data_says_where_the_fields_go() {
     let schema = json!({"type": "object", "required": ["price"], "properties": {"price": {"type": "number"}}});
     let call = json!({"summary": "€93", "achieved": true});
-    let error = take(&call, Some(&schema)).unwrap_err();
+    let Err(Refused::Mismatch(error)) = take(&call, Some(&schema)) else {
+        panic!("a schema mismatch");
+    };
     assert!(error.contains("inside `data`"), "{error}");
 }

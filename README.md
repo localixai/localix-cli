@@ -64,8 +64,8 @@ One task, llx and Codex on the same model (GPT-6 Luna, medium reasoning), every 
 
 | Agent | Runs | Score (median) | Range | Time | Cost |
 | --- | --- | --- | --- | --- | --- |
-| llx | 6 | 195 | 194–197 | 170 s | $0.026 |
-| Codex | 3 | 197 | 196–198 | 143 s | $0.025 |
+| llx | 6 | 196 | 188–197 | 165 s | $0.031 |
+| Codex | 6 | 196 | 192–198 | 141 s | $0.028 |
 
 The runs: [benchmarks/task-tracker/runs](benchmarks/task-tracker/runs); the task and its checks: [evals/arena](evals/arena/arena.py).
 

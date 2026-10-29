@@ -178,15 +178,44 @@ fn a_result_not_achieved_names_what_blocks_it_or_goes_back() {
         run.answer,
         "Two checks fail.\n\nBlocked by: the registry refuses the token"
     );
-    assert!(
-        results(&run)[0].0.contains("blocked_by"),
-        "{:?}",
-        results(&run)[0]
-    );
+    assert_eq!(results(&run)[0], (schema::UNBLOCKED.to_string(), true));
     assert_eq!(
         users(run.conversation.messages()),
         ["Goal: Make the checks pass"]
     );
+}
+
+#[test]
+fn a_progress_report_through_result_is_refused_without_ending_or_asking_for_another() {
+    // A `result` not achieved that names no block is the model reporting progress, not ending:
+    // the run goes on, however often, and the refusal asks for the work, never for the call.
+    let report = || {
+        calls(
+            schema::TOOL,
+            json!({"achieved": false, "summary": "130 of 132 pass; the split is left."}),
+        )
+    };
+    let chat = Scripted::new(vec![
+        report(),
+        report(),
+        report(),
+        calls("echo", json!({"text": "split"})),
+        done("All 132 pass."),
+    ]);
+    let echo = Echo::new(vec![ok("split")]);
+    let recorder = Recorder::default();
+    let run = agent(&chat, &[&echo], None, &recorder).run("Make the checks pass");
+    assert_eq!(run.status, Status::Achieved);
+    assert_eq!(run.answer, "All 132 pass.");
+    let refusals: Vec<_> = results(&run).into_iter().take(3).collect();
+    for (why, failed) in &refusals {
+        assert!(*failed);
+        assert!(why.contains("goes on"), "{why}");
+        assert!(
+            !why.contains("again"),
+            "a refusal that asks for the call again gets one: {why}"
+        );
+    }
 }
 
 #[test]

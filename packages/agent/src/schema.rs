@@ -45,8 +45,22 @@ pub(crate) struct Finished {
     pub achieved: bool,
 }
 
-/// A `result` call read, or what to fix.
-pub(crate) fn take(args: &Value, schema: Option<&Value>) -> Result<Finished, String> {
+/// Why a `result` call is not taken.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Refused {
+    /// Not achieved, and nothing outside the model's reach named: a progress report. The work
+    /// goes on; the call is not asked for again.
+    Unblocked,
+    /// The data breaks the schema: what to fix, and the call comes again.
+    Mismatch(String),
+}
+
+/// Said for a `result` that is a progress report: the task goes on, nothing is asked for.
+pub(crate) const UNBLOCKED: &str = "Not taken: nothing outside your reach blocks the goal, so \
+    the task goes on. What is left to do is not a block; `result` is for the end.";
+
+/// A `result` call read, or why not.
+pub(crate) fn take(args: &Value, schema: Option<&Value>) -> Result<Finished, Refused> {
     let achieved = args["achieved"].as_bool().unwrap_or(true);
     // A `summary` the schema owns, written beside `achieved`, is the data's, not the call's.
     let taken = schema.is_some_and(|schema| schema.pointer("/properties/summary").is_some())
@@ -59,7 +73,7 @@ pub(crate) fn take(args: &Value, schema: Option<&Value>) -> Result<Finished, Str
         // A block is named, or the call goes back: what is left to do is no block.
         let why = args["blocked_by"].as_str().map(str::trim).unwrap_or("");
         if why.is_empty() {
-            return Err("not achieved needs `blocked_by`: what outside your reach blocks the goal; if nothing does, go on with the work instead".into());
+            return Err(Refused::Unblocked);
         }
         summary = format!("{summary}\n\nBlocked by: {why}");
     }
@@ -72,9 +86,9 @@ pub(crate) fn take(args: &Value, schema: Option<&Value>) -> Result<Finished, Str
     };
     let data = match args.get("data") {
         Some(data) => data.clone(),
-        None => beside(args, schema)?,
+        None => beside(args, schema).map_err(Refused::Mismatch)?,
     };
-    check(schema, &data)?;
+    check(schema, &data).map_err(Refused::Mismatch)?;
     Ok(Finished {
         data: Some(data),
         summary,

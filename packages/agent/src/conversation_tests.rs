@@ -8,6 +8,7 @@ fn output(report: &str, state: usize) -> ToolOutput {
     ToolOutput {
         report: report.into(),
         state: Some("x".repeat(state)),
+        ..ToolOutput::default()
     }
 }
 
@@ -69,6 +70,7 @@ fn a_whole_command_report_comes_through_unshortened() {
         ToolOutput {
             report: report.clone(),
             state: None,
+            ..ToolOutput::default()
         },
     );
     assert_eq!(tool_results(conversation.messages()), [report]);

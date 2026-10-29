@@ -36,7 +36,7 @@ fn the_transcript_shows_a_finished_command_by_its_paths_in_the_project() {
     app.event(Event::TaskStarted("fix it".into()), now);
     let command = ran("cd /work/stats && cat /work/stats/stats.py");
     app.event(call("1", "bash", &command), now);
-    let report = done("exit 0 in 0.1s\n### stdout\nimport sys");
+    let report = done("Exit code: 0\nWall time: 0.0 seconds\nOutput:\nimport sys");
     app.event(result("1", "bash", &command, report), now);
     let shown = history(&mut app);
     assert!(shown.contains("cat stats.py"), "{shown}");

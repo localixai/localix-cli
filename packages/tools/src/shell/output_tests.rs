@@ -73,3 +73,16 @@ fn a_cut_never_splits_a_character() {
     let kept = head.chars().count() + tail.chars().count();
     assert_eq!(kept + cut, 1 + HEAD + TAIL);
 }
+
+#[test]
+fn lines_are_counted_whole_or_cut() {
+    let mut output = Output::default();
+    output.push(b"a\nb");
+    assert_eq!((output.lines(), output.cut()), (2, false));
+    output.push(b"\n");
+    assert_eq!(output.lines(), 2);
+    for _ in 0..20_000 {
+        output.push(b"more\n");
+    }
+    assert_eq!((output.lines(), output.cut()), (20_002, true));
+}

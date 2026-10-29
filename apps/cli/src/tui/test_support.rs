@@ -63,6 +63,7 @@ pub(crate) fn result(id: &str, name: &str, label: &Label, outcome: Outcome) -> E
 pub(crate) fn done(report: &str) -> Outcome {
     Outcome::Done {
         report: report.into(),
+        shown: String::new(),
     }
 }
 

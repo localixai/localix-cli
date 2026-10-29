@@ -2,13 +2,12 @@
 //! them, the gate asked for each file it will change, and only then the files written. A hunk that
 //! does not fit, a path outside the workspace or a refusal leaves every file as it was.
 
-use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use contracts::gate::Gate;
-use contracts::tool::ToolError;
+use contracts::tool::{ToolError, ToolOutput};
 
 use super::{Chunk, Hunk, apply, parse};
 use crate::ask;
@@ -41,7 +40,7 @@ pub(super) fn run(
     workspace: &Workspace,
     gate: &dyn Gate,
     patch: &str,
-) -> Result<String, ToolError> {
+) -> Result<ToolOutput, ToolError> {
     // Whole or nothing: a failure always leaves the files as they were, and says so, so the model
     // sends the whole patch again rather than the part it thinks is left.
     carry_out(workspace, gate, patch).map_err(|error| match error {
@@ -53,7 +52,7 @@ pub(super) fn run(
     })
 }
 
-fn carry_out(workspace: &Workspace, gate: &dyn Gate, patch: &str) -> Result<String, ToolError> {
+fn carry_out(workspace: &Workspace, gate: &dyn Gate, patch: &str) -> Result<ToolOutput, ToolError> {
     let hunks = parse(patch).map_err(ToolError::Failed)?;
     let (mut files, mut steps) = (vec![], vec![]);
     for hunk in hunks {
@@ -73,16 +72,24 @@ fn carry_out(workspace: &Workspace, gate: &dyn Gate, patch: &str) -> Result<Stri
         unchanged(&file.path, &file.shown, file.disk.as_deref())?;
     }
     write(&changed)?;
-    let mut report = steps
-        .iter()
+    // The model reads which files, as Codex's `apply_patch` says them; the diff is for the person
+    // alone (`ToolOutput::shown`).
+    let marks: Vec<&str> = (steps.iter())
         .filter(|step| !step.done.is_empty())
         .map(|step| step.done.as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
-    for step in steps.iter().filter(|step| !step.diff.is_empty()) {
-        let _ = write!(report, "\n\nDiff of {}:\n{}", step.subject, step.diff);
-    }
-    Ok(report)
+        .collect();
+    let shown: Vec<String> = (steps.iter())
+        .filter(|step| !step.diff.is_empty())
+        .map(|step| format!("Diff of {}:\n{}", step.subject, step.diff))
+        .collect();
+    Ok(ToolOutput {
+        report: format!(
+            "Success. Updated the following files:\n{}",
+            marks.join("\n")
+        ),
+        shown: shown.join("\n\n"),
+        ..ToolOutput::default()
+    })
 }
 
 /// The writes of `changed` first, then its deletions, so a move that fails halfway keeps its
@@ -169,7 +176,7 @@ fn plan(
             let size = count(content.lines().count());
             steps.push(Step {
                 summary: format!("create {} ({size})", file.shown),
-                done: format!("Created {} ({size})", file.shown),
+                done: format!("A {}", file.shown),
                 ..Step::of(&file.shown)
             });
             file.now = Some(content.into_bytes());
@@ -182,7 +189,7 @@ fn plan(
             let size = count(String::from_utf8_lossy(&bytes).lines().count());
             steps.push(Step {
                 summary: format!("delete {} ({size})", file.shown),
-                done: format!("Deleted {}", file.shown),
+                done: format!("D {}", file.shown),
                 ..Step::of(&file.shown)
             });
         }
@@ -227,16 +234,16 @@ fn update(
     } else {
         format!(" (+{added} -{removed} lines)")
     };
-    let (verb, summary) = match &moved {
-        Some(dest) => ("Moved", format!("move {shown} to {dest}{size}")),
-        None => ("Updated", format!("update {shown}{size}")),
+    let (done, summary) = match &moved {
+        Some(dest) => (
+            format!("D {shown}\nA {dest}"),
+            format!("move {shown} to {dest}{size}"),
+        ),
+        None => (format!("M {shown}"), format!("update {shown}{size}")),
     };
     steps.push(Step {
         summary,
-        done: match &moved {
-            Some(dest) => format!("{verb} {shown} to {dest}{size}"),
-            None => format!("{verb} {shown}{size}"),
-        },
+        done,
         diff,
         ..Step::of(&shown)
     });

@@ -273,7 +273,7 @@ fn weight(event: &Event) -> usize {
             outcome,
         } => {
             let outcome = match outcome {
-                Outcome::Done { report } => report.len(),
+                Outcome::Done { report, shown } => report.len() + shown.len(),
                 Outcome::Failed { why, .. } | Outcome::Fatal { why } => why.len(),
             };
             call.len() + name.len() + label(said) + outcome

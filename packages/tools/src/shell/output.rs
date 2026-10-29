@@ -18,11 +18,16 @@ pub(super) struct Output {
     dropped: usize,
     /// Characters pushed in all, so the marker can say how many were cut.
     chars: usize,
+    /// Line breaks pushed, and whether the last byte was one: the lines printed in all.
+    breaks: usize,
+    ended: bool,
 }
 
 impl Output {
     pub(super) fn push(&mut self, mut bytes: &[u8]) {
         self.chars += characters(bytes);
+        self.breaks += bytes.iter().filter(|&&byte| byte == b'\n').count();
+        self.ended = bytes.last().map_or(self.ended, |&byte| byte == b'\n');
         let taken = (HEAD - self.head.len()).min(bytes.len());
         let (first, rest) = bytes.split_at(taken);
         self.head.extend_from_slice(first);
@@ -33,6 +38,16 @@ impl Output {
             self.tail.drain(..over);
             self.dropped += over;
         }
+    }
+
+    /// Whether the middle was cut out of what `text` gives.
+    pub(super) fn cut(&self) -> bool {
+        self.dropped + self.tail.len().saturating_sub(TAIL) > 0
+    }
+
+    /// Lines printed in all, the cut ones too.
+    pub(super) fn lines(&self) -> usize {
+        self.breaks + usize::from(self.chars > 0 && !self.ended)
     }
 
     /// The output as text, trailing whitespace dropped, with a marker where the middle was cut.

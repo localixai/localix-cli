@@ -219,10 +219,19 @@ fn grouped_calls_keep_outputs_and_failures_and_approvals_break_the_chain() {
     let mut term = Term::new(&app);
     app.event(Event::TaskStarted("check".into()), now);
     for (command, outcome) in [
-        ("one", done("exit 0 in 0.0s\n### stdout\nfirst output")),
-        ("two", done("exit 0 in 0.0s\n### stdout\nsecond output")),
+        (
+            "one",
+            done("Exit code: 0\nWall time: 0.0 seconds\nOutput:\nfirst output"),
+        ),
+        (
+            "two",
+            done("Exit code: 0\nWall time: 0.0 seconds\nOutput:\nsecond output"),
+        ),
         ("bad", failed("permission denied", false)),
-        ("three", done("exit 0 in 0.0s\n### stdout\nthird output")),
+        (
+            "three",
+            done("Exit code: 0\nWall time: 0.0 seconds\nOutput:\nthird output"),
+        ),
     ] {
         app.event(result(command, "bash", &ran(command), outcome), now);
         term.draw(&mut app, now);
@@ -237,7 +246,15 @@ fn grouped_calls_keep_outputs_and_failures_and_approvals_break_the_chain() {
     );
     app.frame(protocol::ToClient::Resolved { id: 1 }, now);
     let four = ran("four");
-    app.event(result("four", "bash", &four, done("exit 0 in 0.0s")), now);
+    app.event(
+        result(
+            "four",
+            "bash",
+            &four,
+            done("Exit code: 0\nWall time: 0.0 seconds\nOutput:"),
+        ),
+        now,
+    );
     let shown = term.draw(&mut app, now);
     assert!(shown.contains("third output\n\n• Ran four"), "{shown}");
 }

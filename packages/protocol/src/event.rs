@@ -116,16 +116,15 @@ pub struct Total {
 pub enum Outcome {
     Done {
         report: String,
+        /// What only the person reads under the call (an edit's diff). Optional (W3): an older
+        /// server sends none.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        shown: String,
     },
     /// The model is told why; `declined` when the person refused the call.
-    Failed {
-        why: String,
-        declined: bool,
-    },
+    Failed { why: String, declined: bool },
     /// The run ends on it.
-    Fatal {
-        why: String,
-    },
+    Fatal { why: String },
 }
 
 /// A task of a session as the transcript shows it again.

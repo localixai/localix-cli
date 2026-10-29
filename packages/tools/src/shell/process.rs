@@ -69,6 +69,8 @@ pub(super) struct Finished {
     pub elapsed: Duration,
     pub stdout: String,
     pub stderr: String,
+    /// Lines the two streams printed in all, when either was cut (`output::Output`).
+    pub cut_lines: Option<usize>,
     /// The output was still open when it was taken: a background process holds it.
     pub open: bool,
 }
@@ -100,6 +102,7 @@ pub(super) fn run(job: &Job) -> io::Result<Finished> {
         elapsed,
         stdout: text(&stdout),
         stderr: text(&stderr),
+        cut_lines: cut_lines(&[&stdout, &stderr]),
         open,
     })
 }
@@ -290,6 +293,14 @@ fn drained(readers: &Receiver<()>, count: usize) -> bool {
             .recv_timeout(deadline.saturating_duration_since(Instant::now()))
             .is_ok()
     })
+}
+
+/// Lines printed in all by `outputs`, when any of them was cut.
+fn cut_lines(outputs: &[&Mutex<Output>]) -> Option<usize> {
+    let held: Vec<_> = outputs.iter().map(|output| crate::lock(output)).collect();
+    held.iter()
+        .any(|output| output.cut())
+        .then(|| held.iter().map(|output| output.lines()).sum())
 }
 
 fn text(output: &Mutex<Output>) -> String {

@@ -23,10 +23,7 @@ fn a_patch_written_as_text_changes_the_files() {
     assert!(grammar.contains("*** Begin Patch"));
     let patch = "*** Begin Patch\n*** Update File: a.txt\n@@\n one\n-two\n+three\n*** End Patch";
     let report = tool.call(&json!(patch)).unwrap().report;
-    assert!(
-        report.starts_with("Updated a.txt (+1 -1 lines)"),
-        "{report}"
-    );
+    assert_eq!(report, "Success. Updated the following files:\nM a.txt");
     assert_eq!(
         std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
         "one\nthree\n"

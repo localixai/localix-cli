@@ -339,6 +339,7 @@ fn the_ring_keeps_no_more_than_its_bytes_and_says_the_gap() {
                 label: protocol::Label::default(),
                 outcome: protocol::Outcome::Done {
                     report: report.clone(),
+                    shown: String::new(),
                 },
             },
         ));
@@ -377,6 +378,7 @@ fn a_call_s_label_counts_toward_the_ring_s_bytes_at_its_start_and_at_its_result(
             label: label.clone(),
             outcome: protocol::Outcome::Done {
                 report: "ok".into(),
+                shown: String::new(),
             },
         };
         hub.send(said(Some("s1"), ended));

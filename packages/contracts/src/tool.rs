@@ -81,6 +81,8 @@ pub struct ToolOutput {
     /// The state the call left: only the newest one matters, so an agent may drop older ones to
     /// keep the conversation short.
     pub state: Option<String>,
+    /// What only the person reads (an edit's diff): never sent to the model, and not kept.
+    pub shown: String,
 }
 
 /// A report alone: most calls leave no state.

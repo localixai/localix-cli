@@ -2,7 +2,6 @@
 //! tests and git. The model reads the exit code and both streams; a failing command is an answer,
 //! not an error.
 
-use std::fmt::Write as _;
 use std::time::Duration;
 
 use contracts::gate::Gate;
@@ -21,7 +20,7 @@ const MAX_TIMEOUT_MS: u64 = 600_000;
 
 /// What the model reads of the tool; `{shell}` is the shell this system runs commands with.
 const DESCRIPTION: &str = "Run a shell command (`{shell}`) in the workspace root, or in `workdir`, \
-and return its exit code, stdout and stderr. Use it for builds, tests, git, package managers and \
+and return its exit code, wall time and output (stdout, then stderr). Use it for builds, tests, git, package managers and \
 searching (`rg`, `rg --files`, `grep`, `find`), and for reading files (`cat`, `sed -n`, `head`). \
 Each call is a fresh shell: `cd` and variables do not carry over, so pass `workdir` or \
 chain with `&&`. Input is closed and there is no terminal: never start an interactive \
@@ -167,34 +166,46 @@ fn summary(command: &str) -> String {
         .replace('\n', " \u{23ce} ")
 }
 
-/// How it ended, then each stream that printed anything.
+/// The report as Codex writes it: how the command ended, its wall time, then `Output:` and
+/// stdout followed by stderr as one stream. Each line is a `Key: value`, so the model reads the
+/// code the same way whatever tool it was trained on.
 fn report(finished: &Finished, place: Option<&str>) -> String {
-    let seconds = format!("{:.1}s", finished.elapsed.as_secs_f64());
-    let mut head = match finished.ending {
-        Ending::Exit(code) => format!("exit {code} in {seconds}"),
-        Ending::Signal(signal) => format!("killed by signal {signal} in {seconds}"),
-        Ending::TimedOut { killed } => format!(
-            "timed out after {seconds}: {} (raise timeout_ms, at most {MAX_TIMEOUT_MS}, or run \
-             it in the background)",
+    let seconds = format!("{:.1}", finished.elapsed.as_secs_f64());
+    let mut out = vec![];
+    match finished.ending {
+        Ending::Exit(code) => out.push(format!("Exit code: {code}")),
+        Ending::Signal(signal) => out.push(format!("Killed by signal: {signal}")),
+        Ending::TimedOut { killed } => out.push(format!(
+            "Timed out after: {seconds} seconds ({}; raise timeout_ms, at most \
+             {MAX_TIMEOUT_MS}, or run it in the background)",
             killed_or_not(killed)
-        ),
-        Ending::Stopped { killed } => format!(
-            "stopped by the person after {seconds}: {}",
-            killed_or_not(killed)
-        ),
-        Ending::Unknown => format!("ended in {seconds}"),
-    };
-    if let Some(place) = place {
-        let _ = write!(head, " (in {place})");
-    }
-    let mut out = vec![head];
-    for (name, text) in [("stdout", &finished.stdout), ("stderr", &finished.stderr)] {
-        if !text.is_empty() {
-            out.push(format!("### {name}\n{text}"));
+        )),
+        Ending::Stopped { killed } => {
+            out.push(format!(
+                "Stopped: by the person ({})",
+                killed_or_not(killed)
+            ));
         }
+        Ending::Unknown => out.push("Exit code: unknown".into()),
     }
-    if out.len() == 1 {
-        out[0].push_str(", no output");
+    // A timeout's line already says how long it ran.
+    if !matches!(finished.ending, Ending::TimedOut { .. }) {
+        out.push(format!("Wall time: {seconds} seconds"));
+    }
+    if let Some(place) = place {
+        out.push(format!("Directory: {place}"));
+    }
+    if let Some(lines) = finished.cut_lines {
+        out.push(format!("Total output lines: {lines}"));
+    }
+    out.push("Output:".into());
+    let streams: Vec<&str> = [&finished.stdout, &finished.stderr]
+        .into_iter()
+        .filter(|text| !text.is_empty())
+        .map(String::as_str)
+        .collect();
+    if !streams.is_empty() {
+        out.push(streams.join("\n"));
     }
     if finished.open {
         out.push(

@@ -83,10 +83,10 @@ pub(crate) fn head(name: &str, label: &Label, state: &State, width: usize) -> Ve
 /// What a finished call printed or why it failed, under its head.
 pub(crate) fn body(name: &str, outcome: &Outcome, width: usize) -> Vec<Line<'static>> {
     if name == "apply_patch"
-        && let Outcome::Done { report } = outcome
-        && let Some((summary, diffs)) = report.split_once("\n\nDiff of ")
+        && let Outcome::Done { report, shown } = outcome
+        && let Some(diffs) = shown.strip_prefix("Diff of ")
     {
-        let mut out = rows_block(output_rows(name, summary), width);
+        let mut out = rows_block(output_rows(name, report), width);
         let diffs: Vec<&str> = diffs.split("\n\nDiff of ").collect();
         for each in &diffs {
             let (file, diff) = each.split_once(":\n").unwrap_or((each, ""));
@@ -106,7 +106,7 @@ pub(crate) fn body(name: &str, outcome: &Outcome, width: usize) -> Vec<Line<'sta
         Outcome::Failed { why, .. } | Outcome::Fatal { why } => {
             vec![(printable(why), style::failed())]
         }
-        Outcome::Done { report } => output_rows(name, report),
+        Outcome::Done { report, .. } => output_rows(name, report),
     };
     rows_block(rows, width)
 }
@@ -129,7 +129,7 @@ fn rows_block(rows: Vec<(String, Style)>, width: usize) -> Vec<Line<'static>> {
 fn failed(name: &str, outcome: &Outcome) -> bool {
     match outcome {
         Outcome::Failed { .. } | Outcome::Fatal { .. } => true,
-        Outcome::Done { report } => name == "bash" && !exit_zero(report),
+        Outcome::Done { report, .. } => name == "bash" && !exit_zero(report),
     }
 }
 
@@ -141,14 +141,13 @@ pub(crate) fn doing(label: &Label) -> String {
 }
 
 /// The rows worth showing under a finished call. A command shows what it printed, and its exit
-/// when that was not 0; an edit shows its line counts; the rest show their report's first row.
+/// when that was not 0; an edit the files it changed; the rest show their report's first row.
 fn output_rows(name: &str, report: &str) -> Vec<(String, Style)> {
     match name {
         "bash" => {
-            let (head, streams) = report.split_once('\n').unwrap_or((report, ""));
-            let printed = streams
-                .lines()
-                .filter(|line| !matches!(*line, "### stdout" | "### stderr"));
+            // The header's lines (`Exit code: 1`, `Wall time: …`) end at `Output:`.
+            let head = report.lines().next().unwrap_or_default();
+            let printed = report.lines().skip_while(|line| *line != "Output:").skip(1);
             let mut out: Vec<_> = rows(printed).collect();
             if !exit_zero(report) {
                 out.push((printable(head), style::failed()));
@@ -157,15 +156,10 @@ fn output_rows(name: &str, report: &str) -> Vec<(String, Style)> {
             }
             out
         }
-        // One file: its counts, as the head names it; several: a line each.
-        "apply_patch" => match report.lines().nth(1) {
-            None => (report.rfind('(').and_then(|at| report.get(at..)))
-                .map(|counts| vec![(counts.to_string(), style::dim())])
-                .unwrap_or_default(),
-            Some(_) => (report.lines())
-                .map(|line| (printable(line), style::dim()))
-                .collect(),
-        },
+        // The files as the model reads them (`M src/a.rs`), without the line that says success.
+        "apply_patch" => (report.lines().skip(1))
+            .map(|line| (printable(line), style::dim()))
+            .collect(),
         // What the person answered, without the report's own heading.
         "ask" => rows(report.lines()).skip(1).collect(),
         // What agents said, without the tags that frame it for the model.
@@ -185,7 +179,7 @@ fn rows<'a>(lines: impl Iterator<Item = &'a str>) -> impl Iterator<Item = (Strin
 
 /// Whether a command's report says it exited with 0.
 fn exit_zero(report: &str) -> bool {
-    report.starts_with("exit 0 ")
+    report.lines().next() == Some("Exit code: 0")
 }
 
 /// At most `HEAD + TAIL + 1` rows: the first, `… +N lines`, the last.

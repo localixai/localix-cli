@@ -67,7 +67,7 @@ impl Tool for PatchTool<'_> {
                     .into(),
             ));
         };
-        super::run(self.workspace, self.gate, patch).map(Into::into)
+        super::run(self.workspace, self.gate, patch)
     }
 }
 

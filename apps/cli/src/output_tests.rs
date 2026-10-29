@@ -37,8 +37,8 @@ fn run(output: &Output) {
     output.started(&start);
     output.call(&call());
     let done = Ok(ToolOutput {
-        report: "exit 0 in 1.0s".into(),
-        state: None,
+        report: "Exit code: 0\nWall time: 1.0 seconds\nOutput:".into(),
+        ..ToolOutput::default()
     });
     output.result(&call(), &done);
     output.turn(&Usage::default());

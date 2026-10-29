@@ -9,6 +9,7 @@ pub(crate) fn outcome(outcome: &Result<ToolOutput, ToolError>) -> protocol::Outc
     match outcome {
         Ok(output) => protocol::Outcome::Done {
             report: output.report.clone(),
+            shown: output.shown.clone(),
         },
         Err(ToolError::Failed(why)) => protocol::Outcome::Failed {
             declined: why.contains(crate::gate::DECLINED),

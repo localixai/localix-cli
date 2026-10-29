@@ -43,7 +43,7 @@ fn a_task_leaves_its_blocks_in_order() {
     let ls = ran("ls");
     app.event(call("c1", "bash", &ls), now);
     assert!(!app.shown().running.is_empty());
-    let outcome = done("exit 0 in 0.0s\n### stdout\nREADME.md");
+    let outcome = done("Exit code: 0\nWall time: 0.0 seconds\nOutput:\nREADME.md");
     app.event(result("c1", "bash", &ls, outcome), now);
     app.event(Event::Answer("One file: `README.md`.".into()), now);
     app.event(
@@ -725,7 +725,12 @@ fn a_call_that_took_a_while_says_how_long_and_a_quick_one_says_nothing() {
         app.event(call(command, "bash", &label), now);
         let ended = now + Duration::from_millis(took);
         app.event(
-            result(command, "bash", &label, done("exit 0 in 0.0s")),
+            result(
+                command,
+                "bash",
+                &label,
+                done("Exit code: 0\nWall time: 0.0 seconds\nOutput:"),
+            ),
             ended,
         );
         history(app).lines().next().unwrap_or("").to_string()

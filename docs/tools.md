@@ -18,6 +18,7 @@ those present) in a `Runtimes:` line.
 ## bash
 
 - `sh -c` in the workspace or a `workdir`, with stdin closed. On Unix it runs in its own session, with no terminal, so a program that prompts fails at once; git and pagers are told not to prompt or page.
+- The model reads what Codex's `shell` returns: `Exit code: N`, `Wall time: 0.4 seconds`, then `Output:` with stdout followed by stderr as one stream (a timeout reads `Timed out after: …`, a signal `Killed by signal: N`, a stop `Stopped: by the person`; a `workdir` adds `Directory: …`, a cut output `Total output lines: N`).
 - A timeout (120 s by default, at most 600 s) or Ctrl-C kills it with everything it started.
 - Each stream keeps about 40,000 characters: the first 8,000 and the last 32,000, cut at lines. A non-zero exit is a normal result. It asks the gate. In a read-only mode its commands run in an operating system sandbox instead ([modes](modes.md#modes)); a command that writes a file fails there.
 - The key variables of the provider in use (as the catalog names them, such as `DEEPSEEK_API_KEY`) and `OPENROUTER_API_KEY` are left out of a command's environment; other providers' variables stay, so a project's own tests can use them; a provider chosen later with `/login` has its variables left out too, from the next command on. That is no barrier, since a command can still read llx's own environment (`ps -E` on macOS; on Linux llx marks itself non-dumpable, so only root can read `/proc/<llx pid>/environ`, and a hosted CI runner gives passwordless `sudo`) and the saved key file. Where `bash` runs on input from strangers, see [CI security](ci.md#security).
@@ -25,6 +26,7 @@ those present) in a `Runtimes:` line.
 ## apply_patch
 
 - A patch as free text, `*** Begin Patch` … `*** End Patch`: `*** Add File`, `*** Delete File`, `*** Update File` (with `*** Move to`), each update's hunks found by their lines and the lines around them. Where the provider takes a tool of free text held to a grammar (the ChatGPT sign-in, for a model the catalog says takes one), it is offered so; elsewhere as a function with the patch in one string. Every file is worked out and asked of the gate before any is written; a hunk that does not fit changes nothing.
+- The model reads Codex's summary: `Success. Updated the following files:` and one line a file, `A path`, `M path` or `D path` (a move is `D old`, `A new`). The diff is shown to you in the terminal, never sent to the model; a failure says why and that no file was changed.
 - Writes are atomic (a new temporary file, then a rename) and keep CRLF line endings and permissions; a read-only file is refused, and a file with other hard links is written in place.
 - It asks the gate, refuses to write when the file changed while the question was open, and changes only files inside the workspace, never llx's own. In a read-only mode (`plan`) a patch is refused: a file written cannot be sandboxed.
 

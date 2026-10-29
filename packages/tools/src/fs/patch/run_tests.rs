@@ -3,25 +3,29 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use contracts::gate::{Effect, Gate, Open, Verdict};
-use contracts::tool::{Tool, ToolError};
+use contracts::tool::{Tool, ToolError, ToolOutput};
 use serde_json::{Value, json};
 
 use crate::fs::PatchTool;
 use crate::testing::{Recorder, Scratch};
 use crate::workspace::Workspace;
 
+fn patch(dir: &Scratch, gate: &dyn Gate, body: &str) -> Result<String, ToolError> {
+    patch_output(dir, gate, body).map(|output| output.report)
+}
+
 #[expect(
     clippy::unwrap_in_result,
     reason = "a test's helper: a setup that fails, fails the test"
 )]
-fn patch(dir: &Scratch, gate: &dyn Gate, body: &str) -> Result<String, ToolError> {
+fn patch_output(dir: &Scratch, gate: &dyn Gate, body: &str) -> Result<ToolOutput, ToolError> {
     let workspace = Workspace::new(dir.path()).unwrap();
     let tool = PatchTool {
         workspace: &workspace,
         gate,
     };
     let text = format!("*** Begin Patch\n{body}*** End Patch");
-    tool.call(&Value::String(text)).map(|output| output.report)
+    tool.call(&Value::String(text))
 }
 
 fn failed(result: Result<String, ToolError>) -> String {
@@ -69,15 +73,33 @@ fn a_patch_updates_creates_deletes_and_moves_files() {
     assert!(!dir.path().join("gone.txt").exists());
     assert!(!dir.path().join("old/b.txt").exists());
     assert_eq!(read(&dir, "new/b.txt"), "keep\nyou\n");
-    for expected in [
-        "Updated a.txt (+2 -1 lines)",
-        "Created sub/new.txt (1 line)",
-        "Deleted gone.txt",
-        "Moved old/b.txt to new/b.txt (+1 -1 lines)",
-        "-two\n+2\n+2b",
-    ] {
-        assert!(report.contains(expected), "{expected}: {report}");
-    }
+    // Codex's words: which files, and nothing of what changed in them.
+    assert_eq!(
+        report,
+        "Success. Updated the following files:\nM a.txt\nA sub/new.txt\nD gone.txt\n\
+         D old/b.txt\nA new/b.txt"
+    );
+}
+
+#[test]
+fn the_diff_is_for_the_person_and_never_in_the_report() {
+    let dir = Scratch::new();
+    dir.file("a.txt", "one\ntwo\nthree\n");
+    let output = patch_output(
+        &dir,
+        &Open,
+        "*** Update File: a.txt\n@@\n one\n-two\n+2\n three\n",
+    )
+    .unwrap();
+    assert!(!output.report.contains("two"), "{}", output.report);
+    assert_eq!(output.state, None);
+    assert!(
+        output
+            .shown
+            .starts_with("Diff of a.txt:\n@@ -1,3 +1,3 @@\n one\n-two\n+2\n three"),
+        "{}",
+        output.shown
+    );
 }
 
 #[test]
@@ -319,7 +341,7 @@ fn a_move_to_the_same_place_is_an_update() {
         "*** Update File: a.txt\n*** Move to: a.txt\n@@\n-x\n+y\n",
     )
     .unwrap();
-    assert!(report.starts_with("Updated a.txt"), "{report}");
+    assert_eq!(report, "Success. Updated the following files:\nM a.txt");
     assert_eq!(read(&dir, "a.txt"), "y\n");
 }
 

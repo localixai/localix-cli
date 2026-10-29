@@ -35,9 +35,14 @@ fn failed(result: Result<String, ToolError>) -> String {
 
 /// The report with its time replaced, which differs run to run.
 fn timeless(report: &str) -> String {
-    let (head, rest) = report.split_once(" in ").unwrap();
-    let (_, rest) = rest.split_once('s').unwrap();
-    format!("{head} in Ts{rest}")
+    report
+        .lines()
+        .map(|line| match line.starts_with("Wall time: ") {
+            true => "Wall time: T seconds",
+            false => line,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[test]
@@ -52,7 +57,7 @@ fn a_failing_command_is_output_with_its_code_and_streams() {
     .unwrap();
     assert_eq!(
         timeless(&report),
-        "exit 2 in Ts\n### stdout\nout\n### stderr\nerr"
+        "Exit code: 2\nWall time: T seconds\nOutput:\nout\nerr"
     );
     assert_eq!(
         *gate.asked.lock().unwrap(),
@@ -66,10 +71,13 @@ fn empty_streams_are_left_out() {
     let gate = Recorder::default();
     assert_eq!(
         timeless(&bash(&dir, &gate, json!({"command": "exit 0"})).unwrap()),
-        "exit 0 in Ts, no output"
+        "Exit code: 0\nWall time: T seconds\nOutput:"
     );
     let only_err = bash(&dir, &gate, json!({"command": "echo oops 1>&2"})).unwrap();
-    assert_eq!(timeless(&only_err), "exit 0 in Ts\n### stderr\noops");
+    assert_eq!(
+        timeless(&only_err),
+        "Exit code: 0\nWall time: T seconds\nOutput:\noops"
+    );
 }
 
 #[test]
@@ -80,7 +88,7 @@ fn workdir_is_relative_to_the_root() {
     let report = bash(&dir, &gate, json!({"command": "ls", "workdir": "sub"})).unwrap();
     assert_eq!(
         timeless(&report),
-        "exit 0 in Ts (in sub)\n### stdout\ninner.txt"
+        "Exit code: 0\nWall time: T seconds\nDirectory: sub\nOutput:\ninner.txt"
     );
     let missing = failed(bash(
         &dir,
@@ -149,9 +157,9 @@ fn a_command_past_its_timeout_is_killed_fast() {
         started.elapsed()
     );
     // The time varies with the machine's load: only the rest is checked.
-    assert!(report.starts_with("timed out after "), "{report}");
+    assert!(report.starts_with("Timed out after: "), "{report}");
     assert!(
-        report.contains("s: the command and everything it started were killed"),
+        report.contains(" seconds (the command and everything it started were killed;"),
         "{report}"
     );
 }
@@ -194,21 +202,25 @@ fn a_report_says_how_the_command_ended() {
         elapsed: Duration::from_millis(1240),
         stdout: "x".into(),
         stderr: String::new(),
+        cut_lines: Some(7),
         open: true,
     };
     assert_eq!(
         report(&finished(Ending::Signal(9)), None),
-        "killed by signal 9 in 1.2s\n### stdout\nx\n\
+        "Killed by signal: 9\nWall time: 1.2 seconds\nTotal output lines: 7\nOutput:\nx\n\
          (a background process still holds the output: what it prints later is not shown)"
     );
-    assert!(report(&finished(Ending::Unknown), Some("sub")).starts_with("ended in 1.2s (in sub)"));
+    assert!(
+        report(&finished(Ending::Unknown), Some("sub"))
+            .starts_with("Exit code: unknown\nWall time: 1.2 seconds\nDirectory: sub\n")
+    );
     assert!(
         report(&finished(Ending::TimedOut { killed: false }), None)
-            .starts_with("timed out after 1.2s: the command could not be killed")
+            .starts_with("Timed out after: 1.2 seconds (the command could not be killed")
     );
     assert!(
         report(&finished(Ending::Stopped { killed: true }), None).starts_with(
-            "stopped by the person after 1.2s: the command and everything it started were killed"
+            "Stopped: by the person (the command and everything it started were killed)\nWall time"
         )
     );
 }
@@ -230,7 +242,7 @@ fn without_tty_there_is_still_no_terminal() {
     let dir = Scratch::new();
     let command = "python3 -c 'import sys; print(sys.stdin.isatty(), sys.stdout.isatty())'";
     let report = bash(&dir, &Recorder::default(), json!({"command": command})).unwrap();
-    assert!(report.ends_with("### stdout\nFalse False"), "{report}");
+    assert!(report.ends_with("Output:\nFalse False"), "{report}");
 }
 
 #[test]
@@ -275,7 +287,7 @@ fn a_command_runs_with_the_workspaces_environment_and_never_its_hidden_variables
     let report = tool.call(&json!({"command": command})).unwrap().report;
     // The process's own HOME is not the client's: only what the client gave reaches it.
     assert!(
-        report.ends_with("### stdout\nfrom the client|none|none"),
+        report.ends_with("Output:\nfrom the client|none|none"),
         "{report}"
     );
 }
@@ -294,4 +306,22 @@ fn a_source_file_of_a_thousand_lines_is_read_whole() {
     assert!(
         report.contains("line 0500 of") && report.ends_with("line 0999 of a file to read whole")
     );
+}
+
+#[test]
+fn a_cut_output_says_how_many_lines_it_had() {
+    let dir = Scratch::new();
+    let report = bash(
+        &dir,
+        &Recorder::default(),
+        json!({"command": "awk 'BEGIN { for (i = 0; i < 20000; i++) printf \"line %05d\\n\", i }'"}),
+    )
+    .unwrap();
+    assert!(
+        report.starts_with("Exit code: 0\nWall time: ")
+            && report.contains("\nTotal output lines: 20000\nOutput:\nline 00000"),
+        "{}",
+        report
+    );
+    assert!(report.contains("characters cut"));
 }

@@ -239,7 +239,7 @@ Every task ends with the agent's `result` call: `achieved`, a `summary`, `blocke
 | --- | --- | --- |
 | 0 | `achieved` | Its `result` said the goal was reached |
 | 1 | `not-achieved` | Its `result` said it was not (the answer names what blocks it), or the data did not match `--schema` |
-| 2 | `out-of-budget` | Turns or time ran out before a `result` |
+| 2 | `out-of-budget` | Turns, time or the budget ran out before a `result` |
 | 3 | `not-ready` | No key, no network, a model error, a bad argument |
 | 130 | `interrupted` | Interrupted, or the runner cancelled the job |
 

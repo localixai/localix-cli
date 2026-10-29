@@ -45,6 +45,8 @@ struct Router {
     meet: Vec<&'static str>,
     /// Agents that think a while before each answer, so the main agent gets to wait for them.
     slow: Vec<&'static str>,
+    /// How long: longer where the main agent must make many turns while they think.
+    slow_for: Duration,
     met: Mutex<(usize, usize)>,
     arrived: Condvar,
     /// The agents that met another one thinking.
@@ -66,6 +68,7 @@ impl Router {
                     .map(|(key, replies)| (key.to_string(), replies.iter().cloned().collect()))
                     .collect(),
             ),
+            slow_for: Duration::from_millis(300),
             ..Self::default()
         }
     }
@@ -177,7 +180,7 @@ impl Chat for Router {
             self.main_turn(&request);
         }
         if self.slow.contains(&key.as_str()) {
-            std::thread::sleep(Duration::from_millis(300));
+            std::thread::sleep(self.slow_for);
         }
         if self.fails.contains(&key.as_str()) {
             return Err(ChatError::Unavailable("the model is down".into()));
@@ -449,6 +452,9 @@ fn eight_agents_work_at_most_even_when_some_are_closed() {
     }
     let mut chat = Router::new(&[("main", script)]);
     chat.slow = names.to_vec();
+    // Fifteen main turns happen while the first six think: under a loaded test run they take
+    // longer than the usual pause.
+    chat.slow_for = Duration::from_secs(2);
     composed_with(crate::modes::built("bypass"), true, &chat, |rig| {
         rig.task("a crowd");
         let results = results(rig);

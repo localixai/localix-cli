@@ -19,7 +19,7 @@
 - Every task ends with the agent's `result` call (achieved, a summary, `blocked_by`, and `data` matching `--schema`); text alone never ends it.
 - `llx exec --json` prints one JSON event per line, ending with `run.completed` and its `status`.
 - `llx decide "<question>"` asks the decision model one question about stdin and prints the option it picked (`--choices`, `--expect`).
-- Exit codes: 0 achieved, 1 not achieved, 2 out of turns or time (`exhausted`), 3 environment or usage (`error`), 130 interrupted.
+- Exit codes: 0 achieved, 1 not achieved, 2 out of turns, time or money (`exhausted`; `--max-turns`, `--timeout`, `--budget`), 3 environment or usage (`error`), 130 interrupted.
 
 ## In CI
 

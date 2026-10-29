@@ -8,6 +8,7 @@ export function Footer() {
       <nav aria-label="Footer">
         <a href={DOCS}>Docs</a>
         <a href={GITHUB}>GitHub</a>
+        <a href={`${GITHUB}/blob/main/MODELS.md`}>Models</a>
         <a href={`${GITHUB}/blob/main/CHANGELOG.md`}>Changelog</a>
       </nav>
     </footer>

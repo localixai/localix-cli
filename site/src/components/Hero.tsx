@@ -12,12 +12,12 @@ export function Hero() {
           <span className="hero-chip">Autonomous</span> agent runtime for CI and scripts
         </h1>
         <p className="lede">
-          One task, a structured end every time, and an exit code to branch on. One small binary on any model, with a minimal
-          agent for your terminal, and commands other agents can call.
+          <code>llx exec</code> runs one task and ends with a result and an exit code your pipeline can branch on. One
+          binary under 4 MB, on any model. It is a minimal agent at your terminal, too.
         </p>
         <InstallCommand tabs={INSTALL} />
         <p className="hero-under">
-          macOS · Linux · MIT · <a href={DOCS}>Read the docs</a>
+          macOS and Linux · MIT · <a href={DOCS}>Docs</a>
         </p>
       </div>
       <figure className="hero-demo">

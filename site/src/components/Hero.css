@@ -79,3 +79,7 @@ h1 {
   .hero-copy > *,
   .hero-demo { animation: none; }
 }
+.lede code {
+  color: var(--white);
+  font-size: 0.88em;
+}

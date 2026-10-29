@@ -9,10 +9,13 @@
 </p>
 
 <p align="center">
-  One task, a structured end every time, and an exit code to branch on. One binary under 4 MB, on any model. A minimal agent at your terminal, too.
+  <code>llx exec</code> runs one task and ends with a <code>result</code> and an exit code your pipeline can branch on. One binary under 4 MB, on any model. A minimal agent at your terminal, too.
 </p>
 
 <p align="center">
+  <a href="https://github.com/rsaryev/llx/actions/workflows/ci.yml"><img src="https://github.com/rsaryev/llx/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
+  <a href="https://github.com/rsaryev/llx/releases/latest"><img src="https://img.shields.io/github/v/release/rsaryev/llx?color=black&label=release" alt="Latest release"></a>
+  <a href="https://www.npmjs.com/package/@localixai/llx"><img src="https://img.shields.io/npm/v/@localixai/llx?color=black&label=npm" alt="npm version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-black" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/macOS%20%C2%B7%20Linux-black" alt="macOS and Linux">
   <img src="https://img.shields.io/badge/binary-under%204%20MB-black" alt="One binary under 4 MB">
@@ -20,10 +23,10 @@
 </p>
 
 <p align="center">
-  <a href="#install">Install</a> ·
+  <a href="#try-it">Try it</a> ·
   <a href="docs/usage.md">Documentation</a> ·
   <a href="#in-ci-and-scripts">In CI</a> ·
-  <a href="#in-other-agents">In other agents</a> ·
+  <a href="#benchmark">Benchmark</a> ·
   <a href="https://llx.sh">llx.sh</a>
 </p>
 
@@ -41,25 +44,19 @@ llx is a model in a loop over five tools, on any provider: `bash`, `apply_patch`
 | **You** | `llx` | A minimal agent at your terminal |
 | **Your other agents** | `llx exec` · `llx decide` | Commands they run from their shell: a helper on any model, a quick decision. They extend the agent you use, never replace it |
 
-<table>
-  <tr>
-    <td valign="top">
-      <strong>A step in your pipeline</strong><br>
-      A GitHub Action, and <code>llx exec</code> anywhere else: it answers to your JSON Schema and exits with a code CI can branch on.<br>
-      <a href="docs/ci.md">CI →</a>
-    </td>
-    <td valign="top">
-      <strong>Small on purpose</strong><br>
-      Under 4 MB, starts in about 5 ms. About 200 model providers: a ChatGPT sign-in, OpenRouter, or a key.<br>
-      <a href="MODELS.md">Models →</a>
-    </td>
-    <td valign="top">
-      <strong>Rules, not trust</strong><br>
-      Every command and file change asks first, unless a rule allows it: <code>--allow 'bash(cargo test *)'</code>, or a mode of your own. <code>plan</code> runs read-only in the system's sandbox.<br>
-      <a href="docs/modes.md">Modes →</a>
-    </td>
-  </tr>
-</table>
+Every command and file change asks first, unless a rule allows it (`--allow 'bash(cargo test *)'`, or a mode of your own); `plan` runs read-only in the system's sandbox ([modes](docs/modes.md)). A task is bounded by `--max-turns`, `--timeout` and `--budget`: the first reached ends it. About 200 model providers: a ChatGPT sign-in, OpenRouter, or a key ([models](MODELS.md)).
+
+## Try it
+
+```bash
+npm install -g @localixai/llx                # or the curl installer, below
+cd your-project && llx                       # a session: /login first, then a task
+echo '{"type":"object","properties":{"bump":{"enum":["patch","minor","major"]},"ship":{"type":"boolean"}},"required":["bump","ship"]}' > ship.json
+git diff main... | llx exec --json --mode plan --schema @ship.json "Safe to ship? Which bump?" > events.jsonl
+echo $?                                      # 0 achieved, 1 not achieved, 2 exhausted, 3 error
+jq -c 'select(.type == "run.completed") | {status, data}' events.jsonl
+# {"status":"achieved","data":{"bump":"patch","ship":true}}
+```
 
 ## Benchmark
 
@@ -78,13 +75,7 @@ The runs: [benchmarks/task-tracker/runs](benchmarks/task-tracker/runs); the task
 npm install -g @localixai/llx
 ```
 
-Or `curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh` (macOS and Linux x86_64, checked against `SHA256SUMS`), or `cargo install --locked --path apps/cli` from a clone.
-
-```bash
-cd your-project
-llx                                    # a session: /login first, then a task
-llx doctor                             # sign-ins, models, the shell
-```
+Or `curl -fsSL https://raw.githubusercontent.com/rsaryev/llx/main/scripts/install.sh | sh` (macOS and Linux x86_64, checked against `SHA256SUMS`), or `cargo install --locked --path apps/cli` from a clone. `llx doctor` checks the sign-ins, the models and the shell.
 
 ## In CI and scripts
 

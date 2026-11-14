@@ -13,12 +13,12 @@ publish = false
 [features]
 testing = ["dep:vt100"]
 
-# The interface (ARCHITECTURE.md L7): the protocol alone among the workspace's crates, and the
-# terminal's libraries.
+# The interface (ARCHITECTURE.md L7): the protocol alone among the workspace's crates, flowdown
+# (the lab's library that reads what it draws) and the terminal's libraries.
 [dependencies]
 protocol.workspace = true
 crossterm.workspace = true
-markdown.workspace = true
+flowdown.workspace = true
 ratatui.workspace = true
 unicode-width.workspace = true
 # The terminal's modes, signals and size: calls std has no wrapper for.

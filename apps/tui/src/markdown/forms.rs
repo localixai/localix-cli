@@ -3,7 +3,7 @@
 //! number over what it counts (a list where no row holds them), the case for and against by
 //! their markers, a section under its title, sources by number, each address on its own row.
 
-use markdown::{Callout, Kind, Node};
+use flowdown::{Callout, Kind, Node};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 

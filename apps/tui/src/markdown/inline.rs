@@ -2,7 +2,7 @@
 //! after its text. And what a paragraph is read as by how it is written: a step's or a figure's
 //! bold lead, the line that names a quote's source, a picture's caption.
 
-use markdown::{Kind, Node};
+use flowdown::{Kind, Node};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 

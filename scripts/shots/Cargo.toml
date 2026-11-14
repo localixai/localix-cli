@@ -1,0 +1,14 @@
+# The README's pictures of a terminal: a text as llx's interface draws it, written as SVG.
+# A crate of its own, outside the workspace: it is a tool run by hand, and never reaches llx's
+# build or its checks.
+[package]
+name = "shots"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+# The interface: how llx draws what flowdown read.
+tui = { path = "../../apps/tui", features = ["testing"] }

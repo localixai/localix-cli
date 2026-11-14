@@ -628,6 +628,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowdown"
+version = "0.1.0"
+source = "git+https://github.com/localixai/flowdown?rev=ab35cd80f7cfbba429eeb1e726565c3367d94856#ab35cd80f7cfbba429eeb1e726565c3367d94856"
+
+[[package]]
 name = "flowschema"
 version = "0.1.0"
 source = "git+https://github.com/localixai/flowschema?rev=d0de5402aaaac9e0db00033b14095db4977b64bd#d0de5402aaaac9e0db00033b14095db4977b64bd"
@@ -1075,10 +1080,6 @@ dependencies = [
  "nix 0.31.3",
  "windows-sys",
 ]
-
-[[package]]
-name = "markdown"
-version = "0.6.1"
 
 [[package]]
 name = "memchr"
@@ -1878,11 +1879,11 @@ dependencies = [
  "anthropic",
  "clap",
  "contracts",
+ "flowdown",
  "flowschema",
  "libc",
  "local",
  "log",
- "markdown",
  "models",
  "openai",
  "openrouter",
@@ -2321,9 +2322,9 @@ name = "tui"
 version = "0.6.1"
 dependencies = [
  "crossterm",
+ "flowdown",
  "insta",
  "libc",
- "markdown",
  "protocol",
  "ratatui",
  "unicode-width",

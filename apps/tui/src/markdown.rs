@@ -12,7 +12,7 @@ mod math;
 mod table;
 mod tree;
 
-use markdown::{Kind, Node, Task};
+use flowdown::{Kind, Node, Task};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
@@ -22,7 +22,7 @@ use crate::printable::printable;
 
 /// `text` as rows of at most `width` columns.
 pub(crate) fn render(text: &str, width: usize) -> Vec<Line<'static>> {
-    let doc = markdown::parse(text);
+    let doc = flowdown::parse(text);
     let mut out = Renderer {
         width: width.max(8),
         rows: vec![],

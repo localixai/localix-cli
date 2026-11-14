@@ -26,8 +26,8 @@ contracts.workspace = true
 protocol.workspace = true
 queue.workspace = true
 flowschema.workspace = true
-# The forms an answer is drawn with, as the package that reads them tells a model.
-markdown.workspace = true
+# The forms an answer is drawn with, as the library that reads them tells a model.
+flowdown.workspace = true
 anthropic.workspace = true
 local.workspace = true
 openai.workspace = true

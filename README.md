@@ -100,17 +100,17 @@ What finished goes into the terminal's own scrollback, so scrolling, selecting a
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="packages/markdown/assets/files-dark.svg">
-    <img src="packages/markdown/assets/files-light.svg" alt="An answer as llx draws it in a terminal: a file tree, code under its file's name, a diff, a formula, a quote with its source and a footnote" width="49%">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/files-dark.svg">
+    <img src="docs/assets/files-light.svg" alt="An answer as llx draws it in a terminal: a file tree, code under its file's name, a diff, a formula, a quote with its source and a footnote" width="49%">
   </picture>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="packages/markdown/assets/report-dark.svg">
-    <img src="packages/markdown/assets/report-light.svg" alt="An answer as llx draws it in a terminal: figures side by side, a table, a task list, the case for and against, and sources by number" width="49%">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/report-dark.svg">
+    <img src="docs/assets/report-light.svg" alt="An answer as llx draws it in a terminal: figures side by side, a table, a task list, the case for and against, and sources by number" width="49%">
   </picture>
 </p>
 
 <p align="center">
-  <sub>The renderer's own rows, written as SVG; they follow your GitHub theme. How they are read and drawn: <a href="packages/markdown/README.md">packages/markdown</a>.</sub>
+  <sub>The renderer's own rows, written as SVG; they follow your GitHub theme. The Markdown is read by <a href="https://github.com/localixai/flowdown">flowdown</a>, the lab's library; llx draws what it read.</sub>
 </p>
 
 | Key | What it does |

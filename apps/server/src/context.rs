@@ -38,8 +38,8 @@ pub(crate) struct Environment<'a> {
 /// How an answer reaches the person.
 #[derive(Clone, Copy)]
 pub(crate) enum Answer {
-    /// Drawn by the interface, which reads it with the `markdown` package: the model is told
-    /// the forms that package reads, in the package's own words.
+    /// Drawn by the interface, which reads it with flowdown: the model is told the forms that
+    /// library reads, in the library's own words.
     Drawn,
     /// As the model wrote it: a pipe, a file, `--json`, data.
     Plain,
@@ -51,7 +51,7 @@ pub(crate) fn gather(environment: &Environment) -> String {
     match environment.answer {
         Answer::Drawn => parts.push(format!(
             "<answer_format>\n{}\n</answer_format>",
-            markdown::prompt()
+            flowdown::prompt()
         )),
         Answer::Plain => {}
     }

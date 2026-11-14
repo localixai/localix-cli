@@ -29,7 +29,6 @@ members = [
     "packages/agent",
     "packages/contracts",
     "packages/protocol",
-    "packages/markdown",
     "packages/queue",
     "packages/session",
     "packages/tools",
@@ -158,7 +157,6 @@ local = { path = "packages/providers/local" }
 models = { path = "packages/providers/models" }
 openai = { path = "packages/providers/openai" }
 openrouter = { path = "packages/providers/openrouter" }
-markdown = { path = "packages/markdown" }
 queue = { path = "packages/queue" }
 provider-kit = { path = "packages/providers/kit" }
 server = { path = "apps/server" }
@@ -185,6 +183,10 @@ serde = { version = "1.0.229", features = ["derive"] }
 # (ARCHITECTURE.md P8). It brings `regex-lite`, its fallback for a pattern its automaton cannot
 # take.
 flowschema = { git = "https://github.com/localixai/flowschema", rev = "d0de5402aaaac9e0db00033b14095db4977b64bd" }
+# What reads the Markdown a model writes into the tree the interface draws: the lab's library
+# (ARCHITECTURE.md L7), its Rust crate, taken at a pinned revision of its repository. No
+# dependency of its own.
+flowdown = { git = "https://github.com/localixai/flowdown", rev = "ab35cd80f7cfbba429eeb1e726565c3367d94856" }
 serde_json = "1.0.154"
 # Already in the tree through crossterm: the facade the log is written through.
 log = "0.4"
@@ -210,5 +212,5 @@ strip = true
 
 # The one crate built for speed: an answer is read again from its start each time a piece of it
 # arrives, on the thread that draws. It costs the binary about 33 KB.
-[profile.release.package.markdown]
+[profile.release.package.flowdown]
 opt-level = 3

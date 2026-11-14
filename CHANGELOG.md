@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **An answer's Markdown is read by [flowdown](https://github.com/localixai/flowdown)**, the
+  lab's library the parser grew into, in place of llx's own copy of it. The forms an answer may
+  take are told to the model in that library's words, and a long run of `)` after a bare
+  address is read in linear time.
 - **`--schema` is checked by [flowschema](https://github.com/localixai/flowschema)**, the lab's
   library the checker grew into, in place of llx's own copy of it. The messages and what is
   checked are the same; a schema is compiled several times faster.

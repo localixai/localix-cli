@@ -23,7 +23,7 @@ fn an_answer_the_interface_draws_is_told_the_forms_it_draws_and_a_plain_one_is_n
     });
     let (place, forms, instructions) = (
         drawn.find("</environment>").unwrap(),
-        drawn.find("<answer_format>\n# Answer format\n").unwrap(),
+        drawn.find("<answer_format>\n# Answer format").unwrap(),
         drawn.find("No project instructions").unwrap(),
     );
     // Before the instructions: the person's own say how they want an answer, and come last.

@@ -18,7 +18,7 @@ const DIAGRAM: &str = "mermaid";
 const TREE: &str = "tree";
 
 impl Renderer {
-    pub(super) fn fence(&mut self, node: markdown::Node<'_>) {
+    pub(super) fn fence(&mut self, node: flowdown::Node<'_>) {
         let info = node.info().trim();
         let (language, meta) = info.split_once(char::is_whitespace).unwrap_or((info, ""));
         let source = node.text().trim_end_matches('\n');

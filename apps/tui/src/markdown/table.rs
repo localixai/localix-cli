@@ -1,7 +1,7 @@
 //! Styled Markdown table cells, laid out within the terminal's display columns: each column given
 //! room by what it holds, and the rows ruled apart when they hold long text.
 
-use markdown::Align;
+use flowdown::Align;
 use ratatui::text::{Line, Span};
 
 use crate::style;

@@ -35,7 +35,7 @@ does is known above the server.
                 │                 │        packages/agent                  the core
                 │                 │        packages/tools, session, providers/*   adapters
                 │                 │
-          packages/protocol                 packages/contracts, queue, markdown, providers/kit
+          packages/protocol                 packages/contracts, queue, providers/kit
           the seam's types only             vocabulary: ports, primitives
 ```
 
@@ -44,22 +44,24 @@ The server's package is `server`, its library `llx`: the log's targets (`llx::se
 
 | Layer | Crates | Knows |
 |---|---|---|
-| Vocabulary | `contracts` (ports, no logic), `queue`, `markdown`, `providers/kit` | no workspace crate |
+| Vocabulary | `contracts` (ports, no logic), `queue`, `providers/kit` | no workspace crate |
 | Seam | `protocol` | no crate at all |
 | Core | `agent` | `contracts` |
 | Adapters | `tools`, `session` | `contracts` |
 | Adapters | `providers/{models,local,anthropic,openai,openrouter}` | `contracts`, `kit` |
 | Server | `apps/server` (library `llx`) | every package |
-| Interface | `apps/tui` (its client to the server a module, `client.rs`) | `protocol`, `markdown` |
+| Interface | `apps/tui` (its client to the server a module, `client.rs`) | `protocol` |
 | Binary | `apps/cli` | `server`, `tui`, `protocol` (the frames and the offer it hands over, P7) |
 
 ## Dependency rules
 
 - **L1** _checked_: `contracts` depends on no workspace crate.
 - **L2** _checked_: `agent` depends only on `contracts`.
-- **L3** _checked_: tools and stores depend only on `contracts`; primitives (`queue`, and
-  `markdown`: the Markdown a model writes read into a tree) and the provider kit on nothing;
-  providers on `contracts` and the kit. A tool knows nothing of the
+- **L3** _checked_: tools and stores depend only on `contracts`; the primitive an app composes
+  (`queue`) and the provider kit on nothing; providers on `contracts` and the kit. What was a
+  primitive and grew into a library of the lab is taken from its repository at a pinned
+  revision, never kept as a workspace crate: flowschema (P8), and flowdown, the Markdown a model
+  writes read into a tree (L7). A tool knows nothing of the
   agent, the models or the other tools; a provider nothing of tools or other providers.
 - **L4** _checked_: only apps compose packages. Nothing depends on an app, but the binary on the
   server and the interface; the server and the interface depend on no app in any section (the
@@ -71,10 +73,11 @@ The server's package is `server`, its library `llx`: the log's targets (`llx::se
 - **L6** _checked_: `protocol` depends on no crate. Its types are the seam's own, never the
   domain's: the server maps its values onto them (`server/wire.rs`), and the protocol never
   re-exports one.
-- **L7** _checked_ on `apps/tui`'s manifest and sources: the interface depends only on
-  `protocol`, and on `markdown`, the primitive that reads what it draws (the model's words reach
-  it as text; how they read is not the server's to say): never on
-  the agent, tools, providers, the session store or the server, nor on the app's other modules.
+- **L7** _checked_ on `apps/tui`'s manifest and sources: among the workspace's crates the
+  interface depends only on `protocol`; what it draws is read by flowdown, the lab's library
+  (the model's words reach it as text; how they read is not the server's to say). It never
+  depends on the agent, tools, providers, the session store or the server, nor on the app's
+  other modules.
   What it needs to show, the protocol carries.
 - **L8**: the server is the only crate that serves the protocol and the only one that knows
   every package; the interface's client (`apps/tui`'s `client.rs`) is the only code that calls

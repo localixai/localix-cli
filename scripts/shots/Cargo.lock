@@ -392,7 +392,7 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 [[package]]
 name = "flowdown"
 version = "0.1.0"
-source = "git+https://github.com/localixai/flowdown?rev=ab35cd80f7cfbba429eeb1e726565c3367d94856#ab35cd80f7cfbba429eeb1e726565c3367d94856"
+source = "git+https://github.com/localixai/flowdown?tag=rust-v0.1.0#ab35cd80f7cfbba429eeb1e726565c3367d94856"
 
 [[package]]
 name = "fnv"

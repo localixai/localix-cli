@@ -7,7 +7,8 @@ const COLUMNS: u16 = 30;
 
 /// A terminal that keeps what scrolled off the top.
 fn terminal() -> vt100::Parser {
-    vt100::Parser::new(ROWS, COLUMNS, 100)
+    let cells = |n: u16| std::num::NonZeroU16::new(n).unwrap_or(std::num::NonZeroU16::MIN);
+    vt100::Parser::new(cells(ROWS), cells(COLUMNS), 100)
 }
 
 fn lines(rows: &[&str]) -> Vec<Line<'static>> {

@@ -152,7 +152,8 @@ impl Term {
             .spawn()
             .unwrap();
         drop(slave);
-        let screen = Arc::new(Mutex::new(vt100::Parser::new(ROWS, COLS, 0)));
+        let cells = |n: u16| std::num::NonZeroU16::new(n).unwrap_or(std::num::NonZeroU16::MIN);
+        let screen = Arc::new(Mutex::new(vt100::Parser::new(cells(ROWS), cells(COLS), 0)));
         let reading = Arc::clone(&screen);
         let mut output = File::from(master.try_clone().unwrap());
         let reader = std::thread::Builder::new().name("term-reader".into());

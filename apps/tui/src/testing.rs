@@ -356,6 +356,11 @@ pub(crate) fn plain(lines: &[ratatui::text::Line<'static>]) -> String {
         .join("\n")
 }
 
+/// A count of rows or columns as vt100 takes it: never none (a window of none is of one).
+fn cells(n: u16) -> std::num::NonZeroU16 {
+    std::num::NonZeroU16::new(n).unwrap_or(std::num::NonZeroU16::MIN)
+}
+
 /// A terminal of the app's size, drawn into as the interface's thread draws: what finished goes
 /// above once, the live area is redrawn under it, and a changed view clears the screen first.
 pub(crate) struct Term {
@@ -364,7 +369,7 @@ pub(crate) struct Term {
 
 impl Term {
     pub(crate) fn new(app: &App) -> Self {
-        let size = |n: usize| u16::try_from(n).unwrap_or(u16::MAX);
+        let size = |n: usize| cells(u16::try_from(n).unwrap_or(u16::MAX));
         let parser = vt100::Parser::new(size(app.height), size(app.width), 0);
         Self {
             screen: Screen::new(parser, false),
@@ -391,7 +396,7 @@ impl Term {
         self.screen
             .output_mut()
             .screen_mut()
-            .set_size(height, width);
+            .set_size(cells(height), cells(width));
         app.input(Input::Resize(width, height), now);
     }
 

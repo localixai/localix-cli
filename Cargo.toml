@@ -177,12 +177,12 @@ unicode-width = "0.2"
 # Tests of what the terminal shows (dev only): snapshots, and a terminal emulator the tests draw
 # into.
 insta = "1.46"
-vt100 = "0.16.2"
+vt100 = "0.18"
 serde = { version = "1.0.229", features = ["derive"] }
 # What `--schema` is checked by: the lab's library, taken at a pinned revision of its repository
 # (ARCHITECTURE.md P8). It brings `regex-lite`, its fallback for a pattern its automaton cannot
 # take.
-flowschema = { git = "https://github.com/localixai/flowschema", rev = "73550951157b86d8d0c0ca9804975972c82dcf0d" }
+flowschema = { git = "https://github.com/localixai/flowschema", rev = "0ad53564900a3cb3c95542156d806cda80f58287" }
 # What reads the Markdown a model writes into the tree the interface draws: the lab's library
 # (ARCHITECTURE.md L7), its Rust crate, taken at a release's tag (`rust-v<version>`). No
 # dependency of its own.
@@ -194,7 +194,7 @@ log = "0.4"
 miniz_oxide = "0.9.1"
 sha2 = "0.11.1"
 # models.dev's files, read by the catalog's build script alone: none of it reaches the binary.
-toml = "0.8"
+toml = "1.2"
 # The OS's TLS and its trust store (`RootCerts::PlatformVerifier`, the kit's one agent): not
 # `native-tls`, which also builds in Mozilla's root certificates (about 130 KB) that agent never reads.
 ureq = { version = "3", default-features = false, features = ["json", "gzip", "native-tls-no-default"] }

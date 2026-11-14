@@ -635,7 +635,7 @@ source = "git+https://github.com/localixai/flowdown?tag=rust-v0.1.0#ab35cd80f7cf
 [[package]]
 name = "flowschema"
 version = "0.1.0"
-source = "git+https://github.com/localixai/flowschema?rev=d0de5402aaaac9e0db00033b14095db4977b64bd#d0de5402aaaac9e0db00033b14095db4977b64bd"
+source = "git+https://github.com/localixai/flowschema?rev=b9d3dd7217f68f2b37806fe9ac8a1d2de176769b#b9d3dd7217f68f2b37806fe9ac8a1d2de176769b"
 dependencies = [
  "regex-lite",
  "serde_json",

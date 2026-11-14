@@ -182,7 +182,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 # What `--schema` is checked by: the lab's library, taken at a pinned revision of its repository
 # (ARCHITECTURE.md P8). It brings `regex-lite`, its fallback for a pattern its automaton cannot
 # take.
-flowschema = { git = "https://github.com/localixai/flowschema", rev = "d0de5402aaaac9e0db00033b14095db4977b64bd" }
+flowschema = { git = "https://github.com/localixai/flowschema", rev = "b9d3dd7217f68f2b37806fe9ac8a1d2de176769b" }
 # What reads the Markdown a model writes into the tree the interface draws: the lab's library
 # (ARCHITECTURE.md L7), its Rust crate, taken at a release's tag (`rust-v<version>`). No
 # dependency of its own.

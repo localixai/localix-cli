@@ -19,7 +19,8 @@ Packages and three apps: the server (the composition root), the interface and th
 - `packages/tools`: the tools, a module each (`fs/`, `shell/`, `ask.rs`), and `workspace.rs`, where paths resolve.
 - `packages/providers/`: the models' providers, a package each: `kit/` (what they share), `models/` (the model catalog, MODELS.md), `local/`, `openrouter/`, `anthropic/`, `openai/`.
 - `packages/protocol`: what the interface and the server say to each other (ARCHITECTURE.md W1-W8).
-- `packages/queue`, `packages/schema`, `packages/markdown`: primitives an app composes, with no workspace dependency.
+- `packages/queue`, `packages/markdown`: primitives an app composes, with no workspace dependency.
+- flowschema (`github.com/localixai/flowschema`, pinned in the root `Cargo.toml`): the lab's library `--schema` is checked by, named by the server alone (ARCHITECTURE.md P8). A change to how data is checked is made there, then the pin moves here.
 - `packages/session`: the history store, a JSON Lines file per session.
 - `apps/server`: the composition root, package `server`, its library `llx`.
 - `apps/tui`: the session's interface, package `tui`.
@@ -36,7 +37,7 @@ Layers (checked by `apps/cli/tests/suite/repo/architecture.rs`):
 
 - L1: `contracts` depends on no workspace package.
 - L2: `agent` depends only on `contracts`.
-- L3: tools and stores (every other package under `packages/`) depend only on `contracts`; primitives an app composes (`queue`, `schema`, `markdown`) on no workspace package; providers (under `packages/providers/`) only on `contracts` and the provider kit, which depends on no workspace package. A tool knows nothing of the agent, the models or the other tools. A provider knows nothing of tools or of the other providers.
+- L3: tools and stores (every other package under `packages/`) depend only on `contracts`; primitives an app composes (`queue`, `markdown`) on no workspace package; providers (under `packages/providers/`) only on `contracts` and the provider kit, which depends on no workspace package. A tool knows nothing of the agent, the models or the other tools. A provider knows nothing of tools or of the other providers.
 - L4: only apps compose packages. Only the binary (`apps/cli`) depends on apps: the server and the interface (its tests list the two again, with their `testing` features); nothing else depends on an app.
 - L5: `contracts` and `agent` name no tool or provider: no browser, page, URL, OpenRouter, OpenAI, model name. The agent learns what a tool's world is like through `ToolSpec::description`. Where the run happens (the directory, the system, the mode) reaches the agent through the app's context.
 

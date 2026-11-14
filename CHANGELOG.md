@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **`--schema` is checked by [flowschema](https://github.com/localixai/flowschema)**, the lab's
+  library the checker grew into, in place of llx's own copy of it. The messages and what is
+  checked are the same; a schema is compiled several times faster.
+
 ## 0.6.1
 
 - **The project is Localix CLI, and its repository is `localixai/localix-cli`.** The command stays

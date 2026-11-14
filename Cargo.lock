@@ -628,6 +628,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowschema"
+version = "0.1.0"
+source = "git+https://github.com/localixai/flowschema?rev=d0de5402aaaac9e0db00033b14095db4977b64bd#d0de5402aaaac9e0db00033b14095db4977b64bd"
+dependencies = [
+ "regex-lite",
+ "serde_json",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1775,14 +1784,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "schema"
-version = "0.6.1"
-dependencies = [
- "regex-lite",
- "serde_json",
-]
-
-[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1877,6 +1878,7 @@ dependencies = [
  "anthropic",
  "clap",
  "contracts",
+ "flowschema",
  "libc",
  "local",
  "log",
@@ -1887,7 +1889,6 @@ dependencies = [
  "protocol",
  "provider-kit",
  "queue",
- "schema",
  "serde_json",
  "session",
  "tools",

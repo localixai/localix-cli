@@ -1,6 +1,6 @@
 //! The shape a run's result must have (`--schema`): the JSON Schema the model is told, and every
-//! way data does not match it. The app supplies it (from the `schema` primitive, ARCHITECTURE.md
-//! P8): the agent holds no JSON Schema of its own.
+//! way data does not match it. The app supplies it (from flowschema, ARCHITECTURE.md P8): the
+//! agent holds no JSON Schema of its own.
 
 use serde_json::Value;
 

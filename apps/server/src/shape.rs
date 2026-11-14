@@ -1,22 +1,25 @@
-//! `--schema` as the agent checks it: the `schema` primitive behind the `Shape` port
-//! (ARCHITECTURE.md P8).
+//! `--schema` as the agent checks it: flowschema behind the `Shape` port (ARCHITECTURE.md P8).
 
 use contracts::shape::Shape;
-use schema::Schema;
+use flowschema::Schema;
 use serde_json::Value;
 
-/// The schema `--schema` gives, and its check.
-pub(crate) struct Checked(Schema);
+/// The schema `--schema` gives, as it was written and as it is checked.
+pub(crate) struct Checked {
+    json: Value,
+    compiled: Schema,
+}
 
 impl Checked {
     pub(crate) fn new(json: Value) -> Self {
-        Self(Schema::new(json))
+        let compiled = Schema::new(&json);
+        Self { json, compiled }
     }
 
     /// What `--schema` says data is not held to here, said as the run starts: the model is told
     /// those keywords, and a reader of the data should not count on them.
     pub(crate) fn unchecked_note(&self) -> Option<String> {
-        let unchecked = self.0.unchecked();
+        let unchecked = self.compiled.unchecked();
         let (are, them) = match unchecked.len() {
             1 => ("is", "it"),
             _ => ("are", "them"),
@@ -32,11 +35,11 @@ impl Checked {
 
 impl Shape for Checked {
     fn schema(&self) -> &Value {
-        self.0.json()
+        &self.json
     }
 
     fn mismatches(&self, data: &Value) -> Vec<String> {
-        self.0.mismatches(data)
+        self.compiled.mismatches(data)
     }
 }
 

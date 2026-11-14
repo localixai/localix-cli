@@ -31,7 +31,6 @@ members = [
     "packages/protocol",
     "packages/markdown",
     "packages/queue",
-    "packages/schema",
     "packages/session",
     "packages/tools",
     "packages/providers/*",
@@ -161,7 +160,6 @@ openai = { path = "packages/providers/openai" }
 openrouter = { path = "packages/providers/openrouter" }
 markdown = { path = "packages/markdown" }
 queue = { path = "packages/queue" }
-schema = { path = "packages/schema" }
 provider-kit = { path = "packages/providers/kit" }
 server = { path = "apps/server" }
 session = { path = "packages/session" }
@@ -183,8 +181,10 @@ unicode-width = "0.2"
 insta = "1.46"
 vt100 = "0.16.2"
 serde = { version = "1.0.229", features = ["derive"] }
-# The schema primitive's fallback for a pattern its automaton cannot take.
-regex-lite = "0.1.9"
+# What `--schema` is checked by: the lab's library, taken at a pinned revision of its repository
+# (ARCHITECTURE.md P8). It brings `regex-lite`, its fallback for a pattern its automaton cannot
+# take.
+flowschema = { git = "https://github.com/localixai/flowschema", rev = "d0de5402aaaac9e0db00033b14095db4977b64bd" }
 serde_json = "1.0.154"
 # Already in the tree through crossterm: the facade the log is written through.
 log = "0.4"

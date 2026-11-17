@@ -16,4 +16,8 @@ export const INSTALL = [['llx', 'curl -fsSL https://llx.sh/install | sh']] as co
  *  (src/analytics/). `ga4` is the web stream's measurement id (`G-…`; a malformed one fails the
  *  build), `notice` the card's one sentence, `privacy` the page that says what is collected.
  *  Undefined: no card, no "Cookie settings" in the footer, no tag. */
-export const ANALYTICS: { ga4: string; notice: string; privacy?: string } | undefined = undefined;
+export const ANALYTICS: { ga4: string; notice: string; privacy?: string } | undefined = {
+  ga4: 'G-Q8WCW7ZLDD',
+  notice: 'We count visits with Google Analytics, only with your yes, to see which pages help.',
+  privacy: 'https://localix.ai/privacy',
+};

@@ -82,7 +82,8 @@ long-context price band; the reason llx's default request ceiling is 272k);
   providers llx lists first and the lab files they name: `data/providers/<id>/provider.toml`,
   `data/providers/<id>/models/...`, `data/models/<lab>/...`. `scripts/models_sync.py <clone>`
   copies them from a models.dev clone (`git clone -b dev`), keeping per provider the newest models
-  llx can work with, and every decision model it serves (`llx decide` takes one); nothing in
+  llx can work with, the app's default where still usable, and every decision model it serves
+  (`llx decide` takes one); nothing in
   `data/` is edited by hand.
 - **Build:** `build.rs` resolves the files as models.dev does (the rules above, in Rust) into one
   document in the shape of the v2 API, cut by the catalog's types (`types.rs`) as a fetched

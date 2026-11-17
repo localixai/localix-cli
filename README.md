@@ -66,6 +66,9 @@ the median test fails, fix it
 
 `/login` takes a ChatGPT sign-in, OpenRouter or a key for any of 200+ providers; a model on your own machine (Ollama, LM Studio) needs none. `llx doctor` says what is missing. Other ways to install: [Installing llx](docs/install.md).
 
+Installed with the script? Run `llx --update` to install the latest stable release. A session
+only [notifies you](docs/install.md#updating) when one is available.
+
 ## Why llx
 
 llx is a model in a loop over five tools: `bash`, `apply_patch`, `ask`, `agents` and `jobs`. It reads, searches and runs your checks through the shell, and changes files with patches.

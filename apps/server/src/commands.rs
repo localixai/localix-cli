@@ -12,6 +12,7 @@ pub(crate) mod rewind;
 pub mod run;
 pub(crate) mod sessions;
 pub(crate) mod signin;
+pub(crate) mod update;
 
 use clap::Parser;
 
@@ -54,6 +55,9 @@ pub fn main(front: &'static dyn Front) -> i32 {
 
 /// Run what `cli` asks for, a session's shown at this terminal by the binary's `front`.
 pub(crate) fn dispatch(cli: Cli, front: &'static dyn Front) -> Result<i32, Failure> {
+    if cli.update {
+        return update::install();
+    }
     let kind = match cli.print {
         true => Kind::Exec,
         false => Kind::Session,

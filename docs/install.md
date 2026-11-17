@@ -4,6 +4,7 @@ llx is one binary for macOS (Apple silicon and Intel) and Linux (x86_64 and arm6
 version see the [README](../README.md#quick-start).
 
 - [The install script](#the-install-script)
+- [Updating](#updating)
 - [Other ways](#other-ways)
 - [Signing in](#signing-in)
 
@@ -21,6 +22,17 @@ It is [scripts/install.sh](../scripts/install.sh) as `main` has it, read before 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/localixai/localix-cli/main/scripts/install.sh | LLX_VERSION=0.3.0 sh
 ```
+
+## Updating
+
+llx checks for a newer stable release in the background when you open a terminal session.
+It shows a note if one is available; it never downloads or installs a binary without a
+command. Set `LLX_UPDATE_CHECK=0` to turn off the notice.
+
+If you installed with the script, run `llx --update` from a shell outside the session.
+It checks the downloaded archive before replacing the binary. If you used a custom
+`LLX_INSTALL_DIR`, set it again for the update. On versions without `--update`, run the
+install script again. If you installed with a package manager, update through that tool.
 
 ## Other ways
 

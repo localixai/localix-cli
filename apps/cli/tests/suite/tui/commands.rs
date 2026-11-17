@@ -17,14 +17,16 @@ fn slash_down_enter_opens_model_which_applies_the_one_chosen() {
     assert!(!screen.contains("unknown command"), "{screen}");
     assert!(screen.contains("OpenRouter"), "{screen}");
     assert!(screen.contains("❯"), "a model is marked:\n{screen}");
-    // Off the current model, so a /model that applied nothing would show.
-    term.press(key::DOWN).press(key::ENTER);
+    // Choose by id so catalog updates cannot move the current model under the cursor.
+    term.type_text("openai/gpt-6.2-sol");
+    term.wait_for("GPT-6.2 Sol", LONG);
+    term.press(key::ENTER);
     // One Enter confirms both the model and its inline reasoning level.
     term.wait_for("Now openrouter", LONG);
     term.type_text("hello").press(key::ENTER);
     term.wait_for("Worked for", LONG);
     let used = model.requests()[0]["model"].as_str().unwrap().to_string();
-    assert_ne!(used, "anthropic/claude-haiku-5.5");
+    assert_eq!(used, "openai/gpt-6.2-sol");
     let settings = std::fs::read_to_string(term.file("../config/llx/settings.json")).unwrap();
     assert!(settings.contains(&used), "{used} is not in {settings}");
 }

@@ -2,10 +2,17 @@
 
 ## Unreleased
 
+## 0.6.2
+
+- **Update llx with `llx --update`** after installing it with the install script. Terminal
+  sessions check for a newer stable release in the background and show a note without
+  interrupting work or installing anything. Set `LLX_UPDATE_CHECK=0` to disable the notice.
+- **Updated the built-in model catalog**, including GPT-6.2 Sol and GPT-6.2 Astra.
+
 - **An answer's Markdown is read by [flowdown](https://github.com/localixai/flowdown)**, the
-  lab's library the parser grew into, in place of llx's own copy of it. The forms an answer may
-  take are told to the model in that library's words, and a long run of `)` after a bare
-  address is read in linear time.
+  lab's library the parser grew into, in place of llx's own copy of it. Version 0.1.1 reads
+  horizontal rules between tabs and formulas such as `$2 + 2 = 4$`, and tells the model how
+  the forms are drawn. A long run of `)` after a bare address is read in linear time.
 - **`--schema` is checked by [flowschema](https://github.com/localixai/flowschema)**, the lab's
   library the checker grew into, in place of llx's own copy of it. The messages and what is
   checked are the same; a schema is compiled several times faster.

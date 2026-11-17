@@ -286,10 +286,10 @@ fn the_built_in_files_resolve_as_models_dev_resolves_them() {
     // One lab model through two hosts: the lab file's facts through both, each host's own
     // APIs and reasoning controls.
     let direct = catalog
-        .model("anthropic", "claude-haiku-5-5")
+        .model("anthropic", "claude-fable-5-2")
         .expect("in the files");
     let relayed = catalog
-        .model("openrouter", "anthropic/claude-haiku-5.5")
+        .model("openrouter", "anthropic/claude-fable-5.2")
         .expect("in the files");
     assert!(relayed.limit.is_some());
     assert_eq!(
@@ -313,8 +313,8 @@ fn the_built_in_files_resolve_as_models_dev_resolves_them() {
     assert!(host.starts_with("https://api.anthropic.com/"), "{host}");
     // The levels are what the host's controls give (the lab file names none).
     for (provider, id, model) in [
-        ("anthropic", "claude-haiku-5-5", direct),
-        ("openrouter", "anthropic/claude-haiku-5.5", relayed),
+        ("anthropic", "claude-fable-5-2", direct),
+        ("openrouter", "anthropic/claude-fable-5.2", relayed),
     ] {
         let entry = catalog.entry(provider, id).unwrap();
         let reasoning = model.capabilities.reasoning.clone().unwrap_or_default();

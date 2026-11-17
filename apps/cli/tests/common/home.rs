@@ -233,6 +233,7 @@ pub(crate) fn isolate(command: &mut Command, home: &Path) {
         .env("XDG_CONFIG_HOME", home.join("config"))
         .env("LLX_SESSIONS", home.join("sessions"))
         .env("LLX_MODELS_REFRESH", "0")
+        .env("LLX_UPDATE_CHECK", "0")
         .env("LLX_LOCAL", "0")
         .env("OPENROUTER_BASE_URL", "http://127.0.0.1:1");
 }

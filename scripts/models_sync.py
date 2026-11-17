@@ -9,8 +9,8 @@ models.dev's own, copied verbatim with their source comments: for each provider 
 (POPULAR, read from packages/providers/models/src/lib.rs), its `provider.toml`, its newest
 `PER_PROVIDER` models llx can work with (type chat, tools supported, text out, not deprecated,
 not `v2_only`: read as build.rs resolves it from its base model), every decision model it serves
-that is not deprecated (`llx decide` takes one), and the lab files those name. Nothing in data/
-is edited by hand: run this again, review the diff, commit.
+that is not deprecated (`llx decide` takes one), any usable app default, and the lab files those
+name. Nothing in data/ is edited by hand: run this again, review the diff, commit.
 """
 import pathlib
 import re
@@ -29,6 +29,15 @@ def popular():
     if not found:
         sys.exit("POPULAR not found in packages/providers/models/src/lib.rs")
     return re.findall(r'"([^"]+)"', found.group(1))
+
+
+def defaults():
+    """The app's default models must survive the catalog's newest-first cut."""
+    source = (CRATE.parents[2] / "apps/server/src/providers.rs").read_text()
+    found = re.search(r"const DEFAULTS: \[\(&str, &str\); \d+\] = \[(.*?)\];", source, re.S)
+    if not found:
+        sys.exit("DEFAULTS not found in apps/server/src/providers.rs")
+    return dict(re.findall(r'\("([^"]+)", "([^"]+)"\)', found.group(1)))
 
 
 def merged(base, over):
@@ -99,6 +108,7 @@ def toml():
 def main():
     clone = clone_given()
     tomllib = toml()
+    pinned = defaults()
     shutil.rmtree(DATA, ignore_errors=True)
     labs = set()
     for provider in popular():
@@ -125,7 +135,10 @@ def main():
         target = DATA / "providers" / provider
         target.mkdir(parents=True)
         shutil.copy2(source / "provider.toml", target / "provider.toml")
-        for _, path, base in chosen[:PER_PROVIDER] + decision:
+        older_default = [item for item in chosen[PER_PROVIDER:]
+                         if item[1].relative_to(source / "models").with_suffix("").as_posix()
+                         == pinned.get(provider)]
+        for _, path, base in chosen[:PER_PROVIDER] + older_default + decision:
             out = target / "models" / path.relative_to(source / "models")
             out.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, out)

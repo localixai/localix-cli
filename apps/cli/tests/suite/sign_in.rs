@@ -33,9 +33,16 @@ fn a_provider_not_signed_in_and_a_level_the_model_lacks_stop_before_any_model() 
             "not signed in",
         ),
         (
-            &["exec", "--reasoning", "ultra", "x"],
+            &[
+                "exec",
+                "-m",
+                "openai/gpt-6.2-astra",
+                "--reasoning",
+                "ultra",
+                "x",
+            ],
             true,
-            "--reasoning ultra: anthropic/claude-haiku-5.5 takes off, low",
+            "--reasoning ultra: openai/gpt-6.2-astra takes low, medium, high, xhigh, max",
         ),
     ];
     for (args, key, said) in cases {

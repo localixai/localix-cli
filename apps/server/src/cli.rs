@@ -81,7 +81,8 @@ or usage, 130 interrupted.
 
 Environment: OPENROUTER_API_KEY (else the key /login saved), LLX_PROVIDER, LLX_MODEL,
 LLX_REASONING, LLX_DECISION_MODEL (decide, doctor), LLX_MODELS_REFRESH (0: no background
-catalog refresh), LLX_LOCAL (0: no look for Ollama, LM Studio or llama.cpp on this
+catalog refresh), LLX_UPDATE_CHECK (0: no release notices in a session),
+LLX_LOCAL (0: no look for Ollama, LM Studio or llama.cpp on this
 machine; what settings.json names under `local` and `hosts` stays), OLLAMA_HOST, LLX_SESSIONS (where sessions are kept, default ~/.llx/sessions), LLX_RECORD
 (a directory: each session's run kept whole there, every output as the model read it). Sign-ins
 and the /login choice are kept in ~/.config/llx/ (0600).";
@@ -107,6 +108,9 @@ pub(crate) struct Cli {
     /// Go on with the newest session of this directory, as `llx resume --last` does.
     #[arg(short = 'c', long = "continue")]
     pub resume_last: bool,
+    /// Install the latest stable release if this binary was installed with the install script.
+    #[arg(long, conflicts_with_all = ["prompt", "print", "resume_last"])]
+    pub update: bool,
     #[command(flatten)]
     pub run: RunOptions,
     #[command(subcommand)]

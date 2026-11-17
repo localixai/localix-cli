@@ -8,7 +8,7 @@ use protocol::{ToClient, ToServer};
 use tools::workspace::Workspace;
 
 use super::{Attached, Front, NO_INTERFACE, RUN_EXEC, Unready};
-use crate::commands::entry;
+use crate::commands::{entry, update};
 use crate::desk;
 use crate::error::Failure;
 use crate::modes::Modes;
@@ -30,11 +30,9 @@ pub(super) fn in_process(root: &Workspace, front: &'static dyn Front) -> Result<
     let held = interface.map_err(|Unready(error)| why(error))?;
     // A newer model catalog, for the next session: nothing here waits on it.
     crate::providers::refresh_catalog();
-    Ok(Attached {
-        held,
-        ui: Ui::new(peer),
-        requests,
-    })
+    let ui = Ui::new(peer);
+    update::check(ui.clone());
+    Ok(Attached { held, ui, requests })
 }
 
 /// A server for the interface, on a thread of its own: what it serves the sessions, and what the

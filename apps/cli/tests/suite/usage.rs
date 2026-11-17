@@ -4,6 +4,23 @@ use crate::common::home::{FAKE_KEY, Home, detach, output, own_terminal, text};
 use crate::common::term::{cooked, pty};
 
 #[test]
+fn update_is_explicit_and_does_not_replace_a_managed_binary() {
+    let home = Home::new();
+    let help = home.run(&["--help"]);
+    assert!(text(&help.stdout).contains("--update"));
+    let out = home.run(&["--update"]);
+    assert_eq!(out.status.code(), Some(3));
+    let stderr = text(&out.stderr);
+    assert!(
+        stderr.contains("update it the same way you installed it"),
+        "{stderr}"
+    );
+    let conflict = home.run(&["--update", "a task"]);
+    assert_eq!(conflict.status.code(), Some(3));
+    assert!(text(&conflict.stderr).contains("cannot be used with"));
+}
+
+#[test]
 fn an_unknown_flag_is_a_usage_error() {
     let home = Home::new();
     let missing = home.path().join("missing");

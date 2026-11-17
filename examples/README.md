@@ -106,7 +106,7 @@ prompt is in the workflow, where you can read it, and so is what gets posted.
   workflows name them; pin them to a commit too where your policy asks for it.
 - On a self-hosted runner, replace `ubuntu-latest` with its labels; the action needs `jq` and
   `perl` there. It installs the Linux (x86_64, arm64) and macOS builds: elsewhere, build llx on the
-  runner (`cargo install`, as the [README](../README.md#install) says) and give the action
+  runner (`cargo install`, as [Installing llx](../docs/install.md#other-ways) says) and give the action
   `version: system`. Without passwordless `sudo` it keeps the runner's privileges, and the summary
   says so.
 

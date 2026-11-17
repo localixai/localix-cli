@@ -7,8 +7,11 @@ export type NavGroup = { title: string; blurb: string; pages: NavPage[] };
 export const NAV: NavGroup[] = [
   {
     title: 'Start',
-    blurb: 'The command line, a session and its keys, signing in and choosing a model, saved sessions, project instructions.',
-    pages: [{ slug: 'usage', source: 'docs/usage.md' }],
+    blurb: 'Installing llx, the command line, a session and its keys, signing in and choosing a model, saved sessions, project instructions.',
+    pages: [
+      { slug: 'install', source: 'docs/install.md' },
+      { slug: 'usage', source: 'docs/usage.md' },
+    ],
   },
   {
     title: 'CI and scripts',

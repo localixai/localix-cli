@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  A coding agent at your terminal, on any model: a ChatGPT sign-in, OpenRouter or your own key. The same agent runs one task in CI and helps your other agents. One binary under 4 MB.
+  A coding agent at your terminal, on any model: a ChatGPT sign-in, OpenRouter, your own key or a local model (Ollama, LM Studio, llama.cpp). The same agent runs one task in CI and helps your other agents. One binary under 4 MB.
 </p>
 
 <p align="center">

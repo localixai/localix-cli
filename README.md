@@ -269,4 +269,6 @@ In Claude Code it is also a plugin: `/plugin install llx --marketplace localixai
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [ARCHITECTURE.md](ARCHITECTURE.md). Report vulnerabilities as [SECURITY.md](SECURITY.md) describes. llx is open source under the [MIT License](LICENSE), made by [Localix](https://localix.ai).
 
+Before Localix CLI, this repository was auto-copilot-cli (2023, TypeScript), its author's first AI command line. llx is its successor, written anew in Rust.
+
 [^sandbox]: Seatbelt on macOS; Landlock with a seccomp filter on Linux (6.2 or later), where commands only read. The boundaries are in [Modes and trust](docs/modes.md#trust-boundaries).

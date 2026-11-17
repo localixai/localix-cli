@@ -1,6 +1,11 @@
 // The docs pages' only script (their styles are docs.html's links). The pages are whole HTML from
 // the build, with no React in the browser: this adds the code blocks' Copy and marks the section
-// being read in the table of contents. Without it a page reads the same.
+// being read in the table of contents, and asks about usage statistics where they are on. Without
+// it a page reads the same.
+import { track } from '../analytics';
+import { startConsent } from '../analytics/card';
+
+startConsent();
 
 for (const button of document.querySelectorAll<HTMLButtonElement>('.code-copy')) {
   const code = button.closest('.code')?.querySelector('pre');
@@ -13,6 +18,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('.code-copy'))
     } catch {
       return;
     }
+    track('code_copied', {});
     button.textContent = 'Copied';
     window.clearTimeout(timer);
     timer = window.setTimeout(() => (button.textContent = 'Copy'), 1600);

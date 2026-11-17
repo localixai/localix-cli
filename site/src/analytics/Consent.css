@@ -1,0 +1,56 @@
+/* The usage statistics card: over the page's lower left corner, across it on a phone, in the
+   cards' raised ground. Fixed, so it moves nothing when it comes. */
+.consent {
+  position: fixed;
+  bottom: var(--gutter);
+  left: var(--gutter);
+  z-index: 20;
+  width: min(25rem, 100vw - 2 * var(--gutter));
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--raised);
+  color: var(--soft);
+  font: 400 var(--step-s) / 1.55 var(--text);
+  animation: consent-in 240ms var(--ease-out) both;
+}
+.consent p {
+  margin: 0 0 0.9rem;
+}
+.consent a {
+  color: var(--white);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.consent-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+/* The two answers are one variant and one size: saying no is as easy as saying yes. */
+.consent button {
+  flex: 1;
+  min-height: 2.75rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--white);
+  font: 500 0.8125rem/1 var(--text);
+  cursor: pointer;
+  transition: border-color 160ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .consent button:hover {
+    border-color: var(--white);
+  }
+}
+@keyframes consent-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .consent {
+    animation: none;
+  }
+}

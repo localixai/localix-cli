@@ -4,7 +4,7 @@
 // Cloudflare Pages serves at that URL with no redirect), and the files that list them.
 // Runs after `vite build` and `vite build --ssr`, then removes the server bundle.
 import { existsSync } from 'node:fs';
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -77,6 +77,22 @@ await writeFile(`${dist}_headers`, `${headers.join('\n')}\n`);
 await writeFile(`${dist}llms-full.txt`, ssr.llmsFull());
 const llms = await readFile(`${dist}llms.txt`, 'utf8');
 await writeFile(`${dist}llms.txt`, `${llms.trimEnd()}\n\n${ssr.llmsDocs()}`);
+
+// Nothing of Google's may reach a page before a visitor's yes: its tag, its queue and its host are
+// named only in src/analytics/google-tag.ts, which adds them after one, and in no page's HTML.
+const TAG = /googletagmanager|google-analytics\.com|\bgtag\b|\bdataLayer\b/;
+const site = fileURLToPath(new URL('./', import.meta.url));
+const own = `${site}src/analytics/google-tag.ts`;
+const sources = (await readdir(`${site}src`, { recursive: true })).map((path) => `${site}src/${path}`);
+const built = (await readdir(dist, { recursive: true })).filter((path) => path.endsWith('.html')).map((path) => dist + path);
+const naming = [];
+for (const path of [...sources.filter((path) => /\.(tsx?|css)$/.test(path) && path !== own), `${site}index.html`, `${site}docs.html`, ...built]) {
+  const at = (await readFile(path, 'utf8')).split('\n').findIndex((line) => TAG.test(line));
+  if (at >= 0) naming.push(`${path.slice(site.length)}:${at + 1}`);
+}
+if (naming.length > 0) {
+  throw new Error(`Google's tag is named outside src/analytics/google-tag.ts:\n  ${naming.join('\n  ')}`);
+}
 
 await rm(server, { recursive: true, force: true });
 console.log(`prerendered dist/index.html and ${ssr.DOCS_ROUTES.length} docs pages`);

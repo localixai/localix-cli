@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { track } from '../analytics';
 import { Tokens } from './Code';
 import { shellLine } from './highlight';
 import { Check, Copy } from './icons';
@@ -17,6 +18,7 @@ export function InstallCommand({ tabs }: { tabs: readonly (readonly [string, str
     try {
       await navigator.clipboard.writeText(command);
       setCopied(true);
+      track('install_copied', { method: tabs[shown]?.[0] ?? '' });
     } catch {
       return;
     }

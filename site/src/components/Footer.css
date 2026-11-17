@@ -37,13 +37,23 @@
   flex-wrap: wrap;
   font: 500 0.8125rem/1 var(--text);
 }
-.foot nav a {
+.foot nav a,
+.foot-consent {
   display: inline-flex;
   align-items: center;
   min-height: 2.5rem;
   color: var(--soft);
   transition: color 160ms ease;
 }
-.foot nav a:hover {
+/* A button that reads as one of the links beside it. */
+.foot-consent {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.foot nav a:hover,
+.foot-consent:hover {
   color: var(--white);
 }

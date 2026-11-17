@@ -11,3 +11,9 @@ export const EXAMPLES_DOCS = `${DOCS}/examples`;
 export const AGENTS_DOCS = `${DOCS}/agents`;
 /** The install: one tab per way in (a tab row shows only with several). */
 export const INSTALL = [['llx', 'curl -fsSL https://llx.sh/install | sh']] as const;
+
+/** Usage statistics: Google Analytics 4, loaded only after a visitor's yes on a small card
+ *  (src/analytics/). `ga4` is the web stream's measurement id (`G-…`; a malformed one fails the
+ *  build), `notice` the card's one sentence, `privacy` the page that says what is collected.
+ *  Undefined: no card, no "Cookie settings" in the footer, no tag. */
+export const ANALYTICS: { ga4: string; notice: string; privacy?: string } | undefined = undefined;

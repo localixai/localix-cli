@@ -47,7 +47,7 @@
 **1. Install** on macOS or Linux:
 
 ```bash
-curl -fsSL https://llx.sh/install | sh
+curl -fsSL https://raw.githubusercontent.com/localixai/localix-cli/main/scripts/install.sh | sh
 ```
 
 **2. Run it in your project:**

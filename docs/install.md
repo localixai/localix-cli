@@ -10,17 +10,16 @@ version see the [README](../README.md#quick-start).
 ## The install script
 
 ```bash
-curl -fsSL https://llx.sh/install | sh
+curl -fsSL https://raw.githubusercontent.com/localixai/localix-cli/main/scripts/install.sh | sh
 ```
 
 It puts `llx`, and `lx`, a link to it, in `~/.local/bin` (or `LLX_INSTALL_DIR`), says so when that
 directory is not on your `PATH`, and checks the archive against the release's `SHA256SUMS`.
-`llx.sh/install` is [scripts/install.sh](../scripts/install.sh) as `main` has it (the site serves
-it; `https://raw.githubusercontent.com/localixai/localix-cli/main/scripts/install.sh` is the same
-file). To pin a release:
+It is [scripts/install.sh](../scripts/install.sh) as `main` has it, read before it runs if you like;
+`https://llx.sh/install` serves the same file, a shorter address for it. To pin a release:
 
 ```bash
-curl -fsSL https://llx.sh/install | LLX_VERSION=0.3.0 sh
+curl -fsSL https://raw.githubusercontent.com/localixai/localix-cli/main/scripts/install.sh | LLX_VERSION=0.3.0 sh
 ```
 
 ## Other ways

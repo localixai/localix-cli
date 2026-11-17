@@ -1,7 +1,7 @@
 [package]
 name = "localix-cli"
 description = "An ultrafast, lightweight agent runtime for coding and CI, and a minimal agent for the terminal"
-homepage = "https://llx.sh"
+homepage = "https://cli.localix.ai"
 repository = "https://github.com/localixai/localix-cli"
 keywords = ["agent", "agent-runtime", "coding-agent", "cli", "llm"]
 categories = ["command-line-utilities", "development-tools"]

@@ -1,4 +1,4 @@
-export const SITE = 'https://llx.sh';
+export const SITE = 'https://cli.localix.ai';
 /** Who makes llx: the lab's page of everything it makes, signed first in the footer. */
 export const MAKER = { label: 'Localix Lab', href: 'https://localix.ai' } as const;
 export const GITHUB = 'https://github.com/localixai/localix-cli';

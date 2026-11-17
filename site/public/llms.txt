@@ -21,7 +21,7 @@
 - `llx exec --json` prints one JSON event per line, ending with `run.completed` and its `status`.
 - `rg -l -i 'retry|backoff' src | xargs llx decide "Does this file send a failed request again?"` searches the code by what it does: rg narrows the files, the decision model reads each and keeps those that do the thing.
 - `llx decide "<question>"` asks the decision model one question about stdin and prints the option it picked (`--choices`; `--expect` exits 1 when another is picked). It needs an OpenRouter key.
-- What a task may do is its mode. By default its commands run in the system's sandbox, which writes only inside the workspace (never its `.git`; on Linux they only read) and opens no network, and its file changes there are made; what must reach further is asked at the terminal, and refused where there is none (CI, cron). `--mode plan` is read-only, `-y` allows everything, and `--allow 'bash(cargo test *)'` and `--deny 'bash(git push *)'` add rules: https://llx.sh/docs/modes.
+- What a task may do is its mode. By default its commands run in the system's sandbox, which writes only inside the workspace (never its `.git`; on Linux they only read) and opens no network, and its file changes there are made; what must reach further is asked at the terminal, and refused where there is none (CI, cron). `--mode plan` is read-only, `-y` allows everything, and `--allow 'bash(cargo test *)'` and `--deny 'bash(git push *)'` add rules: https://cli.localix.ai/docs/modes.
 - Exit codes: 0 done, 1 no data (`no_data`, `--schema` only) or, for `decide --expect`, another option picked, 2 out of turns, time or money (`exhausted`; `--max-turns`, `--timeout`, `--budget`), 3 environment or usage (`error`), 130 interrupted (Ctrl-C, SIGTERM or SIGHUP).
 
 ## In CI
@@ -29,15 +29,15 @@
 - `uses: localixai/localix-cli@v0` is a GitHub Action: it installs llx, runs `llx exec` once, and returns the answer, the exit code and the cost.
 - The agent works through the shell (`gh`, `git`, `jq` and the project's own tools): no MCP server, no GitHub tool, no built-in prompt. The workflow owns the prompt and the posting.
 - The job that runs the model holds a read-only token; a second job, with write access and no model key, posts what it answered.
-- Guide: https://llx.sh/docs/ci. Recipes: https://llx.sh/docs/recipes. Ready-made workflows: https://llx.sh/docs/examples.
+- Guide: https://cli.localix.ai/docs/ci. Recipes: https://cli.localix.ai/docs/recipes. Ready-made workflows: https://cli.localix.ai/docs/examples.
 
 ## From another agent
 
 - `llx exec` hands a task to a helper on any provider and model; `llx decide` answers a quick choice about stdin.
 - A skill for any agent that takes skills: `npx skills add localixai/localix-cli` (in Claude Code also a plugin: `/plugin install llx --marketplace localixai/localix-cli`). It points the agent at each command's `--help`.
-- Guide: https://llx.sh/docs/agents.
+- Guide: https://cli.localix.ai/docs/agents.
 
 ## Links
 
-- Docs: https://llx.sh/docs (each page is listed below; all of them in one file: https://llx.sh/llms-full.txt)
+- Docs: https://cli.localix.ai/docs (each page is listed below; all of them in one file: https://cli.localix.ai/llms-full.txt)
 - Source: https://github.com/localixai/localix-cli

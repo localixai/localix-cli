@@ -29,7 +29,7 @@ function docs(): Plugin {
   };
 }
 
-// The site is served from the domain root (https://llx.sh/); public/ keeps every static URL as it was.
+// The site is served from the domain root (https://cli.localix.ai/); public/ keeps every static URL as it was.
 // Two pages are built: the landing, and docs.html, the shell every docs page is prerendered into.
 export default defineConfig({
   plugins: [react(), docs()],

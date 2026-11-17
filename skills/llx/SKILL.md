@@ -13,7 +13,7 @@ ChatGPT plan among them, with its commands in the operating system's sandbox.
 Install: `curl -fsSL https://llx.sh/install | sh` (macOS and Linux), then `llx` and `/login`.
 `llx doctor` says whether the sign-ins, the models and the shell are ready. The end of this file
 is `llx exec --help` and `llx decide --help` as this version prints them;
-`llx --help` is the session at the terminal. The guides: https://llx.sh/docs.
+`llx --help` is the session at the terminal. The guides: https://cli.localix.ai/docs.
 
 ## A coding agent at the terminal
 
@@ -97,8 +97,8 @@ The action's other inputs: `prompt-file`, `schema` (the answer as data), `allow`
 `working-directory`, `version`, `args`, `privileges`, `instructions-from`, `install-only`.
 Ready workflows (review with comments on lines, `@llx` in a comment, triage, a failed run
 explained, a described pull request, a draft release, a daily gate, a weekly audit, a dependency
-update read, a Jira item made a draft pull request): https://llx.sh/docs/examples. GitLab and any other CI run
-`llx exec` the same way: https://llx.sh/docs/ci.
+update read, a Jira item made a draft pull request): https://cli.localix.ai/docs/examples. GitLab and any other CI run
+`llx exec` the same way: https://cli.localix.ai/docs/ci.
 
 A gate fails the job on the answer: `--schema` and a check of the data, or `llx decide --expect`:
 

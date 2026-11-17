@@ -33,12 +33,12 @@
   <a href="#in-other-agents">In other agents</a> ·
   <a href="#measured-beside-claude-code">Measured</a> ·
   <a href="#documentation">Documentation</a> ·
-  <a href="https://llx.sh">llx.sh</a>
+  <a href="https://cli.localix.ai">cli.localix.ai</a>
 </p>
 
 <p align="center">
-  <a href="https://llx.sh">
-    <img src="docs/assets/demo.gif" alt="llx at a terminal, as on llx.sh, every step a real run on Claude Haiku 5.5: a model is picked, a failing test is fixed, two questions are answered with steps, tabs, a table and a formula, two agents work in parallel, then llx decide and llx exec --schema answer from the shell" width="880">
+  <a href="https://cli.localix.ai">
+    <img src="docs/assets/demo.gif" alt="llx at a terminal, as on cli.localix.ai, every step a real run on Claude Haiku 5.5: a model is picked, a failing test is fixed, two questions are answered with steps, tabs, a table and a formula, two agents work in parallel, then llx decide and llx exec --schema answer from the shell" width="880">
   </a>
 </p>
 
@@ -52,7 +52,7 @@
 5. **A decision.** From the shell, as CI calls it, `llx decide` answers a yes-or-no question about the diff in 475 ms.
 6. **Data.** `llx exec --schema` reads the diff and answers in the shape a JSON Schema defines.
 
-The same recording plays on [llx.sh](https://llx.sh), where it can be paused, scrolled and copied from.
+The same recording plays on [cli.localix.ai](https://cli.localix.ai), where it can be paused, scrolled and copied from.
 
 </details>
 

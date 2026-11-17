@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
-Sitemap: https://llx.sh/sitemap.xml
+Sitemap: https://cli.localix.ai/sitemap.xml
 Disallow: /og-card.html

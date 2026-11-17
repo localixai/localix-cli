@@ -1,6 +1,6 @@
 //! The pictures of a README: each text of a folder as llx draws it in a terminal 64 columns
-//! wide, written as an SVG for a light page and one for a dark page. The same text gives the
-//! same picture: nothing is captured from a screen.
+//! wide, written as an SVG on a dark terminal: the lab shows its demos dark only, whatever the
+//! page's theme. The same text gives the same picture: nothing is captured from a screen.
 //!
 //! ```sh
 //! cargo run --release --manifest-path scripts/shots/Cargo.toml              # llx's own
@@ -28,22 +28,13 @@ struct Theme {
     colours: [&'static str; 6],
 }
 
-const LIGHT: Theme = Theme {
-    name: "light",
-    paper: "#ffffff",
-    edge: "#d0d7de",
-    ink: "#1f2328",
-    dim: "#8c959f",
-    colours: [
-        "#cf222e", "#1a7f37", "#9a6700", "#0969da", "#8250df", "#1b7c83",
-    ],
-};
+/// The lab's neutral dark (`notes/brand.md` in the workspace): no blue cast in its greys.
 const DARK: Theme = Theme {
     name: "dark",
-    paper: "#0d1117",
-    edge: "#30363d",
-    ink: "#e6edf3",
-    dim: "#7d8590",
+    paper: "#0b0b0b",
+    edge: "#2e2e2c",
+    ink: "#f4f4f2",
+    dim: "#8b8b87",
     colours: [
         "#ff7b72", "#3fb950", "#d29922", "#58a6ff", "#bc8cff", "#39c5cf",
     ],
@@ -163,7 +154,9 @@ fn main() {
     let here = env!("CARGO_MANIFEST_DIR");
     let mut args = std::env::args().skip(1);
     let texts = args.next().unwrap_or_else(|| format!("{here}/texts"));
-    let out = args.next().unwrap_or_else(|| format!("{here}/../../docs/assets"));
+    let out = args
+        .next()
+        .unwrap_or_else(|| format!("{here}/../../docs/assets"));
     let mut names: Vec<_> = fs::read_dir(&texts)
         .unwrap_or_else(|e| panic!("{texts}: {e}"))
         .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
@@ -175,13 +168,11 @@ fn main() {
         let text = fs::read_to_string(format!("{texts}/{name}.md")).unwrap();
         let drawn = tui::testing::markdown(&text, WIDTH);
         let rows: Vec<_> = drawn.lines().map(runs).collect();
-        for theme in [&LIGHT, &DARK] {
-            fs::write(
-                format!("{out}/{name}-{}.svg", theme.name),
-                picture(&rows, theme),
-            )
-            .unwrap();
-        }
+        fs::write(
+            format!("{out}/{name}-{}.svg", DARK.name),
+            picture(&rows, &DARK),
+        )
+        .unwrap();
         println!("{name}: {} rows", rows.len());
     }
 }

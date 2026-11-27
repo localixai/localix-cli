@@ -540,3 +540,40 @@ fn a_hosts_own_toggle_turns_thinking_off_where_it_names_no_off() {
     assert_eq!(switch("mistral", "magistral-medium-latest"), Switch::Named);
     assert_eq!(switch("zai", "no-such-model"), Switch::Named);
 }
+
+#[test]
+fn llmtr_is_a_named_openai_compatible_provider() {
+    let catalog = Catalog::built_in();
+    let provider = catalog.provider("llmtr").expect("in the files");
+    assert_eq!(provider.name(), "LLMTR");
+    assert_eq!(provider.env(), ["LLMTR_API_KEY"]);
+    assert!(catalog.callable("llmtr"));
+    let ids = catalog.ids();
+    assert!(ids.contains(&"llmtr"));
+    // Not one of the popular hosts: it follows them, in id order.
+    let popular: Vec<&str> = POPULAR
+        .iter()
+        .copied()
+        .filter(|id| ids.contains(id))
+        .collect();
+    assert_eq!(ids[..popular.len()], popular[..]);
+    assert!(ids[popular.len()..].contains(&"llmtr"));
+
+    let free = catalog
+        .model("llmtr", "qwen/qwen3.8-27b-free")
+        .expect("in the files");
+    assert!(free.usable());
+    assert_eq!(free.address(CHAT_COMPLETIONS), Some("https://llmtr.com/v1"));
+    assert_eq!(free.price(1_000_000, 0, 0, 0), Some(0.0));
+
+    let flash = catalog
+        .model("llmtr", "minimax/minimax-m3.1-flash")
+        .expect("in the files");
+    assert!(flash.usable());
+    assert_eq!(
+        flash.address(CHAT_COMPLETIONS),
+        Some("https://llmtr.com/v1")
+    );
+    // 1M uncached input at $0.15/M, no output.
+    assert_eq!(flash.price(1_000_000, 0, 0, 0), Some(0.15));
+}

@@ -1,0 +1,21 @@
+# Sources (accessed 2026-11-27): https://llmtr.com/models and GET https://llmtr.com/v1/models
+# Pricing: $0.10/M input, $0.50/M output, $0.01/M cache read, $0.125/M cache write.
+# Effort: none|low|medium|high|xhigh|max.
+schema = 2
+base_model = "anthropic/claude-haiku-5-5"
+
+[capabilities]
+reasoning = { supported = true, effort = ["none", "low", "medium", "high", "xhigh", "max"] }
+
+[limit]
+context = 1_000_000
+output = 128_000
+
+[api.chat-completions]
+
+[cost.text.input]
+price = 0.1
+cache = { read = 0.01, write = 0.125 }
+
+[cost.text.output]
+price = 0.5

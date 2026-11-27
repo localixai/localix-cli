@@ -1,0 +1,16 @@
+# Sources (accessed 2026-11-27): https://llmtr.com/models and GET https://llmtr.com/v1/models
+# Free tier: $0 input and output. Context 131,042, max output 16,384.
+schema = 2
+base_model = "alibaba/qwen3.8-27b"
+
+[limit]
+context = 131_042
+output = 16_384
+
+[api.chat-completions]
+
+[cost.text.input]
+price = 0
+
+[cost.text.output]
+price = 0

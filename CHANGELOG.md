@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **LLMTR** is a built-in OpenAI-compatible provider: set `LLMTR_API_KEY`, or paste a key at
+  `/login`. A starter set of chat models is in the catalog; the API is `https://llmtr.com/v1`.
+
 ## 0.6.2
 
 - **Update llx with `llx --update`** after installing it with the install script. Terminal

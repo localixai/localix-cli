@@ -1,0 +1,21 @@
+# Sources (accessed 2026-11-27): https://llmtr.com/models and GET https://llmtr.com/v1/models
+# Pricing: $0.15/M input, $0.60/M output, $0.015/M cache read. Context 1,000,000, max output 524,288.
+# Effort: low|medium|high|xhigh|max (reasoning is on).
+schema = 2
+base_model = "minimax/MiniMax-M3.1-Flash"
+
+[capabilities]
+reasoning = { supported = true, effort = ["low", "medium", "high", "xhigh", "max"] }
+
+[limit]
+context = 1_000_000
+output = 524_288
+
+[api.chat-completions]
+
+[cost.text.input]
+price = 0.15
+cache = { read = 0.015 }
+
+[cost.text.output]
+price = 0.6

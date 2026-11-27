@@ -1,0 +1,13 @@
+# Prepaid OpenAI-compatible gateway. Chat Completions at POST /v1/chat/completions.
+# Public catalog: GET https://llmtr.com/v1/models
+# Keys: https://llmtr.com/dashboard/keys
+# Sources accessed 2026-11-27:
+# https://llmtr.com
+# https://llmtr.com/models
+# https://llmtr.com/docs/
+name = "LLMTR"
+env = ["LLMTR_API_KEY"]
+npm = "@ai-sdk/openai-compatible"
+opencodeai = "@opencode/ai/providers/openai-compatible"
+api = "https://llmtr.com/v1"
+doc = "https://llmtr.com/models"
